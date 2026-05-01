@@ -5,9 +5,6 @@ simulator, and how the code is laid out to keep that path testable
 and extensible.
 
 If you just want to build and use Baguette, read [`../README.md`](../README.md).
-For the reverse-engineering history — including the in-process
-"Croissant" injection path Baguette shipped before the host-HID path
-was revived.
 
 ## The problem
 
@@ -17,23 +14,11 @@ and `AXe` call `IndigoHIDMessageForMouseNSEvent` with the old
 target that silently drops them or crashes `backboardd`. For a while
 nothing outside Simulator.app could inject touches into iOS 26 sims.
 
-Two paths out of that hole:
-
-1. **In-process injection** — load a dylib into the target app via
-   `DYLD_INSERT_LIBRARIES`, synthesize `UITouchesEvent` inside the app,
-   dispatch via `[UIApplication sendEvent:]`. Worked but invasive
-   (per-boot priming, SpringBoard restart, frontmost-app tracking).
-   The old `Croissant.dylib` took this route and is preserved as a
-   standalone fallback module at [`../../Croissant/`](../../Croissant/).
-2. **Revived host-HID via Xcode 26 preview-kit** — Xcode 26's
-   SimulatorKit exposes a new 9-argument
-   `IndigoHIDMessageForMouseNSEvent` signature that routes touches
-   to digitizer target `0x32`. Tools that use the correct new
-   signature can inject from the host again — no in-process code,
-   no app injection.
-
-Baguette ships path #2. Croissant isn't built, primed, or loaded
-anywhere on the runtime path.
+Xcode 26's SimulatorKit exposes a new 9-argument
+`IndigoHIDMessageForMouseNSEvent` signature that routes touches to
+digitizer target `0x32`. Tools that use the correct new signature can
+inject from the host again — no in-process code, no app injection,
+no `DYLD_INSERT_LIBRARIES`. Baguette ships that path.
 
 ## Two consumers
 
@@ -66,11 +51,10 @@ difference is the App-layer entry point: `InputCommand` reads stdin
 and writes stdout; `Server` (under `baguette serve`) opens a
 WebSocket and uses `WebSocketFrameSink` to push encoded frames back.
 
-The asc-pro plugin uses path #1 today — it spawns one persistent
-`baguette input --udid <UDID>` subprocess per booted device because
-spawning costs ~1.2 s (framework resolution) and the IndigoHID
-pipeline has a ~40 ms per-session warmup that should only happen
-once.
+Subprocess consumers typically spawn one persistent `baguette input
+--udid <UDID>` per booted device because spawning costs ~1.2 s
+(framework resolution) and the IndigoHID pipeline has a ~40 ms
+per-session warmup that should only happen once.
 
 ## Three-layer code split
 
@@ -86,30 +70,36 @@ Sources/Baguette/
 └── Resources/Web/      static HTML / JS / CSS for `serve`
 ```
 
+`Domain/` and `Infrastructure/` are further split into bounded-context
+subfolders (`Simulator/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`)
+that mirror across the two layers, so a feature lives in one place
+across both. `Tests/BaguetteTests/` mirrors the same context split.
+
 ### Domain
 
 Pure value types with rich behaviour, plus `@Mockable` aggregate
 protocols at the boundaries the App layer wires up.
 
-| Type | Kind | Notes |
-|---|---|---|
-| `Simulator` | value | identity (`udid`, `name`, `state`, `runtime`); rich verbs `boot()` / `shutdown()` / `screen()` / `input()` / `chrome(in:)` delegate to the injected aggregate |
-| `Simulators` | aggregate | `@Mockable` protocol — `all`, `find`, `boot`, `shutdown`, `screen(for:)`, `input(for:)`. Default-impl `running` / `available` / `listJSON` |
-| `Screen` | port | `@Mockable` protocol — `start(onFrame:)` / `stop`. Emits `IOSurface` per frame |
-| `Input` | port | `@Mockable` protocol — `tap` / `swipe` / `touch1` / `touch2` / `button` / `scroll` |
-| `Stream` | port | `@Mockable` protocol — `start(on:)` / `stop` / `apply(_:)` / `requestKeyframe` / `requestSnapshot` |
-| `StreamConfig` / `StreamFormat` | value | runtime knobs + `mjpeg` / `avcc` enum |
-| `Gesture` | protocol | `Tap` / `Swipe` / `Touch1` / `Touch2` / `Press` / `Scroll` / `Pinch` / `Pan` value types |
-| `GestureRegistry` | strategy | maps wire `"type"` strings to per-gesture parsers |
-| `DeviceChrome` | value | bezel layout from `chrome.json` — insets, corner radius, button anchors |
-| `DeviceProfile` | value | `profile.plist` parse result (chromeIdentifier) |
-| `Chromes` | aggregate | `@Mockable` protocol — `assets(forDeviceName:)` returns `DeviceChromeAssets` |
-| `Point` / `Size` / `Insets` / `Rect` | value | coordinate primitives |
+| Context | Type | Kind | Notes |
+|---|---|---|---|
+| Simulator | `Simulator` | value | identity (`udid`, `name`, `state`, `runtime`); rich verbs `boot()` / `shutdown()` / `screen()` / `input()` / `chrome(in:)` delegate to the injected aggregate |
+| Simulator | `Simulators` | aggregate | `@Mockable` protocol — `all`, `find`, `boot`, `shutdown`, `screen(for:)`, `input(for:)`. Default-impl `running` / `available` / `listJSON` |
+| Screen | `Screen` | port | `@Mockable` protocol — `start(onFrame:)` / `stop`. Emits `IOSurface` per frame |
+| Input | `Input` | port | `@Mockable` protocol — `tap` / `swipe` / `touch1` / `touch2` / `button` / `scroll` |
+| Input | `Gesture` | protocol | `Tap` / `Swipe` / `Touch1` / `Touch2` / `Press` / `Scroll` / `Pinch` / `Pan` value types |
+| Input | `GestureRegistry` | strategy | maps wire `"type"` strings to per-gesture parsers |
+| Stream | `Stream` | port | `@Mockable` protocol — `start(on:)` / `stop` / `apply(_:)` / `requestKeyframe` / `requestSnapshot` |
+| Stream | `StreamConfig` / `StreamFormat` | value | runtime knobs + `mjpeg` / `avcc` enum |
+| Chrome | `DeviceChrome` | value | bezel layout from `chrome.json` — insets, corner radius, button anchors |
+| Chrome | `DeviceProfile` | value | `profile.plist` parse result (chromeIdentifier) |
+| Chrome | `Chromes` | aggregate | `@Mockable` protocol — `assets(forDeviceName:)` returns `DeviceChromeAssets` |
+| Common | `Point` / `Size` / `Insets` / `Rect` | value | coordinate primitives |
 
-Adding a new gesture is one `Gesture`-conforming struct + one line in
-`GestureRegistry.standard`. Adding a new stream format is one `Stream`
-impl + one case in `StreamFormat.makeStream`. Caller code stays
-unchanged (OCP).
+Adding a new gesture is one `Gesture`-conforming struct in
+`Domain/Input/` + one line in `GestureRegistry.standard`. Adding a
+new stream format is one `Stream` impl in `Infrastructure/Stream/` +
+one case in `StreamFormat.makeStream`. Caller code stays unchanged
+(OCP).
 
 ### Infrastructure
 
@@ -117,18 +107,18 @@ unchanged (OCP).
 ObjC-runtime / SimulatorKit / CoreGraphics work; tests substitute
 mocks at the port boundary.
 
-| Port | Concrete impl | What it wraps |
-|---|---|---|
-| `Simulators` | `CoreSimulators` | CoreSimulator + SimulatorKit private classes via the ObjC runtime |
-| `Screen` | `SimulatorKitScreen` | `SimDevice.io` framebuffer callback registration |
-| `Input` | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
-| `Stream` | `MJPEGStream` / `AVCCStream` | `JPEGEncoder` + `H264Encoder` (VideoToolbox), envelope formatting |
-| `FrameSink` | `StdoutSink` / `WebSocketFrameSink` | per-process or per-WS sink for encoded bytes |
-| `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
-| `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |
-| `PDFRasterizer` | `CoreGraphicsPDFRasterizer` | turns composite PDFs into RGBA PNG |
-| — | `Server` | Hummingbird HTTP + WebSocket server for `baguette serve` |
-| — | `WebRoot` | resolves `Resources/Web/` via env override → source tree → `Bundle.module` |
+| Context | Port | Concrete impl | What it wraps |
+|---|---|---|---|
+| Simulator | `Simulators` | `CoreSimulators` | CoreSimulator + SimulatorKit private classes via the ObjC runtime |
+| Screen | `Screen` | `SimulatorKitScreen` | `SimDevice.io` framebuffer callback registration |
+| Input | `Input` | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
+| Stream | `Stream` | `MJPEGStream` / `AVCCStream` | `JPEGEncoder` + `H264Encoder` (VideoToolbox), envelope formatting |
+| Stream | `FrameSink` | `StdoutSink` / `WebSocketFrameSink` | per-process or per-WS sink for encoded bytes |
+| Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
+| Chrome | `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |
+| Chrome | `PDFRasterizer` | `CoreGraphicsPDFRasterizer` | turns composite PDFs into RGBA PNG |
+| Server | — | `Server` | Hummingbird HTTP + WebSocket server for `baguette serve` |
+| Server | — | `WebRoot` | resolves `Resources/Web/` via env override → source tree → `Bundle.module` |
 
 `StdoutSink` and `WebSocketFrameSink` both conform to `FrameSink`
 (`func write(Data)`) so the encoders don't know or care which they're
@@ -159,7 +149,7 @@ Thin orchestration; ArgumentParser lives here.
 1. **Browser** — user taps inside the on-page simulator. `MouseGestureSource`
    computes the click's normalized coordinates and calls `SimInput.tap(...)`.
 2. **`SimInput`** — emits a payload `{kind:"tap", x, y, duration, width, height}`
-   in the asc-cli plugin's wire dialect, hands it to its `transport`
+   in the host plugin's wire dialect, hands it to its `transport`
    callback.
 3. **`sim-stream.js` orchestrator** — translates the dialect to
    Baguette's wire (`type:"tap"`, x/y multiplied to device-point
@@ -227,7 +217,7 @@ SimulatorKitScreen (IOSurface)        Stream impl                        FrameSi
 that's `WebSocketFrameSink`, which parses the envelope back into
 per-frame chunks and emits them as WS binary messages.
 
-Format-specific envelopes live in `Domain/Envelope.swift`:
+Format-specific envelopes live in `Domain/Stream/Envelope.swift`:
 
 - `MJPEGEnvelope.header` / `framed(jpeg:)` — multipart MIME prologue
   + per-frame `--frame` boundary (so an HTTP `<img src=…/stream.mjpeg>`
@@ -331,6 +321,9 @@ graph; vanilla `<script>` tags loaded in order.
 Chicago-school state-based tests throughout. 110+ tests; every
 external boundary is `@Mockable`, so tests substitute auto-generated
 fakes and assert on returned values rather than recorded calls.
+`Tests/BaguetteTests/` mirrors the same context split as `Sources/`
+(`Simulator/`, `Input/`, `Stream/`, `Chrome/`, plus `App/` for the
+App-layer dispatchers).
 
 - **Pure parsers** (`DeviceChrome`, `DeviceProfile`, `ReconfigParser`,
   `GestureRegistry`) — feed JSON / plist data, assert on the parsed
@@ -354,7 +347,7 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 
 - **`key` / `type`** — keyboard isn't on Baguette's host-HID path
   yet (preview-kit recipe still WIP). The `serve` UI logs and drops
-  these; the asc-pro plugin routes them through external tooling.
+  these; subprocess consumers route them through external tooling.
 - **`siri` button** — crashes `backboardd` via every known Indigo
   path. Explicitly rejected.
 - **Single-finger streaming** — routed correctly but
@@ -366,3 +359,6 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 
 - [`../README.md`](../README.md) — quickstart, CLI reference, wire
   protocol.
+- `../Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` —
+  the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
+  commented.
