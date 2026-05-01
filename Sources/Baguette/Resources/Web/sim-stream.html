@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulator stream — preview</title>
+<style>
+  /* Design system — duplicated from the host page (`/api/sim/ui`) so this
+     file renders correctly when opened directly via file://. At runtime,
+     sim-stream.js only extracts the #simPluginView contents, so these
+     parent-page styles are ignored (the host's own copy is already loaded). */
+  :root {
+    --bg: #f8fafc;
+    --panel: #ffffff;
+    --text: #334155;
+    --text-muted: #94a3b8;
+    --border: #e2e8f0;
+    --border-light: rgba(15, 23, 42, 0.06);
+    --accent: #2563eb;
+    --success: #0f766e;
+    --danger: #b91c1c;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+  .toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .card-header { padding: 10px 12px; border-bottom: 1px solid var(--border); background: #f8fafc; }
+  .card-title { font-size: 13px; font-weight: 700; color: #1f2937; }
+  .card-body { padding: 12px; }
+  .card-body.padded { padding: 12px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center;
+         gap: 6px; height: 30px; padding: 0 12px;
+         border: 1px solid var(--border); border-radius: 8px;
+         background: var(--panel); color: var(--text);
+         font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn:hover { border-color: #cbd5e1; background: #f1f5f9; }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+  .btn-secondary { background: #f8fafc; color: #475569; }
+
+  /* Preview ribbon — visible only when opened via file:// */
+  #preview-banner {
+    display: none; position: fixed; top: 10px; right: 10px; z-index: 999;
+    padding: 4px 10px; border-radius: 6px;
+    background: rgba(234,179,8,.16); border: 1px solid rgba(234,179,8,.42);
+    color: #ca8a04; font: 700 10px -apple-system, sans-serif; letter-spacing: .14em;
+  }
+  body.preview #preview-banner { display: block; }
+</style>
+</head>
+<body>
+<div id="preview-banner">PREVIEW</div>
+
+<!--
+  Everything inside #simPluginView is what sim-stream.js injects into the
+  host page when a stream starts. The style block directly below is scoped
+  to #simStreamSidebar and travels with the extracted markup.
+-->
+<div id="simPluginView" style="padding:20px;box-sizing:border-box">
+  <style>
+    #simStreamSidebar kbd{display:inline-block;min-width:14px;padding:1px 5px;border-radius:4px;background:#f1f5f9;border:1px solid var(--border);font:600 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#1f2937;text-align:center}
+    #simStreamSidebar .sim-tip{display:flex;gap:8px;padding:8px 10px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:11px;line-height:1.55}
+    #simStreamSidebar > .sim-tip{grid-column:1 / -1}  /* span both columns when sidebar becomes a grid on narrow layouts */
+    #simStreamSidebar .sim-tip strong{color:#1d4ed8;font-weight:700;display:block;margin-bottom:2px;font-size:11px}
+    #simStreamSidebar .sim-tip .dim{color:#475569}
+    #simStreamSidebar .btn-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    #simStreamSidebar .key-row{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;margin-top:8px}
+    #simStreamSidebar .key-row .btn{font-size:11px;padding:0 8px;gap:4px}
+    #simStreamSidebar .key-row .btn .glyph{color:var(--text-muted);font-weight:700;min-width:12px;text-align:center}
+    #simStreamSidebar .preset-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    #simStreamSidebar .preset-row .btn{flex-direction:column;gap:2px;height:auto;padding:8px 4px}
+    #simStreamSidebar .preset-row .btn .label{font-size:11px;font-weight:700}
+    #simStreamSidebar .preset-row .btn .hint{font-size:9px;color:var(--text-muted);font-weight:500;letter-spacing:0.02em}
+    #simStreamSidebar .preset-row .btn.btn-primary .hint{color:rgba(255,255,255,0.75)}
+    #simStreamSidebar .adv{margin-top:10px;border-top:1px dashed var(--border-light,#eef2f7);padding-top:10px}
+    #simStreamSidebar .adv > summary{list-style:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:4px;user-select:none}
+    #simStreamSidebar .adv > summary::-webkit-details-marker{display:none}
+    #simStreamSidebar .adv > summary::before{content:'▸';font-size:9px;transition:transform 0.15s ease}
+    #simStreamSidebar .adv[open] > summary::before{transform:rotate(90deg)}
+    #simStreamSidebar .adv .kv{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px}
+    #simStreamSidebar .adv .kv .k{color:var(--text-muted);width:72px;flex-shrink:0}
+    #simStreamSidebar .adv .kv .v{display:flex;gap:4px;flex:1}
+    #simStreamSidebar .adv .kv .v .btn{flex:1;min-width:0;font-size:11px;padding:0 6px}
+    #simStreamSidebar .captures-head{display:flex;align-items:center;gap:6px}
+    #simStreamSidebar .captures-head .with-frame{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+    #simStreamSidebar details.events > summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--border);user-select:none}
+    #simStreamSidebar details.events > summary::-webkit-details-marker{display:none}
+    #simStreamSidebar details.events > summary::after{content:'▸';font-size:10px;color:var(--text-muted);transition:transform 0.15s ease}
+    #simStreamSidebar details.events[open] > summary::after{transform:rotate(90deg)}
+    #simStreamSidebar details.events:not([open]) > summary{border-bottom:none}
+    #simStreamSidebar details.events[open] > summary{border-bottom:1px solid var(--border)}
+
+    /* Responsive — sidebar collapses to grid / single column on narrow
+       widths. Moved here from sim-stream.js so the rules arrive with the
+       markup and can be previewed at any width. */
+    @media (max-width: 820px) {
+      #simStreamLayout { flex-direction: column !important; gap: 16px !important; }
+      #simStreamDeviceCol { width: 100% !important; }
+      #simStreamSidebar {
+        width: 100% !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        align-items: start;
+        gap: 12px !important;
+      }
+      #simStreamSidebar > .card:last-child { grid-column: 1 / -1; }
+      #simDeviceFrame { max-height: 58vh !important; }
+      #simDeviceFrame img, #simDeviceFrame canvas { max-height: 58vh !important; }
+    }
+    @media (max-width: 520px) {
+      #simPluginView { padding: 12px; }
+      #simStreamSidebar { grid-template-columns: 1fr !important; }
+      #simStreamToolbar { gap: 8px !important; }
+      #simStreamToolbarActions { margin-left: 0 !important; }
+      #simDeviceFrame { max-height: 54vh !important; }
+      #simDeviceFrame img, #simDeviceFrame canvas { max-height: 54vh !important; }
+    }
+  </style>
+
+  <div id="simStreamToolbar" class="toolbar" style="padding:0 0 16px;border:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <button class="btn btn-secondary btn-sm" onclick="window._simStopStream()" title="Back to simulator list">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span id="simStreamTitle" style="font-weight:600;font-size:14px;color:#1f2937"></span>
+    <span id="simStreamFps" style="color:var(--text-muted);font-size:11px;font-variant-numeric:tabular-nums;padding:3px 8px;background:#f1f5f9;border-radius:999px"></span>
+    <div id="simStreamToolbarActions" style="margin-left:auto;display:flex;align-items:center;gap:8px"></div>
+  </div>
+
+  <div id="simStreamLayout" style="display:flex;gap:20px;align-items:flex-start">
+    <div id="simStreamDeviceCol" style="flex:1;display:flex;justify-content:center">
+      <div id="simDeviceFrame" style="position:relative;display:inline-block;max-height:70vh"></div>
+    </div>
+
+    <div id="simStreamSidebar" style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:12px">
+
+      <div class="sim-tip">
+        <div style="flex:1">
+          <strong>Quick tips</strong>
+          <span class="dim">Click to tap · drag to swipe · <kbd>⌥</kbd> + drag to pinch · scroll to pan</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title" style="font-size:12px">Phone buttons</span></div>
+        <div class="card-body padded">
+          <div class="btn-row">
+            <button class="btn btn-secondary btn-sm" onclick="window._simButton('home')">Home</button>
+            <button class="btn btn-secondary btn-sm" onclick="window._simButton('lock')">Lock</button>
+            <button class="btn btn-secondary btn-sm" onclick="window._simButton('siri')">Siri</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title" style="font-size:12px">Keyboard</span></div>
+        <div class="card-body padded">
+          <div style="display:flex;gap:6px">
+            <input type="text" id="simTextInput" placeholder="Type text to send…" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text)" onkeydown="if(event.key==='Enter'){event.preventDefault();window._simSendText()}">
+            <button class="btn btn-primary btn-sm" onclick="window._simSendText()">Send</button>
+          </div>
+          <div class="key-row">
+            <button class="btn btn-secondary btn-sm" onclick="window._simKey(40)" title="Return"><span class="glyph">↵</span>Return</button>
+            <button class="btn btn-secondary btn-sm" onclick="window._simKey(42)" title="Delete / Backspace"><span class="glyph">⌫</span>Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="window._simKey(43)" title="Tab"><span class="glyph">⇥</span>Tab</button>
+            <button class="btn btn-secondary btn-sm" onclick="window._simKey(41)" title="Escape">Esc</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title" style="font-size:12px">Stream</span></div>
+        <div class="card-body padded">
+          <div class="kv" style="margin:0 0 10px">
+            <span class="k">Format</span>
+            <div id="simFormatRow" class="v">
+              <button class="btn btn-sm simFmt" data-v="avcc" onclick="window._simSetFormat(this)" title="H.264 (hardware-decoded). Smaller, more compressed.">H.264</button>
+              <button class="btn btn-sm simFmt" data-v="mjpeg" onclick="window._simSetFormat(this)" title="MJPEG (multipart JPEG). Higher bandwidth, lower latency.">MJPEG</button>
+            </div>
+          </div>
+          <div class="preset-row">
+            <button class="btn btn-sm preset" data-scale="3" data-fps="30" data-bps="500000"
+              title="Low resolution, 30fps, smallest bitrate — best for slow connections"
+              onclick="['scale','fps','bps'].forEach(k=>{var b=document.querySelector('#simStreamSidebar .simQ[data-k='+k+'][data-v=\x22'+this.dataset[k]+'\x22]');if(b)b.click()});this.parentNode.querySelectorAll('.preset').forEach(function(o){o.classList.remove('btn-primary')});this.classList.add('btn-primary')">
+              <span class="label">Fast</span>
+              <span class="hint">Low · 30</span>
+            </button>
+            <button class="btn btn-sm preset btn-primary" data-scale="2" data-fps="60" data-bps="2000000"
+              title="Mid resolution, 60fps, balanced bitrate — recommended"
+              onclick="['scale','fps','bps'].forEach(k=>{var b=document.querySelector('#simStreamSidebar .simQ[data-k='+k+'][data-v=\x22'+this.dataset[k]+'\x22]');if(b)b.click()});this.parentNode.querySelectorAll('.preset').forEach(function(o){o.classList.remove('btn-primary')});this.classList.add('btn-primary')">
+              <span class="label">Balanced</span>
+              <span class="hint">Mid · 60</span>
+            </button>
+            <button class="btn btn-sm preset" data-scale="1" data-fps="60" data-bps="4000000"
+              title="Full resolution, 60fps, high bitrate — for clear capture"
+              onclick="['scale','fps','bps'].forEach(k=>{var b=document.querySelector('#simStreamSidebar .simQ[data-k='+k+'][data-v=\x22'+this.dataset[k]+'\x22]');if(b)b.click()});this.parentNode.querySelectorAll('.preset').forEach(function(o){o.classList.remove('btn-primary')});this.classList.add('btn-primary')">
+              <span class="label">Sharp</span>
+              <span class="hint">Full · 60</span>
+            </button>
+          </div>
+          <details class="adv">
+            <summary>Advanced</summary>
+            <div class="kv">
+              <span class="k">Resolution</span>
+              <div id="simQualScale" class="v">
+                <button class="btn btn-sm simQ" data-k="scale" data-v="3" onclick="window._simSetQuality(this)">1×</button>
+                <button class="btn btn-sm simQ" data-k="scale" data-v="2" onclick="window._simSetQuality(this)">2×</button>
+                <button class="btn btn-sm simQ" data-k="scale" data-v="1" onclick="window._simSetQuality(this)">3×</button>
+              </div>
+            </div>
+            <div class="kv">
+              <span class="k">Frame rate</span>
+              <div class="v">
+                <button class="btn btn-sm simQ" data-k="fps" data-v="30" onclick="window._simSetQuality(this)">30</button>
+                <button class="btn btn-sm simQ" data-k="fps" data-v="60" onclick="window._simSetQuality(this)">60</button>
+              </div>
+            </div>
+            <div class="kv">
+              <span class="k">Bitrate</span>
+              <div class="v">
+                <button class="btn btn-sm simQ" data-k="bps" data-v="500000" onclick="window._simSetQuality(this)">Low</button>
+                <button class="btn btn-sm simQ" data-k="bps" data-v="2000000" onclick="window._simSetQuality(this)">Bal</button>
+                <button class="btn btn-sm simQ" data-k="bps" data-v="4000000" onclick="window._simSetQuality(this)">High</button>
+                <button class="btn btn-sm simQ" data-k="bps" data-v="8000000" onclick="window._simSetQuality(this)">Max</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="captures-head">
+            <span class="card-title" style="font-size:12px;flex:1">Captures <span id="simCaptureCount" style="font-weight:500;color:var(--text-muted)"></span></span>
+            <label class="with-frame">
+              <input type="checkbox" id="simFrameToggle" onchange="window._simToggleFrame(this.checked)" style="cursor:pointer"> with frame
+            </label>
+          </div>
+        </div>
+        <div class="card-body padded" style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="window._simCapture()" style="width:100%">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Take screenshot
+          </button>
+          <div id="simCaptureGallery" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px">
+            <div style="color:var(--text-muted);font-size:11px;padding:4px 2px">No captures yet</div>
+          </div>
+        </div>
+      </div>
+
+      <details class="card events">
+        <summary><span class="card-title" style="font-size:12px">Events</span></summary>
+        <div class="card-body" style="padding:8px;max-height:200px;overflow-y:auto;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace" id="simActivityLog">
+          <div style="color:var(--text-muted)">Click the device to interact</div>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Preview bootstrap — only fires when this file is opened directly in a
+  // browser (file://). In production, sim-stream.js extracts the markup
+  // above and injects it into the live page, so none of this runs.
+  (function(){
+    if (location.protocol !== 'file:') return;
+    document.body.classList.add('preview');
+
+    // Stub server-bound handlers so interacting with the preview doesn't throw.
+    ['_simStopStream','_simButton','_simSendText','_simKey','_simSetQuality','_simSetFormat','_simCapture','_simToggleFrame']
+      .forEach(function(name){
+        window[name] = function(){ console.log('[preview]', name, arguments); };
+      });
+    // The Stream preset buttons still run their inline onclick to flip
+    // btn-primary between presets — that's pure DOM toggling, needs no stub.
+
+    // Placeholder title + fps + device frame for the preview.
+    document.getElementById('simStreamTitle').textContent = 'iPhone 17 Pro Max';
+    document.getElementById('simStreamFps').textContent = '— fps';
+    var frame = document.getElementById('simDeviceFrame');
+    var img = document.createElement('img');
+    img.src = '../frames/iPhone 17 Pro Max.png';
+    img.style.cssText = 'display:block;height:100%;max-height:70vh;pointer-events:none';
+    frame.appendChild(img);
+  })();
+</script>
+</body>
+</html>

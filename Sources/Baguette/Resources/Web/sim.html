@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulators — ASC Pro</title>
+<style>
+  /* Minimal tokens so the injected sim-list / sim-stream markup renders
+     with a consistent look standalone (outside the host SPA). Mirrors
+     the variables the legacy CSS expects. */
+  :root {
+    --bg:        #f8fafc;
+    --panel:     #ffffff;
+    --text:      #334155;
+    --text-muted:#94a3b8;
+    --border:    #e2e8f0;
+    --border-light: rgba(15,23,42,0.06);
+    --accent:    #2563eb;
+    --success:   #0f766e;
+    --danger:    #b91c1c;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+               font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, sans-serif; }
+  body { min-height: 100vh; }
+</style>
+</head>
+<body>
+<!--
+  Standalone simulator entry. Each script owns one job; they're loaded
+  in dependency order:
+
+    1. sim-input.js       — SimInput / PinchOverlay / MouseGestureSource
+    2. frame-decoder.js   — MJPEG / AVCC byte → frame strategy
+    3. device-frame.js    — bezel + screen-area DOM construction
+    4. capture-gallery.js — screenshot fetch + composite + thumbs
+    5. stream-session.js  — WebSocket lifetime + paint loop
+    6. sim-stream.js      — orchestrator: registers `stream` affordance,
+                            wires the modules above on Stream click
+    7. sim-list.js        — list page UI + boot/shutdown buttons
+
+  Each file is a self-contained IIFE that hangs its public surface
+  on `window`. No bundler, no module graph; just `<script>` tags.
+-->
+<script src="sim-input.js"></script>
+<script src="frame-decoder.js"></script>
+<script src="device-frame.js"></script>
+<script src="capture-gallery.js"></script>
+<script src="stream-session.js"></script>
+<script src="sim-stream.js"></script>
+<script src="sim-list.js"></script>
+</body>
+</html>
