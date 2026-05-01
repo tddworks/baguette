@@ -19,8 +19,30 @@ struct DeviceChrome: Equatable, Sendable {
     let buttons: [ChromeButton]
     /// Basename of the pre-built composite PDF inside the chrome
     /// bundle, e.g. `"PhoneComposite"`. `nil` when the bundle only
-    /// ships 9-slice pieces — the loader falls back / gives up.
+    /// ships 9-slice pieces — the loader falls back to the slice path.
     let compositeImageName: String?
+    /// 9-slice piece names (4 corners, 4 edges, 1 inner screen).
+    /// Populated when `chrome.json` carries the full set; `nil` when
+    /// any piece is missing. Bundles with a baked composite still
+    /// publish slice names, so the slice acts as a fallback path even
+    /// when `compositeImageName` is set.
+    let slice: DeviceChromeSlice?
+
+    init(
+        identifier: String,
+        screenInsets: Insets,
+        outerCornerRadius: Double,
+        buttons: [ChromeButton],
+        compositeImageName: String?,
+        slice: DeviceChromeSlice? = nil
+    ) {
+        self.identifier = identifier
+        self.screenInsets = screenInsets
+        self.outerCornerRadius = outerCornerRadius
+        self.buttons = buttons
+        self.compositeImageName = compositeImageName
+        self.slice = slice
+    }
 
     /// Width of the bezel surrounding the screen — the larger of the
     /// horizontal and vertical insets, used to derive the inner corner
@@ -122,7 +144,69 @@ struct DeviceChrome: Equatable, Sendable {
             screenInsets: insets,
             outerCornerRadius: outerRadius,
             buttons: buttons,
-            compositeImageName: images["composite"] as? String
+            compositeImageName: images["composite"] as? String,
+            slice: DeviceChromeSlice(json: images)
+        )
+    }
+}
+
+/// Names of the nine PDF assets that compose a bezel when a bundle
+/// doesn't ship a baked `Composite.pdf`. Eight pieces wrap the device
+/// body (4 corners + 4 edges); `screen` defines the inner cutout area
+/// — its bounding box, plus the chrome's `screenInsets`, drives the
+/// composed canvas size.
+struct DeviceChromeSlice: Equatable, Sendable {
+    let topLeft: String
+    let top: String
+    let topRight: String
+    let right: String
+    let bottomRight: String
+    let bottom: String
+    let bottomLeft: String
+    let left: String
+    let screen: String
+
+    init(
+        topLeft: String, top: String, topRight: String,
+        right: String,
+        bottomRight: String, bottom: String, bottomLeft: String,
+        left: String,
+        screen: String
+    ) {
+        self.topLeft = topLeft
+        self.top = top
+        self.topRight = topRight
+        self.right = right
+        self.bottomRight = bottomRight
+        self.bottom = bottom
+        self.bottomLeft = bottomLeft
+        self.left = left
+        self.screen = screen
+    }
+
+    /// All-or-nothing parse: any missing key → `nil`. Keeps callers
+    /// simple — they branch on `slice != nil` instead of probing each
+    /// field, and a partial bundle can't accidentally produce a
+    /// half-drawn bezel.
+    init?(json images: [String: Any]) {
+        guard
+            let topLeft = images["topLeft"] as? String,
+            let top = images["top"] as? String,
+            let topRight = images["topRight"] as? String,
+            let right = images["right"] as? String,
+            let bottomRight = images["bottomRight"] as? String,
+            let bottom = images["bottom"] as? String,
+            let bottomLeft = images["bottomLeft"] as? String,
+            let left = images["left"] as? String,
+            let screen = images["screen"] as? String
+        else { return nil }
+
+        self.init(
+            topLeft: topLeft, top: top, topRight: topRight,
+            right: right,
+            bottomRight: bottomRight, bottom: bottom, bottomLeft: bottomLeft,
+            left: left,
+            screen: screen
         )
     }
 }

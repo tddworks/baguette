@@ -74,7 +74,7 @@ struct LiveChromesTests {
         #expect(chromes.assets(forDeviceName: "iPhone 17 Pro") == nil)
     }
 
-    @Test func `assets returns nil when chrome relies on 9-slice (no composite)`() {
+    @Test func `assets returns nil when chrome has neither composite nor full slice`() {
         let store = MockChromeStore()
         let rasterizer = MockPDFRasterizer()
         given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
@@ -82,8 +82,87 @@ struct LiveChromesTests {
             .willReturn(Self.fixtureChromeJSONNoComposite)
 
         let chromes = LiveChromes(store: store, rasterizer: rasterizer)
-        // No composite image → we don't rasterize, return nil. Caller can
-        // fall back to a plain stream.
+        // No composite, no slice — nothing to render. Caller can fall
+        // back to a plain stream.
+        #expect(chromes.assets(forDeviceName: "iPhone 17 Pro") == nil)
+    }
+
+    @Test func `assets composes a 9-slice bezel using screen size from plist`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let composed = ChromeImage(data: Data("9SLICE-PNG".utf8), size: Size(width: 926, height: 1302))
+
+        // tablet5 plist with mainScreenWidth/Height/Scale → 1668/2 ×
+        // 2420/2 = 834×1210 1× points (iPad Pro 11" M4).
+        given(store).profilePlistData(deviceName: .any)
+            .willReturn(Self.makePlist(
+                chromeIdentifier: "com.apple.dt.devicekit.chrome.tablet5",
+                width: 1668, height: 2420, scale: 2
+            ))
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONSliceOnly)
+        for (name, payload) in Self.slicePDFNamesAndPayloads where name != "Screen" {
+            given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value(name))
+                .willReturn(Data(payload.utf8))
+        }
+        given(rasterizer).compose9Slice(pdfs: .any, insets: .any, innerSize: .any)
+            .willReturn(composed)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        let assets = try #require(chromes.assets(forDeviceName: "iPad Pro 11-inch (M4)"))
+
+        #expect(assets.composite == composed)
+        verify(rasterizer).compose9Slice(
+            pdfs: .value(NineSlicePDFs(
+                topLeft: Data("topLeft".utf8),
+                top: Data("top".utf8),
+                topRight: Data("topRight".utf8),
+                right: Data("right".utf8),
+                bottomRight: Data("bottomRight".utf8),
+                bottom: Data("bottom".utf8),
+                bottomLeft: Data("bottomLeft".utf8),
+                left: Data("left".utf8)
+            )),
+            insets: .value(Insets(top: 46, left: 46, bottom: 46, right: 46)),
+            innerSize: .value(Size(width: 834, height: 1210))
+        ).called(1)
+        // No baked composite means we must NOT call rasterize on a
+        // single composite PDF.
+        verify(rasterizer).rasterize(pdfData: .any).called(0)
+    }
+
+    @Test func `assets returns nil for 9-slice bundle when plist lacks screen size`() {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        // chromeIdentifier present but mainScreen* keys missing — the
+        // 9-slice path can't size the canvas, so the asset is unloadable.
+        given(store).profilePlistData(deviceName: .any)
+            .willReturn(Self.makePlist(
+                chromeIdentifier: "com.apple.dt.devicekit.chrome.tablet5"
+            ))
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONSliceOnly)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        #expect(chromes.assets(forDeviceName: "iPad Pro 11-inch (M4)") == nil)
+    }
+
+    @Test func `assets returns nil when a 9-slice piece is unreadable`() {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONSliceOnly)
+        // 8 of 9 readable, one missing — overall result must be nil
+        // (a half-drawn bezel is worse than no bezel).
+        for (name, _) in Self.slicePDFNamesAndPayloads where name != "iPadTop" {
+            given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value(name))
+                .willReturn(Data("ok".utf8))
+        }
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("iPadTop"))
+            .willThrow(StubError.notFound)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
         #expect(chromes.assets(forDeviceName: "iPhone 17 Pro") == nil)
     }
 
@@ -176,14 +255,31 @@ struct LiveChromesTests {
 
 private extension LiveChromesTests {
 
-    static let fixturePlist: Data = {
-        try! PropertyListSerialization.data(
-            fromPropertyList: [
-                "chromeIdentifier": "com.apple.dt.devicekit.chrome.phone11"
-            ] as [String: Any],
-            format: .xml, options: 0
+    /// Default plist fixture — phone11 with a phone-shaped 1× point
+    /// screen size (iPhone 17 Pro). 1320×2868 ÷ 3 = 440×956.
+    static let fixturePlist: Data = makePlist(
+        chromeIdentifier: "com.apple.dt.devicekit.chrome.phone11",
+        width: 1320, height: 2868, scale: 3
+    )
+
+    /// Build a `profile.plist` with the keys `LiveChromes` reads:
+    /// `chromeIdentifier` always, `mainScreen{Width,Height,Scale}` only
+    /// when supplied — omitting the screen keys exercises the path
+    /// where 9-slice composition can't size its inner canvas.
+    static func makePlist(
+        chromeIdentifier: String,
+        width: Int? = nil,
+        height: Int? = nil,
+        scale: Int? = nil
+    ) -> Data {
+        var dict: [String: Any] = ["chromeIdentifier": chromeIdentifier]
+        if let width  { dict["mainScreenWidth"]  = width }
+        if let height { dict["mainScreenHeight"] = height }
+        if let scale  { dict["mainScreenScale"]  = scale }
+        return try! PropertyListSerialization.data(
+            fromPropertyList: dict, format: .xml, options: 0
         )
-    }()
+    }
 
     static let fixtureChromeJSON: Data = Data(#"""
     {
@@ -205,6 +301,45 @@ private extension LiveChromesTests {
       "inputs": []
     }
     """#.utf8)
+
+    /// Real-shape `tablet5` chrome — every iPad bundle's 9-slice
+    /// (and `phone13` / iPhone 17e) parses to this same shape.
+    static let fixtureChromeJSONSliceOnly: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.tablet5",
+      "images": {
+        "topLeft": "iPadTL",
+        "top": "iPadTop",
+        "topRight": "iPadTR",
+        "right": "iPadRight",
+        "bottomRight": "iPadBR",
+        "bottom": "iPadBase",
+        "bottomLeft": "iPadBL",
+        "left": "iPadLeft",
+        "screen": "Screen",
+        "sizing": { "leftWidth": 46, "rightWidth": 46, "topHeight": 46, "bottomHeight": 46 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 75 } },
+      "inputs": []
+    }
+    """#.utf8)
+
+    /// Map of slice asset name → mock PDF payload, used by the 9-slice
+    /// happy-path test to assert the right `imageName` lookups happen
+    /// and the right bytes flow into `compose9Slice`. The `Screen` entry
+    /// stays here only so the 'unreadable piece' test can stub /
+    /// throw without special-casing — `compose9Slice` itself never
+    /// receives the screen PDF (1×1 marker, supplanted by `innerSize`).
+    static let slicePDFNamesAndPayloads: [(String, String)] = [
+        ("iPadTL",    "topLeft"),
+        ("iPadTop",   "top"),
+        ("iPadTR",    "topRight"),
+        ("iPadRight", "right"),
+        ("iPadBR",    "bottomRight"),
+        ("iPadBase",  "bottom"),
+        ("iPadBL",    "bottomLeft"),
+        ("iPadLeft",  "left"),
+    ]
 
     /// Four anchors × two aligns — drives every arm of the
     /// computeMargins / buttonTopLeft switches (left, right, top with

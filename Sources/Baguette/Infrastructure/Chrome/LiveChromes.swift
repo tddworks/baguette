@@ -29,9 +29,10 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     }
 
     func assets(forDeviceName deviceName: String) -> DeviceChromeAssets? {
-        guard let chromeID = chromeIdentifier(forDeviceName: deviceName) else {
+        guard let profile = resolveProfile(deviceName: deviceName) else {
             return nil
         }
+        let chromeID = profile.chromeIdentifier
 
         lock.lock()
         if let cached = cache[chromeID] {
@@ -40,7 +41,7 @@ final class LiveChromes: Chromes, @unchecked Sendable {
         }
         lock.unlock()
 
-        let resolved = loadAssets(chromeIdentifier: chromeID)
+        let resolved = loadAssets(chromeIdentifier: chromeID, profile: profile)
 
         lock.lock()
         cache[chromeID] = resolved
@@ -50,16 +51,19 @@ final class LiveChromes: Chromes, @unchecked Sendable {
 
     // MARK: - private
 
-    private func chromeIdentifier(forDeviceName deviceName: String) -> String? {
+    private func resolveProfile(deviceName: String) -> DeviceProfile? {
         do {
             let plistData = try store.profilePlistData(deviceName: deviceName)
-            return try DeviceProfile.parsing(plistData: plistData).chromeIdentifier
+            return try DeviceProfile.parsing(plistData: plistData)
         } catch {
             return nil
         }
     }
 
-    private func loadAssets(chromeIdentifier: String) -> DeviceChromeAssets? {
+    private func loadAssets(
+        chromeIdentifier: String,
+        profile: DeviceProfile
+    ) -> DeviceChromeAssets? {
         let chrome: DeviceChrome
         do {
             let json = try store.chromeJSONData(chromeIdentifier: chromeIdentifier)
@@ -67,21 +71,80 @@ final class LiveChromes: Chromes, @unchecked Sendable {
         } catch {
             return nil
         }
-        guard let imageName = chrome.compositeImageName else {
-            // 9-slice-only bundles aren't supported yet; cache nil so
-            // we don't keep re-parsing the JSON.
+        guard let composite = loadComposite(
+            chromeIdentifier: chromeIdentifier,
+            chrome: chrome,
+            profile: profile
+        ) else {
+            // Neither baked-composite nor a complete 9-slice (with a
+            // valid screen size) — cache nil so we don't keep re-parsing.
             return nil
         }
         do {
-            let pdf = try store.chromeAssetPDF(
-                chromeIdentifier: chromeIdentifier,
-                imageName: imageName
-            )
-            let composite = try rasterizer.rasterize(pdfData: pdf)
             return try assemble(
                 chromeIdentifier: chromeIdentifier,
                 chrome: chrome,
                 composite: composite
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    /// Resolve a `DeviceChrome` to a single bezel image. Prefers the
+    /// pre-baked composite when the bundle ships one (every iPhone
+    /// `phoneN ≤ 12`); falls through to 9-slice composition for
+    /// bundles that ship only corner / edge pieces (every iPad
+    /// `tabletN`, plus `phone13` for iPhone 17e). The 9-slice path
+    /// needs the simulator's screen size to size its inner canvas —
+    /// `Screen.pdf` is a 1×1 marker, so we read the dimensions from
+    /// `mainScreen{Width,Height,Scale}` on the device's plist instead.
+    private func loadComposite(
+        chromeIdentifier: String,
+        chrome: DeviceChrome,
+        profile: DeviceProfile
+    ) -> ChromeImage? {
+        if let imageName = chrome.compositeImageName,
+           let pdf = try? store.chromeAssetPDF(
+               chromeIdentifier: chromeIdentifier, imageName: imageName
+           ),
+           let composite = try? rasterizer.rasterize(pdfData: pdf) {
+            return composite
+        }
+        guard let slice = chrome.slice,
+              let innerSize = profile.screenSize,
+              let pdfs = loadSlicePDFs(
+                  chromeIdentifier: chromeIdentifier, slice: slice
+              ) else {
+            return nil
+        }
+        return try? rasterizer.compose9Slice(
+            pdfs: pdfs, insets: chrome.screenInsets, innerSize: innerSize
+        )
+    }
+
+    /// Read all nine PDF assets in one go. Any single missing piece
+    /// fails the whole load — a half-drawn bezel would look worse than
+    /// no bezel.
+    private func loadSlicePDFs(
+        chromeIdentifier: String,
+        slice: DeviceChromeSlice
+    ) -> NineSlicePDFs? {
+        func read(_ name: String) throws -> Data {
+            try store.chromeAssetPDF(
+                chromeIdentifier: chromeIdentifier, imageName: name
+            )
+        }
+        do {
+            return try NineSlicePDFs(
+                topLeft: read(slice.topLeft),
+                top: read(slice.top),
+                topRight: read(slice.topRight),
+                right: read(slice.right),
+                bottomRight: read(slice.bottomRight),
+                bottom: read(slice.bottom),
+                bottomLeft: read(slice.bottomLeft),
+                left: read(slice.left)
             )
         } catch {
             return nil

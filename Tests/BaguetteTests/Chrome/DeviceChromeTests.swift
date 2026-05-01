@@ -32,6 +32,35 @@ struct DeviceChromeTests {
         #expect(chrome.compositeImageName == nil)
     }
 
+    @Test func `parsing reads images slice piece names`() throws {
+        // phone11 ships both `composite` and the 9-slice names; the
+        // slice block stays populated regardless of whether a baked
+        // composite exists, so 9-slice is always available as a fallback.
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
+        let slice = try #require(chrome.slice)
+        #expect(slice == DeviceChromeSlice(
+            topLeft: "Phone TL", top: "Phone Top", topRight: "Phone TR",
+            right: "Phone Right",
+            bottomRight: "Phone BR", bottom: "Phone Base", bottomLeft: "Phone BL",
+            left: "Phone Left",
+            screen: "Screen"
+        ))
+    }
+
+    @Test func `slice is populated for 9-slice-only bundles`() throws {
+        let chrome = try DeviceChrome.parsing(json: Self.fixtureSliceOnly)
+        #expect(chrome.compositeImageName == nil)
+        #expect(chrome.slice?.topLeft == "iPad TL")
+        #expect(chrome.slice?.screen == "Screen")
+    }
+
+    @Test func `slice is nil when any of the 9 piece names is missing`() throws {
+        // Drop just one key (`top`) to verify we treat the slice as
+        // all-or-nothing — partial coverage isn't useful.
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePartialSlice)
+        #expect(chrome.slice == nil)
+    }
+
     @Test func `parsing collects buttons preserving order`() throws {
         let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
         #expect(chrome.buttons.map(\.name) == ["action", "volume-up", "power"])
@@ -262,10 +291,9 @@ private extension DeviceChromeTests {
         )
     }
 
-    /// Same shape as `fixturePhone11` but with `images.composite` removed —
-    /// represents a chrome bundle that ships only 9-slice pieces. We don't
-    /// rasterize 9-slice today; the parser should report `nil` so callers
-    /// can skip such bundles cleanly.
+    /// Same shape as `fixturePhone11` but with `images.composite` removed
+    /// AND only one slice piece — exercises the path where neither a
+    /// baked composite nor a complete 9-slice are usable.
     static let fixtureNoComposite: Data = Data(#"""
     {
       "identifier": "com.apple.dt.devicekit.chrome.phoneN",
@@ -274,6 +302,49 @@ private extension DeviceChromeTests {
         "sizing": { "leftWidth": 18, "rightWidth": 18, "topHeight": 18, "bottomHeight": 18 }
       },
       "paths": { "simpleOutsideBorder": { "cornerRadiusX": 80, "cornerRadiusY": 80 } },
+      "inputs": []
+    }
+    """#.utf8)
+
+    /// Real-shape iPad / phone13 bundle — no `composite` key, but every
+    /// 9-slice piece present. Mirrors what `tablet*.devicechrome` ship.
+    static let fixtureSliceOnly: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.tablet5",
+      "images": {
+        "topLeft": "iPad TL",
+        "top": "iPadTop",
+        "topRight": "iPad TR",
+        "right": "iPadRight",
+        "bottomRight": "iPad BR",
+        "bottom": "iPadBase",
+        "bottomLeft": "iPad BL",
+        "left": "iPadLeft",
+        "screen": "Screen",
+        "sizing": { "leftWidth": 46, "rightWidth": 46, "topHeight": 46, "bottomHeight": 46 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 75 } },
+      "inputs": []
+    }
+    """#.utf8)
+
+    /// 8 of 9 slice keys (`top` removed). Slice should resolve to nil
+    /// — partial coverage isn't enough to compose a bezel.
+    static let fixturePartialSlice: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.partial",
+      "images": {
+        "topLeft": "TL",
+        "topRight": "TR",
+        "right": "R",
+        "bottomRight": "BR",
+        "bottom": "B",
+        "bottomLeft": "BL",
+        "left": "L",
+        "screen": "S",
+        "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
       "inputs": []
     }
     """#.utf8)

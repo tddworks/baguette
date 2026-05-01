@@ -17,6 +17,25 @@ struct DeviceProfileTests {
         #expect(profile.chromeIdentifier == "phone11")
     }
 
+    // mainScreenWidth/Height are in pixels; mainScreenScale converts to
+    // 1x points. iPhone 17 Pro Max plist values: 1320×2868 @3x → 440×956
+    // points. The 9-slice composer needs this to size the inner area
+    // since `Screen.pdf` is just a 1×1 marker.
+    @Test func `parsing reads mainScreen pixels and scale into 1x point screenSize`() throws {
+        let plist = Self.makePlist(chromeIdentifier: "phone12")
+        let profile = try DeviceProfile.parsing(plistData: plist)
+        #expect(profile.screenSize == Size(width: 440, height: 956))
+    }
+
+    @Test func `screenSize is nil when any mainScreen key is missing`() throws {
+        let plist = try PropertyListSerialization.data(
+            fromPropertyList: ["chromeIdentifier": "phone12"] as [String: Any],
+            format: .xml, options: 0
+        )
+        let profile = try DeviceProfile.parsing(plistData: plist)
+        #expect(profile.screenSize == nil)
+    }
+
     @Test func `parsing throws on missing chromeIdentifier`() throws {
         let plist = try PropertyListSerialization.data(
             fromPropertyList: ["mainScreenWidth": 1320] as [String: Any],
