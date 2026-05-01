@@ -35,10 +35,15 @@ jobs:
           BIN_PATH=$(swift build --show-bin-path)
           XCTEST="$BIN_PATH/BaguettePackageTests.xctest/Contents/MacOS/BaguettePackageTests"
           PROFDATA="$BIN_PATH/codecov/default.profdata"
+          # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
+          # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,
+          # stdin/stdout) and the thin command-layer files that do nothing
+          # but wire those shims together — they need a booted simulator or
+          # live socket to exercise meaningfully.
           xcrun llvm-cov export "$XCTEST" \
             -instr-profile "$PROFDATA" \
             -format=lcov \
-            -ignore-filename-regex=".build|Tests|Resources|Mock" \
+            -ignore-filename-regex=".build|Tests|Resources|Mock|Infrastructure/Server/|Infrastructure/Simulator/|Infrastructure/Input/|Infrastructure/Screen/|Infrastructure/Stream/|App/Commands/BootCommand|App/Commands/InputCommand|App/Commands/ListCommand|App/Commands/ShutdownCommand|App/Commands/ServeCommand|App/Commands/StreamCommand|App/Commands/GestureCommands|App/Logger" \
             > coverage.lcov
 
       - name: Upload coverage to Codecov

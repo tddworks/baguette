@@ -150,7 +150,7 @@ struct CommandParsingTests {
             "--udid", "ABC",
             "--x1", "10", "--y1", "20",
             "--x2", "30", "--y2", "40",
-            "--dx", "5", "--dy", "-5",
+            "--dx", "5", "--dy=-5",
             "--width", "390", "--height", "844",
         ])
         #expect(cmd.x1 == 10 && cmd.y1 == 20)
