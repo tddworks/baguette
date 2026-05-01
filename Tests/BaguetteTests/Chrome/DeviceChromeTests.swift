@@ -70,6 +70,59 @@ struct DeviceChromeTests {
         }
     }
 
+    // Top-level array is valid JSON but not the dict shape the parser
+    // requires — must throw `malformedJSON` rather than crash on the cast.
+    @Test func `parsing throws malformedJSON when payload is not a dict`() {
+        let bad = Data("[]".utf8)
+        #expect(throws: DeviceChromeParseError.malformedJSON) {
+            _ = try DeviceChrome.parsing(json: bad)
+        }
+    }
+
+    // Bundles missing every optional section ("images", "paths", "inputs")
+    // must still parse — they fall through every `?? [:]` / `?? []` branch
+    // and produce a chrome with zeroed insets, zero radius, and no buttons.
+    @Test func `parsing tolerates missing images, paths and inputs`() throws {
+        let bare = Data(#"{"identifier":"phoneN"}"#.utf8)
+        let chrome = try DeviceChrome.parsing(json: bare)
+        #expect(chrome.identifier == "phoneN")
+        #expect(chrome.screenInsets == Insets(top: 0, left: 0, bottom: 0, right: 0))
+        #expect(chrome.outerCornerRadius == 0)
+        #expect(chrome.buttons.isEmpty)
+        #expect(chrome.compositeImageName == nil)
+    }
+
+    @Test func `button defaults anchor to left and align to leading when absent`() throws {
+        let json = Data(#"""
+        {
+          "identifier": "phoneN",
+          "inputs": [
+            { "name": "naked", "image": "X" }
+          ]
+        }
+        """#.utf8)
+        let chrome = try DeviceChrome.parsing(json: json)
+        let naked = try #require(chrome.buttons.first)
+        #expect(naked.anchor == .left)
+        #expect(naked.align == .leading)
+        // Also exercises the `?? [:]` fallback for the missing offsets dict.
+        #expect(naked.offset == Point(x: 0, y: 0))
+    }
+
+    @Test func `button skips entries missing required name or image fields`() throws {
+        let json = Data(#"""
+        {
+          "identifier": "phoneN",
+          "inputs": [
+            { "name": "no-image" },
+            { "image": "no-name" }
+          ]
+        }
+        """#.utf8)
+        let chrome = try DeviceChrome.parsing(json: json)
+        #expect(chrome.buttons.isEmpty)
+    }
+
     // MARK: - rich domain semantics
 
     @Test func `bezelWidth is the larger of left and top inset`() {

@@ -32,6 +32,27 @@ struct DeviceProfileTests {
             _ = try DeviceProfile.parsing(plistData: Data("not-a-plist".utf8))
         }
     }
+
+    // PropertyListSerialization rejects empty data outright (vs. parsing
+    // it as a string) — exercises the catch arm of the do/catch instead
+    // of the "parsed but wrong shape" arm.
+    @Test func `parsing throws malformedPlist when PropertyListSerialization rejects the bytes`() {
+        #expect(throws: DeviceProfileParseError.malformedPlist) {
+            _ = try DeviceProfile.parsing(plistData: Data())
+        }
+    }
+
+    // A plist whose top level is an array (not a dict) — parser exits
+    // through the `guard let dict` arm and reports malformedPlist.
+    @Test func `parsing throws malformedPlist when the top level is not a dict`() throws {
+        let plist = try PropertyListSerialization.data(
+            fromPropertyList: ["a", "b"] as [String],
+            format: .xml, options: 0
+        )
+        #expect(throws: DeviceProfileParseError.malformedPlist) {
+            _ = try DeviceProfile.parsing(plistData: plist)
+        }
+    }
 }
 
 private extension DeviceProfileTests {

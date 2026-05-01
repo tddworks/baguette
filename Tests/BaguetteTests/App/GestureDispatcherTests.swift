@@ -62,4 +62,26 @@ struct GestureDispatcherTests {
         #expect(ack == #"{"ok":true}"#)
         verify(input).touch1(phase: .value(.down), at: .any, size: .any).called(1)
     }
+
+    @Test func `wraps non-GestureError thrown by a parser into the ack`() {
+        let input = MockInput()
+        let registry = GestureRegistry()
+        registry.register(ThrowingGesture.self)
+        let dispatcher = GestureDispatcher(input: input, registry: registry)
+
+        let ack = dispatcher.dispatch(line: #"{"type":"explode"}"#)
+
+        #expect(ack == #"{"ok":false,"error":"boom"}"#)
+    }
+}
+
+private struct ThrowingGesture: Gesture {
+    static var wireType: String { "explode" }
+    static func parse(_ dict: [String: Any]) throws -> Self { throw OtherError.boom }
+    func execute(on input: any Input) -> Bool { true }
+}
+
+private enum OtherError: Error, CustomStringConvertible {
+    case boom
+    var description: String { "boom" }
 }

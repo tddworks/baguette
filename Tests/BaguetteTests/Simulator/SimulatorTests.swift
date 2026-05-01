@@ -155,4 +155,14 @@ struct SimulatorTests {
         )
         #expect(s.runtime == "")
     }
+
+    // The `state` strings end up in the list output and the serve UI;
+    // exhaustively pin every enum case so a typo or new case is caught.
+    @Test func `State description covers all cases`() {
+        #expect(Simulator.State.creating.description == "Creating")
+        #expect(Simulator.State.shutdown.description == "Shutdown")
+        #expect(Simulator.State.booting.description == "Booting")
+        #expect(Simulator.State.booted.description == "Booted")
+        #expect(Simulator.State.shuttingDown.description == "ShuttingDown")
+    }
 }

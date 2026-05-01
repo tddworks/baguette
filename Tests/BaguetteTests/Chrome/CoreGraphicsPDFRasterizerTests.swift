@@ -23,6 +23,50 @@ struct CoreGraphicsPDFRasterizerTests {
         }
     }
 
+    @Test func `rasterize throws noPage when the PDF page has zero dimensions`() throws {
+        let pdf = try makeSquarePDF(side: 0)
+        let rast = CoreGraphicsPDFRasterizer()
+        #expect(throws: PDFRasterizerError.noPage) {
+            _ = try rast.rasterize(pdfData: pdf)
+        }
+    }
+
+    // compose stacks layers onto a fresh canvas — produces a PNG sized
+    // to canvasSize with the layer drawn at top-left coordinates.
+    @Test func `compose draws PNG layers onto a sized canvas`() throws {
+        let layerPDF = try makeSquarePDF(side: 50)
+        let rast = CoreGraphicsPDFRasterizer()
+        let layerImage = try rast.rasterize(pdfData: layerPDF)
+
+        let merged = try rast.compose(
+            canvasSize: Size(width: 80, height: 80),
+            layers: [ImageLayer(image: layerImage, topLeft: Point(x: 10, y: 20))]
+        )
+        #expect(merged.size == Size(width: 80, height: 80))
+        #expect(Self.hasPNGMagic(merged.data))
+    }
+
+    @Test func `compose throws rasterFailed for a zero-sized canvas`() {
+        let rast = CoreGraphicsPDFRasterizer()
+        #expect(throws: PDFRasterizerError.rasterFailed) {
+            _ = try rast.compose(canvasSize: Size(width: 0, height: 0), layers: [])
+        }
+    }
+
+    @Test func `compose throws decodingFailed when a layer's PNG bytes are unreadable`() {
+        let rast = CoreGraphicsPDFRasterizer()
+        let busted = ImageLayer(
+            image: ChromeImage(data: Data("not-a-png".utf8), size: Size(width: 10, height: 10)),
+            topLeft: Point(x: 0, y: 0)
+        )
+        #expect(throws: PDFRasterizerError.decodingFailed) {
+            _ = try rast.compose(
+                canvasSize: Size(width: 10, height: 10),
+                layers: [busted]
+            )
+        }
+    }
+
     // MARK: - helpers
 
     /// Build a single-page PDF with crop box `side × side` so we can

@@ -90,4 +90,20 @@ struct GestureRegistryTests {
             _ = try GestureRegistry.standard.parse([:])
         }
     }
+
+    // "tap-down" has a valid phase suffix but `tap` was registered
+    // non-phased, so the phased path falls through; the literal
+    // "tap-down" key has no parser → unknownKind. Pins the rule that a
+    // dash + phase suffix is meaningful only for phased prefixes.
+    @Test func `valid phase suffix on a non-phased prefix falls through to unknownKind`() {
+        #expect(throws: GestureError.unknownKind("tap-down")) {
+            _ = try GestureRegistry.standard.parse(["type": "tap-down"])
+        }
+    }
+
+    @Test func `throws invalidValue when type is not a string`() {
+        #expect(throws: GestureError.invalidValue("type", expected: "string")) {
+            _ = try GestureRegistry.standard.parse(["type": 42])
+        }
+    }
 }

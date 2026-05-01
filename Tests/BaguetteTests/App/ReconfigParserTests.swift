@@ -45,4 +45,23 @@ struct ReconfigParserTests {
         let same = ReconfigParser.apply(#"{"type":"set_bitrate"}"#, to: .default)
         #expect(same == .default)
     }
+
+    @Test func `missing fps field returns the input config unchanged`() {
+        let same = ReconfigParser.apply(#"{"type":"set_fps"}"#, to: .default)
+        #expect(same == .default)
+    }
+
+    @Test func `missing scale field returns the input config unchanged`() {
+        let same = ReconfigParser.apply(#"{"type":"set_scale"}"#, to: .default)
+        #expect(same == .default)
+    }
+
+    // Non-numeric payload: number() falls past the Double / Int branches
+    // and returns nil — apply pins the config unchanged.
+    @Test func `non-numeric bitrate payload returns the input config unchanged`() {
+        let same = ReconfigParser.apply(
+            #"{"type":"set_bitrate","bps":"fast"}"#, to: .default
+        )
+        #expect(same == .default)
+    }
 }

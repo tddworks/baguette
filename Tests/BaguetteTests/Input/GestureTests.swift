@@ -233,6 +233,32 @@ struct PinchTests {
     }
 }
 
+// MARK: - Field
+
+@Suite("Field")
+struct FieldTests {
+    @Test func `requiredDouble throws invalidValue for non-numeric input`() {
+        #expect(throws: GestureError.invalidValue("x", expected: "number")) {
+            _ = try Field.requiredDouble(["x": "abc"], "x")
+        }
+    }
+
+    @Test func `requiredString throws invalidValue when value is not a string`() {
+        #expect(throws: GestureError.invalidValue("name", expected: "string")) {
+            _ = try Field.requiredString(["name": 42], "name")
+        }
+    }
+
+    // `message` derives a CLI-friendly description for every case;
+    // exhaustively assert all three so a future case-add fails the suite.
+    @Test func `GestureError message covers all cases`() {
+        #expect(GestureError.missingField("x").message == "missing field: x")
+        #expect(GestureError.invalidValue("x", expected: "number").message
+                == "invalid x: expected number")
+        #expect(GestureError.unknownKind("frob").message == "unknown kind: frob")
+    }
+}
+
 // MARK: - Pan
 
 @Suite("Pan")
