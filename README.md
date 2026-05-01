@@ -1,7 +1,3 @@
-
-
-https://github.com/user-attachments/assets/85d33739-02ea-4a7b-b7ce-58feff7d67b8
-
 <p align="center">
   <img src="assets/logo.png" alt="Baguette" width="240">
 </p>
