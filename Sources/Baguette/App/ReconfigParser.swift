@@ -26,9 +26,10 @@ enum ReconfigParser {
         }
     }
 
+    // JSONSerialization wraps every numeric in NSNumber, which always
+    // bridges to Double — including JSON integer literals — so a single
+    // cast covers every payload shape the wire produces.
     private static func number(_ raw: Any?) -> Double? {
-        if let v = raw as? Double { return v }
-        if let v = raw as? Int { return Double(v) }
-        return nil
+        raw as? Double
     }
 }
