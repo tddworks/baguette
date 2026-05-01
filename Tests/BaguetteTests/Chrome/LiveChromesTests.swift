@@ -206,11 +206,9 @@ private extension LiveChromesTests {
     }
     """#.utf8)
 
-    /// Four buttons, one per anchor — drives every arm of the
-    /// computeMargins / buttonTopLeft switches in `assemble`.
-    /// `top` button uses `align: trailing` so the trailing-baseX branch
-    /// is hit; `bottom` uses `align: leading` so the leading-baseX branch
-    /// is hit.
+    /// Four anchors × two aligns — drives every arm of the
+    /// computeMargins / buttonTopLeft switches (left, right, top with
+    /// both leading & trailing align, bottom with both leading & trailing).
     static let fixtureChromeJSONFourAnchors: Data = Data(#"""
     {
       "identifier": "com.apple.dt.devicekit.chrome.phone11",
@@ -220,13 +218,17 @@ private extension LiveChromesTests {
       },
       "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
       "inputs": [
-        { "name": "L", "image": "BTN", "anchor": "left",   "align": "leading",
+        { "name": "L",  "image": "BTN", "anchor": "left",   "align": "leading",
           "offsets": { "rollover": { "x": 0, "y": 50 } } },
-        { "name": "R", "image": "BTN", "anchor": "right",  "align": "leading",
+        { "name": "R",  "image": "BTN", "anchor": "right",  "align": "leading",
           "offsets": { "rollover": { "x": 0, "y": 50 } } },
-        { "name": "T", "image": "BTN", "anchor": "top",    "align": "trailing",
+        { "name": "TT", "image": "BTN", "anchor": "top",    "align": "trailing",
           "offsets": { "rollover": { "x": 0, "y": -15 } } },
-        { "name": "B", "image": "BTN", "anchor": "bottom", "align": "leading",
+        { "name": "TL", "image": "BTN", "anchor": "top",    "align": "leading",
+          "offsets": { "rollover": { "x": 0, "y": -15 } } },
+        { "name": "BL", "image": "BTN", "anchor": "bottom", "align": "leading",
+          "offsets": { "rollover": { "x": 0, "y": 15 } } },
+        { "name": "BT", "image": "BTN", "anchor": "bottom", "align": "trailing",
           "offsets": { "rollover": { "x": 0, "y": 15 } } }
       ]
     }
