@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version and tag
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Create release directory
+        run: mkdir -p release
+
+      - name: Build arm64
+        run: |
+          swift build -c release --arch arm64 --disable-sandbox
+          strip -rSTx .build/arm64-apple-macosx/release/Baguette
+          cp .build/arm64-apple-macosx/release/Baguette release/baguette_${{ steps.version.outputs.tag }}_macOS_arm64
+
+      - name: Create checksums
+        run: |
+          cd release
+          shasum -a 256 * > baguette_${{ steps.version.outputs.tag }}_checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: baguette ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-tap:
+    needs: release
+    uses: ./.github/workflows/update-homebrew-tap.yml
+    with:
+      version: ${{ needs.release.outputs.tag }}
+    secrets: inherit

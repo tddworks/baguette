@@ -1,0 +1,57 @@
+name: Feature Request
+description: Propose a new capability for baguette
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Think from the user's perspective — what can they do now that they couldn't before?
+
+  - type: textarea
+    id: pain
+    attributes:
+      label: The Pain
+      description: What's frustrating today? Why does this matter?
+      placeholder: |
+        Today I can't drive a hardware keyboard event into the simulator from the browser, so...
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: The Fix
+      description: What can the user do now? Show the command(s) or wire format.
+      placeholder: |
+        ```bash
+        baguette key --udid <UDID> --code 0x07
+        ```
+        or via the WS:
+        ```json
+        {"type":"key","code":"0x07"}
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: before-after
+    attributes:
+      label: Before & After
+      description: Concrete comparison — old way vs new way.
+      placeholder: |
+        **Before:** Send keystrokes via external osascript shimming.
+        **After:** Native WS message — same channel as taps and swipes.
+    validations:
+      required: false
+
+  - type: textarea
+    id: future
+    attributes:
+      label: Future Possibilities
+      description: What could this unlock next?
+      placeholder: |
+        - [ ] IME composition events
+        - [ ] Hardware-key chords (cmd-tab, etc.)
+    validations:
+      required: false

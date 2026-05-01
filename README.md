@@ -8,6 +8,15 @@
   Headless iOS Simulator manager + host-side input injection for iOS 26.
 </p>
 
+<p align="center">
+  <a href="https://github.com/tddworks/baguette/actions/workflows/ci.yml"><img src="https://github.com/tddworks/baguette/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/tddworks/baguette/releases/latest"><img src="https://img.shields.io/github/v/release/tddworks/baguette?sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/tddworks/baguette" alt="License"></a>
+  <img src="https://img.shields.io/badge/Swift-6.1-orange?logo=swift" alt="Swift 6.1">
+  <img src="https://img.shields.io/badge/macOS-15%2B-blue?logo=apple" alt="macOS 15+">
+  <img src="https://img.shields.io/badge/Xcode-26-1575F9?logo=xcode" alt="Xcode 26">
+</p>
+
 A single Swift CLI — **`baguette`** — that creates / boots / shuts down
 simulator devices, streams their screens at 60 fps, and injects taps
 / swipes / multi-finger touches without booting the Simulator.app GUI.
@@ -35,7 +44,17 @@ https://github.com/user-attachments/assets/e904413f-16bb-4b3d-86d5-162333403cee
   split; 110+ Mockable-backed tests; `swift test` runs without a booted
   simulator.
 
-## Build
+## Install
+
+```bash
+brew tap tddworks/tap
+brew install baguette
+```
+
+Apple Silicon only. Requires Xcode 26 — `baguette` links against private
+SimulatorKit / CoreSimulator frameworks shipped with Xcode.
+
+## Build from source
 
 ```bash
 make           # release build via ./build.sh

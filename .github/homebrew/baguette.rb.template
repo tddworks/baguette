@@ -1,0 +1,34 @@
+# typed: false
+# frozen_string_literal: true
+
+class Baguette < Formula
+  desc "Headless iOS Simulator manager + host-side input injection for iOS 26"
+  homepage "https://github.com/tddworks/baguette"
+  version "__VERSION__"
+  license "Apache-2.0"
+
+  on_arm do
+    url "https://github.com/tddworks/baguette/releases/download/__VERSION__/baguette___VERSION___macOS_arm64"
+    sha256 "__SHA256_ARM64__"
+  end
+
+  depends_on :macos
+  depends_on arch: :arm64
+  depends_on xcode: ["26.0", :build]
+
+  def install
+    bin.install "baguette___VERSION___macOS_arm64" => "baguette"
+  end
+
+  def caveats
+    <<~EOS
+      baguette links against private SimulatorKit and CoreSimulator
+      frameworks shipped with Xcode 26. Make sure Xcode 26 is installed
+      and `xcode-select` points at it before running `baguette serve`.
+    EOS
+  end
+
+  test do
+    assert_match "baguette", shell_output("#{bin}/baguette --help")
+  end
+end

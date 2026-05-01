@@ -1,0 +1,49 @@
+name: Bug Report
+description: Something isn't working as expected
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you try to do, and what went wrong?
+      placeholder: |
+        I ran `baguette serve` and tapping in the browser does nothing...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands and gestures to trigger the bug.
+      placeholder: |
+        ```bash
+        baguette boot --udid <UDID>
+        baguette serve
+        # then in browser: open /simulators/<UDID>, tap on the screen
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS version, Xcode version, simulator runtime.
+      placeholder: |
+        - macOS: 15.x (Apple Silicon)
+        - Xcode: 26.x
+        - Simulator runtime: iOS 26.4
+        - Install method: brew / source
+    validations:
+      required: false
