@@ -16,11 +16,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: |
-          ls /Applications | grep -i Xcode || true
-          sudo xcode-select -p
-          swift --version
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.2"
+
+      - name: Swift version
+        run: swift --version
 
       - name: Build
         run: swift build -c release
