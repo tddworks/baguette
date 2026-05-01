@@ -12,8 +12,8 @@ coverage:
 # Mirror the lcov exclusions in .github/workflows/ci.yml: IO / 3rd-party
 # shims around CoreSimulator, SimulatorKit, IOKit HID, Hummingbird,
 # VideoToolbox, CoreImage, IOSurface and stdin/stdout sinks need a booted
-# simulator or live socket to exercise — they're not unit-testable and
-# would otherwise drown the signal from the Domain + App layers.
+# simulator or live socket to exercise — and the thin command-layer files
+# that do nothing but wire those shims together follow the same rule.
 ignore:
   - "Sources/Baguette/Resources/**"
   - "Sources/Baguette/Infrastructure/Server/**"
@@ -21,4 +21,12 @@ ignore:
   - "Sources/Baguette/Infrastructure/Input/**"
   - "Sources/Baguette/Infrastructure/Screen/**"
   - "Sources/Baguette/Infrastructure/Stream/**"
+  - "Sources/Baguette/App/Commands/BootCommand.swift"
+  - "Sources/Baguette/App/Commands/InputCommand.swift"
+  - "Sources/Baguette/App/Commands/ListCommand.swift"
+  - "Sources/Baguette/App/Commands/ShutdownCommand.swift"
+  - "Sources/Baguette/App/Commands/ServeCommand.swift"
+  - "Sources/Baguette/App/Commands/StreamCommand.swift"
+  - "Sources/Baguette/App/Commands/GestureCommands.swift"
+  - "Sources/Baguette/App/Logger.swift"
   - "Tests/**"
