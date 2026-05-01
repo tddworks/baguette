@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/85d33739-02ea-4a7b-b7ce-58feff7d67b8
+
 <p align="center">
   <img src="assets/logo.png" alt="Baguette" width="240">
 </p>
@@ -16,7 +20,7 @@ control any booted simulator from a browser.
 
 ## Demo
 
-https://github.com/user-attachments/assets/baguette-demo.mp4
+https://github.com/user-attachments/assets/e904413f-16bb-4b3d-86d5-162333403cee
 
 > The raw clip lives at [`assets/demo.mp4`](assets/demo.mp4) — drag
 > it into a GitHub web edit of this README to upload as a CDN-hosted
