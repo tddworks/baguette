@@ -4,6 +4,8 @@
 
 <h1 align="center">Baguette</h1>
 
+<p align="center"><em>Bon appétit.</em></p>
+
 <p align="center">
   Headless iOS Simulator manager + host-side input injection for iOS 26.
 </p>
@@ -357,7 +359,3 @@ and the layered design is documented in
 ## License
 
 Apache License 2.0 — see [`LICENSE`](LICENSE).
-
----
-
-<p align="center"><em>Bon appétit.</em></p>
