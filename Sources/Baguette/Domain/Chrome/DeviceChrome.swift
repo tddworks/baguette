@@ -127,14 +127,12 @@ struct DeviceChrome: Equatable, Sendable {
     }
 }
 
-/// `JSONSerialization` produces numbers as `NSNumber`. Cast paths
-/// differ between Int-shaped and Double-shaped JSON literals; this
-/// collapses them so the parser stays terse.
+/// JSONSerialization wraps every numeric in NSNumber, which bridges to
+/// Double on Apple platforms regardless of the JSON literal's shape —
+/// so one cast covers integer and floating literals alike. Missing /
+/// non-numeric values fall back to zero so callers stay terse.
 fileprivate func coerceDouble(_ any: Any?) -> Double {
-    if let d = any as? Double { return d }
-    if let i = any as? Int { return Double(i) }
-    if let n = any as? NSNumber { return n.doubleValue }
-    return 0
+    (any as? Double) ?? 0
 }
 
 /// One button overlaid on the device body — action / volume / power.
