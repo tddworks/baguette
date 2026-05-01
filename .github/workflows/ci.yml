@@ -43,7 +43,7 @@ jobs:
           xcrun llvm-cov export "$XCTEST" \
             -instr-profile "$PROFDATA" \
             -format=lcov \
-            -ignore-filename-regex=".build|Tests|Resources|Mock|Infrastructure/Server/|Infrastructure/Simulator/|Infrastructure/Input/|Infrastructure/Screen/|Infrastructure/Stream/|App/Commands/BootCommand|App/Commands/InputCommand|App/Commands/ListCommand|App/Commands/ShutdownCommand|App/Commands/ServeCommand|App/Commands/StreamCommand|App/Commands/GestureCommands|App/Logger" \
+            -ignore-filename-regex=".build|Tests|Resources|Mock|Infrastructure/Server/|Infrastructure/Simulator/|Infrastructure/Input/|Infrastructure/Screen/|Infrastructure/Stream/|Infrastructure/Chrome/PDFRasterizer|App/Commands/|App/Logger" \
             > coverage.lcov
 
       - name: Upload coverage to Codecov
