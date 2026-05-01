@@ -27,5 +27,24 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Test
-        run: swift test
+      - name: Test with coverage
+        run: swift test --enable-code-coverage
+
+      - name: Generate lcov report
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          XCTEST="$BIN_PATH/BaguettePackageTests.xctest/Contents/MacOS/BaguettePackageTests"
+          PROFDATA="$BIN_PATH/codecov/default.profdata"
+          xcrun llvm-cov export "$XCTEST" \
+            -instr-profile "$PROFDATA" \
+            -format=lcov \
+            -ignore-filename-regex=".build|Tests|Resources|Mock" \
+            > coverage.lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: tddworks/baguette
+          files: coverage.lcov
+          fail_ci_if_error: true
