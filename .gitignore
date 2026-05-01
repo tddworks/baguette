@@ -4,4 +4,4 @@ DerivedData/
 .DS_Store
 *.xcodeproj
 *.xcworkspace
-Baguette
+/Baguette

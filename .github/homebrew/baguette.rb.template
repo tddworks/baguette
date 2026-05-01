@@ -8,7 +8,7 @@ class Baguette < Formula
   license "Apache-2.0"
 
   on_arm do
-    url "https://github.com/tddworks/baguette/releases/download/__VERSION__/baguette___VERSION___macOS_arm64"
+    url "https://github.com/tddworks/baguette/releases/download/__VERSION__/baguette___VERSION___macOS_arm64.tar.gz"
     sha256 "__SHA256_ARM64__"
   end
 
@@ -17,7 +17,13 @@ class Baguette < Formula
   depends_on xcode: ["26.0", :build]
 
   def install
-    bin.install "baguette___VERSION___macOS_arm64" => "baguette"
+    # Binary and its SPM resource bundle must sit side-by-side at
+    # runtime — WebRoot resolves the bundle via dladdr from the
+    # executable's directory. Install both into libexec and symlink
+    # the binary into bin.
+    libexec.install "Baguette" => "baguette"
+    libexec.install "Baguette_Baguette.bundle"
+    bin.install_symlink libexec/"baguette"
   end
 
   def caveats

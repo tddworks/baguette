@@ -48,7 +48,17 @@ jobs:
         run: |
           swift build -c release --arch arm64 --disable-sandbox
           strip -rSTx .build/arm64-apple-macosx/release/Baguette
-          cp .build/arm64-apple-macosx/release/Baguette release/baguette_${{ steps.version.outputs.tag }}_macOS_arm64
+
+      - name: Package binary + resource bundle
+        run: |
+          BUILD_DIR=.build/arm64-apple-macosx/release
+          STAGING=baguette-${{ steps.version.outputs.tag }}-macOS-arm64
+          mkdir -p "$STAGING"
+          cp "$BUILD_DIR/Baguette" "$STAGING/Baguette"
+          # Resource bundle holds Sources/Baguette/Resources/Web for `serve`.
+          # Must sit next to the executable at runtime.
+          cp -R "$BUILD_DIR/Baguette_Baguette.bundle" "$STAGING/Baguette_Baguette.bundle"
+          tar czf "release/baguette_${{ steps.version.outputs.tag }}_macOS_arm64.tar.gz" "$STAGING"
 
       - name: Create checksums
         run: |

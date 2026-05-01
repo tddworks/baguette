@@ -12,8 +12,11 @@ import Foundation
 ///      inside the package's `.build/`, walk up to the package root
 ///      and read directly from `Sources/Baguette/Resources/Web/`.
 ///      Edits show on the next browser refresh; no rebuild.
-///   3. `Bundle.module` (release) — the SPM-bundled copy alongside
-///      the binary.
+///   3. Sidecar `Baguette_Baguette.bundle` next to the executable —
+///      the SPM-generated resource bundle. We resolve it manually
+///      via `dladdr` instead of `Bundle.module` because the latter
+///      `fatalError`s when the bundle is missing (e.g. a Homebrew
+///      install that didn't ship the bundle).
 ///
 /// `data(named:)` is used by the route handlers; the resolution logic
 /// runs once per call which is fine — the OS caches the file pages.
@@ -35,11 +38,8 @@ struct WebRoot {
            let data = read(dev) {
             return data
         }
-        if let bundled = Bundle.module.url(
-            forResource: (filename as NSString).deletingPathExtension,
-            withExtension: (filename as NSString).pathExtension,
-            subdirectory: "Web"
-        ), let data = read(bundled) {
+        if let bundled = sidecarWebURL(for: filename),
+           let data = read(bundled) {
             return data
         }
         return nil
@@ -70,5 +70,25 @@ struct WebRoot {
             url = url.deletingLastPathComponent()
         }
         return nil
+    }
+
+    /// Resolve a file inside the SPM-generated `Baguette_Baguette.bundle`
+    /// expected to sit next to the running executable. Returns nil when
+    /// the bundle isn't there (e.g. a binary-only install that forgot
+    /// to ship the bundle). Crucially, this avoids `Bundle.module`,
+    /// which `fatalError`s on miss.
+    private static func sidecarWebURL(for filename: String) -> URL? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0,
+              let cstr = info.dli_fname else { return nil }
+        let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
+        let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
+        guard FileManager.default.fileExists(atPath: bundleURL.path),
+              let bundle = Bundle(url: bundleURL) else { return nil }
+        return bundle.url(
+            forResource: (filename as NSString).deletingPathExtension,
+            withExtension: (filename as NSString).pathExtension,
+            subdirectory: "Web"
+        )
     }
 }
