@@ -357,3 +357,7 @@ and the layered design is documented in
 ## License
 
 Apache License 2.0 — see [`LICENSE`](LICENSE).
+
+---
+
+<p align="center"><em>Bon appétit.</em></p>
