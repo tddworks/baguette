@@ -13,7 +13,7 @@
   <a href="https://codecov.io/gh/tddworks/baguette"><img src="https://codecov.io/gh/tddworks/baguette/branch/main/graph/badge.svg" alt="Coverage"></a>
   <a href="https://github.com/tddworks/baguette/releases/latest"><img src="https://img.shields.io/github/v/release/tddworks/baguette?sort=semver" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/tddworks/baguette" alt="License"></a>
-  <img src="https://img.shields.io/badge/Swift-6.1-orange?logo=swift" alt="Swift 6.1">
+  <img src="https://img.shields.io/badge/Swift-6.1-orange?logo=swift" alt="Swift 6.2">
   <img src="https://img.shields.io/badge/macOS-15%2B-blue?logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Xcode-26-1575F9?logo=xcode" alt="Xcode 26">
 </p>
@@ -53,6 +53,28 @@ brew install tddworks/tap/baguette
 
 Apple Silicon only. Requires Xcode 26 — `baguette` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
+
+## Quickstart
+
+```bash
+# Start the web UI
+baguette serve
+
+# Open the dashboard
+open http://localhost:8421/simulators
+```
+
+You'll get a list of every simulator on the machine with Boot / Shutdown
+buttons. Click any booted device to open its Stream page — live frames,
+mouse/touch input, and the DeviceKit-sourced bezel.
+
+Headless from the terminal works too:
+
+```bash
+baguette list
+baguette boot --udid <UDID>
+baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+```
 
 ## Build from source
 
