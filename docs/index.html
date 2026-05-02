@@ -194,118 +194,168 @@
   .mock-stat .live{color:var(--live)}
 
   .farm-app{
-    display:grid;grid-template-columns:170px 1fr 1.4fr;height:calc(100% - 38px);
-    background:var(--bg-2);
+    display:grid;grid-template-columns:1.35fr 1fr;height:calc(100% - 39px);
+    background:var(--line);gap:1px;
   }
-  .farm-side{
-    border-right:1px solid var(--line);padding:18px 14px;
-    font-family:"JetBrains Mono";font-size:10.5px;
-  }
-  .farm-side .label{color:var(--dim);letter-spacing:.18em;text-transform:uppercase;
-    margin-bottom:14px;font-size:9.5px;}
-  .farm-side .item{
-    display:flex;justify-content:space-between;padding:7px 8px;
-    color:var(--ink-2);border-radius:5px;cursor:pointer;
-  }
-  .farm-side .item.on{background:var(--surface-2);color:var(--ink);
-    box-shadow:inset 2px 0 0 var(--crust);}
-  .farm-side .item .n{color:var(--dim)}
-  .farm-side .div{height:1px;background:var(--line);margin:14px 0}
 
-  .farm-grid{
-    border-right:1px solid var(--line);padding:14px;
-    display:grid;grid-template-columns:1fr 1fr;gap:10px;
-    align-content:start;
-    background:
-      radial-gradient(circle at 50% 0%, rgba(255,139,61,.04), transparent 60%);
-  }
-  .tile{
-    aspect-ratio:9/16;background:#000;border-radius:6px;position:relative;
-    border:1px solid var(--line-bright);overflow:hidden;
-    transition:transform .2s ease, border-color .2s ease;
-  }
-  .tile:hover{transform:translateY(-2px);border-color:var(--crust)}
-  .tile .badge{
-    position:absolute;top:5px;left:5px;font-family:"JetBrains Mono";
-    font-size:8px;letter-spacing:.05em;color:var(--ink-2);
-    background:rgba(0,0,0,.6);padding:2px 5px;border-radius:3px;backdrop-filter:blur(4px);
-  }
-  .tile .live-dot{
-    position:absolute;top:5px;right:5px;width:5px;height:5px;border-radius:50%;
-    background:var(--live);box-shadow:0 0 6px var(--live);animation:pulse 2s infinite;
-  }
-  .tile.idle .live-dot{background:var(--muted);box-shadow:none;animation:none}
-  .tile .ui{position:absolute;inset:0;padding:20% 14% 14%;display:flex;flex-direction:column;gap:5px}
-  .tile .ui .h{height:6px;background:linear-gradient(90deg,#3a2a1f,transparent);border-radius:2px}
-  .tile .ui .b{height:14px;background:#1a120c;border-radius:3px;border:1px solid #251a10}
-  .tile .ui .b.acc{background:linear-gradient(135deg,#5a3219,#3a1f10);border-color:#6a3a1f}
-  .tile.iphone-pro{background:linear-gradient(140deg,#1f140d,#0c0807)}
-  .tile.iphone-air{background:linear-gradient(160deg,#0e1620,#070a0e)}
-  .tile.ipad{background:linear-gradient(140deg,#1a1a22,#0a0a0e);aspect-ratio:4/5;grid-column:span 2}
-  .tile.ipad .ui{padding:8% 8% 6%}
-
-  .farm-focus{
-    padding:18px;display:flex;flex-direction:column;gap:14px;
+  /* — featured (focused) device — */
+  .farm-feature{
     background:linear-gradient(180deg,var(--bg-2),var(--surface));
+    padding:20px 22px;display:flex;flex-direction:column;gap:14px;
+    position:relative;min-width:0;
   }
-  .focus-head{
-    display:flex;justify-content:space-between;align-items:center;
-    font-family:"JetBrains Mono";font-size:10.5px;
+  .feature-head{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
   }
-  .focus-head .title{color:var(--ink);font-weight:600;letter-spacing:.02em}
-  .focus-head .meta{color:var(--dim);display:flex;gap:14px}
-  .focus-head .meta b{color:var(--live);font-weight:600}
-  .focus-screen{
-    flex:1;background:#000;border-radius:10px;border:1px solid var(--line-bright);
+  .feature-head .ttl{
+    font-family:"JetBrains Mono";font-weight:600;font-size:13px;
+    color:var(--ink);letter-spacing:-.01em;line-height:1.2;
+  }
+  .feature-head .ttl .sub{
+    display:block;font-weight:400;font-size:9.5px;color:var(--dim);
+    letter-spacing:.14em;text-transform:uppercase;margin-top:3px;
+  }
+  .feature-head .stats{
+    display:flex;gap:14px;font-family:"JetBrains Mono";font-size:10px;
+    color:var(--dim);align-items:center;
+  }
+  .feature-head .stats .live{
+    color:var(--live);font-weight:700;letter-spacing:.06em;
+    display:inline-flex;align-items:center;gap:5px;
+  }
+  .feature-head .stats .live::before{
+    content:"";width:5px;height:5px;background:var(--live);border-radius:50%;
+    box-shadow:0 0 6px var(--live);animation:pulse 2s infinite;
+  }
+  .feature-head .stats b{color:var(--ink);font-weight:600}
+
+  .feature-screen{
+    flex:1;background:#000;border-radius:14px;border:1px solid var(--line-bright);
     position:relative;overflow:hidden;
-    background:
-      radial-gradient(ellipse at top,#2a1a0e 0%,#0a0604 70%);
-    box-shadow:inset 0 0 80px rgba(0,0,0,.8);
+    background:radial-gradient(ellipse at 50% 0%,#2a1a0e 0%,#0a0604 70%);
+    box-shadow:inset 0 0 80px rgba(0,0,0,.85), 0 14px 30px -16px rgba(0,0,0,.6);
+    min-height:280px;
   }
-  .focus-screen::before{
-    content:"";position:absolute;inset:0;
-    background-image:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(255,255,255,.012) 2px,rgba(255,255,255,.012) 3px);
-    pointer-events:none;
+  .feature-screen::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(255,255,255,.014) 2px,rgba(255,255,255,.014) 3px);
   }
-  .focus-screen .notch{
-    position:absolute;top:14px;left:50%;transform:translateX(-50%);
-    width:80px;height:22px;background:#000;border-radius:14px;
+  .feature-screen .notch{
+    position:absolute;top:12px;left:50%;transform:translateX(-50%);
+    width:90px;height:24px;background:#000;border-radius:14px;z-index:2;
   }
-  .focus-screen .app{
-    position:absolute;inset:50px 22px 22px;display:flex;flex-direction:column;gap:10px;
+  .feature-screen .app{
+    position:absolute;inset:50px 20px 20px;display:flex;flex-direction:column;gap:10px;
   }
-  .focus-screen .app .row{
-    display:flex;gap:8px;align-items:center;
+  .feature-screen .app .row{display:flex;gap:8px;align-items:center}
+  .feature-screen .app .pill{
+    height:10px;background:linear-gradient(90deg,#3a281a,#1a1209);
+    border-radius:5px;flex:1;
   }
-  .focus-screen .app .pill{
-    height:10px;background:linear-gradient(90deg,#3a281a,#1a1209);border-radius:5px;flex:1;
+  .feature-screen .app .pill.acc{
+    background:linear-gradient(90deg,var(--crust),var(--crust-deep));
+    box-shadow:0 0 14px rgba(255,139,61,.4);flex:0 0 45%;
   }
-  .focus-screen .app .pill.acc{background:linear-gradient(90deg,#FF8B3D,#D9621F);}
-  .focus-screen .app .card{
-    height:48px;background:linear-gradient(135deg,#1a120c,#0d0805);border-radius:8px;
+  .feature-screen .app .pill.sm{flex:0 0 30%}
+  .feature-screen .app .card{
+    background:linear-gradient(135deg,#1a120c,#0d0805);border-radius:10px;
     border:1px solid #251a10;
   }
-  .focus-screen .app .card.lg{height:90px}
-  .focus-screen .cursor{
-    position:absolute;top:55%;left:55%;width:32px;height:32px;border-radius:50%;
-    border:2px solid var(--crust);background:rgba(255,139,61,.12);
-    animation:tap 3s infinite ease-out;
+  .feature-screen .app .card.lg{flex:1.2;display:flex;align-items:flex-end;padding:12px}
+  .feature-screen .app .card.lg::after{
+    content:"";flex:1;height:6px;border-radius:3px;
+    background:linear-gradient(90deg,var(--crust-soft),transparent 70%);opacity:.6;
+  }
+  .feature-screen .app .card.md{flex:.65}
+  .feature-screen .cursor{
+    position:absolute;top:46%;left:50%;width:38px;height:38px;border-radius:50%;
+    border:2px solid var(--crust);background:rgba(255,139,61,.15);
+    animation:tap 2.6s infinite ease-out;pointer-events:none;
+    transform:translate(-50%,-50%);
   }
   @keyframes tap{
-    0%,100%{transform:scale(.8);opacity:0}
-    20%{transform:scale(1);opacity:1}
-    60%{transform:scale(1.6);opacity:0}
+    0%,100%{transform:translate(-50%,-50%) scale(.6);opacity:0}
+    18%{transform:translate(-50%,-50%) scale(1);opacity:1}
+    65%{transform:translate(-50%,-50%) scale(1.7);opacity:0}
   }
 
-  .focus-tools{
+  .feature-tools{
     display:flex;gap:6px;flex-wrap:wrap;
   }
   .tool{
-    font-family:"JetBrains Mono";font-size:10px;letter-spacing:.08em;
-    padding:6px 10px;border:1px solid var(--line-bright);border-radius:5px;
+    font-family:"JetBrains Mono";font-size:10px;font-weight:500;letter-spacing:.1em;
+    padding:7px 12px;border:1px solid var(--line-bright);border-radius:6px;
     color:var(--ink-2);background:var(--surface-2);text-transform:uppercase;
+    transition:all .2s;
   }
-  .tool.act{background:var(--crust);color:var(--bg);border-color:var(--crust);font-weight:600}
+  .tool:hover{color:var(--ink);border-color:var(--crust)}
+  .tool.act{
+    background:var(--crust);color:var(--bg);border-color:var(--crust);font-weight:700;
+    box-shadow:0 4px 12px -4px rgba(255,139,61,.5);
+  }
+
+  /* — thumbnail column — */
+  .farm-thumbs{
+    background:linear-gradient(180deg,var(--surface),var(--bg-2));
+    padding:20px 18px;display:flex;flex-direction:column;gap:12px;
+  }
+  .thumbs-head{
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .thumbs-head .lbl{
+    font-family:"JetBrains Mono";font-size:9.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--dim);
+  }
+  .thumbs-head .lbl .x{color:var(--crust);font-weight:600}
+  .thumbs-head .vbtns{display:flex;gap:4px}
+  .thumbs-head .vbtns span{
+    font-family:"JetBrains Mono";font-size:9px;letter-spacing:.05em;color:var(--dim);
+    padding:4px 8px;border-radius:4px;border:1px solid var(--line);
+    text-transform:uppercase;
+  }
+  .thumbs-head .vbtns span.on{
+    color:var(--crust);border-color:var(--crust);background:rgba(255,139,61,.08);font-weight:600;
+  }
+
+  .thumbs-grid{
+    flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;
+    align-content:start;
+  }
+  .thumb{
+    aspect-ratio:9/15;background:#000;border-radius:8px;position:relative;
+    border:1px solid var(--line-bright);overflow:hidden;
+    transition:all .2s ease;
+  }
+  .thumb:hover{transform:translateY(-2px);border-color:var(--crust)}
+  .thumb.iphone-pro{background:linear-gradient(150deg,#1f140d,#0a0604)}
+  .thumb.iphone-air{background:linear-gradient(160deg,#0e1620,#060a0e)}
+  .thumb.iphone-se{background:linear-gradient(150deg,#1a1218,#0a0608)}
+  .thumb.ipad{background:linear-gradient(140deg,#181820,#08080c)}
+  .thumb .label{
+    position:absolute;bottom:8px;left:9px;
+    font-family:"JetBrains Mono";font-size:9px;font-weight:500;
+    color:var(--ink-2);letter-spacing:.02em;
+    text-shadow:0 1px 4px rgba(0,0,0,.9);
+  }
+  .thumb .live-dot{
+    position:absolute;top:7px;right:7px;width:5px;height:5px;border-radius:50%;
+    background:var(--live);box-shadow:0 0 6px var(--live);animation:pulse 2s infinite;
+  }
+  .thumb.idle .live-dot{background:var(--muted);box-shadow:none;animation:none}
+  .thumb .mini{
+    position:absolute;inset:14% 14% 30%;display:flex;flex-direction:column;gap:4px;
+  }
+  .thumb .mini b{
+    height:5px;background:linear-gradient(90deg,#3a281a,transparent);
+    border-radius:2px;display:block;
+  }
+  .thumb .mini b.s{width:55%}
+  .thumb .mini c{
+    display:block;height:14px;background:#15100a;border-radius:3px;border:1px solid #221810;
+  }
+  .thumb .mini c.acc{
+    background:linear-gradient(135deg,#3a2010,#1a0e08);border-color:#5a3219;
+  }
 
   /* ─────────── SPECS BAR ─────────── */
   .specs{
@@ -548,8 +598,8 @@
     .specs{grid-template-columns:1fr 1fr}
     .specs .cell:nth-child(3){border-left:none;padding-left:0}
     .feat-grid{grid-template-columns:1fr}
-    .farm-side{display:none}
-    .farm-app{grid-template-columns:1fr 1.4fr}
+    .farm-app{grid-template-columns:1fr}
+    .farm-thumbs{display:none}
     .foot-row{flex-direction:column}
     .foot .links{grid-template-columns:repeat(2,auto);gap:24px}
   }
@@ -615,83 +665,71 @@
           <div class="mock-stat"><span class="live">●</span> 4 DEVICES · 240 fps</div>
         </div>
         <div class="farm-app">
-          <aside class="farm-side">
-            <div class="label">View</div>
-            <div class="item on"><span>Wall</span><span class="n">⌘1</span></div>
-            <div class="item"><span>Grid</span><span class="n">⌘2</span></div>
-            <div class="item"><span>List</span><span class="n">⌘3</span></div>
-            <div class="div"></div>
-            <div class="label">Family</div>
-            <div class="item on"><span>iPhone</span><span class="n">3</span></div>
-            <div class="item on"><span>iPad</span><span class="n">1</span></div>
-            <div class="item"><span>Watch</span><span class="n">0</span></div>
-            <div class="div"></div>
-            <div class="label">State</div>
-            <div class="item on"><span>Booted</span><span class="n">4</span></div>
-            <div class="item"><span>Shutdown</span><span class="n">12</span></div>
-          </aside>
-
-          <div class="farm-grid">
-            <div class="tile iphone-pro">
-              <span class="badge">17 Pro Max</span>
-              <span class="live-dot"></span>
-              <div class="ui">
-                <div class="h"></div>
-                <div class="b acc"></div>
-                <div class="b"></div>
-                <div class="b"></div>
+          <!-- Featured / focused device -->
+          <div class="farm-feature">
+            <div class="feature-head">
+              <div class="ttl">
+                iPhone 17 Pro Max
+                <span class="sub">Focused · Full quality</span>
+              </div>
+              <div class="stats">
+                <span class="live">LIVE</span>
+                <span><b>60.0</b> fps</span>
+                <span><b>4.0</b> Mbps</span>
               </div>
             </div>
-            <div class="tile iphone-air">
-              <span class="badge">17 Air</span>
-              <span class="live-dot"></span>
-              <div class="ui">
-                <div class="h"></div>
-                <div class="b"></div>
-                <div class="b"></div>
-                <div class="b acc"></div>
-              </div>
-            </div>
-            <div class="tile ipad">
-              <span class="badge">iPad Pro 13"</span>
-              <span class="live-dot"></span>
-              <div class="ui">
-                <div class="h"></div>
-                <div class="b acc"></div>
-                <div class="b"></div>
-                <div class="b"></div>
-                <div class="b"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="farm-focus">
-            <div class="focus-head">
-              <span class="title">iPhone 17 Pro Max</span>
-              <span class="meta">
-                <b>● LIVE</b>
-                <span>60.0 fps</span>
-                <span>4.0 Mbps</span>
-              </span>
-            </div>
-            <div class="focus-screen">
+            <div class="feature-screen">
               <div class="notch"></div>
               <div class="app">
-                <div class="row"><div class="pill"></div><div class="pill"></div></div>
+                <div class="row"><div class="pill sm"></div><div class="pill"></div></div>
                 <div class="card lg"></div>
-                <div class="row"><div class="pill acc"></div><div class="pill"></div><div class="pill"></div></div>
-                <div class="card"></div>
-                <div class="card"></div>
+                <div class="row"><div class="pill acc"></div><div class="pill"></div></div>
+                <div class="card md"></div>
+                <div class="card md"></div>
               </div>
               <div class="cursor"></div>
             </div>
-            <div class="focus-tools">
-              <span class="tool act">TAP</span>
-              <span class="tool">SWIPE</span>
-              <span class="tool">PINCH</span>
-              <span class="tool">HOME</span>
-              <span class="tool">LOCK</span>
-              <span class="tool">SNAP</span>
+            <div class="feature-tools">
+              <span class="tool act">Tap</span>
+              <span class="tool">Swipe</span>
+              <span class="tool">Pinch</span>
+              <span class="tool">Home</span>
+              <span class="tool">Lock</span>
+              <span class="tool">Snap</span>
+            </div>
+          </div>
+
+          <!-- Thumbnail column -->
+          <div class="farm-thumbs">
+            <div class="thumbs-head">
+              <span class="lbl">Booted · <span class="x">4</span></span>
+              <div class="vbtns">
+                <span class="on">Wall</span>
+                <span>Grid</span>
+                <span>List</span>
+              </div>
+            </div>
+            <div class="thumbs-grid">
+              <div class="thumb iphone-pro">
+                <span class="live-dot"></span>
+                <div class="mini"><b></b><c class="acc"></c><c></c><c></c></div>
+                <span class="label">17 Pro</span>
+              </div>
+              <div class="thumb iphone-air">
+                <span class="live-dot"></span>
+                <div class="mini"><b></b><c></c><c class="acc"></c><c></c></div>
+                <span class="label">17 Air</span>
+              </div>
+              <div class="thumb iphone-se idle">
+                <span class="live-dot"></span>
+                <div class="mini"><b class="s"></b><c></c><c></c></div>
+                <span class="label">SE 4</span>
+              </div>
+              <div class="thumb ipad">
+                <span class="live-dot"></span>
+                <div class="mini"><b></b><c class="acc"></c><c></c><c></c></div>
+                <span class="label">iPad Pro</span>
+              </div>
             </div>
           </div>
         </div>
