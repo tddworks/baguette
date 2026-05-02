@@ -196,11 +196,9 @@
   };
 
   // After every render, walk the produced screen-host nodes and ask
-  // each tile to install its canvas. Selection no longer affects the
-  // grid — the focused tile's canvas keeps painting in its grid host
-  // continuously, and the focus pane uses a separate mirror <video>
-  // sourced from the same canvas's captureStream. One pipeline, two
-  // viewers, no swaps.
+  // each tile to install its canvas. All views honor the global
+  // bezel toggle uniformly so the device-farm aesthetic carries
+  // across grid / wall / list.
   FarmApp.prototype.attachTilesToScreens = function () {
     document.querySelectorAll('#farm-view-host [data-screen-host]').forEach(host => {
       const udid = host.dataset.screenHost;

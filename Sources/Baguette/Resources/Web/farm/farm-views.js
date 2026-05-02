@@ -170,20 +170,29 @@
   }
 
   // ---- wall view -----------------------------------------------------
+  // Uniform 3:4 monitor-wall layout. Top strip: status pip + channel.
+  // Center: device feed (raw canvas, contained — no bezel even when
+  // global toggle is on, since wall is for at-a-glance fleet status).
+  // Bottom strip: short device name.
   function renderWall(host, devices, ctx) {
     host.innerHTML = `<div class="wall"></div>`;
     const wall = host.firstChild;
     devices.forEach((d, i) => {
       const panel = document.createElement('div');
-      panel.className = 'panel ' + shapeFor(d.platform) + (ctx.selectedUdid === d.udid ? ' selected' : '');
+      panel.className = 'panel' + (ctx.selectedUdid === d.udid ? ' selected' : '');
       panel.dataset.udid = d.udid;
       panel.dataset.state = d.uiState;
       const channel = String(i + 1).padStart(2, '0');
       panel.innerHTML = `
-        <div data-screen-host="${d.udid}" style="position:absolute;inset:0">${overlayFor(d, true)}</div>
-        <span class="corner tl">${stateLabel(d.uiState).slice(0, 4)} · <span data-readout="fps">—</span></span>
-        <span class="corner br">CH${channel}</span>
-        <span class="corner bl">${shortName(d.name)}</span>`;
+        <div class="strip top">
+          <span class="pip">${stateLabel(d.uiState).slice(0, 4)}</span>
+          <span class="ch">CH${channel}</span>
+        </div>
+        <div data-screen-host="${d.udid}">${overlayFor(d, true)}</div>
+        <div class="strip bottom">
+          <span class="name">${escapeHTML(shortName(d.name))}</span>
+          <span data-readout="fps" style="color:var(--phosphor);font-variant-numeric:tabular-nums">—</span>
+        </div>`;
       wall.appendChild(panel);
     });
   }
