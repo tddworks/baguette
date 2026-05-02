@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baguette · Device Farm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------ */
+  /* TOKENS — diagnostics console: deep slate, phosphor-lime, amber.     */
+  /* ------------------------------------------------------------------ */
+  :root {
+    --bg:        #0a0c10;
+    --bg-2:      #070a0d;
+    --panel:     #10141b;
+    --panel-2:   #161c25;
+    --panel-hi:  #1c242f;
+    --rule:      #1d2531;
+    --rule-2:    #283241;
+    --text:      #d6dee9;
+    --muted:     #6a7686;
+    --dim:       #424d5d;
+    --phosphor:  #b6ff43;
+    --phosphor-glow: rgba(182, 255, 67, 0.22);
+    --amber:     #ffb05a;
+    --amber-glow:rgba(255, 176, 90, 0.22);
+    --rose:      #ff6b8a;
+    --cyan:      #62e8ff;
+    --cyan-glow: rgba(98, 232, 255, 0.18);
+    --violet:    #a78bff;
+
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --serif:'Instrument Serif', 'Times New Roman', serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 400 12px/1.5 var(--mono);
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Faint phosphor dot grid + a soft vignette in the corners */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(rgba(182,255,67,0.045) 1px, transparent 1px),
+      radial-gradient(circle at 20% 0%, rgba(98,232,255,0.05), transparent 50%),
+      radial-gradient(circle at 100% 100%, rgba(255,176,90,0.04), transparent 60%);
+    background-size: 24px 24px, auto, auto;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Scanline texture overlay — subtle, always present */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.012) 0px,
+      rgba(255,255,255,0.012) 1px,
+      transparent 1px, transparent 3px);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .app { position: relative; z-index: 2; height: 100vh; display: grid;
+         grid-template-rows: 60px 1fr 36px; }
+
+  /* ------------------------------------------------------------------ */
+  /* HEADER BAR                                                         */
+  /* ------------------------------------------------------------------ */
+  header {
+    display: grid;
+    grid-template-columns: 280px 1fr auto;
+    align-items: stretch;
+    border-bottom: 1px solid var(--rule);
+    background: linear-gradient(to bottom, var(--panel), var(--bg));
+  }
+
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 22px;
+    border-right: 1px solid var(--rule);
+    position: relative;
+  }
+  .brand .mark {
+    font: italic 400 28px/1 var(--serif);
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .brand .mark em { font-style: italic; color: var(--phosphor); }
+  .brand .sub {
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.32em;
+    color: var(--muted);
+    border-left: 1px solid var(--rule-2);
+    padding-left: 12px;
+  }
+  .brand::after {
+    content: '';
+    position: absolute; right: -1px; top: 12px; bottom: 12px;
+    width: 1px; background: var(--rule);
+  }
+
+  .telemetry-bar {
+    display: flex; align-items: center; gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  .stat {
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 0 22px;
+    height: 100%;
+    border-right: 1px solid var(--rule);
+    min-width: 132px;
+  }
+  .stat .label {
+    font: 600 9px/1 var(--mono);
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .stat .value {
+    font: 600 16px/1 var(--mono);
+    color: var(--text);
+    letter-spacing: -0.01em;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .stat .value .unit {
+    font: 500 10px/1 var(--mono);
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+  .stat.live .value { color: var(--phosphor); text-shadow: 0 0 16px var(--phosphor-glow); }
+  .stat.warn .value { color: var(--amber); }
+  .stat.cyan .value { color: var(--cyan); }
+
+  .sys-clock {
+    display: flex; align-items: center;
+    padding: 0 24px;
+    gap: 14px;
+    border-left: 1px solid var(--rule);
+  }
+  .sys-clock .led {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--phosphor);
+    box-shadow: 0 0 10px var(--phosphor), 0 0 20px var(--phosphor-glow);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .sys-clock time {
+    font: 600 13px/1 var(--mono);
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(0.85); }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* MAIN GRID — left rail / device grid / focus pane                   */
+  /* ------------------------------------------------------------------ */
+  main {
+    display: grid;
+    grid-template-columns: 280px 1fr 420px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* === LEFT RAIL =================================================== */
+  .rail {
+    border-right: 1px solid var(--rule);
+    background: linear-gradient(to right, var(--panel-2), var(--panel));
+    overflow-y: auto;
+    padding: 22px 22px 60px;
+  }
+  .rail::-webkit-scrollbar { width: 4px; }
+  .rail::-webkit-scrollbar-thumb { background: var(--rule-2); }
+  .rail::-webkit-scrollbar-track { background: transparent; }
+
+  .rail h3 {
+    margin: 0 0 12px;
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.32em;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 10px;
+    text-transform: uppercase;
+  }
+  .rail h3::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(to right, var(--rule), transparent);
+  }
+  .rail section + section { margin-top: 26px; }
+
+  .filter {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s;
+    font-size: 11px;
+  }
+  .filter:hover { background: rgba(255,255,255,0.025); }
+  .filter input {
+    appearance: none;
+    width: 12px; height: 12px;
+    border: 1px solid var(--rule-2);
+    background: var(--bg);
+    margin: 0;
+    border-radius: 2px;
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+  .filter input:checked {
+    background: var(--phosphor);
+    border-color: var(--phosphor);
+    box-shadow: 0 0 8px var(--phosphor-glow);
+  }
+  .filter input:checked::after {
+    content: ''; width: 6px; height: 6px; background: var(--bg);
+    border-radius: 1px;
+  }
+  .filter .name { flex: 1; color: var(--text); }
+  .filter .count {
+    font: 500 10px/1 var(--mono);
+    color: var(--muted);
+    background: var(--bg-2);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid var(--rule);
+  }
+
+  .runtime-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px;
+    border-radius: 100px;
+    border: 1px solid var(--rule-2);
+    background: var(--bg-2);
+    font: 500 10px/1 var(--mono);
+    color: var(--text);
+    margin: 0 4px 4px 0;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .runtime-pill:hover { border-color: var(--dim); }
+  .runtime-pill.active {
+    border-color: var(--phosphor);
+    color: var(--phosphor);
+    background: rgba(182,255,67,0.06);
+    box-shadow: 0 0 12px rgba(182,255,67,0.1);
+  }
+  .runtime-pill .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--dim);
+  }
+  .runtime-pill.active .dot {
+    background: var(--phosphor);
+    box-shadow: 0 0 6px var(--phosphor);
+  }
+
+  .bulk-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%;
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    color: var(--text);
+    font: 600 11px/1 var(--mono);
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: all 0.12s;
+    text-align: left;
+  }
+  .bulk-btn:hover {
+    border-color: var(--phosphor);
+    background: rgba(182,255,67,0.04);
+    color: var(--phosphor);
+  }
+  .bulk-btn .glyph {
+    font-family: var(--mono);
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .bulk-btn:hover .glyph { color: var(--phosphor); }
+
+  .bulk-btn.danger:hover {
+    border-color: var(--rose);
+    background: rgba(255,107,138,0.04);
+    color: var(--rose);
+  }
+  .bulk-btn.danger:hover .glyph { color: var(--rose); }
+
+  .group-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    border: 1px solid transparent;
+  }
+  .group-row:hover { background: rgba(255,255,255,0.02); }
+  .group-row .swatch {
+    width: 10px; height: 10px;
+    border: 1px solid var(--dim);
+    border-radius: 2px;
+  }
+  .group-row .name { flex: 1; font-size: 11px; }
+  .group-row .ct  { color: var(--muted); font-size: 10px; }
+
+  /* === DEVICE GRID ================================================= */
+  .grid-wrap {
+    overflow-y: auto;
+    padding: 22px 26px 60px;
+    background:
+      linear-gradient(to bottom, transparent 0, transparent 80px, transparent 100%);
+    position: relative;
+  }
+  .grid-wrap::-webkit-scrollbar { width: 6px; }
+  .grid-wrap::-webkit-scrollbar-thumb { background: var(--rule-2); }
+  .grid-wrap::-webkit-scrollbar-track { background: transparent; }
+
+  /* Grid header */
+  .grid-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 22px;
+    gap: 16px;
+  }
+  .grid-head .title {
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .grid-head .title .num {
+    font: italic 400 56px/0.9 var(--serif);
+    color: var(--phosphor);
+    text-shadow: 0 0 24px var(--phosphor-glow);
+    letter-spacing: -0.02em;
+  }
+  .grid-head .title .of {
+    font: italic 400 22px/1 var(--serif);
+    color: var(--muted);
+  }
+  .grid-head .title .lab {
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.34em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding-left: 16px;
+    border-left: 1px solid var(--rule);
+    align-self: stretch;
+    display: flex; align-items: center;
+  }
+
+  .grid-tools {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    width: 240px;
+  }
+  .search:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-glow); }
+  .search .ic { color: var(--muted); font-size: 11px; }
+  .search input {
+    flex: 1;
+    background: transparent;
+    border: 0; outline: 0;
+    color: var(--text);
+    font: 500 11px/1 var(--mono);
+  }
+  .search input::placeholder { color: var(--muted); }
+  .search kbd {
+    font: 600 9px/1 var(--mono);
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    padding: 3px 5px;
+    border-radius: 2px;
+  }
+
+  .view-toggle {
+    display: flex; gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .view-toggle button {
+    background: var(--panel-2);
+    border: 0;
+    color: var(--muted);
+    padding: 7px 10px;
+    font: 700 10px/1 var(--mono);
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .view-toggle button.active {
+    background: var(--bg);
+    color: var(--phosphor);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+    gap: 16px;
+  }
+
+  /* === DEVICE TILE ================================================= */
+  .tile {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 14px;
+    cursor: pointer;
+    transition: transform 0.18s ease, border-color 0.18s, box-shadow 0.18s;
+    display: flex; flex-direction: column;
+    gap: 12px;
+  }
+  .tile:hover {
+    transform: translateY(-2px);
+    border-color: var(--rule-2);
+    box-shadow: 0 12px 32px -16px rgba(0,0,0,0.6);
+  }
+  .tile.selected {
+    border-color: var(--phosphor);
+    box-shadow:
+      0 0 0 1px var(--phosphor),
+      0 0 32px -4px var(--phosphor-glow);
+  }
+  .tile.selected::before {
+    content: '';
+    position: absolute; inset: -5px;
+    border: 1px dashed var(--phosphor);
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  /* Registration crosshair marks at corners */
+  .tile .reg {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-color: var(--dim);
+    border-style: solid;
+    pointer-events: none;
+  }
+  .tile .reg.tl { top: 5px;  left: 5px;  border-width: 1px 0 0 1px; }
+  .tile .reg.tr { top: 5px;  right: 5px; border-width: 1px 1px 0 0; }
+  .tile .reg.bl { bottom:5px; left: 5px;  border-width: 0 0 1px 1px; }
+  .tile .reg.br { bottom:5px; right: 5px; border-width: 0 1px 1px 0; }
+
+  .tile-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 10px;
+  }
+  .tile-name {
+    font: 700 12px/1.25 var(--mono);
+    color: var(--text);
+    letter-spacing: -0.005em;
+    margin: 0;
+    word-break: break-word;
+  }
+  .tile-udid {
+    font: 500 9px/1 var(--mono);
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.02em;
+  }
+  .tile-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 7px;
+    border: 1px solid var(--rule-2);
+    border-radius: 100px;
+    font: 700 8.5px/1 var(--mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .tile-status .led {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--dim);
+  }
+  .tile-status[data-state="live"]    { color: var(--phosphor); border-color: rgba(182,255,67,0.32); background: rgba(182,255,67,0.05); }
+  .tile-status[data-state="live"] .led { background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor); animation: pulse 1.4s ease-in-out infinite; }
+  .tile-status[data-state="boot"]    { color: var(--amber); border-color: rgba(255,176,90,0.3); }
+  .tile-status[data-state="boot"] .led { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: pulse 0.8s linear infinite; }
+  .tile-status[data-state="idle"]    { color: var(--muted); }
+  .tile-status[data-state="error"]   { color: var(--rose); border-color: rgba(255,107,138,0.32); background: rgba(255,107,138,0.05); }
+  .tile-status[data-state="error"] .led { background: var(--rose); box-shadow: 0 0 6px var(--rose); }
+  .tile-status[data-state="off"] { color: var(--dim); }
+
+  /* The "screen" inside a tile */
+  .screen {
+    position: relative;
+    aspect-ratio: 9 / 16;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #050810;
+    border: 1px solid #000;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.04),
+      0 4px 16px -8px rgba(0,0,0,0.6);
+  }
+  .screen.ipad   { aspect-ratio: 4 / 3; }
+  .screen.tv     { aspect-ratio: 16 / 9; }
+  .screen.watch  { aspect-ratio: 1 / 1.18; border-radius: 18px; }
+  .screen .glass {
+    position: absolute; inset: 0;
+    background-position: center;
+    background-size: cover;
+  }
+  .screen .scan {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.0) 0,
+      rgba(0,0,0,0.18) 1px,
+      transparent 1px, transparent 3px);
+    pointer-events: none;
+    mix-blend-mode: multiply;
+  }
+  .screen .live-tag {
+    position: absolute; top: 8px; left: 8px;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 6px;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    border-radius: 3px;
+    font: 700 8px/1 var(--mono);
+    letter-spacing: 0.18em;
+    color: var(--phosphor);
+  }
+  .screen .live-tag::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--phosphor);
+    box-shadow: 0 0 6px var(--phosphor);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .screen .off-overlay {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    color: var(--dim);
+    background: linear-gradient(135deg, #050810 0%, #0a0c10 100%);
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.34em;
+  }
+  .screen .err-overlay {
+    position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(45deg, rgba(255,107,138,0.06) 0 6px, transparent 6px 12px),
+      #1a0610;
+    display: grid; place-items: center;
+    color: var(--rose);
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.2em;
+  }
+
+  /* faux device "wallpaper" generators — pure CSS */
+  .wp-1 { background:
+    radial-gradient(circle at 30% 20%, #ff7e50 0%, transparent 40%),
+    radial-gradient(circle at 70% 80%, #c1ff43 0%, transparent 40%),
+    linear-gradient(135deg, #1a1a2e 0%, #0a0a1a 100%); }
+  .wp-2 { background:
+    linear-gradient(180deg, #001a26 0%, #0a3a52 50%, #156280 100%);
+  }
+  .wp-3 { background:
+    radial-gradient(circle at 50% 100%, #ffd87a 0%, #d65a8e 30%, #4a2070 70%, #0a0820 100%);
+  }
+  .wp-4 { background:
+    linear-gradient(135deg, #0a1426 0%, #1c3050 50%, #0a1426 100%);
+  }
+  .wp-5 { background:
+    radial-gradient(ellipse at center, #2a1f3d 0%, #0d0a1a 100%);
+  }
+  .wp-6 { background: #0a0d12;
+    background-image:
+      linear-gradient(to right, rgba(98,232,255,0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(98,232,255,0.1) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .wp-7 { background:
+    linear-gradient(160deg, #002818 0%, #0d4a2e 60%, #2a8a52 100%);
+  }
+  .wp-8 { background:
+    radial-gradient(circle at 0% 100%, #ff5e7a 0%, transparent 50%),
+    radial-gradient(circle at 100% 0%, #ffb05a 0%, transparent 50%),
+    #1a0a14;
+  }
+  .wp-9 { background:
+    linear-gradient(180deg, #0a0a14 0%, #1a1a2e 100%);
+  }
+  .wp-10{ background: #050a14;
+    background-image: radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* per-app icon mosaic mock */
+  .springboard {
+    position: absolute; inset: 12% 14% auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8%;
+  }
+  .springboard span {
+    aspect-ratio: 1; border-radius: 22%;
+    background: rgba(255,255,255,0.16);
+    backdrop-filter: blur(2px);
+  }
+
+  .tile-readout {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 10px;
+    margin: 0 -2px;
+  }
+  .tile-readout .col {
+    display: flex; flex-direction: column;
+    gap: 4px;
+    padding: 0 8px;
+    border-right: 1px dashed var(--rule);
+  }
+  .tile-readout .col:last-child { border-right: 0; }
+  .tile-readout .col .k {
+    font: 700 8px/1 var(--mono);
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .tile-readout .col .v {
+    font: 600 12px/1 var(--mono);
+    color: var(--text);
+  }
+  .tile-readout .col .v.lime  { color: var(--phosphor); }
+  .tile-readout .col .v.amber { color: var(--amber); }
+  .tile-readout .col .v.dim   { color: var(--dim); }
+
+  .tile-quick {
+    position: absolute; top: 14px; right: 14px;
+    display: flex; gap: 4px;
+    opacity: 0; transform: translateY(-4px);
+    transition: opacity 0.18s, transform 0.18s;
+    pointer-events: none;
+  }
+  .tile:hover .tile-quick { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .tile.selected .tile-quick { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .qa {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    background: var(--bg-2);
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    color: var(--muted);
+    font: 600 10px/1 var(--mono);
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .qa:hover { color: var(--phosphor); border-color: var(--phosphor); background: rgba(182,255,67,0.06); }
+
+  /* === FOCUS PANE ================================================== */
+  .focus {
+    border-left: 1px solid var(--rule);
+    background: var(--panel-2);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .focus::-webkit-scrollbar { width: 4px; }
+  .focus::-webkit-scrollbar-thumb { background: var(--rule-2); }
+  .focus::-webkit-scrollbar-track { background: transparent; }
+
+  .focus-empty {
+    flex: 1;
+    display: grid; place-items: center;
+    color: var(--muted);
+    text-align: center;
+    padding: 40px 28px;
+  }
+  .focus-empty .big {
+    font: italic 400 28px/1.1 var(--serif);
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .focus-empty .sm {
+    font: 500 11px/1.5 var(--mono);
+  }
+  .focus-empty .ascii {
+    font: 500 10px/1.2 var(--mono);
+    color: var(--dim);
+    margin-bottom: 24px;
+    white-space: pre;
+  }
+
+  .focus-head {
+    padding: 22px 22px 16px;
+    border-bottom: 1px solid var(--rule);
+    position: sticky; top: 0;
+    background: var(--panel-2);
+    z-index: 2;
+  }
+  .focus-head .row1 {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .focus-head .row1 .tag {
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.32em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .focus-head .row1 .close {
+    background: transparent;
+    border: 1px solid var(--rule-2);
+    color: var(--muted);
+    width: 22px; height: 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    font: 600 12px/1 var(--mono);
+  }
+  .focus-head .row1 .close:hover { color: var(--rose); border-color: var(--rose); }
+  .focus-head h2 {
+    margin: 0;
+    font: 700 18px/1.2 var(--mono);
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .focus-head .meta {
+    margin-top: 8px;
+    font: 500 10px/1.5 var(--mono);
+    color: var(--muted);
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .focus-head .meta span::before {
+    content: '· ';
+    color: var(--dim);
+  }
+  .focus-head .meta span:first-child::before { content: ''; }
+
+  .preview {
+    margin: 22px;
+    position: relative;
+  }
+  .preview .screen { aspect-ratio: 9/19; border-radius: 14px; }
+  .preview .screen.ipad   { aspect-ratio: 3/4; }
+  .preview .screen.tv     { aspect-ratio: 16/9; }
+  .preview .screen.watch  { aspect-ratio: 1/1.18; }
+
+  .telemetry {
+    border-top: 1px solid var(--rule);
+    padding: 18px 22px 16px;
+  }
+  .telemetry h4 {
+    margin: 0 0 14px;
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 10px;
+    text-transform: uppercase;
+  }
+  .telemetry h4::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(to right, var(--rule), transparent);
+  }
+  .gauge-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .gauge {
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge .k {
+    font: 700 8px/1 var(--mono);
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .gauge .v {
+    font: 600 22px/1 var(--mono);
+    color: var(--phosphor);
+    letter-spacing: -0.01em;
+    display: flex; align-items: baseline; gap: 4px;
+    margin-bottom: 10px;
+  }
+  .gauge .v .u { font-size: 10px; color: var(--muted); font-weight: 500; }
+  .gauge svg.spark {
+    width: 100%; height: 32px;
+    display: block;
+  }
+  .gauge.amber .v { color: var(--amber); }
+  .gauge.cyan  .v { color: var(--cyan); }
+
+  /* Stream controls */
+  .controls {
+    border-top: 1px solid var(--rule);
+    padding: 18px 22px;
+  }
+  .control-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px;
+    padding: 8px 0;
+  }
+  .control-row .label {
+    font: 600 10px/1 var(--mono);
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    text-transform: uppercase;
+    flex-shrink: 0;
+    width: 80px;
+  }
+  .control-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 18px;
+    cursor: pointer;
+  }
+  .control-row input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: linear-gradient(to right, var(--phosphor) 0%, var(--phosphor) var(--p,50%), var(--rule-2) var(--p,50%));
+  }
+  .control-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--phosphor);
+    box-shadow: 0 0 8px var(--phosphor-glow);
+    margin-top: -5px;
+  }
+  .control-row .num {
+    font: 600 11px/1 var(--mono);
+    color: var(--phosphor);
+    width: 56px;
+    text-align: right;
+  }
+
+  .preset-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .preset {
+    background: transparent;
+    border: 1px solid var(--rule-2);
+    color: var(--text);
+    padding: 8px 4px;
+    font: 600 10px/1 var(--mono);
+    letter-spacing: 0.06em;
+    border-radius: 3px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .preset:hover { border-color: var(--phosphor); color: var(--phosphor); }
+  .preset.active {
+    border-color: var(--phosphor);
+    background: rgba(182,255,67,0.06);
+    color: var(--phosphor);
+  }
+
+  /* Gesture log */
+  .log {
+    border-top: 1px solid var(--rule);
+    padding: 18px 22px 22px;
+    flex: 1; min-height: 200px;
+  }
+  .log .feed {
+    margin-top: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .log .feed::-webkit-scrollbar { width: 4px; }
+  .log .feed::-webkit-scrollbar-thumb { background: var(--rule-2); }
+  .log-line {
+    display: grid;
+    grid-template-columns: 60px 60px 1fr;
+    gap: 10px;
+    padding: 4px 2px;
+    font: 500 10px/1.3 var(--mono);
+    border-bottom: 1px dashed var(--rule);
+  }
+  .log-line:last-child { border-bottom: 0; }
+  .log-line .ts   { color: var(--muted); }
+  .log-line .typ  { color: var(--cyan); }
+  .log-line .typ.tap   { color: var(--phosphor); }
+  .log-line .typ.swipe { color: var(--amber); }
+  .log-line .typ.btn   { color: var(--violet); }
+  .log-line .pl  { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ------------------------------------------------------------------ */
+  /* CLI MIRROR FOOTER                                                  */
+  /* ------------------------------------------------------------------ */
+  footer {
+    display: flex; align-items: center;
+    border-top: 1px solid var(--rule);
+    background: var(--bg-2);
+    padding: 0 22px;
+    gap: 16px;
+    overflow: hidden;
+  }
+  footer .lab {
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  footer .cmd {
+    flex: 1;
+    font: 500 11px/1 var(--mono);
+    color: var(--text);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  footer .cmd .prompt { color: var(--phosphor); }
+  footer .cmd .flag   { color: var(--cyan); }
+  footer .cmd .arg    { color: var(--amber); }
+  footer .copy {
+    background: transparent;
+    border: 1px solid var(--rule-2);
+    color: var(--muted);
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.18em;
+    padding: 6px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+    text-transform: uppercase;
+  }
+  footer .copy:hover { color: var(--phosphor); border-color: var(--phosphor); }
+
+  /* tile entry stagger animation */
+  @keyframes tile-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .tile { animation: tile-in 0.5s ease both; }
+
+  /* hidden util */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- =============== HEADER =============== -->
+  <header>
+    <div class="brand">
+      <div class="mark"><em>Baguette</em></div>
+      <div class="sub">DEVICE&nbsp;FARM</div>
+    </div>
+
+    <div class="telemetry-bar">
+      <div class="stat">
+        <div class="label">Fleet</div>
+        <div class="value"><span id="fleet-live">9</span><span class="unit">/ 14 ONLINE</span></div>
+      </div>
+      <div class="stat live">
+        <div class="label">Aggregate FPS</div>
+        <div class="value"><span id="fleet-fps">487</span><span class="unit">fps</span></div>
+      </div>
+      <div class="stat warn">
+        <div class="label">Bandwidth</div>
+        <div class="value"><span id="fleet-bw">128.4</span><span class="unit">Mb/s</span></div>
+      </div>
+      <div class="stat cyan">
+        <div class="label">P50 Latency</div>
+        <div class="value"><span id="fleet-lat">23</span><span class="unit">ms</span></div>
+      </div>
+      <div class="stat">
+        <div class="label">Uptime</div>
+        <div class="value" id="fleet-up">04:21:38</div>
+      </div>
+    </div>
+
+    <div class="sys-clock">
+      <span class="led"></span>
+      <time id="sys-clock">--:--:--</time>
+    </div>
+  </header>
+
+  <!-- =============== MAIN =============== -->
+  <main>
+
+    <!-- LEFT RAIL ----------------------------- -->
+    <aside class="rail">
+      <section>
+        <h3>Platform</h3>
+        <label class="filter"><input type="checkbox" data-platform="iphone" checked><span class="name">iPhone</span><span class="count">7</span></label>
+        <label class="filter"><input type="checkbox" data-platform="ipad" checked><span class="name">iPad</span><span class="count">3</span></label>
+        <label class="filter"><input type="checkbox" data-platform="watch" checked><span class="name">Apple Watch</span><span class="count">2</span></label>
+        <label class="filter"><input type="checkbox" data-platform="tv" checked><span class="name">Apple TV</span><span class="count">2</span></label>
+      </section>
+
+      <section>
+        <h3>Runtime</h3>
+        <div>
+          <span class="runtime-pill active" data-runtime="26.0"><span class="dot"></span>iOS 26.0</span>
+          <span class="runtime-pill active" data-runtime="18.2"><span class="dot"></span>iOS 18.2</span>
+          <span class="runtime-pill" data-runtime="17.5"><span class="dot"></span>iOS 17.5</span>
+          <span class="runtime-pill active" data-runtime="watchos-11"><span class="dot"></span>watchOS 11</span>
+          <span class="runtime-pill active" data-runtime="tvos-18"><span class="dot"></span>tvOS 18</span>
+        </div>
+      </section>
+
+      <section>
+        <h3>Status</h3>
+        <label class="filter"><input type="checkbox" data-state="live" checked><span class="name">Live stream</span><span class="count">5</span></label>
+        <label class="filter"><input type="checkbox" data-state="boot" checked><span class="name">Booting</span><span class="count">2</span></label>
+        <label class="filter"><input type="checkbox" data-state="idle" checked><span class="name">Booted · Idle</span><span class="count">2</span></label>
+        <label class="filter"><input type="checkbox" data-state="off" checked><span class="name">Shutdown</span><span class="count">4</span></label>
+        <label class="filter"><input type="checkbox" data-state="error" checked><span class="name">Errored</span><span class="count">1</span></label>
+      </section>
+
+      <section>
+        <h3>Groups</h3>
+        <div class="group-row"><span class="swatch" style="background:var(--phosphor)"></span><span class="name">smoke-tests</span><span class="ct">5</span></div>
+        <div class="group-row"><span class="swatch" style="background:var(--cyan)"></span><span class="name">localization</span><span class="ct">8</span></div>
+        <div class="group-row"><span class="swatch" style="background:var(--amber)"></span><span class="name">accessibility</span><span class="ct">3</span></div>
+        <div class="group-row"><span class="swatch" style="background:var(--violet)"></span><span class="name">ad-hoc</span><span class="ct">2</span></div>
+      </section>
+
+      <section>
+        <h3>Bulk Action</h3>
+        <button class="bulk-btn"><span>Boot Selected</span><span class="glyph">↗ B</span></button>
+        <button class="bulk-btn"><span>Snapshot All</span><span class="glyph">⌘ S</span></button>
+        <button class="bulk-btn"><span>Reset Streams</span><span class="glyph">⌥ R</span></button>
+        <button class="bulk-btn danger"><span>Shutdown All</span><span class="glyph">⇧ X</span></button>
+      </section>
+    </aside>
+
+    <!-- DEVICE GRID --------------------------- -->
+    <section class="grid-wrap">
+      <div class="grid-head">
+        <div class="title">
+          <div class="num" id="visible-count">14</div>
+          <div class="of">/ 14</div>
+          <div class="lab">Devices&nbsp;&nbsp;visible</div>
+        </div>
+        <div class="grid-tools">
+          <div class="search">
+            <span class="ic">⌕</span>
+            <input id="search" placeholder="Search by name, runtime, group…">
+            <kbd>⌘ K</kbd>
+          </div>
+          <div class="view-toggle">
+            <button class="active">Grid</button>
+            <button>Wall</button>
+            <button>List</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" id="grid"><!-- tiles injected --></div>
+    </section>
+
+    <!-- FOCUS PANE ---------------------------- -->
+    <aside class="focus" id="focus">
+      <!-- populated by JS -->
+    </aside>
+
+  </main>
+
+  <!-- =============== FOOTER =============== -->
+  <footer>
+    <div class="lab">CLI&nbsp;Mirror</div>
+    <div class="cmd" id="cli">
+      <span class="prompt">$</span>
+      <span>baguette</span>
+      <span class="arg">serve</span>
+      <span class="flag">--platform</span> iphone,ipad,watch,tv
+      <span class="flag">--runtime</span> 26.0,18.2,watchos-11,tvos-18
+      <span class="flag">--port</span> 8089
+    </div>
+    <button class="copy">Copy</button>
+  </footer>
+
+</div>
+
+<script>
+  /* ---------------------------------------------------------------- *
+   *  Synthetic device fleet — populates the grid.                    *
+   * ---------------------------------------------------------------- */
+  const DEVICES = [
+    { name: 'iPhone 17 Pro Max',     platform:'iphone', runtime:'26.0',        state:'live',  fps:60, lat:18, scale:0.65, wp:'wp-1', tags:['smoke-tests'] },
+    { name: 'iPhone 17 Pro',         platform:'iphone', runtime:'26.0',        state:'live',  fps:60, lat:21, scale:0.50, wp:'wp-3', tags:['smoke-tests','localization'] },
+    { name: 'iPhone 17',             platform:'iphone', runtime:'26.0',        state:'live',  fps:58, lat:24, scale:0.50, wp:'wp-2', tags:['localization'] },
+    { name: 'iPhone 16 Plus',        platform:'iphone', runtime:'18.2',        state:'idle',  fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:['smoke-tests'] },
+    { name: 'iPhone 15',             platform:'iphone', runtime:'18.2',        state:'boot',  fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:[] },
+    { name: 'iPhone 14',             platform:'iphone', runtime:'17.5',        state:'off',   fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:[] },
+    { name: 'iPhone SE (3rd gen)',   platform:'iphone', runtime:'18.2',        state:'error', fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:[] },
+    { name: 'iPad Pro 13" (M4)',     platform:'ipad',   runtime:'26.0',        state:'live',  fps:60, lat:19, scale:0.40, wp:'wp-6', tags:['accessibility'] },
+    { name: 'iPad Air 11"',          platform:'ipad',   runtime:'18.2',        state:'idle',  fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:[] },
+    { name: 'iPad mini',             platform:'ipad',   runtime:'17.5',        state:'off',   fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:[] },
+    { name: 'Watch Ultra 3',         platform:'watch',  runtime:'watchos-11',  state:'live',  fps:60, lat:31, scale:1.00, wp:'wp-7', tags:['ad-hoc'] },
+    { name: 'Watch Series 10 (45mm)',platform:'watch',  runtime:'watchos-11',  state:'boot',  fps:0,  lat:0,  scale:1.00, wp:'wp-9', tags:[] },
+    { name: 'Apple TV 4K',           platform:'tv',     runtime:'tvos-18',     state:'live',  fps:60, lat:14, scale:0.35, wp:'wp-8', tags:['accessibility'] },
+    { name: 'Apple TV HD',           platform:'tv',     runtime:'tvos-18',     state:'off',   fps:0,  lat:0,  scale:0.50, wp:'wp-9', tags:[] }
+  ].map((d, i) => ({
+    ...d,
+    udid: makeUdid(i)
+  }));
+
+  function makeUdid(seed) {
+    const hex = '0123456789ABCDEF';
+    let s = '';
+    let r = (seed + 1) * 0x9e3779b1;
+    for (let i = 0; i < 8; i++) {
+      r = (r ^ (r << 13)) >>> 0;
+      r = (r ^ (r >>> 17)) >>> 0;
+      r = (r ^ (r << 5))  >>> 0;
+      s += hex[r & 15] + hex[(r >> 4) & 15];
+    }
+    return s.slice(0,8) + '-' + s.slice(8,12);
+  }
+
+  function shapeFor(p) {
+    return p === 'ipad' ? 'ipad' : p === 'tv' ? 'tv' : p === 'watch' ? 'watch' : '';
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  Tile rendering                                                  *
+   * ---------------------------------------------------------------- */
+  function renderGrid(devices) {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    devices.forEach((d, idx) => {
+      const tile = document.createElement('article');
+      tile.className = 'tile';
+      tile.dataset.udid = d.udid;
+      tile.style.animationDelay = (idx * 32) + 'ms';
+
+      const shape = shapeFor(d.platform);
+      const stateLabel = ({ live:'LIVE', boot:'BOOTING', idle:'BOOTED', off:'SHUTDOWN', error:'ERROR' })[d.state];
+
+      const screen = (() => {
+        if (d.state === 'live') {
+          return `
+            <div class="screen ${shape}">
+              <div class="glass ${d.wp}"></div>
+              ${d.platform !== 'tv' && d.platform !== 'watch'
+                ? `<div class="springboard">${'<span></span>'.repeat(12)}</div>`
+                : ''}
+              <div class="scan"></div>
+              <div class="live-tag">LIVE · ${d.fps}fps</div>
+            </div>`;
+        }
+        if (d.state === 'boot') {
+          return `
+            <div class="screen ${shape}">
+              <div class="glass" style="background:#0a0a14"></div>
+              <div class="scan"></div>
+              <div class="off-overlay" style="color:var(--amber)">··· BOOTING ···</div>
+            </div>`;
+        }
+        if (d.state === 'error') {
+          return `
+            <div class="screen ${shape}">
+              <div class="err-overlay">FAULT&nbsp;·&nbsp;HID&nbsp;UNAVAIL</div>
+            </div>`;
+        }
+        if (d.state === 'idle') {
+          return `
+            <div class="screen ${shape}">
+              <div class="glass ${d.wp}" style="opacity:0.8"></div>
+              <div class="scan"></div>
+              <div class="off-overlay" style="color:var(--muted);background:rgba(0,0,0,0.5)">IDLE · NOT STREAMING</div>
+            </div>`;
+        }
+        return `
+          <div class="screen ${shape}">
+            <div class="off-overlay">SHUTDOWN</div>
+          </div>`;
+      })();
+
+      const fpsClass  = d.state === 'live' ? 'lime'  : 'dim';
+      const latClass  = d.state === 'live' ? 'amber' : 'dim';
+
+      tile.innerHTML = `
+        <span class="reg tl"></span><span class="reg tr"></span>
+        <span class="reg bl"></span><span class="reg br"></span>
+
+        <div class="tile-head">
+          <div>
+            <h3 class="tile-name">${d.name}</h3>
+            <div class="tile-udid">${d.udid} · ${runtimeLabel(d.runtime)}</div>
+          </div>
+          <span class="tile-status" data-state="${d.state}">
+            <span class="led"></span>${stateLabel}
+          </span>
+        </div>
+
+        <div class="tile-quick">
+          <button class="qa" title="Snapshot">◉</button>
+          <button class="qa" title="Reset">↻</button>
+          <button class="qa" title="Open in tab">↗</button>
+        </div>
+
+        ${screen}
+
+        <div class="tile-readout">
+          <div class="col"><div class="k">FPS</div><div class="v ${fpsClass}">${d.state === 'live' ? d.fps : '—'}</div></div>
+          <div class="col"><div class="k">Lat</div><div class="v ${latClass}">${d.state === 'live' ? d.lat + 'ms' : '—'}</div></div>
+          <div class="col"><div class="k">Scale</div><div class="v">${(d.scale * 100).toFixed(0)}%</div></div>
+        </div>
+      `;
+      tile.addEventListener('click', () => selectDevice(d.udid));
+      grid.appendChild(tile);
+    });
+    document.getElementById('visible-count').textContent = devices.length;
+  }
+
+  function runtimeLabel(r) {
+    const map = {
+      '26.0':       'iOS 26.0',
+      '18.2':       'iOS 18.2',
+      '17.5':       'iOS 17.5',
+      'watchos-11': 'watchOS 11',
+      'tvos-18':    'tvOS 18'
+    };
+    return map[r] ?? r;
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  Filtering                                                        *
+   * ---------------------------------------------------------------- */
+  const filterState = {
+    platforms: new Set(['iphone','ipad','watch','tv']),
+    runtimes:  new Set(['26.0','18.2','watchos-11','tvos-18']),
+    states:    new Set(['live','boot','idle','off','error']),
+    search: ''
+  };
+
+  function applyFilters() {
+    const filtered = DEVICES.filter(d =>
+      filterState.platforms.has(d.platform) &&
+      filterState.runtimes.has(d.runtime) &&
+      filterState.states.has(d.state) &&
+      (filterState.search === '' ||
+        (d.name + ' ' + d.udid + ' ' + runtimeLabel(d.runtime) + ' ' + d.tags.join(' '))
+          .toLowerCase().includes(filterState.search))
+    );
+    renderGrid(filtered);
+    rebuildCli();
+    if (selected && !filtered.some(d => d.udid === selected.udid)) {
+      clearFocus();
+    }
+  }
+
+  document.querySelectorAll('input[data-platform]').forEach(el =>
+    el.addEventListener('change', () => {
+      el.checked ? filterState.platforms.add(el.dataset.platform)
+                 : filterState.platforms.delete(el.dataset.platform);
+      applyFilters();
+    }));
+
+  document.querySelectorAll('input[data-state]').forEach(el =>
+    el.addEventListener('change', () => {
+      el.checked ? filterState.states.add(el.dataset.state)
+                 : filterState.states.delete(el.dataset.state);
+      applyFilters();
+    }));
+
+  document.querySelectorAll('.runtime-pill').forEach(pill =>
+    pill.addEventListener('click', () => {
+      pill.classList.toggle('active');
+      const r = pill.dataset.runtime;
+      pill.classList.contains('active') ? filterState.runtimes.add(r)
+                                        : filterState.runtimes.delete(r);
+      applyFilters();
+    }));
+
+  document.getElementById('search').addEventListener('input', e => {
+    filterState.search = e.target.value.toLowerCase().trim();
+    applyFilters();
+  });
+
+  /* ---------------------------------------------------------------- *
+   *  Focus pane                                                      *
+   * ---------------------------------------------------------------- */
+  let selected = null;
+
+  function selectDevice(udid) {
+    const d = DEVICES.find(x => x.udid === udid);
+    if (!d) return;
+    selected = d;
+    document.querySelectorAll('.tile').forEach(t =>
+      t.classList.toggle('selected', t.dataset.udid === udid));
+    renderFocus(d);
+  }
+
+  function clearFocus() {
+    selected = null;
+    document.querySelectorAll('.tile').forEach(t => t.classList.remove('selected'));
+    document.getElementById('focus').innerHTML = `
+      <div class="focus-empty">
+        <pre class="ascii">┌──────────┐
+│  ╳   ╳   │
+│          │
+│  ── ──── │
+└──────────┘</pre>
+        <div class="big">No device focused.</div>
+        <div class="sm">Pick any tile in the grid to mirror its stream,<br>read live telemetry, and send gestures.</div>
+      </div>`;
+  }
+
+  function renderFocus(d) {
+    const focus = document.getElementById('focus');
+    const shape = shapeFor(d.platform);
+    const isStreaming = d.state === 'live';
+    const screen = isStreaming
+      ? `<div class="screen ${shape}">
+           <div class="glass ${d.wp}"></div>
+           ${d.platform !== 'tv' && d.platform !== 'watch'
+             ? `<div class="springboard">${'<span></span>'.repeat(20)}</div>` : ''}
+           <div class="scan"></div>
+           <div class="live-tag">LIVE · ${d.fps}fps</div>
+         </div>`
+      : `<div class="screen ${shape}"><div class="off-overlay">${
+           d.state === 'boot' ? '··· BOOTING ···' :
+           d.state === 'error' ? 'FAULT' :
+           d.state === 'idle' ? 'IDLE · NOT STREAMING' : 'SHUTDOWN'
+         }</div></div>`;
+
+    focus.innerHTML = `
+      <div class="focus-head">
+        <div class="row1">
+          <div class="tag">Focused&nbsp;Device</div>
+          <button class="close" title="Clear">✕</button>
+        </div>
+        <h2>${d.name}</h2>
+        <div class="meta">
+          <span>${runtimeLabel(d.runtime)}</span>
+          <span>${d.udid}</span>
+          <span>${d.tags.length ? d.tags.join(' / ') : 'no group'}</span>
+        </div>
+      </div>
+
+      <div class="preview">${screen}</div>
+
+      <div class="telemetry">
+        <h4>Live Telemetry</h4>
+        <div class="gauge-row">
+          <div class="gauge"><div class="k">Frame Rate</div><div class="v"><span id="g-fps">${isStreaming ? d.fps : 0}</span><span class="u">fps</span></div>${spark('s-fps')}</div>
+          <div class="gauge amber"><div class="k">Latency P95</div><div class="v"><span id="g-lat">${isStreaming ? d.lat : 0}</span><span class="u">ms</span></div>${spark('s-lat')}</div>
+          <div class="gauge cyan"><div class="k">Bitrate</div><div class="v"><span id="g-br">${isStreaming ? '6.4' : '0'}</span><span class="u">Mb/s</span></div>${spark('s-br')}</div>
+          <div class="gauge"><div class="k">Memory</div><div class="v" style="color:var(--violet)"><span id="g-mem">${isStreaming ? '418' : '—'}</span><span class="u">MB</span></div>${spark('s-mem')}</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4 style="margin:0 0 8px;font:700 9px/1 var(--mono);letter-spacing:.3em;color:var(--muted);text-transform:uppercase">Stream Controls</h4>
+        <div class="control-row">
+          <span class="label">Bitrate</span>
+          <input type="range" min="500" max="20000" value="6400" id="ctl-br">
+          <span class="num"><span id="v-br">6400</span>k</span>
+        </div>
+        <div class="control-row">
+          <span class="label">FPS</span>
+          <input type="range" min="15" max="120" value="${isStreaming ? d.fps : 60}" id="ctl-fps">
+          <span class="num"><span id="v-fps">${isStreaming ? d.fps : 60}</span></span>
+        </div>
+        <div class="control-row">
+          <span class="label">Scale</span>
+          <input type="range" min="20" max="100" value="${(d.scale*100)}" id="ctl-scale">
+          <span class="num"><span id="v-scale">${(d.scale*100).toFixed(0)}</span>%</span>
+        </div>
+        <div class="preset-row">
+          <button class="preset">Force IDR</button>
+          <button class="preset">Snapshot</button>
+          <button class="preset">Open Tab</button>
+        </div>
+      </div>
+
+      <div class="log">
+        <h4 style="margin:0;font:700 9px/1 var(--mono);letter-spacing:.3em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:10px">
+          Gesture&nbsp;Feed
+          <span style="flex:1;height:1px;background:linear-gradient(to right,var(--rule),transparent)"></span>
+        </h4>
+        <div class="feed" id="feed"></div>
+      </div>
+    `;
+
+    focus.querySelector('.close').addEventListener('click', clearFocus);
+
+    // Wire control sliders + paint progress.
+    ['br','fps','scale'].forEach(k => {
+      const el = focus.querySelector('#ctl-' + k);
+      const v = focus.querySelector('#v-' + k);
+      const paint = () => {
+        const min = +el.min, max = +el.max, cur = +el.value;
+        el.style.setProperty('--p', ((cur - min) / (max - min) * 100) + '%');
+        v.textContent = (k === 'scale') ? cur : cur;
+      };
+      el.addEventListener('input', () => { paint(); rebuildCli(); });
+      paint();
+    });
+
+    seedFeed(d);
+    drawSparks();
+    rebuildCli();
+  }
+
+  function spark(id) {
+    return `<svg class="spark" id="${id}" viewBox="0 0 100 32" preserveAspectRatio="none"></svg>`;
+  }
+
+  function drawSparks() {
+    const data = key => {
+      const arr = [];
+      let v = 50 + Math.random()*30;
+      for (let i = 0; i < 24; i++) {
+        v += (Math.random() - 0.5) * 12;
+        v = Math.max(5, Math.min(95, v));
+        arr.push(v);
+      }
+      return arr;
+    };
+    [['s-fps','var(--phosphor)'], ['s-lat','var(--amber)'], ['s-br','var(--cyan)'], ['s-mem','var(--violet)']]
+      .forEach(([id, color]) => {
+        const svg = document.getElementById(id);
+        if (!svg) return;
+        const d = data(id);
+        const path = d.map((y, i) => `${(i / (d.length-1)) * 100},${32 - (y/100) * 28 - 2}`).join(' ');
+        svg.innerHTML = `
+          <polyline points="${path}" fill="none" stroke="${color}" stroke-width="1.4" />
+          <polyline points="0,32 ${path} 100,32" fill="${color}" fill-opacity="0.08" stroke="none" />
+        `;
+      });
+  }
+
+  function seedFeed(d) {
+    const feed = document.getElementById('feed');
+    if (!feed) return;
+    const events = d.state === 'live' ? [
+      { typ:'tap',   pl:'(193, 412) · 9-arg digitizer · target 0x32' },
+      { typ:'swipe', pl:'(80,720)→(80,200) · 240ms · 12 frames' },
+      { typ:'btn',   pl:'home' },
+      { typ:'tap',   pl:'(312, 188)' },
+      { typ:'frame', pl:'AVCC · 6.4Mb/s · IDR' },
+      { typ:'tap',   pl:'(127, 644)' },
+      { typ:'swipe', pl:'(180,400)→(180,80) · 320ms' },
+      { typ:'btn',   pl:'lock' },
+      { typ:'tap',   pl:'(244, 122)' }
+    ] : [
+      { typ:'frame', pl:'stream not active' }
+    ];
+    feed.innerHTML = events.map((e, i) => `
+      <div class="log-line">
+        <span class="ts">${formatTs(i)}</span>
+        <span class="typ ${e.typ}">${e.typ.toUpperCase()}</span>
+        <span class="pl">${e.pl}</span>
+      </div>`).join('');
+  }
+
+  function formatTs(off) {
+    const t = new Date(Date.now() - off * 1450);
+    const pad = n => String(n).padStart(2,'0');
+    return `${pad(t.getMinutes())}:${pad(t.getSeconds())}.${String(t.getMilliseconds()).padStart(3,'0').slice(0,2)}`;
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  CLI mirror                                                       *
+   * ---------------------------------------------------------------- */
+  function rebuildCli() {
+    const cli = document.getElementById('cli');
+    const platforms = [...filterState.platforms].join(',') || '∅';
+    const runtimes  = [...filterState.runtimes].join(',') || '∅';
+    let extra = '';
+    if (selected) {
+      extra = `<span class="flag">--focus</span> <span class="arg">${selected.udid}</span>`;
+    }
+    cli.innerHTML = `
+      <span class="prompt">$</span>
+      baguette
+      <span class="arg">serve</span>
+      <span class="flag">--platform</span> ${platforms}
+      <span class="flag">--runtime</span> ${runtimes}
+      <span class="flag">--port</span> 8089
+      ${extra}
+    `;
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  Live telemetry tick — keeps numbers feeling alive               *
+   * ---------------------------------------------------------------- */
+  setInterval(() => {
+    const fps = document.getElementById('fleet-fps');
+    const bw  = document.getElementById('fleet-bw');
+    const lat = document.getElementById('fleet-lat');
+    const up  = document.getElementById('fleet-up');
+    if (fps) fps.textContent = 480 + Math.floor(Math.random() * 16);
+    if (bw)  bw.textContent  = (124 + Math.random() * 12).toFixed(1);
+    if (lat) lat.textContent = 21 + Math.floor(Math.random() * 6);
+
+    if (up) {
+      const t = (window.__uptime ?? (4*3600 + 21*60 + 38)) + 1;
+      window.__uptime = t;
+      const h = String(Math.floor(t / 3600)).padStart(2,'0');
+      const m = String(Math.floor((t / 60) % 60)).padStart(2,'0');
+      const s = String(t % 60).padStart(2,'0');
+      up.textContent = `${h}:${m}:${s}`;
+    }
+
+    // gauge tick
+    const g = document.getElementById('g-fps');
+    if (g) g.textContent = 58 + Math.floor(Math.random() * 4);
+    const gl = document.getElementById('g-lat');
+    if (gl && selected?.state === 'live') gl.textContent = selected.lat + Math.floor(Math.random() * 6 - 3);
+    const gb = document.getElementById('g-br');
+    if (gb) gb.textContent = (6.0 + Math.random() * 0.8).toFixed(1);
+    const gm = document.getElementById('g-mem');
+    if (gm && selected?.state === 'live') gm.textContent = 410 + Math.floor(Math.random() * 24);
+  }, 1000);
+
+  /* sys clock */
+  setInterval(() => {
+    const t = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('sys-clock').textContent =
+      `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+  }, 1000);
+
+  /* ---------------------------------------------------------------- *
+   *  Boot                                                             *
+   * ---------------------------------------------------------------- */
+  applyFilters();
+  clearFocus();
+  selectDevice(DEVICES[0].udid); // open with first device focused
+
+  // Cmd-K focuses search
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      document.getElementById('search').focus();
+    }
+  });
+</script>
+
+</body>
+</html>
