@@ -80,17 +80,24 @@
   // (canvas or video mirror) into the screenArea so the live pipeline
   // isn't disturbed. When false, the element sits raw inside the host
   // and edge-fills it.
+  //
+  // Idempotency matters: FarmApp.renderAll() runs on every filter or
+  // telemetry change, and detaching a `<video>` from the DOM (even
+  // momentarily) pauses it on most browsers. We early-return when the
+  // live element is already grafted into this host with the same
+  // bezel mode, so the mirror stream keeps running smoothly.
   FarmTile.prototype._mountIn = function (host, opts, element, fitObject) {
     if (!host) return;
     const useBezel = !!(opts && opts.useBezel && window.DeviceFrame);
     const layout = opts && opts.layout || null;
 
     if (useBezel) {
-      // Always rebuild — element identity may have changed (canvas ↔
-      // mirror), or the layout may have arrived after a prior raw
-      // mount. The DeviceFrame DOM is cheap; the live element is
-      // re-grafted in place so the WebSocket / captureStream pipe
-      // never sees a teardown.
+      // Already mounted in this host with the right element + mode? Skip.
+      if (host.dataset.bezelMounted === 'yes' &&
+          host.dataset.activeKind === element.tagName &&
+          host.contains(element)) {
+        return;
+      }
       host.innerHTML = '';
       host.classList.add('with-bezel');
       const frame = new window.DeviceFrame({ udid: this.udid, layout });
@@ -99,12 +106,15 @@
       element.style.cssText =
         `display:block;width:100%;height:100%;object-fit:${fitObject};background:#000`;
       host.dataset.bezelMounted = 'yes';
+      host.dataset.activeKind = element.tagName;
+      this._resumeIfVideo(element);
       return;
     }
 
     // Raw mode — strip any prior bezel scaffolding or stale element
     // (e.g. the canvas, when this attach is for the mirror or vice
-    // versa) and drop the requested element in.
+    // versa) and drop the requested element in. Idempotent: when the
+    // requested element is already the sole child, no-op.
     if (host.dataset.bezelMounted === 'yes') {
       host.innerHTML = '';
       delete host.dataset.bezelMounted;
@@ -113,9 +123,23 @@
     if (host.firstChild !== element || host.children.length > 1) {
       host.innerHTML = '';
       host.appendChild(element);
+      element.style.cssText =
+        'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
+      host.dataset.activeKind = element.tagName;
+      this._resumeIfVideo(element);
     }
-    element.style.cssText =
-      'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
+  };
+
+  // Browsers pause `<video>` elements while detached from the DOM (and
+  // sometimes after a re-attach without explicit play()). Calling
+  // play() returns a promise we deliberately ignore — autoplay
+  // policies can reject it, but we already have user-gesture context
+  // (the click that caused select), so the resume usually succeeds.
+  FarmTile.prototype._resumeIfVideo = function (element) {
+    if (element && element.tagName === 'VIDEO') {
+      const p = element.play && element.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
   };
 
   // Wire the mirror video to the canvas's captureStream(). The track

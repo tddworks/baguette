@@ -417,7 +417,11 @@ main {
 .tile-status[data-state="error"] .led { background: var(--rose); box-shadow: 0 0 6px var(--rose); }
 .tile-status[data-state="off"]   { color: var(--dim); }
 
-/* In-tile preview screen — owns either the live <canvas> or a static placeholder. */
+/* In-tile preview screen — owns either the live <canvas> or a static placeholder.
+   Default aspect-ratio applies in non-grid contexts (focus pane preview).
+   The grid view overrides this to a fixed height so every tile in a row
+   aligns regardless of device shape (iPhone vs iPad vs Watch) or mode
+   (live / shutdown / bezel-on). */
 .screen {
   position: relative;
   aspect-ratio: 9 / 16;
@@ -433,27 +437,45 @@ main {
 .screen.tv    { aspect-ratio: 16 / 9; }
 .screen.watch { aspect-ratio: 1 / 1.18; border-radius: 18px; }
 
-/* Bezel mode — DeviceFrame's wrapper carries the bezel image, which
-   sets the aspect ratio. Drop the fixed 9:16 lock and let the image
-   drive sizing. Center the wrapper inside the tile so all phones in
-   one row visually align by their bottom edge. */
-.screen.with-bezel {
+/* Grid tiles — fixed-height screen container. The bezel image (or canvas
+   in raw mode, or off-overlay in idle/shutdown/error) fits within these
+   bounds so all tiles in a row have the same height. Bezels are scaled
+   to fit by the max-width/max-height constraints below. */
+.tile .screen,
+.tile .screen.ipad,
+.tile .screen.tv,
+.tile .screen.watch {
   aspect-ratio: auto;
+  height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Bezel mode — DeviceFrame's wrapper carries the bezel image. The image
+   sizes naturally; max-width/max-height bound it inside the fixed-height
+   container so iPhones (tall), iPads (square-ish), and Watches don't
+   stretch their tile rows. */
+.screen.with-bezel {
   background: transparent;
   border: 0;
   box-shadow: none;
   border-radius: 0;
   overflow: visible;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  min-height: 220px;
 }
-.screen.with-bezel > div { /* the DeviceFrame wrapper */
+.screen.with-bezel > div {  /* DeviceFrame wrapper */
   max-width: 100%;
-  max-height: 320px;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.screen.with-bezel img { max-height: 320px; max-width: 100%; height: auto; width: auto; }
+.screen.with-bezel img {
+  max-height: 100%;
+  max-width: 100%;
+  height: auto;
+  width: auto;
+}
 .screen canvas {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
