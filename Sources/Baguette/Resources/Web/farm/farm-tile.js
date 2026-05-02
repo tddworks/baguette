@@ -181,13 +181,11 @@
       }
       host.dataset.bezelMounted = 'yes';
       host.dataset.activeKind = element.tagName;
-      this._resumeIfVideo(element);
       return;
     }
 
     // Raw mode — strip any prior bezel scaffolding or stale element
-    // (e.g. the canvas, when this attach is for the mirror or vice
-    // versa) and drop the requested element in. Idempotent: when the
+    // and drop the requested element in. Idempotent: when the
     // requested element is already the sole child, no-op.
     if (host.dataset.bezelMounted === 'yes') {
       host.innerHTML = '';
@@ -200,35 +198,6 @@
       element.style.cssText =
         'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
       host.dataset.activeKind = element.tagName;
-      this._resumeIfVideo(element);
-    }
-  };
-
-  // Browsers pause `<video>` elements while detached from the DOM (and
-  // sometimes after a re-attach without explicit play()). Calling
-  // play() returns a promise we deliberately ignore — autoplay
-  // policies can reject it, but we already have user-gesture context
-  // (the click that caused select), so the resume usually succeeds.
-  FarmTile.prototype._resumeIfVideo = function (element) {
-    if (element && element.tagName === 'VIDEO') {
-      const p = element.play && element.play();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
-    }
-  };
-
-  // Wire the mirror video to the canvas's captureStream(). The track
-  // doesn't yield frames until the canvas has painted at least once,
-  // so this is called lazily on the first attachMirror() — by then
-  // the StreamSession has been alive long enough to draw frames.
-  FarmTile.prototype.ensureMirrorStream = function () {
-    if (this._mirrorStreamReady) return;
-    if (typeof this.canvas.captureStream !== 'function') return;
-    try {
-      this.mirror.srcObject = this.canvas.captureStream();
-      this._mirrorStreamReady = true;
-    } catch {
-      // Older browsers / non-hardware-accelerated contexts: leave the
-      // mirror dark. It's a UX nicety, not a correctness requirement.
     }
   };
 
@@ -277,6 +246,11 @@
     this.mode = 'thumb';
     this.applyConfig(THUMB);
     this.unwireInput();
+    // Stop the per-frame copy when the tile is no longer focused.
+    // The mirror element stays in DOM until FarmFocus.dispose()
+    // wipes the focus pane innerHTML; either way, no point burning
+    // a rAF loop when nothing's looking at the mirror.
+    this._stopMirrorCopy();
   };
 
   // ---- input lifecycle ------------------------------------------------
@@ -364,9 +338,11 @@
 
   FarmTile.prototype.stop = function () {
     this.unwireInput();
+    this._stopMirrorCopy();
     if (this.session) { this.session.stop(); this.session = null; }
     this.mode = 'idle';
     if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
+    if (this.mirror.parentElement) this.mirror.parentElement.removeChild(this.mirror);
   };
 
   window.FarmTile = FarmTile;
