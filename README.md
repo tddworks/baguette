@@ -30,6 +30,8 @@ control any booted simulator from a browser.
 
 https://github.com/user-attachments/assets/e904413f-16bb-4b3d-86d5-162333403cee
 
+https://github.com/user-attachments/assets/c49c9f4b-0e4b-47ea-9272-3223b1ac7739
+
 > The raw clip lives at [`assets/demo.mp4`](assets/demo.mp4) — drag
 > it into a GitHub web edit of this README to upload as a CDN-hosted
 > video and replace the line above with the auto-generated URL.
