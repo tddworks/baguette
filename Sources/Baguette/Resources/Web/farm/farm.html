@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baguette · Device Farm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="/farm/farm.css">
+</head>
+<body>
+<!--
+  Static shell. The five scripts below own one job each, hung off
+  `window` as IIFE classes (same pattern as sim-list.js / sim-stream.js):
+
+    1. farm-views.js  — Grid / Wall / List renderers (pure DOM)
+    2. farm-tile.js   — FarmTile: per-device thumbnail StreamSession
+    3. farm-focus.js  — FarmFocus: full-quality focused-device pane
+    4. farm-filter.js — FarmFilter: filter state + sidebar wiring
+    5. farm-app.js    — FarmApp: orchestrator (boot, fetch, dispatch)
+
+  No bundler, no module graph. Load order matters: dependents go last.
+-->
+<div class="app">
+  <header id="farm-header"></header>
+  <main>
+    <aside class="rail" id="farm-rail"></aside>
+    <section class="grid-wrap">
+      <div class="grid-head" id="farm-grid-head"></div>
+      <div id="farm-view-host"></div>
+    </section>
+    <aside class="focus" id="farm-focus"></aside>
+  </main>
+  <footer id="farm-cli"></footer>
+</div>
+
+<script src="/stream-session.js"></script>
+<script src="/frame-decoder.js"></script>
+<script src="/sim-input.js"></script>
+<script src="/farm/farm-views.js"></script>
+<script src="/farm/farm-tile.js"></script>
+<script src="/farm/farm-focus.js"></script>
+<script src="/farm/farm-filter.js"></script>
+<script src="/farm/farm-app.js"></script>
+</body>
+</html>
