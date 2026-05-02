@@ -102,15 +102,20 @@
       return;
     }
 
-    // Raw mode — strip any prior bezel scaffolding, drop the element in.
+    // Raw mode — strip any prior bezel scaffolding or stale element
+    // (e.g. the canvas, when this attach is for the mirror or vice
+    // versa) and drop the requested element in.
     if (host.dataset.bezelMounted === 'yes') {
       host.innerHTML = '';
       delete host.dataset.bezelMounted;
       host.classList.remove('with-bezel');
     }
+    if (host.firstChild !== element || host.children.length > 1) {
+      host.innerHTML = '';
+      host.appendChild(element);
+    }
     element.style.cssText =
       'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
-    if (element.parentElement !== host) host.appendChild(element);
   };
 
   // Wire the mirror video to the canvas's captureStream(). The track
