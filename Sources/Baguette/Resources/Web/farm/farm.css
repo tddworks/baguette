@@ -610,6 +610,9 @@ main {
   flex: 1;
   min-height: 0;
   background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .wall .panel canvas {
   position: absolute; inset: 0;
