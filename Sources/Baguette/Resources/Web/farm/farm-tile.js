@@ -34,6 +34,15 @@
     this.session = null;
     this.mode = 'idle';   // 'idle' | 'thumb' | 'full'
     this.lastFps = 0;
+    // Frame-reported size in pixels; updated on every onSize callback.
+    // Used as the input-plane fallback when there's no chrome layout.
+    this.framePixelSize = { w: 0, h: 0 };
+    // Input plumbing — only attached while this tile is the focused
+    // device (FarmApp calls promote() / demote()). Each holds onto its
+    // detach handle so the same tile can re-promote without leaks.
+    this.simInput = null;
+    this.mouseSource = null;
+    this.inputLayout = null;     // chrome layout snapshot for sizing
   }
 
   // Move the canvas into whichever screen-host element the latest view
@@ -85,7 +94,15 @@
       format: 'mjpeg',           // MJPEG decodes anywhere — H.264/AVCC needs WebCodecs.
       version: 'v2',
       canvas: this.canvas,
-      onSize: (w, h) => this.onSize(this.udid, w, h),
+      onSize: (w, h) => {
+        this.framePixelSize = { w, h };
+        // While focused, keep SimInput's screen size in sync with the
+        // current frame — first-frame sizes the input plane; later
+        // resizes (from `set_scale` switches between thumb and full)
+        // re-anchor it without losing the active gesture state.
+        if (this.simInput) this.simInput.setScreenSize(...this.computeScreenSize());
+        this.onSize(this.udid, w, h);
+      },
       onFps:  (fps) => {
         this.lastFps = fps;
         this.onTelemetry(this.udid, { fps });
@@ -94,23 +111,82 @@
     });
     this.session.start();
     this.mode = 'thumb';
-    // ReconfigParser needs the socket open — give it a tick. start()
-    // sets onopen; we ride it via a microtask so the apply lands on
-    // an OPEN socket rather than a queued one.
     setTimeout(() => this.applyConfig(THUMB), 200);
   };
 
-  FarmTile.prototype.promote = function () {
+  // promote() upgrades stream quality AND wires gesture input. The
+  // wiring requires the canvas to have a parent (so the mouse source
+  // can attach to its bounding box) — FarmApp calls promote() after
+  // the canvas has been attached to the focus preview, so by this
+  // point `canvas.parentElement` is the element we want to listen on.
+  FarmTile.prototype.promote = function (opts) {
     if (!this.session) { this.start(); }
     this.mode = 'full';
     this.applyConfig(FULL);
+    this.inputLayout = (opts && opts.layout) || null;
+    this.wireInput();
   };
 
   FarmTile.prototype.demote = function () {
     if (!this.session) return;
     this.mode = 'thumb';
     this.applyConfig(THUMB);
+    this.unwireInput();
   };
+
+  // ---- input lifecycle ------------------------------------------------
+  // Resolve the input plane's logical size in device points. Order:
+  //   1. cached chrome layout's `screen.{width,height}` — accurate
+  //   2. last frame size from StreamSession.onSize — close enough at
+  //      scale=1, off-by-divisor at thumbnail scales. Won't matter
+  //      because FarmTile only wires input while in `full` mode.
+  //   3. iPhone-15-Pro-ish default — keeps math from dividing by zero
+  //      while the WS handshake completes.
+  FarmTile.prototype.computeScreenSize = function () {
+    if (this.inputLayout?.screen) {
+      return [this.inputLayout.screen.width, this.inputLayout.screen.height];
+    }
+    if (this.framePixelSize.w > 0) {
+      return [this.framePixelSize.w, this.framePixelSize.h];
+    }
+    return [402, 874];
+  };
+
+  FarmTile.prototype.wireInput = function () {
+    if (this.simInput || !this.session || !window.SimInput) return;
+    if (!window.SimInputBridge || !window.MouseGestureSource) return;
+    this.simInput = new window.SimInput({
+      udid: this.udid,
+      log:  () => {},
+      transport: window.SimInputBridge.makeTransport(this.session)
+    });
+    this.simInput.setScreenSize(...this.computeScreenSize());
+    // Attach to the canvas itself — that's the precise rectangle
+    // covering live screen pixels in both raw and bezel modes (the
+    // DeviceFrame's screenArea is the canvas's parent and shares
+    // its bounding box). Mouse coords normalize against the listener
+    // element, so canvas is the right pick.
+    this.mouseSource = new window.MouseGestureSource({
+      el:    this.canvas,
+      input: this.simInput,
+      log:   () => {}
+    });
+    this.mouseSource.attach();
+  };
+
+  FarmTile.prototype.unwireInput = function () {
+    if (this.mouseSource && typeof this.mouseSource.detach === 'function') {
+      try { this.mouseSource.detach(); } catch {}
+    }
+    this.mouseSource = null;
+    this.simInput = null;
+  };
+
+  // Forward sidebar buttons (home / lock / volume / siri) to the
+  // focused device. FarmFocus calls these on its preset row clicks.
+  FarmTile.prototype.button = function (name) { this.simInput?.button(name); };
+  FarmTile.prototype.type   = function (text) { this.simInput?.type(text); };
+  FarmTile.prototype.key    = function (code) { this.simInput?.key(code); };
 
   FarmTile.prototype.applyConfig = function (cfg) {
     if (!this.session || !this.session.send) return;
@@ -123,6 +199,7 @@
   FarmTile.prototype.snapshot  = function () { this.session?.send?.({ type: 'snapshot' }); };
 
   FarmTile.prototype.stop = function () {
+    this.unwireInput();
     if (this.session) { this.session.stop(); this.session = null; }
     this.mode = 'idle';
     if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
