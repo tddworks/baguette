@@ -72,13 +72,11 @@
         </div>
       </div>`;
 
-    // Re-parent the live canvas into the focus preview. The tile is
-    // already running in full mode (FarmApp called .promote() before
-    // calling us), so visually nothing changes except the size.
+    // FarmApp re-parents the live canvas into `previewScreen` after
+    // we return — that way the bezel toggle + chrome layout stay in
+    // one place (tile.attach()) instead of being split across two
+    // mounting paths. Here we only build the chrome.
     this.previewScreen = this.host.querySelector('[data-role="focus-screen"]');
-    if (tile && this.previewScreen) {
-      this.previewScreen.appendChild(tile.canvas);
-    }
     this.fpsEl = this.host.querySelector('[data-readout="fps"]');
     this.latEl = this.host.querySelector('[data-readout="lat"]');
     this.brEl  = this.host.querySelector('[data-readout="br"]');

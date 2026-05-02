@@ -191,9 +191,16 @@
   // After every render, walk the produced screen-host nodes and ask
   // each tile to drop its canvas into the matching one. Idempotent —
   // attach() no-ops when the parent + bezel mode didn't change.
+  //
+  // The currently-focused tile is skipped: its canvas lives in the
+  // focus pane while focused, and re-attaching here would yank it
+  // back to the grid (leaving the focus preview empty). On clearFocus,
+  // FarmFocus.dispose() detaches the canvas from the focus pane and
+  // the next attachTilesToScreens reparents it back into the grid.
   FarmApp.prototype.attachTilesToScreens = function () {
     document.querySelectorAll('#farm-view-host [data-screen-host]').forEach(host => {
       const udid = host.dataset.screenHost;
+      if (udid === this.selectedUdid) return;
       const tile = this.tiles.get(udid);
       if (!tile) return;
       tile.attach(host, {
@@ -252,6 +259,15 @@
       onLifecycle: (d, action) => this.runAction(d.udid, action)
     });
     this.renderAll();
+    // After grid render, plant the live canvas in the focus preview
+    // (renderAll's attachTilesToScreens skipped this udid). Same
+    // attach() path as the grid, so bezel mode + chrome layout work.
+    if (tile && this.focus.previewScreen) {
+      tile.attach(this.focus.previewScreen, {
+        useBezel: this.showBezels,
+        layout:   this.chromeLayouts.get(udid) || null
+      });
+    }
   };
 
   FarmApp.prototype.clearFocus = function () {
