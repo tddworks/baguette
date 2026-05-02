@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baguette — headless iOS 26 simulator manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,300..500&family=JetBrains+Mono:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0C0907;
+    --bg-2:#120D09;
+    --surface:#1A130D;
+    --surface-2:#221911;
+    --line:#2B2017;
+    --line-bright:#3F2E20;
+    --ink:#F1E6CE;
+    --ink-2:#C7B89B;
+    --dim:#8A7A60;
+    --muted:#5A4D3D;
+    --crust:#FF8B3D;
+    --crust-deep:#D9621F;
+    --crust-soft:#FFB07A;
+    --live:#7BD17E;
+    --live-dim:#3F8045;
+    --signal:#67BFE7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Manrope",system-ui,sans-serif;
+    font-weight:400;line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    background-image:
+      radial-gradient(1100px 600px at 85% -10%, rgba(255,139,61,.10), transparent 55%),
+      radial-gradient(900px 500px at -10% 30%, rgba(103,191,231,.05), transparent 60%);
+    background-attachment:fixed;
+  }
+  /* engineering grid */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      linear-gradient(rgba(241,230,206,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(241,230,206,.025) 1px,transparent 1px);
+    background-size:64px 64px;
+    mask-image:radial-gradient(ellipse at center, black 30%, transparent 80%);
+  }
+  ::selection{background:var(--crust);color:var(--bg)}
+  a{color:inherit;text-decoration:none}
+  code,.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+
+  .wrap{max-width:1280px;margin:0 auto;padding:0 32px;position:relative;z-index:2}
+
+  /* ─────────── TOP BAR ─────────── */
+  .topbar{
+    position:sticky;top:0;z-index:50;
+    background:rgba(12,9,7,.7);backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar .inner{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 32px;max-width:1280px;margin:0 auto;
+  }
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand .logo{
+    width:30px;height:30px;display:grid;place-items:center;
+    background:var(--crust);border-radius:6px;
+    box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 8px 20px -8px rgba(255,139,61,.6);
+    font-family:"JetBrains Mono";font-weight:800;font-size:16px;color:var(--bg);
+  }
+  .brand .name{
+    font-family:"JetBrains Mono";font-weight:700;font-size:14px;letter-spacing:-.01em;
+  }
+  .brand .ver{
+    font-family:"JetBrains Mono";font-size:10px;letter-spacing:.1em;
+    color:var(--dim);background:var(--surface);
+    padding:3px 8px;border:1px solid var(--line);border-radius:4px;
+  }
+  .nav{display:flex;align-items:center;gap:8px}
+  .nav a{
+    font-size:13px;color:var(--ink-2);padding:8px 14px;border-radius:6px;
+    transition:background .2s ease, color .2s ease;
+    font-weight:500;
+  }
+  .nav a:hover{background:var(--surface);color:var(--ink)}
+  .nav .gh{
+    font-family:"JetBrains Mono";font-size:11px;letter-spacing:.06em;
+    background:var(--ink);color:var(--bg);padding:8px 14px;
+    margin-left:6px;font-weight:600;
+  }
+  .nav .gh:hover{background:var(--crust);color:var(--bg)}
+
+  /* ─────────── HERO ─────────── */
+  .hero{padding:80px 0 60px;position:relative}
+  .hero-grid{
+    display:grid;grid-template-columns:1fr 1.05fr;gap:64px;align-items:center;
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:10px;
+    font-family:"JetBrains Mono";font-size:11px;letter-spacing:.16em;
+    color:var(--ink-2);text-transform:uppercase;
+    padding:7px 12px;border:1px solid var(--line);border-radius:999px;
+    background:var(--surface);
+    margin-bottom:32px;
+    opacity:0;animation:fade .8s .1s forwards;
+  }
+  .eyebrow .pill{
+    background:var(--live);color:var(--bg);padding:2px 7px;border-radius:4px;
+    font-weight:700;letter-spacing:.08em;
+  }
+  .eyebrow .dot{width:6px;height:6px;background:var(--live);border-radius:50%;
+    box-shadow:0 0 10px var(--live);animation:pulse 2s infinite;
+  }
+  h1.headline{
+    font-family:"JetBrains Mono";font-weight:700;
+    font-size:clamp(48px,6.4vw,84px);line-height:.95;letter-spacing:-.04em;
+    color:var(--ink);
+    opacity:0;animation:rise 1s .15s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  h1 .accent{color:var(--crust)}
+  h1 .tag{
+    display:block;margin-top:18px;
+    font-family:"Fraunces";font-style:italic;font-weight:300;
+    font-variation-settings:"opsz" 144;
+    font-size:clamp(22px,2.2vw,30px);color:var(--crust-soft);
+    letter-spacing:-.01em;
+  }
+  .lede{
+    margin-top:32px;font-size:18px;line-height:1.62;color:var(--ink-2);
+    max-width:520px;font-weight:400;
+    opacity:0;animation:rise 1s .35s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .lede b{color:var(--ink);font-weight:600}
+  .actions{
+    display:flex;flex-wrap:wrap;gap:12px;margin-top:36px;align-items:center;
+    opacity:0;animation:rise 1s .55s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:10px;
+    padding:13px 20px;border-radius:8px;font-weight:600;font-size:14px;
+    transition:transform .2s ease, background .2s ease, box-shadow .2s ease, color .2s ease;
+    border:1px solid transparent;
+    font-family:"Manrope";
+  }
+  .btn.primary{
+    background:var(--crust);color:var(--bg);
+    box-shadow:0 8px 24px -8px rgba(255,139,61,.5), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .btn.primary:hover{transform:translateY(-2px);background:var(--crust-deep)}
+  .btn.ghost{
+    background:var(--surface);color:var(--ink);border-color:var(--line-bright);
+  }
+  .btn.ghost:hover{background:var(--surface-2);transform:translateY(-2px)}
+  .btn.copy{
+    font-family:"JetBrains Mono";font-size:13px;font-weight:500;
+    background:transparent;color:var(--ink-2);border:1px dashed var(--line-bright);
+    padding:13px 18px;
+  }
+  .btn.copy:hover{color:var(--ink);border-color:var(--crust);background:rgba(255,139,61,.05)}
+  .btn.copy .pre{color:var(--crust)}
+
+  /* ─────────── HERO MOCK ─────────── */
+  .mock{
+    position:relative;aspect-ratio:1.05/1;
+    background:var(--surface);border:1px solid var(--line-bright);
+    border-radius:14px;overflow:hidden;
+    box-shadow:
+      0 40px 80px -30px rgba(0,0,0,.7),
+      0 0 0 1px rgba(255,255,255,.02),
+      inset 0 1px 0 rgba(255,255,255,.04);
+    opacity:0;animation:rise 1.2s .35s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .mock-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:11px 16px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));
+    font-family:"JetBrains Mono";font-size:11px;color:var(--dim);
+  }
+  .mock-bar .lights{display:flex;gap:6px}
+  .mock-bar .lights span{width:10px;height:10px;border-radius:50%;background:var(--line-bright)}
+  .mock-bar .lights span:nth-child(1){background:#E8553D}
+  .mock-bar .lights span:nth-child(2){background:#E8B33D}
+  .mock-bar .lights span:nth-child(3){background:var(--live)}
+  .mock-bar .url{
+    color:var(--ink-2);background:var(--bg-2);padding:4px 10px;border-radius:4px;
+    border:1px solid var(--line);font-size:10.5px;
+  }
+  .mock-bar .url .crust{color:var(--crust)}
+  .mock-stat{font-size:10px;letter-spacing:.1em;color:var(--dim)}
+  .mock-stat .live{color:var(--live)}
+
+  .farm-app{
+    display:grid;grid-template-columns:170px 1fr 1.4fr;height:calc(100% - 38px);
+    background:var(--bg-2);
+  }
+  .farm-side{
+    border-right:1px solid var(--line);padding:18px 14px;
+    font-family:"JetBrains Mono";font-size:10.5px;
+  }
+  .farm-side .label{color:var(--dim);letter-spacing:.18em;text-transform:uppercase;
+    margin-bottom:14px;font-size:9.5px;}
+  .farm-side .item{
+    display:flex;justify-content:space-between;padding:7px 8px;
+    color:var(--ink-2);border-radius:5px;cursor:pointer;
+  }
+  .farm-side .item.on{background:var(--surface-2);color:var(--ink);
+    box-shadow:inset 2px 0 0 var(--crust);}
+  .farm-side .item .n{color:var(--dim)}
+  .farm-side .div{height:1px;background:var(--line);margin:14px 0}
+
+  .farm-grid{
+    border-right:1px solid var(--line);padding:14px;
+    display:grid;grid-template-columns:1fr 1fr;gap:10px;
+    align-content:start;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(255,139,61,.04), transparent 60%);
+  }
+  .tile{
+    aspect-ratio:9/16;background:#000;border-radius:6px;position:relative;
+    border:1px solid var(--line-bright);overflow:hidden;
+    transition:transform .2s ease, border-color .2s ease;
+  }
+  .tile:hover{transform:translateY(-2px);border-color:var(--crust)}
+  .tile .badge{
+    position:absolute;top:5px;left:5px;font-family:"JetBrains Mono";
+    font-size:8px;letter-spacing:.05em;color:var(--ink-2);
+    background:rgba(0,0,0,.6);padding:2px 5px;border-radius:3px;backdrop-filter:blur(4px);
+  }
+  .tile .live-dot{
+    position:absolute;top:5px;right:5px;width:5px;height:5px;border-radius:50%;
+    background:var(--live);box-shadow:0 0 6px var(--live);animation:pulse 2s infinite;
+  }
+  .tile.idle .live-dot{background:var(--muted);box-shadow:none;animation:none}
+  .tile .ui{position:absolute;inset:0;padding:20% 14% 14%;display:flex;flex-direction:column;gap:5px}
+  .tile .ui .h{height:6px;background:linear-gradient(90deg,#3a2a1f,transparent);border-radius:2px}
+  .tile .ui .b{height:14px;background:#1a120c;border-radius:3px;border:1px solid #251a10}
+  .tile .ui .b.acc{background:linear-gradient(135deg,#5a3219,#3a1f10);border-color:#6a3a1f}
+  .tile.iphone-pro{background:linear-gradient(140deg,#1f140d,#0c0807)}
+  .tile.iphone-air{background:linear-gradient(160deg,#0e1620,#070a0e)}
+  .tile.ipad{background:linear-gradient(140deg,#1a1a22,#0a0a0e);aspect-ratio:4/5;grid-column:span 2}
+  .tile.ipad .ui{padding:8% 8% 6%}
+
+  .farm-focus{
+    padding:18px;display:flex;flex-direction:column;gap:14px;
+    background:linear-gradient(180deg,var(--bg-2),var(--surface));
+  }
+  .focus-head{
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:"JetBrains Mono";font-size:10.5px;
+  }
+  .focus-head .title{color:var(--ink);font-weight:600;letter-spacing:.02em}
+  .focus-head .meta{color:var(--dim);display:flex;gap:14px}
+  .focus-head .meta b{color:var(--live);font-weight:600}
+  .focus-screen{
+    flex:1;background:#000;border-radius:10px;border:1px solid var(--line-bright);
+    position:relative;overflow:hidden;
+    background:
+      radial-gradient(ellipse at top,#2a1a0e 0%,#0a0604 70%);
+    box-shadow:inset 0 0 80px rgba(0,0,0,.8);
+  }
+  .focus-screen::before{
+    content:"";position:absolute;inset:0;
+    background-image:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(255,255,255,.012) 2px,rgba(255,255,255,.012) 3px);
+    pointer-events:none;
+  }
+  .focus-screen .notch{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    width:80px;height:22px;background:#000;border-radius:14px;
+  }
+  .focus-screen .app{
+    position:absolute;inset:50px 22px 22px;display:flex;flex-direction:column;gap:10px;
+  }
+  .focus-screen .app .row{
+    display:flex;gap:8px;align-items:center;
+  }
+  .focus-screen .app .pill{
+    height:10px;background:linear-gradient(90deg,#3a281a,#1a1209);border-radius:5px;flex:1;
+  }
+  .focus-screen .app .pill.acc{background:linear-gradient(90deg,#FF8B3D,#D9621F);}
+  .focus-screen .app .card{
+    height:48px;background:linear-gradient(135deg,#1a120c,#0d0805);border-radius:8px;
+    border:1px solid #251a10;
+  }
+  .focus-screen .app .card.lg{height:90px}
+  .focus-screen .cursor{
+    position:absolute;top:55%;left:55%;width:32px;height:32px;border-radius:50%;
+    border:2px solid var(--crust);background:rgba(255,139,61,.12);
+    animation:tap 3s infinite ease-out;
+  }
+  @keyframes tap{
+    0%,100%{transform:scale(.8);opacity:0}
+    20%{transform:scale(1);opacity:1}
+    60%{transform:scale(1.6);opacity:0}
+  }
+
+  .focus-tools{
+    display:flex;gap:6px;flex-wrap:wrap;
+  }
+  .tool{
+    font-family:"JetBrains Mono";font-size:10px;letter-spacing:.08em;
+    padding:6px 10px;border:1px solid var(--line-bright);border-radius:5px;
+    color:var(--ink-2);background:var(--surface-2);text-transform:uppercase;
+  }
+  .tool.act{background:var(--crust);color:var(--bg);border-color:var(--crust);font-weight:600}
+
+  /* ─────────── SPECS BAR ─────────── */
+  .specs{
+    margin-top:64px;padding:22px 28px;border:1px solid var(--line);
+    border-radius:10px;background:linear-gradient(180deg,var(--surface),var(--bg-2));
+    display:grid;grid-template-columns:repeat(5,1fr);gap:24px;
+    opacity:0;animation:rise 1s .8s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .specs .cell{
+    border-left:1px solid var(--line);padding-left:18px;
+  }
+  .specs .cell:first-child{border-left:none;padding-left:0}
+  .specs .v{
+    font-family:"JetBrains Mono";font-weight:700;font-size:24px;
+    color:var(--ink);letter-spacing:-.02em;
+  }
+  .specs .v .u{color:var(--crust);font-size:14px;margin-left:2px;font-weight:500}
+  .specs .l{
+    font-family:"JetBrains Mono";font-size:9.5px;letter-spacing:.16em;
+    color:var(--dim);text-transform:uppercase;margin-top:6px;
+  }
+
+  /* ─────────── SECTIONS ─────────── */
+  section.block{padding:120px 0;position:relative}
+  .sec-head{margin-bottom:54px;max-width:740px}
+  .sec-tag{
+    font-family:"JetBrains Mono";font-size:11px;letter-spacing:.18em;
+    color:var(--crust);text-transform:uppercase;
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:18px;
+  }
+  .sec-tag::before{content:"";width:24px;height:1px;background:var(--crust)}
+  .sec-head h2{
+    font-family:"JetBrains Mono";font-weight:700;
+    font-size:clamp(34px,4.2vw,52px);line-height:1.05;letter-spacing:-.03em;
+    color:var(--ink);
+  }
+  .sec-head h2 em{font-style:normal;color:var(--crust)}
+  .sec-head p{
+    margin-top:18px;font-size:17px;line-height:1.6;color:var(--ink-2);
+    max-width:620px;
+  }
+
+  /* feature grid */
+  .feat-grid{
+    display:grid;grid-template-columns:repeat(6,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  }
+  .feat{
+    background:var(--bg-2);padding:34px 30px;
+    transition:background .25s ease;display:flex;flex-direction:column;gap:14px;
+    min-height:280px;position:relative;
+  }
+  .feat:hover{background:var(--surface)}
+  .feat.s3{grid-column:span 3}
+  .feat.s2{grid-column:span 2}
+  .feat.s4{grid-column:span 4}
+  .feat .ix{
+    display:inline-flex;align-items:center;gap:10px;
+    font-family:"JetBrains Mono";font-size:10.5px;color:var(--dim);
+    letter-spacing:.16em;text-transform:uppercase;
+  }
+  .feat .ix .n{color:var(--crust);font-weight:600}
+  .feat h3{
+    font-family:"JetBrains Mono";font-weight:600;font-size:22px;
+    letter-spacing:-.02em;color:var(--ink);line-height:1.2;
+  }
+  .feat p{
+    font-size:14.5px;line-height:1.6;color:var(--ink-2);
+  }
+  .feat .tags{
+    margin-top:auto;display:flex;flex-wrap:wrap;gap:6px;
+  }
+  .feat .tags span{
+    font-family:"JetBrains Mono";font-size:10px;letter-spacing:.08em;
+    padding:4px 9px;border:1px solid var(--line-bright);border-radius:4px;
+    color:var(--ink-2);background:var(--surface);
+  }
+  .feat .tags span.acc{color:var(--crust);border-color:rgba(255,139,61,.4);background:rgba(255,139,61,.06)}
+
+  /* terminal mock for streaming feature */
+  .term{
+    background:#000;border:1px solid var(--line-bright);border-radius:6px;
+    padding:14px;font-family:"JetBrains Mono";font-size:11.5px;line-height:1.7;
+    color:var(--ink-2);overflow:hidden;
+  }
+  .term .pr{color:var(--crust)}
+  .term .ok{color:var(--live)}
+  .term .dim{color:var(--muted)}
+  .term .blink::after{content:"▊";color:var(--crust);animation:blink 1.1s steps(2) infinite;margin-left:2px}
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+  /* ─────────── THE TRICK ─────────── */
+  .trick{
+    display:grid;grid-template-columns:1fr 1.1fr;gap:60px;align-items:start;
+  }
+  .trick-quote{
+    font-family:"JetBrains Mono";font-weight:600;
+    font-size:clamp(26px,2.6vw,36px);line-height:1.25;letter-spacing:-.02em;
+    color:var(--ink);
+  }
+  .trick-quote em{font-style:normal;color:var(--crust);font-weight:700}
+  .trick-quote .crossed{
+    text-decoration:line-through;text-decoration-color:var(--crust-deep);
+    text-decoration-thickness:2px;color:var(--dim);font-weight:500;
+  }
+  .trick-body{font-size:16px;line-height:1.75;color:var(--ink-2)}
+  .trick-body p+p{margin-top:14px}
+  .trick-body code{
+    font-family:"JetBrains Mono";font-size:13.5px;color:var(--crust);
+    background:var(--surface);padding:1px 6px;border-radius:4px;
+    border:1px solid var(--line);
+  }
+
+  .code-block{
+    margin-top:28px;background:#000;border:1px solid var(--line-bright);
+    border-radius:8px;overflow:hidden;
+  }
+  .code-block .hd{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 16px;border-bottom:1px solid var(--line);
+    font-family:"JetBrains Mono";font-size:10.5px;color:var(--dim);
+    background:var(--surface-2);
+  }
+  .code-block .hd .right{color:var(--crust)}
+  .code-block pre{
+    padding:18px 18px;font-family:"JetBrains Mono";font-size:13px;line-height:1.65;
+    color:var(--ink-2);overflow-x:auto;
+  }
+  .code-block .kw{color:#E78AD9}
+  .code-block .fn{color:var(--crust-soft)}
+  .code-block .num{color:var(--live)}
+  .code-block .str{color:#9BCB6B}
+  .code-block .cm{color:var(--muted);font-style:italic}
+  .code-block .hl{
+    background:linear-gradient(90deg,rgba(255,139,61,.18),rgba(255,139,61,.04));
+    display:block;padding:0 18px;margin:0 -18px;
+    box-shadow:inset 3px 0 0 var(--crust);
+  }
+
+  /* ─────────── QUICKSTART ─────────── */
+  .qstart-term{
+    background:#000;border:1px solid var(--line-bright);border-radius:10px;
+    overflow:hidden;
+    box-shadow:0 30px 70px -30px rgba(0,0,0,.7);
+  }
+  .qstart-term .hd{
+    display:flex;align-items:center;gap:10px;padding:11px 16px;
+    background:linear-gradient(180deg,var(--surface-2),var(--surface));
+    border-bottom:1px solid var(--line);
+  }
+  .qstart-term .hd .lights{display:flex;gap:6px}
+  .qstart-term .hd .lights span{width:10px;height:10px;border-radius:50%}
+  .qstart-term .hd .lights span:nth-child(1){background:#E8553D}
+  .qstart-term .hd .lights span:nth-child(2){background:#E8B33D}
+  .qstart-term .hd .lights span:nth-child(3){background:var(--live)}
+  .qstart-term .hd .ttl{
+    font-family:"JetBrains Mono";font-size:11.5px;color:var(--ink-2);margin-left:8px;
+  }
+  .qstart-term .body{
+    padding:24px 28px;font-family:"JetBrains Mono";font-size:13.5px;line-height:1.85;
+    color:var(--ink-2);
+  }
+  .qstart-term .body .pr{color:var(--crust)}
+  .qstart-term .body .ok{color:var(--live)}
+  .qstart-term .body .cm{color:var(--muted)}
+  .qstart-term .body .hi{color:var(--ink);font-weight:500}
+  .qstart-term .body .blink::after{content:"▊";color:var(--crust);animation:blink 1.1s steps(2) infinite;margin-left:2px}
+
+  .qstart-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;
+  }
+  .qstart-side .step{
+    display:grid;grid-template-columns:48px 1fr;gap:20px;padding:24px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .qstart-side .step:last-child{border-bottom:none}
+  .qstart-side .step .n{
+    font-family:"JetBrains Mono";font-weight:700;font-size:22px;
+    color:var(--crust);letter-spacing:-.02em;
+  }
+  .qstart-side .step h4{
+    font-family:"JetBrains Mono";font-weight:600;font-size:16px;
+    color:var(--ink);margin-bottom:6px;letter-spacing:-.01em;
+  }
+  .qstart-side .step p{font-size:14px;color:var(--ink-2);line-height:1.6}
+
+  /* ─────────── FOOTER ─────────── */
+  footer.foot{
+    border-top:1px solid var(--line);margin-top:80px;
+    padding:50px 0 40px;background:linear-gradient(180deg,transparent,var(--bg-2));
+  }
+  .foot-row{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:40px;flex-wrap:wrap;
+  }
+  .foot .brand-lg{
+    font-family:"JetBrains Mono";font-weight:700;font-size:36px;
+    letter-spacing:-.04em;color:var(--ink);
+  }
+  .foot .brand-lg .accent{color:var(--crust)}
+  .foot .tag{
+    font-family:"Fraunces";font-style:italic;font-weight:300;
+    font-variation-settings:"opsz" 144;
+    color:var(--crust-soft);font-size:18px;margin-top:4px;
+  }
+  .foot .links{display:grid;grid-template-columns:repeat(3,auto);gap:8px 48px}
+  .foot .links .col h5{
+    font-family:"JetBrains Mono";font-size:10px;letter-spacing:.18em;
+    color:var(--dim);text-transform:uppercase;margin-bottom:14px;font-weight:500;
+  }
+  .foot .links .col a{
+    display:block;font-size:13.5px;color:var(--ink-2);padding:5px 0;
+    transition:color .2s;
+  }
+  .foot .links .col a:hover{color:var(--crust)}
+  .foot-legal{
+    margin-top:48px;padding-top:22px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    font-family:"JetBrains Mono";font-size:10.5px;letter-spacing:.1em;color:var(--muted);
+  }
+
+  /* ─────────── ANIMATIONS ─────────── */
+  @keyframes fade{to{opacity:1}}
+  @keyframes rise{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+  /* ─────────── RESPONSIVE ─────────── */
+  @media (max-width:1080px){
+    .hero-grid{grid-template-columns:1fr;gap:48px}
+    .specs{grid-template-columns:repeat(3,1fr);gap:18px}
+    .specs .cell:nth-child(4){border-left:none;padding-left:0}
+    .feat-grid{grid-template-columns:1fr 1fr}
+    .feat.s2,.feat.s3,.feat.s4{grid-column:span 1}
+    .trick{grid-template-columns:1fr;gap:36px}
+    .qstart-grid{grid-template-columns:1fr;gap:32px}
+  }
+  @media (max-width:680px){
+    .wrap{padding:0 20px}
+    .topbar .inner{padding:12px 20px}
+    .nav a:not(.gh){display:none}
+    .specs{grid-template-columns:1fr 1fr}
+    .specs .cell:nth-child(3){border-left:none;padding-left:0}
+    .feat-grid{grid-template-columns:1fr}
+    .farm-side{display:none}
+    .farm-app{grid-template-columns:1fr 1.4fr}
+    .foot-row{flex-direction:column}
+    .foot .links{grid-template-columns:repeat(2,auto);gap:24px}
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="inner">
+    <div class="brand">
+      <div class="logo">B</div>
+      <span class="name">baguette</span>
+      <span class="ver">v0.x · iOS 26</span>
+    </div>
+    <nav class="nav">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/tddworks/baguette#readme">Docs</a>
+      <a class="gh" href="https://github.com/tddworks/baguette">GITHUB ↗</a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">
+          <span class="dot"></span>
+          <span>WORKS ON iOS 26.4</span>
+          <span class="pill">NEW</span>
+        </div>
+        <h1 class="headline">
+          Headless<br>iOS Simulators.<br>
+          <span class="accent">Served fresh.</span>
+          <span class="tag">— bon appétit.</span>
+        </h1>
+        <p class="lede">
+          A single Swift CLI that <b>boots simulators headlessly</b>, streams
+          their screens at <b>60 fps</b>, and injects taps, swipes &amp;
+          multi-finger gestures through SimulatorKit's <b>9-arg HID path</b>
+          — the only one iOS 26 still honours. With a built-in web UI
+          and a multi-device farm dashboard.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/tddworks/baguette">
+            View on GitHub →
+          </a>
+          <button class="btn copy" onclick="navigator.clipboard?.writeText('brew install tddworks/tap/baguette')">
+            <span class="pre">$</span> brew install tddworks/tap/baguette
+          </button>
+        </div>
+      </div>
+
+      <!-- HERO MOCK: a stylized device-farm dashboard rendered in pure CSS -->
+      <div class="mock" aria-hidden="true">
+        <div class="mock-bar">
+          <div class="lights"><span></span><span></span><span></span></div>
+          <div class="url">localhost:8421<span class="crust">/farm</span></div>
+          <div class="mock-stat"><span class="live">●</span> 4 DEVICES · 240 fps</div>
+        </div>
+        <div class="farm-app">
+          <aside class="farm-side">
+            <div class="label">View</div>
+            <div class="item on"><span>Wall</span><span class="n">⌘1</span></div>
+            <div class="item"><span>Grid</span><span class="n">⌘2</span></div>
+            <div class="item"><span>List</span><span class="n">⌘3</span></div>
+            <div class="div"></div>
+            <div class="label">Family</div>
+            <div class="item on"><span>iPhone</span><span class="n">3</span></div>
+            <div class="item on"><span>iPad</span><span class="n">1</span></div>
+            <div class="item"><span>Watch</span><span class="n">0</span></div>
+            <div class="div"></div>
+            <div class="label">State</div>
+            <div class="item on"><span>Booted</span><span class="n">4</span></div>
+            <div class="item"><span>Shutdown</span><span class="n">12</span></div>
+          </aside>
+
+          <div class="farm-grid">
+            <div class="tile iphone-pro">
+              <span class="badge">17 Pro Max</span>
+              <span class="live-dot"></span>
+              <div class="ui">
+                <div class="h"></div>
+                <div class="b acc"></div>
+                <div class="b"></div>
+                <div class="b"></div>
+              </div>
+            </div>
+            <div class="tile iphone-air">
+              <span class="badge">17 Air</span>
+              <span class="live-dot"></span>
+              <div class="ui">
+                <div class="h"></div>
+                <div class="b"></div>
+                <div class="b"></div>
+                <div class="b acc"></div>
+              </div>
+            </div>
+            <div class="tile ipad">
+              <span class="badge">iPad Pro 13"</span>
+              <span class="live-dot"></span>
+              <div class="ui">
+                <div class="h"></div>
+                <div class="b acc"></div>
+                <div class="b"></div>
+                <div class="b"></div>
+                <div class="b"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="farm-focus">
+            <div class="focus-head">
+              <span class="title">iPhone 17 Pro Max</span>
+              <span class="meta">
+                <b>● LIVE</b>
+                <span>60.0 fps</span>
+                <span>4.0 Mbps</span>
+              </span>
+            </div>
+            <div class="focus-screen">
+              <div class="notch"></div>
+              <div class="app">
+                <div class="row"><div class="pill"></div><div class="pill"></div></div>
+                <div class="card lg"></div>
+                <div class="row"><div class="pill acc"></div><div class="pill"></div><div class="pill"></div></div>
+                <div class="card"></div>
+                <div class="card"></div>
+              </div>
+              <div class="cursor"></div>
+            </div>
+            <div class="focus-tools">
+              <span class="tool act">TAP</span>
+              <span class="tool">SWIPE</span>
+              <span class="tool">PINCH</span>
+              <span class="tool">HOME</span>
+              <span class="tool">LOCK</span>
+              <span class="tool">SNAP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SPECS -->
+    <div class="specs">
+      <div class="cell">
+        <div class="v">60<span class="u">fps</span></div>
+        <div class="l">Stream Rate</div>
+      </div>
+      <div class="cell">
+        <div class="v">9<span class="u">arg</span></div>
+        <div class="l">HID Signature</div>
+      </div>
+      <div class="cell">
+        <div class="v">110+</div>
+        <div class="l">Tests</div>
+      </div>
+      <div class="cell">
+        <div class="v">0<span class="u">dylib</span></div>
+        <div class="l">Injection</div>
+      </div>
+      <div class="cell">
+        <div class="v">26<span class="u">.4</span></div>
+        <div class="l">iOS Tested</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="block" id="features">
+    <div class="sec-head">
+      <div class="sec-tag">Built for iOS 26</div>
+      <h2>One CLI. <em>Everything you'd reach for.</em></h2>
+      <p>Boot, stream, control, snapshot — without ever opening Simulator.app.</p>
+    </div>
+
+    <div class="feat-grid">
+      <article class="feat s2">
+        <div class="ix"><span class="n">01</span><span>STREAMING</span></div>
+        <h3>60 fps. MJPEG or H.264.</h3>
+        <p>Stream over stdout or WebSocket. Tunable bitrate, fps and scale
+        at runtime. AVCC seeded with JPEG so canvases paint instantly.</p>
+      </article>
+
+      <article class="feat s2">
+        <div class="ix"><span class="n">02</span><span>INPUT</span></div>
+        <h3>Real gestures. No injection.</h3>
+        <p>Taps, swipes, scroll, streaming multi-finger touches, home/lock
+        — all on the only HID path iOS 26 still honours.</p>
+      </article>
+
+      <article class="feat s2">
+        <div class="ix"><span class="n">03</span><span>DEVICE FARM</span></div>
+        <h3>Every simulator, one page.</h3>
+        <p>Wall, Grid or List. Click any tile to focus — same canvas, full
+        rate, full input. Cheap thumbnails, no re-encode.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- QUICKSTART -->
+  <section class="block" id="install">
+    <div class="sec-head">
+      <div class="sec-tag">Quickstart</div>
+      <h2>Three commands. <em>Then you're streaming.</em></h2>
+      <p>Apple Silicon + Xcode 26.</p>
+    </div>
+
+    <div class="qstart-grid">
+      <div class="qstart-side">
+        <div class="step">
+          <div class="n">1.</div>
+          <div>
+            <h4>Install via Homebrew</h4>
+            <p>One tap, no Xcode project setup, no build toolchain.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">2.</div>
+          <div>
+            <h4>Start the web UI</h4>
+            <p>Local server on port 8421. Lists every simulator, lets you
+            boot/shutdown and stream.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">3.</div>
+          <div>
+            <h4>Open the farm</h4>
+            <p>Every booted simulator side-by-side. Click any tile to focus
+            with full-quality streaming and gesture input.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qstart-term">
+        <div class="hd">
+          <div class="lights"><span></span><span></span><span></span></div>
+          <span class="ttl">~/projects · zsh</span>
+        </div>
+        <div class="body">
+<span class="pr">$</span> brew install tddworks/tap/baguette
+<span class="cm">  ==> Installing baguette from tddworks/tap</span>
+<span class="cm">  ==> Pouring baguette--0.x.arm64_sequoia.bottle.tar.gz</span>
+<span class="ok">  🍺  /opt/homebrew/Cellar/baguette/0.x: 12 files, 4.2MB</span>
+
+<span class="pr">$</span> baguette serve
+<span class="cm">  [baguette] listening on</span> <span class="hi">http://127.0.0.1:8421/simulators</span>
+
+<span class="pr">$</span> open http://localhost:8421/farm<span class="blink"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- FOOTER -->
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-row">
+      <div>
+        <div class="brand-lg">baguette<span class="accent">.</span></div>
+        <div class="tag">— bon appétit.</div>
+      </div>
+      <div class="links">
+        <div class="col">
+          <h5>Project</h5>
+          <a href="https://github.com/tddworks/baguette">Repository</a>
+          <a href="https://github.com/tddworks/baguette/releases">Releases</a>
+          <a href="https://github.com/tddworks/baguette/issues">Issues</a>
+        </div>
+        <div class="col">
+          <h5>Docs</h5>
+          <a href="https://github.com/tddworks/baguette#readme">README</a>
+          <a href="./ARCHITECTURE.md">Architecture</a>
+          <a href="./DeviceFarm.html">Device farm</a>
+        </div>
+        <div class="col">
+          <h5>Install</h5>
+          <a>brew install tddworks/tap/baguette</a>
+          <a>Apple Silicon · Xcode 26</a>
+          <a>Apache 2.0</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-legal">
+      <span>© 2026 · TDDWorks</span>
+      <span>Built for the iOS 26 simulator toolchain</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
