@@ -41,12 +41,18 @@
   Each file is a self-contained IIFE that hangs its public surface
   on `window`. No bundler, no module graph; just `<script>` tags.
 -->
-<script src="sim-input.js"></script>
-<script src="frame-decoder.js"></script>
-<script src="device-frame.js"></script>
-<script src="capture-gallery.js"></script>
-<script src="stream-session.js"></script>
-<script src="sim-stream.js"></script>
-<script src="sim-list.js"></script>
+<!-- Absolute paths so the page resolves siblings the same way whether
+     it was loaded at /simulators (list) or /simulators/<udid> (stream).
+     Relative `<script src="…">` against /simulators/<udid> would resolve
+     to `/simulators/<file>.js`, which the `/simulators/:udid` route
+     happily answers with sim.html — leaving the browser to parse HTML
+     as JS and throw `Unexpected token '<'`. -->
+<script src="/sim-input.js"></script>
+<script src="/frame-decoder.js"></script>
+<script src="/device-frame.js"></script>
+<script src="/capture-gallery.js"></script>
+<script src="/stream-session.js"></script>
+<script src="/sim-stream.js"></script>
+<script src="/sim-list.js"></script>
 </body>
 </html>

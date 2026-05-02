@@ -235,6 +235,14 @@ struct ChromeButton: Equatable, Sendable {
     let anchor: Anchor
     let align: Align
     let offset: Point
+    /// Z-order against the device composite. `true` = drawn ON TOP of
+    /// the bezel (Apple Watch's orange action button, the digital crown
+    /// and side button on watch ≤ watch5b/5s where they aren't baked
+    /// into the composite). `false` = drawn BEHIND the composite, so
+    /// only the portion overshooting the bezel edge stays visible
+    /// (every iPhone power / volume button). Sourced from chrome.json's
+    /// `inputs[].onTop`; defaults to `false` to match the iPhone case.
+    let onTop: Bool
 
     var json: [String: Any] {
         [
@@ -243,19 +251,22 @@ struct ChromeButton: Equatable, Sendable {
             "anchor": anchor.rawValue,
             "align": align.rawValue,
             "offset": ["x": offset.x, "y": offset.y],
+            "onTop": onTop,
         ]
     }
 
     init(
         name: String, imageName: String,
         anchor: Anchor, align: Align,
-        offset: Point
+        offset: Point,
+        onTop: Bool = false
     ) {
         self.name = name
         self.imageName = imageName
         self.anchor = anchor
         self.align = align
         self.offset = offset
+        self.onTop = onTop
     }
 
     /// Build from one entry of `inputs[]`. Returns nil for entries
@@ -281,7 +292,8 @@ struct ChromeButton: Equatable, Sendable {
             offset: Point(
                 x: coerceDouble(offsetDict["x"]),
                 y: coerceDouble(offsetDict["y"])
-            )
+            ),
+            onTop: dict["onTop"] as? Bool ?? false
         )
     }
 }

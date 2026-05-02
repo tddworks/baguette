@@ -54,7 +54,14 @@
   let _templatePromise = null;
   async function streamViewHTML() {
     if (!_templatePromise) {
-      _templatePromise = fetch('sim-stream.html')
+      // Absolute path: a relative `sim-stream.html` resolves against
+      // the current URL, so when the page is loaded directly at
+      // `/simulators/<udid>` it would request
+      // `/simulators/sim-stream.html` — which the `/simulators/:udid`
+      // route happily answers with sim.html. The parser then can't
+      // find `#simPluginView` and downstream `getElementById` calls
+      // (`simStreamTitle`, etc.) start returning null.
+      _templatePromise = fetch('/sim-stream.html')
         .then((r) => r.text())
         .then((html) => {
           const doc = new DOMParser().parseFromString(html, 'text/html');

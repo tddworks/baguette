@@ -33,12 +33,19 @@
     this.sort = { key: 'name', dir: 'asc' };
     this.selectedUdid = null;
     this.focus = null;
-    this.showBezels = false;
+    this.showBezels = true;
     this.fleetTelemetry = { live: 0, total: 0, fps: 0, bw: 0, lat: 0 };
   }
 
   FarmApp.prototype.boot = async function () {
     await this.refreshDevices();
+    // Bezels are on by default — pre-fetch chrome layouts before the
+    // first paint so tiles mount with their bezel chrome on the
+    // initial render rather than flashing raw → bezel as layouts
+    // arrive. Fetches run in parallel; failures are tolerated (Apple
+    // TV / watchOS have no chrome bundle and DeviceFrame falls back
+    // to a flat fill).
+    if (this.showBezels) await this.loadChromeLayouts();
     this.renderAll();
     this.startVisibleTiles();
     this.bindGlobalKeys();

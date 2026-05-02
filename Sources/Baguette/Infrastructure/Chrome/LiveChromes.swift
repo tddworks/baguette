@@ -187,21 +187,45 @@ final class LiveChromes: Chromes, @unchecked Sendable {
             height: composite.size.height + margins.top  + margins.bottom
         )
 
-        var layers: [ImageLayer] = buttonImages.map { entry in
-            ImageLayer(
-                image: entry.image,
-                topLeft: buttonTopLeft(
-                    button: entry.button,
-                    imageSize: entry.image.size,
-                    compositeSize: composite.size,
-                    margins: margins
+        // `onTop: false` buttons sit BEHIND the composite (only the
+        // edge-overshoot survives — iPhone volume / power buttons).
+        // `onTop: true` buttons sit ON TOP (Apple Watch's orange action
+        // button, plus crown / side button on older watch chromes that
+        // don't bake them into the composite). The rasterizer draws
+        // layers back-to-front, so behind-buttons → composite → on-top
+        // buttons is the right order.
+        let behindLayers: [ImageLayer] = buttonImages
+            .filter { !$0.button.onTop }
+            .map { entry in
+                ImageLayer(
+                    image: entry.image,
+                    topLeft: buttonTopLeft(
+                        button: entry.button,
+                        imageSize: entry.image.size,
+                        compositeSize: composite.size,
+                        margins: margins
+                    )
                 )
-            )
-        }
+            }
+        let onTopLayers: [ImageLayer] = buttonImages
+            .filter { $0.button.onTop }
+            .map { entry in
+                ImageLayer(
+                    image: entry.image,
+                    topLeft: buttonTopLeft(
+                        button: entry.button,
+                        imageSize: entry.image.size,
+                        compositeSize: composite.size,
+                        margins: margins
+                    )
+                )
+            }
+        var layers = behindLayers
         layers.append(ImageLayer(
             image: composite,
             topLeft: Point(x: margins.left, y: margins.top)
         ))
+        layers.append(contentsOf: onTopLayers)
 
         let merged = try rasterizer.compose(canvasSize: canvasSize, layers: layers)
         return DeviceChromeAssets(
