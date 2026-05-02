@@ -31,18 +31,20 @@
     this.onSize      = opts.onSize      || (() => {});
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = 'width:100%;height:100%;display:block;background:#000';
-    // Live mirror — shown in the grid host while the canvas is moved
-    // into the focus pane. Sourced from canvas.captureStream() so it
-    // tracks every frame the decoder paints, with one decoder/socket
-    // total. Lazy-initialized in `ensureMirrorStream()` because
-    // captureStream() needs at least one painted frame to produce a
-    // useful track.
-    this.mirror = document.createElement('video');
-    this.mirror.muted = true;
-    this.mirror.autoplay = true;
-    this.mirror.playsInline = true;
-    this.mirror.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
-    this._mirrorStreamReady = false;
+    // Live mirror — a second canvas that's redrawn from `this.canvas`
+    // on every animation frame. Used by the focus pane while a tile
+    // is selected, so we can keep the source canvas painting in its
+    // grid host (selection no longer reparents anything in the grid).
+    //
+    // Why a canvas-copy and not `captureStream() → <video>`? In
+    // practice captureStream is fragile across browsers — the
+    // produced track sometimes stalls even though the source canvas
+    // keeps drawing, and any failure is silent (just black). A
+    // straight `drawImage(src, 0, 0)` per rAF is deterministic, has
+    // no autoplay/codec edge cases, and costs one bitmap blit.
+    this.mirror = document.createElement('canvas');
+    this.mirror.style.cssText = 'width:100%;height:100%;display:block;background:#000';
+    this._mirrorRaf = null;
     this.session = null;
     this.mode = 'idle';   // 'idle' | 'thumb' | 'full'
     this.lastFps = 0;
@@ -65,13 +67,51 @@
     this._mountIn(host, opts, this.canvas, /* fitObject */ 'fill');
   };
 
-  // Install the live <video> mirror in `host` instead of the canvas —
-  // used by FarmApp for the grid tile while the device is focused
-  // (canvas is in the focus pane). Same DeviceFrame scaffolding so
-  // bezel mode looks identical across the grid and focus pane.
+  // Install the live mirror canvas in `host` (the focus preview) —
+  // used by FarmApp while a tile is focused. The source canvas
+  // stays in its grid host the whole time; `_startMirrorCopy()`
+  // drives a per-frame redraw of the source into the mirror so the
+  // focus pane shows live frames.
   FarmTile.prototype.attachMirror = function (host, opts) {
-    this.ensureMirrorStream();
     this._mountIn(host, opts, this.mirror, /* fitObject */ 'fill');
+    this._startMirrorCopy();
+  };
+
+  // Detach the mirror from any host and stop the copy loop. Called by
+  // FarmFocus.dispose() (or implicitly when the tile is destroyed).
+  FarmTile.prototype.detachMirror = function () {
+    this._stopMirrorCopy();
+    if (this.mirror.parentElement) {
+      this.mirror.parentElement.removeChild(this.mirror);
+    }
+  };
+
+  FarmTile.prototype._startMirrorCopy = function () {
+    if (this._mirrorRaf) return;
+    const src = this.canvas;
+    const dst = this.mirror;
+    const ctx = dst.getContext('2d');
+    const loop = () => {
+      // Track source dimensions — StreamSession resizes the source
+      // when frame size changes (e.g. on reconfig). drawImage scales
+      // automatically, but matching dimensions avoids quality loss.
+      if (src.width > 0 && src.height > 0) {
+        if (dst.width !== src.width || dst.height !== src.height) {
+          dst.width = src.width;
+          dst.height = src.height;
+        }
+        try { ctx.drawImage(src, 0, 0); } catch {}
+      }
+      this._mirrorRaf = requestAnimationFrame(loop);
+    };
+    this._mirrorRaf = requestAnimationFrame(loop);
+  };
+
+  FarmTile.prototype._stopMirrorCopy = function () {
+    if (this._mirrorRaf) {
+      cancelAnimationFrame(this._mirrorRaf);
+      this._mirrorRaf = null;
+    }
   };
 
   // Shared mount path. `useBezel` swaps the wrapper: when true, the
@@ -260,7 +300,13 @@
   FarmTile.prototype.wireInput = function () {
     if (this.simInput || !this.session || !window.SimInput) return;
     if (!window.SimInputBridge || !window.MouseGestureSource) return;
-    const host = this.canvas.parentElement;
+    // The mirror lives in the focus pane while focused — that's the
+    // element the user sees and clicks. Mouse coords normalize against
+    // the listener element's bounding box, so attaching to the mirror
+    // (instead of the canvas, which stays in the grid) gives correct
+    // device-point math out of the box.
+    const target = this.mirror;
+    const host = target.parentElement;
     if (!host) return;
 
     this.simInput = new window.SimInput({
@@ -270,25 +316,15 @@
     });
     this.simInput.setScreenSize(...this.computeScreenSize());
 
-    // Overlay the same two-finger HUD sim-stream uses, so pinches /
-    // ctrl+wheel / Safari-gesture pinches show their finger circles
-    // on the focused canvas. The overlay attaches to the canvas's
-    // parent (positioned context); MouseGestureSource pushes finger
-    // points into it during touch streams.
     if (window.PinchOverlay) {
       this.pinchOverlay = new window.PinchOverlay(host);
     }
 
-    // Attach to the canvas itself — the precise rectangle covering
-    // live screen pixels in both raw and bezel modes. Mouse coords
-    // normalize against the listener element, so canvas is the
-    // right pick. `touch-action:none` and `cursor:crosshair` mirror
-    // the affordances DeviceFrame puts on its screenArea.
-    this.canvas.style.cursor = 'crosshair';
-    this.canvas.style.touchAction = 'none';
-    this.canvas.tabIndex = 0;
+    target.style.cursor = 'crosshair';
+    target.style.touchAction = 'none';
+    target.tabIndex = 0;
     this.mouseSource = new window.MouseGestureSource({
-      el:    this.canvas,
+      el:    target,
       input: this.simInput,
       overlay: this.pinchOverlay,
       log:   () => {}
@@ -306,8 +342,8 @@
       this.pinchOverlay.container.parentElement.removeChild(this.pinchOverlay.container);
     }
     this.pinchOverlay = null;
-    this.canvas.style.cursor = '';
-    this.canvas.style.touchAction = '';
+    this.mirror.style.cursor = '';
+    this.mirror.style.touchAction = '';
   };
 
   // Forward sidebar buttons (home / lock / volume / siri) to the

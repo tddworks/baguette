@@ -196,25 +196,20 @@
   };
 
   // After every render, walk the produced screen-host nodes and ask
-  // each tile to drop its canvas (or mirror) into the matching one.
-  // Idempotent — _mountIn() rebuilds when DOM identity changes and
-  // no-ops on the live element grafting itself.
-  //
-  // For the focused udid, the canvas lives in the focus pane, so the
-  // grid host gets the tile's mirror <video> (sourced from the same
-  // canvas via captureStream). Both paths share the same bezel +
-  // chrome layout scaffolding so visually grid + focus stay in sync.
+  // each tile to install its canvas. Selection no longer affects the
+  // grid — the focused tile's canvas keeps painting in its grid host
+  // continuously, and the focus pane uses a separate mirror <video>
+  // sourced from the same canvas's captureStream. One pipeline, two
+  // viewers, no swaps.
   FarmApp.prototype.attachTilesToScreens = function () {
     document.querySelectorAll('#farm-view-host [data-screen-host]').forEach(host => {
       const udid = host.dataset.screenHost;
       const tile = this.tiles.get(udid);
       if (!tile) return;
-      const opts = {
+      tile.attach(host, {
         useBezel: this.showBezels,
         layout:   this.chromeLayouts.get(udid) || null
-      };
-      if (udid === this.selectedUdid) tile.attachMirror(host, opts);
-      else                            tile.attach(host, opts);
+      });
     });
   };
 
@@ -266,35 +261,27 @@
       onLifecycle: (d, action) => this.runAction(d.udid, action),
       onButton: (name) => tile?.button(name)
     });
-    // Targeted delta — flip .selected on the affected grid nodes,
-    // refresh the CLI footer (which carries the --focus arg), and
-    // shuffle canvas / mirror to the right hosts. Avoids the full
-    // renderAll() that would destroy and rebuild every grid tile,
-    // causing visible flicker on every selection.
-    this.renderSelectionDelta();
+    // Selection only affects two things — the highlight class on the
+    // grid tile, and the focus pane content. The grid canvas keeps
+    // painting in place; we install a mirror <video> in the focus
+    // preview so the user sees the same frames at full size.
+    this.applySelectionHighlight();
     const layout = this.chromeLayouts.get(udid) || null;
     if (tile && this.focus.previewScreen) {
-      tile.attach(this.focus.previewScreen, { useBezel: this.showBezels, layout });
+      tile.attachMirror(this.focus.previewScreen, { useBezel: this.showBezels, layout });
     }
-    // Promote AFTER attach so the canvas is in-DOM when MouseGestureSource
-    // measures its bounding box. Promote both bumps stream quality and
-    // wires SimInput on the now-mounted canvas.
+    // Bump stream quality + wire input on the mirror.
     if (tile) tile.promote({ layout });
   };
 
-  // Re-paint only what selection actually affects:
-  //   • .selected class on grid tiles (CSS rules drive the highlight)
-  //   • the CLI footer string (carries --focus <udid>)
-  //   • canvas vs mirror placement in each grid host
-  // Header / rail / grid-head are untouched — selection has no effect
-  // on filter counts, runtime list, or telemetry stats.
-  FarmApp.prototype.renderSelectionDelta = function () {
+  // Flip the .selected class on grid tiles + refresh the CLI footer
+  // (which carries the `--focus` arg). Header / rail / grid-head /
+  // tile contents are untouched — no flicker.
+  FarmApp.prototype.applySelectionHighlight = function () {
     document.querySelectorAll('#farm-view-host [data-udid]').forEach(node =>
       node.classList.toggle('selected', node.dataset.udid === this.selectedUdid));
     const ctx = this.renderCtx(this.filter.apply(this.devices));
     window.FarmViews.renderCli(byId('farm-cli'), ctx);
-    // Re-bind the copy button — innerHTML on #farm-cli wiped the
-    // listener. Cheap; one button.
     const copy = document.querySelector('#farm-cli .copy');
     if (copy) {
       copy.onclick = () => {
@@ -302,7 +289,6 @@
         navigator.clipboard?.writeText(cmd.replace(/^\$\s*/, '').trim());
       };
     }
-    this.attachTilesToScreens();
   };
 
   FarmApp.prototype.clearFocus = function () {
@@ -312,10 +298,7 @@
     }
     this.selectedUdid = null;
     if (this.focus) { this.focus.dispose(); }
-    // Same delta path used by select() — no full re-render. The
-    // formerly-focused tile loses .selected; its canvas re-grafts
-    // back into its grid host (mirror was there; canvas takes over).
-    this.renderSelectionDelta();
+    this.applySelectionHighlight();
   };
 
   // ---- per-tile telemetry → fleet aggregate -------------------------
