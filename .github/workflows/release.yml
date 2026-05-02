@@ -65,15 +65,58 @@ jobs:
           cd release
           shasum -a 256 * > baguette_${{ steps.version.outputs.tag }}_checksums.txt
 
-      - name: Create GitHub Release
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES=$(./scripts/extract-changelog.sh "$VERSION" 2>/dev/null || echo "")
+          if [ -z "$NOTES" ]; then
+            NOTES="Bug fixes and improvements."
+            echo "::warning::No CHANGELOG entry found for v$VERSION, using default message"
+            echo "used_fallback=true" >> $GITHUB_OUTPUT
+          fi
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: baguette ${{ steps.version.outputs.tag }}
-          generate_release_notes: true
+          body: ${{ env.RELEASE_NOTES }}
           files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote CHANGELOG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ./scripts/promote-changelog.sh "$VERSION" "$(date +%Y-%m-%d)"
+          # Sync fallback release notes into the newly promoted [VERSION] section
+          if [ "${{ steps.changelog.outputs.used_fallback }}" = "true" ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ ("^## \\[" ver "\\] - ") { in_ver=1; print; next }
+              in_ver && /[^[:space:]]/ && !/^---$/ { has_content=1 }
+              in_ver && /^---$/ {
+                if (!has_content) {
+                  print "### Changed"
+                  print "- Bug fixes and improvements."
+                  print ""
+                }
+                in_ver=0
+              }
+              in_ver && /^## \[/ { in_ver=0 }
+              { print }
+            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet \
+            && echo "No CHANGELOG changes to commit" \
+            || git commit -m "chore(changelog): promote [Unreleased] to v${{ steps.version.outputs.version }}"
+          git push origin HEAD:main
 
   update-tap:
     needs: release
