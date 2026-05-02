@@ -424,6 +424,207 @@
     gap: 16px;
   }
 
+  /* ===== WALL VIEW ============================================ */
+  /* Edge-to-edge video-wall composition. No card chrome — just
+     tightly packed screens with tiny labels burned into the corner.
+     Inspired by NOC / security-room display walls. */
+  .wall {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px;
+    background: #050708;
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    padding: 6px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.6),
+                inset 0 0 60px rgba(0,0,0,0.5);
+  }
+  .wall .panel {
+    position: relative;
+    aspect-ratio: 9 / 16;
+    background: #000;
+    border: 1px solid #000;
+    overflow: hidden;
+    cursor: pointer;
+    transition: outline 0.12s, box-shadow 0.12s;
+    outline: 1px solid transparent;
+  }
+  .wall .panel.ipad  { aspect-ratio: 4 / 3; }
+  .wall .panel.tv    { aspect-ratio: 16 / 9; }
+  .wall .panel.watch { aspect-ratio: 1; }
+  .wall .panel:hover { outline-color: var(--phosphor); z-index: 2; }
+  .wall .panel.selected {
+    outline: 2px solid var(--phosphor);
+    box-shadow: 0 0 24px var(--phosphor-glow);
+    z-index: 3;
+  }
+  .wall .panel .glass {
+    position: absolute; inset: 0;
+    background-size: cover;
+  }
+  .wall .panel .scan {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(to bottom,
+      rgba(0,0,0,0) 0, rgba(0,0,0,0.16) 1px,
+      transparent 1px, transparent 3px);
+    mix-blend-mode: multiply;
+  }
+  .wall .panel .corner {
+    position: absolute;
+    font: 700 8px/1 var(--mono);
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.86);
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(2px);
+    padding: 3px 5px;
+    text-transform: uppercase;
+  }
+  .wall .panel .corner.tl { top: 0; left: 0; }
+  .wall .panel .corner.br { bottom: 0; right: 0; color: var(--phosphor); }
+  .wall .panel .corner.bl { bottom: 0; left: 0; color: var(--muted); }
+  .wall .panel[data-state="live"] .corner.tl::before {
+    content: ''; display: inline-block;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--phosphor);
+    box-shadow: 0 0 6px var(--phosphor);
+    margin-right: 5px; vertical-align: middle;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .wall .panel[data-state="boot"] .corner.tl::before {
+    content: ''; display: inline-block;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--amber); box-shadow: 0 0 6px var(--amber);
+    margin-right: 5px; vertical-align: middle;
+    animation: pulse 0.7s linear infinite;
+  }
+  .wall .panel[data-state="error"] .glass {
+    background:
+      repeating-linear-gradient(45deg, rgba(255,107,138,0.08) 0 6px, transparent 6px 12px),
+      #1a0610;
+  }
+  .wall .panel[data-state="off"] .glass,
+  .wall .panel[data-state="idle"] .glass { opacity: 0.35; }
+
+  /* ===== LIST VIEW ============================================ */
+  /* Dense data-table — one row per device. Sparkline column gives
+     a 24-sample rolling FPS view. Header is sticky to the grid scroll. */
+  .list {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .list-header,
+  .list-row {
+    display: grid;
+    grid-template-columns:
+      28px           /* select pip                       */
+      minmax(220px, 2.2fr) /* device name + udid         */
+      120px          /* runtime                          */
+      110px          /* status                           */
+      72px           /* fps                              */
+      72px           /* lat                              */
+      72px           /* scale                            */
+      120px          /* fps sparkline                    */
+      140px          /* group / tags                     */
+      auto;          /* row actions                      */
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+  }
+  .list-header {
+    height: 36px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--rule);
+    font: 700 9px/1 var(--mono);
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    position: sticky; top: 0; z-index: 2;
+  }
+  .list-header .sortable { cursor: pointer; user-select: none; }
+  .list-header .sortable:hover { color: var(--text); }
+  .list-header .sortable[data-dir="asc"]::after  { content: ' ▲'; color: var(--phosphor); }
+  .list-header .sortable[data-dir="desc"]::after { content: ' ▼'; color: var(--phosphor); }
+
+  .list-row {
+    height: 52px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    transition: background 0.1s;
+    font: 500 11px/1.3 var(--mono);
+  }
+  .list-row:last-child { border-bottom: 0; }
+  .list-row:hover { background: rgba(255,255,255,0.02); }
+  .list-row.selected {
+    background: rgba(182,255,67,0.05);
+    box-shadow: inset 3px 0 0 var(--phosphor);
+  }
+
+  .list-row .pip {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--dim);
+    margin: 0 auto;
+  }
+  .list-row[data-state="live"] .pip {
+    background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .list-row[data-state="boot"] .pip {
+    background: var(--amber); box-shadow: 0 0 6px var(--amber);
+    animation: pulse 0.7s linear infinite;
+  }
+  .list-row[data-state="error"] .pip { background: var(--rose); box-shadow: 0 0 6px var(--rose); }
+  .list-row[data-state="idle"] .pip  { background: var(--muted); }
+
+  .list-row .nm  { color: var(--text); font-weight: 600; }
+  .list-row .uu  { color: var(--muted); font-size: 9.5px; letter-spacing: 0.04em; }
+  .list-row .rt  { color: var(--cyan); font-size: 10.5px; }
+  .list-row .st  {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 7px;
+    border: 1px solid var(--rule-2);
+    border-radius: 100px;
+    font: 700 8.5px/1 var(--mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    width: fit-content;
+  }
+  .list-row[data-state="live"]  .st { color: var(--phosphor); border-color: rgba(182,255,67,0.32); }
+  .list-row[data-state="boot"]  .st { color: var(--amber);    border-color: rgba(255,176,90,0.32); }
+  .list-row[data-state="error"] .st { color: var(--rose);     border-color: rgba(255,107,138,0.32); }
+  .list-row[data-state="idle"]  .st { color: var(--muted); }
+  .list-row[data-state="off"]   .st { color: var(--dim); }
+
+  .list-row .num { font: 600 12px/1 var(--mono); }
+  .list-row .num.lime  { color: var(--phosphor); }
+  .list-row .num.amber { color: var(--amber); }
+  .list-row .num.dim   { color: var(--dim); }
+
+  .list-row svg.row-spark { width: 100%; height: 22px; display: block; }
+
+  .tag-row {
+    display: flex; flex-wrap: wrap; gap: 4px;
+  }
+  .tag-row .t {
+    font: 600 8.5px/1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 6px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--muted);
+  }
+  .tag-row .t.smoke         { color: var(--phosphor); border-color: rgba(182,255,67,0.32); }
+  .tag-row .t.localization  { color: var(--cyan);     border-color: rgba(98,232,255,0.32); }
+  .tag-row .t.accessibility { color: var(--amber);    border-color: rgba(255,176,90,0.32); }
+  .tag-row .t.adhoc         { color: var(--violet);   border-color: rgba(167,139,255,0.32); }
+
+  .list-row .row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s; }
+  .list-row:hover .row-actions,
+  .list-row.selected .row-actions { opacity: 1; }
+
   /* === DEVICE TILE ================================================= */
   .tile {
     position: relative;
@@ -1075,15 +1276,15 @@
             <input id="search" placeholder="Search by name, runtime, group…">
             <kbd>⌘ K</kbd>
           </div>
-          <div class="view-toggle">
-            <button class="active">Grid</button>
-            <button>Wall</button>
-            <button>List</button>
+          <div class="view-toggle" id="view-toggle">
+            <button class="active" data-view="grid">Grid</button>
+            <button data-view="wall">Wall</button>
+            <button data-view="list">List</button>
           </div>
         </div>
       </div>
 
-      <div class="grid" id="grid"><!-- tiles injected --></div>
+      <div id="view-host"><!-- tiles / wall / list injected --></div>
     </section>
 
     <!-- FOCUS PANE ---------------------------- -->
@@ -1151,15 +1352,39 @@
   }
 
   /* ---------------------------------------------------------------- *
-   *  Tile rendering                                                  *
+   *  View dispatcher                                                  *
    * ---------------------------------------------------------------- */
-  function renderGrid(devices) {
+  const view = { mode: 'grid', sort: { key: 'name', dir: 'asc' } };
+
+  function render(devices) {
+    document.getElementById('visible-count').textContent = devices.length;
+    if (view.mode === 'grid') return renderGridView(devices);
+    if (view.mode === 'wall') return renderWallView(devices);
+    if (view.mode === 'list') return renderListView(devices);
+  }
+
+  function setView(mode) {
+    view.mode = mode;
+    document.querySelectorAll('#view-toggle button').forEach(b =>
+      b.classList.toggle('active', b.dataset.view === mode));
+    applyFilters();
+  }
+
+  document.querySelectorAll('#view-toggle button').forEach(btn =>
+    btn.addEventListener('click', () => setView(btn.dataset.view)));
+
+  /* ---------------------------------------------------------------- *
+   *  GRID view (cards)                                                *
+   * ---------------------------------------------------------------- */
+  function renderGridView(devices) {
+    const host = document.getElementById('view-host');
+    host.innerHTML = '<div class="grid" id="grid"></div>';
     const grid = document.getElementById('grid');
-    grid.innerHTML = '';
     devices.forEach((d, idx) => {
       const tile = document.createElement('article');
       tile.className = 'tile';
       tile.dataset.udid = d.udid;
+      if (selected && selected.udid === d.udid) tile.classList.add('selected');
       tile.style.animationDelay = (idx * 32) + 'ms';
 
       const shape = shapeFor(d.platform);
@@ -1239,7 +1464,163 @@
       tile.addEventListener('click', () => selectDevice(d.udid));
       grid.appendChild(tile);
     });
-    document.getElementById('visible-count').textContent = devices.length;
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  WALL view (edge-to-edge video wall)                              *
+   * ---------------------------------------------------------------- */
+  function renderWallView(devices) {
+    const host = document.getElementById('view-host');
+    host.innerHTML = '<div class="wall" id="wall"></div>';
+    const wall = document.getElementById('wall');
+    devices.forEach((d, idx) => {
+      const panel = document.createElement('div');
+      panel.className = 'panel ' + shapeFor(d.platform);
+      panel.dataset.udid = d.udid;
+      panel.dataset.state = d.state;
+      if (selected && selected.udid === d.udid) panel.classList.add('selected');
+      panel.style.animationDelay = (idx * 18) + 'ms';
+
+      const stateLabel = ({ live:'LIVE', boot:'BOOT', idle:'IDLE', off:'OFF', error:'ERR' })[d.state];
+      const channel = String(idx + 1).padStart(2, '0');
+
+      let surface;
+      if (d.state === 'live') {
+        surface = `<div class="glass ${d.wp}"></div>` +
+          (d.platform !== 'tv' && d.platform !== 'watch'
+            ? `<div class="springboard">${'<span></span>'.repeat(12)}</div>` : '') +
+          `<div class="scan"></div>`;
+      } else if (d.state === 'error') {
+        surface = `<div class="glass"></div>`;
+      } else if (d.state === 'idle') {
+        surface = `<div class="glass ${d.wp}"></div>`;
+      } else {
+        surface = `<div class="glass" style="background:#080a0d"></div>`;
+      }
+
+      panel.innerHTML = `
+        ${surface}
+        <span class="corner tl">${stateLabel} · ${d.fps || '—'}</span>
+        <span class="corner br">CH${channel}</span>
+        <span class="corner bl">${shortName(d.name)}</span>
+      `;
+      panel.addEventListener('click', () => selectDevice(d.udid));
+      wall.appendChild(panel);
+    });
+  }
+
+  function shortName(n) {
+    return n
+      .replace(/iPhone\s+/, '')
+      .replace(/iPad\s+/, 'iPad ')
+      .replace(/Apple\s+/, '')
+      .replace(/\s*\(.*?\)/, '')
+      .toUpperCase();
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  LIST view (dense data table)                                     *
+   * ---------------------------------------------------------------- */
+  function renderListView(devices) {
+    const host = document.getElementById('view-host');
+    const cols = [
+      { key: null,      label: '' },
+      { key: 'name',    label: 'Device' },
+      { key: 'runtime', label: 'Runtime' },
+      { key: 'state',   label: 'Status' },
+      { key: 'fps',     label: 'FPS' },
+      { key: 'lat',     label: 'Lat' },
+      { key: 'scale',   label: 'Scale' },
+      { key: null,      label: 'FPS · 24s' },
+      { key: null,      label: 'Groups' },
+      { key: null,      label: '' }
+    ];
+
+    host.innerHTML = `
+      <div class="list" id="list">
+        <div class="list-header">
+          ${cols.map(c => c.key
+            ? `<div class="sortable" data-key="${c.key}">${c.label}</div>`
+            : `<div>${c.label}</div>`).join('')}
+        </div>
+        <div id="list-body"></div>
+      </div>`;
+
+    const head = host.querySelector('.list-header');
+    head.querySelector(`[data-key="${view.sort.key}"]`)?.setAttribute('data-dir', view.sort.dir);
+    head.querySelectorAll('.sortable').forEach(el => {
+      el.addEventListener('click', () => {
+        const k = el.dataset.key;
+        if (view.sort.key === k) {
+          view.sort.dir = view.sort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          view.sort.key = k;
+          view.sort.dir = 'asc';
+        }
+        applyFilters();
+      });
+    });
+
+    const body = host.querySelector('#list-body');
+    devices.forEach((d, idx) => {
+      const row = document.createElement('div');
+      row.className = 'list-row';
+      row.dataset.udid = d.udid;
+      row.dataset.state = d.state;
+      if (selected && selected.udid === d.udid) row.classList.add('selected');
+      row.style.animationDelay = (idx * 18) + 'ms';
+
+      const stateLabel = ({ live:'Live', boot:'Booting', idle:'Booted', off:'Shutdown', error:'Errored' })[d.state];
+      const fpsCell = d.state === 'live' ? `<span class="num lime">${d.fps}</span>`
+                                          : `<span class="num dim">—</span>`;
+      const latCell = d.state === 'live' ? `<span class="num amber">${d.lat}<span style="color:var(--muted);font-size:9px"> ms</span></span>`
+                                          : `<span class="num dim">—</span>`;
+
+      row.innerHTML = `
+        <span class="pip"></span>
+        <div>
+          <div class="nm">${d.name}</div>
+          <div class="uu">${d.udid}</div>
+        </div>
+        <span class="rt">${runtimeLabel(d.runtime)}</span>
+        <span class="st">${stateLabel}</span>
+        ${fpsCell}
+        ${latCell}
+        <span class="num">${(d.scale*100).toFixed(0)}<span style="color:var(--muted);font-size:9px"> %</span></span>
+        ${rowSpark(d)}
+        <div class="tag-row">
+          ${d.tags.length
+            ? d.tags.map(t => `<span class="t ${t.replace('-','')}">${t}</span>`).join('')
+            : '<span class="t" style="opacity:0.4">—</span>'}
+        </div>
+        <div class="row-actions">
+          <button class="qa" title="Snapshot">◉</button>
+          <button class="qa" title="Reset">↻</button>
+          <button class="qa" title="Open">↗</button>
+        </div>`;
+
+      row.addEventListener('click', () => selectDevice(d.udid));
+      body.appendChild(row);
+    });
+  }
+
+  function rowSpark(d) {
+    if (d.state !== 'live') {
+      return `<svg class="row-spark" viewBox="0 0 100 22" preserveAspectRatio="none">
+        <line x1="0" y1="11" x2="100" y2="11" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 4"/>
+      </svg>`;
+    }
+    let v = d.fps - 4 + Math.random() * 4;
+    const pts = [];
+    for (let i = 0; i < 24; i++) {
+      v += (Math.random() - 0.5) * 4;
+      v = Math.max(40, Math.min(62, v));
+      pts.push(`${(i / 23) * 100},${22 - ((v - 40) / 22) * 18 - 2}`);
+    }
+    return `<svg class="row-spark" viewBox="0 0 100 22" preserveAspectRatio="none">
+      <polyline points="${pts.join(' ')}" fill="none" stroke="var(--phosphor)" stroke-width="1.4"/>
+      <polyline points="0,22 ${pts.join(' ')} 100,22" fill="var(--phosphor)" fill-opacity="0.08"/>
+    </svg>`;
   }
 
   function runtimeLabel(r) {
@@ -1272,11 +1653,30 @@
         (d.name + ' ' + d.udid + ' ' + runtimeLabel(d.runtime) + ' ' + d.tags.join(' '))
           .toLowerCase().includes(filterState.search))
     );
-    renderGrid(filtered);
+    const sorted = sortFor(view, filtered);
+    render(sorted);
     rebuildCli();
     if (selected && !filtered.some(d => d.udid === selected.udid)) {
       clearFocus();
     }
+  }
+
+  function sortFor(view, devices) {
+    if (view.mode !== 'list') return devices;
+    const { key, dir } = view.sort;
+    const mul = dir === 'asc' ? 1 : -1;
+    const get = d => ({
+      name: d.name.toLowerCase(),
+      runtime: d.runtime,
+      state: d.state,
+      fps: d.state === 'live' ? d.fps : -1,
+      lat: d.state === 'live' ? d.lat : 1e6,
+      scale: d.scale
+    }[key]);
+    return [...devices].sort((a, b) => {
+      const A = get(a), B = get(b);
+      return A < B ? -1 * mul : A > B ? 1 * mul : 0;
+    });
   }
 
   document.querySelectorAll('input[data-platform]').forEach(el =>
