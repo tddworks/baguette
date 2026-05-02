@@ -43,6 +43,11 @@ https://github.com/user-attachments/assets/e904413f-16bb-4b3d-86d5-162333403cee
 - **Standalone web UI** — `baguette serve` opens `http://localhost:8421/simulators`
   with a list page, live stream, gesture input, and DeviceKit-sourced
   bezels for every simulator family.
+- **Device farm** — `http://localhost:8421/farm` is an interactive
+  multi-device dashboard. Every booted simulator streams in a wall / grid
+  / list, with filtering and sorting; click a tile to focus it for
+  full-quality streaming + gesture and hardware-button input through the
+  same `GestureDispatcher` → `IndigoHIDInput` pipeline as the CLI.
 - **Layered, test-driven** — bounded-context Domain / Infrastructure / App
   split; 110+ Mockable-backed tests; `swift test` runs without a booted
   simulator.
@@ -62,13 +67,19 @@ SimulatorKit / CoreSimulator frameworks shipped with Xcode.
 # Start the web UI
 baguette serve
 
-# Open the dashboard
+# Single-device dashboard — list, boot/shutdown, per-device stream pages
 open http://localhost:8421/simulators
+
+# Device farm — every booted simulator side-by-side, click to focus
+open http://localhost:8421/farm
 ```
 
-You'll get a list of every simulator on the machine with Boot / Shutdown
-buttons. Click any booted device to open its Stream page — live frames,
+`/simulators` lists every simulator on the machine with Boot / Shutdown
+buttons; click any booted device to open its Stream page — live frames,
 mouse/touch input, and the DeviceKit-sourced bezel.
+
+`/farm` is the multi-device control surface. See
+[Device farm](#device-farm) below.
 
 Headless from the terminal works too:
 
@@ -103,7 +114,9 @@ baguette <command> [options]
                                              Stream frames on stdout
   input    --udid <UDID>                     Read JSON gestures from stdin
 
-  # Standalone web UI on localhost.
+  # Standalone web UI on localhost. Serves /simulators (single-device
+  # dashboard) and /farm (multi-device dashboard) — both backed by the
+  # same WS endpoint and HID pipeline.
   serve    [--port 8421] [--host 127.0.0.1] [--device-set <path>]
 
   # DeviceKit chrome / bezel data.
@@ -152,6 +165,8 @@ served root for live-iteration without rebuilding.
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
 | `WS`   | `/simulators/:udid/stream?format=mjpeg|avcc` | live frames + control + input |
+| `GET`  | `/farm`                                    | device-farm HTML             |
+| `GET`  | `/farm/:file`                              | farm UI asset (`farm.css`, `farm-*.js`, …) |
 | `GET`  | `/<file>.{html,js,css}`                    | static UI asset              |
 
 ### One bidirectional WebSocket per stream
@@ -170,6 +185,53 @@ The same WS carries everything for a viewing session:
 
 No `/event` POST, no UDID-keyed registry — the WS handler closure owns
 the live stream + simulator handle for the duration.
+
+## Device farm
+
+```bash
+baguette serve
+open http://localhost:8421/farm
+```
+
+A multi-device dashboard for the booted simulators on the host. Every
+device renders in a single page; the same WebSocket pipeline that powers
+`/simulators/:udid` drives every tile.
+
+**What it does**
+
+- **Three view modes** — Grid (compact thumbnails), Wall (large tiles
+  with bezels), and List (one-row-per-device with metadata). Toggle from
+  the header.
+- **Filter and sort** — by device family, OS version, run state. The
+  rail on the left holds filter state across view changes.
+- **Click to focus** — clicking any tile re-parents its `<canvas>` into
+  a full-quality focused pane on the right. The thumbnail keeps streaming
+  at low bitrate; only the focused tile pays for full-rate frames. No
+  separate mirror video element — the same canvas appears in two places.
+- **Input on the focused tile** — gestures, hardware buttons (home /
+  lock), and the pinch overlay all round-trip through `SimInputBridge`
+  → `GestureDispatcher` → `IndigoHIDInput`. Anything the CLI can drive,
+  the focused tile can drive.
+- **Bezels** — each tile renders with its DeviceKit bezel by default,
+  with a **9-slice composition fallback** for devices without a packaged
+  asset. Toggle to a raw (no-bezel) display mode from the tile menu.
+
+**What's served**
+
+`/farm` is a thin HTML shell at `Resources/Web/farm/farm.html` that
+loads five IIFE component scripts from `/farm/<name>.js`:
+
+| Script           | Job                                             |
+|------------------|-------------------------------------------------|
+| `farm-views.js`  | Grid / Wall / List renderers (pure DOM)         |
+| `farm-tile.js`   | `FarmTile` — per-device thumbnail StreamSession |
+| `farm-focus.js`  | `FarmFocus` — focused-device pane               |
+| `farm-filter.js` | `FarmFilter` — filter state + sidebar wiring    |
+| `farm-app.js`    | `FarmApp` — orchestrator (boot, fetch, dispatch)|
+
+`BAGUETTE_WEB_DIR` overrides the served root, so you can iterate on the
+farm UI without rebuilding — point it at `Sources/Baguette/Resources/Web`
+on disk and reload the browser.
 
 ## Wire protocol — `baguette input`
 
