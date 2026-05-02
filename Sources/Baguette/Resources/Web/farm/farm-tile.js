@@ -105,6 +105,20 @@
       surface.canvas.replaceWith(element);
       element.style.cssText =
         `display:block;width:100%;height:100%;object-fit:${fitObject};background:#000`;
+      // DeviceFrame sets the wrapper inline to `display:inline-block;
+      // max-height:70vh` (sized for the single-device page). In the
+      // farm grid the wrapper sits inside a fixed-height tile; with
+      // an inline-block + 70vh cap the wrapper's height resolves to
+      // its content (the bezel image at natural size, ~2800 px), and
+      // the bezel bleeds out of the 320 px screen container. Pin the
+      // wrapper to the screen container's height so the inner image's
+      // `height:100%` resolves correctly.
+      const wrapper = host.firstElementChild;
+      if (wrapper) {
+        wrapper.style.height = '100%';
+        wrapper.style.maxHeight = '100%';
+        wrapper.style.maxWidth = '100%';
+      }
       host.dataset.bezelMounted = 'yes';
       host.dataset.activeKind = element.tagName;
       this._resumeIfVideo(element);
