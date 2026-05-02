@@ -95,6 +95,18 @@ struct Server: Sendable {
             Self.bezelPNG(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
         }
 
+        // Device-farm UI — multi-device dashboard. The HTML at /farm
+        // is a thin shell that loads its own component scripts from
+        // the `farm/` subfolder; sibling assets (CSS + per-component
+        // JS) resolve against `/farm/<file>`. Registered before the
+        // catch-all `/:file` so `/farm` doesn't get hijacked.
+        router.get("/farm") { _, _ in Self.staticAsset("farm/farm.html") }
+        router.get("/farm/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("farm/\(name)")
+        }
+
         // Live stream — encoded frames downstream as binary; upstream
         // text JSON carries everything else: gesture input + runtime
         // control (set_bitrate / set_fps / set_scale / force_idr /

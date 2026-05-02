@@ -42,6 +42,7 @@
     // detach handle so the same tile can re-promote without leaks.
     this.simInput = null;
     this.mouseSource = null;
+    this.pinchOverlay = null;    // visual HUD shown during 2-finger gestures
     this.inputLayout = null;     // chrome layout snapshot for sizing
   }
 
@@ -155,20 +156,37 @@
   FarmTile.prototype.wireInput = function () {
     if (this.simInput || !this.session || !window.SimInput) return;
     if (!window.SimInputBridge || !window.MouseGestureSource) return;
+    const host = this.canvas.parentElement;
+    if (!host) return;
+
     this.simInput = new window.SimInput({
       udid: this.udid,
       log:  () => {},
       transport: window.SimInputBridge.makeTransport(this.session)
     });
     this.simInput.setScreenSize(...this.computeScreenSize());
-    // Attach to the canvas itself — that's the precise rectangle
-    // covering live screen pixels in both raw and bezel modes (the
-    // DeviceFrame's screenArea is the canvas's parent and shares
-    // its bounding box). Mouse coords normalize against the listener
-    // element, so canvas is the right pick.
+
+    // Overlay the same two-finger HUD sim-stream uses, so pinches /
+    // ctrl+wheel / Safari-gesture pinches show their finger circles
+    // on the focused canvas. The overlay attaches to the canvas's
+    // parent (positioned context); MouseGestureSource pushes finger
+    // points into it during touch streams.
+    if (window.PinchOverlay) {
+      this.pinchOverlay = new window.PinchOverlay(host);
+    }
+
+    // Attach to the canvas itself — the precise rectangle covering
+    // live screen pixels in both raw and bezel modes. Mouse coords
+    // normalize against the listener element, so canvas is the
+    // right pick. `touch-action:none` and `cursor:crosshair` mirror
+    // the affordances DeviceFrame puts on its screenArea.
+    this.canvas.style.cursor = 'crosshair';
+    this.canvas.style.touchAction = 'none';
+    this.canvas.tabIndex = 0;
     this.mouseSource = new window.MouseGestureSource({
       el:    this.canvas,
       input: this.simInput,
+      overlay: this.pinchOverlay,
       log:   () => {}
     });
     this.mouseSource.attach();
@@ -180,6 +198,12 @@
     }
     this.mouseSource = null;
     this.simInput = null;
+    if (this.pinchOverlay && this.pinchOverlay.container?.parentElement) {
+      this.pinchOverlay.container.parentElement.removeChild(this.pinchOverlay.container);
+    }
+    this.pinchOverlay = null;
+    this.canvas.style.cursor = '';
+    this.canvas.style.touchAction = '';
   };
 
   // Forward sidebar buttons (home / lock / volume / siri) to the

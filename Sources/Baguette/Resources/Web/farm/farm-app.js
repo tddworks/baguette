@@ -251,23 +251,25 @@
     const tile = this.tiles.get(udid);
     if (!device) return;
 
-    if (tile) tile.promote();
     this.focus = this.focus || new window.FarmFocus(byId('farm-focus'));
     this.focus.show(device, tile, {
       onClose: () => this.clearFocus(),
       onOpenTab: (d) => window.open(`/simulators/${encodeURIComponent(d.udid)}`, '_blank'),
-      onLifecycle: (d, action) => this.runAction(d.udid, action)
+      onLifecycle: (d, action) => this.runAction(d.udid, action),
+      onButton: (name) => tile?.button(name)
     });
     this.renderAll();
     // After grid render, plant the live canvas in the focus preview
     // (renderAll's attachTilesToScreens skipped this udid). Same
     // attach() path as the grid, so bezel mode + chrome layout work.
+    const layout = this.chromeLayouts.get(udid) || null;
     if (tile && this.focus.previewScreen) {
-      tile.attach(this.focus.previewScreen, {
-        useBezel: this.showBezels,
-        layout:   this.chromeLayouts.get(udid) || null
-      });
+      tile.attach(this.focus.previewScreen, { useBezel: this.showBezels, layout });
     }
+    // Promote AFTER attach so the canvas is in-DOM when MouseGestureSource
+    // measures its bounding box. Promote both bumps stream quality and
+    // wires SimInput on the now-mounted canvas.
+    if (tile) tile.promote({ layout });
   };
 
   FarmApp.prototype.clearFocus = function () {

@@ -59,6 +59,20 @@
       </div>
 
       <div class="controls">
+        <h4>Hardware Buttons</h4>
+        <div class="preset-row">
+          <button class="preset" data-button="home">Home</button>
+          <button class="preset" data-button="lock">Lock</button>
+          <button class="preset" data-button="vol-up">Vol +</button>
+        </div>
+        <div class="preset-row" style="margin-top:6px">
+          <button class="preset" data-button="vol-down">Vol −</button>
+          <button class="preset" data-button="screenshot">Snap UI</button>
+          <button class="preset" data-button="rotate">Rotate</button>
+        </div>
+      </div>
+
+      <div class="controls">
         <h4>Stream Controls</h4>
         <div class="preset-row">
           <button class="preset" data-action="force-idr">Force IDR</button>
@@ -89,6 +103,27 @@
     this.host.querySelector('[data-action="boot"]').onclick      = () => callbacks.onLifecycle(device, 'boot');
     this.host.querySelector('[data-action="shutdown"]').onclick  = () => callbacks.onLifecycle(device, 'shutdown');
     this.host.querySelector('[data-action="restart"]').onclick   = () => callbacks.onLifecycle(device, 'restart');
+
+    // Hardware buttons — UI exposes the full set (home, lock, volume,
+    // screenshot, rotate). Today only `home` and `lock` reach
+    // Baguette's host-HID path (Press.swift); the rest land server-side
+    // as ignored gestures until DeviceButton is widened. The buttons
+    // are wired so the UI stays useful as soon as the Domain layer
+    // grows the cases — no client change needed.
+    const buttonMap = {
+      'home':       'home',
+      'lock':       'lock',
+      'vol-up':     'volume-up',
+      'vol-down':   'volume-down',
+      'screenshot': 'screenshot',
+      'rotate':     'rotate'
+    };
+    this.host.querySelectorAll('[data-button]').forEach(btn => {
+      btn.onclick = () => {
+        const name = buttonMap[btn.dataset.button];
+        if (name) callbacks.onButton?.(name);
+      };
+    });
   };
 
   // FarmApp pumps per-tile telemetry here — keeps the gauges live

@@ -77,6 +77,11 @@ struct WebRoot {
     /// the bundle isn't there (e.g. a binary-only install that forgot
     /// to ship the bundle). Crucially, this avoids `Bundle.module`,
     /// which `fatalError`s on miss.
+    ///
+    /// `filename` may include a subdirectory segment (e.g.
+    /// `farm/farm.html`); the path is split into a subdirectory and
+    /// leaf so the bundle's `subdirectory:` argument matches what
+    /// `.copy("Resources/Web")` produces in the resource bundle.
     private static func sidecarWebURL(for filename: String) -> URL? {
         var info = Dl_info()
         guard dladdr(#dsohandle, &info) != 0,
@@ -85,10 +90,15 @@ struct WebRoot {
         let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
         guard FileManager.default.fileExists(atPath: bundleURL.path),
               let bundle = Bundle(url: bundleURL) else { return nil }
+        let parts = filename.split(separator: "/", omittingEmptySubsequences: true)
+        let subdir: String = parts.count > 1
+            ? "Web/" + parts.dropLast().joined(separator: "/")
+            : "Web"
+        let leaf = String(parts.last ?? Substring(filename))
         return bundle.url(
-            forResource: (filename as NSString).deletingPathExtension,
-            withExtension: (filename as NSString).pathExtension,
-            subdirectory: "Web"
+            forResource: (leaf as NSString).deletingPathExtension,
+            withExtension: (leaf as NSString).pathExtension,
+            subdirectory: subdir
         )
     }
 }
