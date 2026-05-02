@@ -225,6 +225,53 @@ struct LiveChromesTests {
         verify(rasterizer).compose(canvasSize: .any, layers: .any).called(1)
     }
 
+    // Watch-style chrome: the orange action button (`onTop: true`)
+    // must layer ON TOP of the composite, otherwise the bezel hides
+    // it. Older watch chromes (watch ≤ watch5b/5s) have the same need
+    // for the digital crown and side button, so honoring `onTop` fixes
+    // every watch family in one go.
+    @Test func `assets layers onTop buttons above the composite`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let composite = ChromeImage(data: Data("composite".utf8), size: Size(width: 100, height: 200))
+        let behind = ChromeImage(data: Data("behind".utf8), size: Size(width: 10, height: 20))
+        let onTop = ChromeImage(data: Data("ontop".utf8), size: Size(width: 8, height: 30))
+        let merged = ChromeImage(data: Data("merged".utf8), size: Size(width: 110, height: 200))
+
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONOnTopMix)
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("PhoneComposite"))
+            .willReturn(Data("composite-pdf".utf8))
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("BEHIND"))
+            .willReturn(Data("behind-pdf".utf8))
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("ONTOP"))
+            .willReturn(Data("ontop-pdf".utf8))
+        given(rasterizer).rasterize(pdfData: .value(Data("composite-pdf".utf8)))
+            .willReturn(composite)
+        given(rasterizer).rasterize(pdfData: .value(Data("behind-pdf".utf8)))
+            .willReturn(behind)
+        given(rasterizer).rasterize(pdfData: .value(Data("ontop-pdf".utf8)))
+            .willReturn(onTop)
+        given(rasterizer).compose(canvasSize: .any, layers: .any).willReturn(merged)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        _ = chromes.assets(forDeviceName: "Apple Watch Ultra 2 (49mm)")
+
+        // Layers must be: behind-button → composite → onTop-button.
+        // Compare by image identity (data) since `ImageLayer`'s topLeft
+        // depends on margin math we don't want to re-derive here.
+        verify(rasterizer).compose(
+            canvasSize: .any,
+            layers: .matching { layers in
+                layers.count == 3
+                    && layers[0].image == behind
+                    && layers[1].image == composite
+                    && layers[2].image == onTop
+            }
+        ).called(1)
+    }
+
     // When every button image fails to rasterize the merged-canvas path
     // is skipped — assets fall back to the bare composite, no compose call.
     @Test func `assets falls back to bare composite when every button image fails`() throws {
@@ -340,6 +387,28 @@ private extension LiveChromesTests {
         ("iPadBL",    "bottomLeft"),
         ("iPadLeft",  "left"),
     ]
+
+    /// One `onTop: false` button and one `onTop: true` button. Drives
+    /// the layering split inside `assemble()` so a watch-shaped chrome
+    /// renders its overlaid action button above the bezel.
+    static let fixtureChromeJSONOnTopMix: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.watch4",
+      "images": {
+        "composite": "PhoneComposite",
+        "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
+      "inputs": [
+        { "name": "behind", "image": "BEHIND", "anchor": "left",
+          "onTop": false,
+          "offsets": { "normal": { "x": 0, "y": 50 } } },
+        { "name": "onTop", "image": "ONTOP", "anchor": "left",
+          "onTop": true,
+          "offsets": { "normal": { "x": 20, "y": 100 } } }
+      ]
+    }
+    """#.utf8)
 
     /// Four anchors × two aligns — drives every arm of the
     /// computeMargins / buttonTopLeft switches (left, right, top with

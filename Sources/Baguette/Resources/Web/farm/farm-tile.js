@@ -31,6 +31,18 @@
     this.onSize      = opts.onSize      || (() => {});
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = 'width:100%;height:100%;display:block;background:#000';
+    // Live mirror — shown in the grid host while the canvas is moved
+    // into the focus pane. Sourced from canvas.captureStream() so it
+    // tracks every frame the decoder paints, with one decoder/socket
+    // total. Lazy-initialized in `ensureMirrorStream()` because
+    // captureStream() needs at least one painted frame to produce a
+    // useful track.
+    this.mirror = document.createElement('video');
+    this.mirror.muted = true;
+    this.mirror.autoplay = true;
+    this.mirror.playsInline = true;
+    this.mirror.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
+    this._mirrorStreamReady = false;
     this.session = null;
     this.mode = 'idle';   // 'idle' | 'thumb' | 'full'
     this.lastFps = 0;
@@ -49,43 +61,72 @@
   // Move the canvas into whichever screen-host element the latest view
   // produced for this udid. If the device is not booted, we leave the
   // host empty — its overlay (BOOTING / SHUTDOWN / etc.) shows through.
-  //
-  // `opts.useBezel` swaps the wrapper: when true, the existing
-  // DeviceFrame builds the bezel <img> + screenArea + a fresh canvas;
-  // we discard that canvas and graft `this.canvas` (the live decoder
-  // target) into the screenArea so the WebSocket isn't disturbed.
-  // When false, the canvas sits raw inside the host and edge-fills it.
   FarmTile.prototype.attach = function (host, opts) {
+    this._mountIn(host, opts, this.canvas, /* fitObject */ 'fill');
+  };
+
+  // Install the live <video> mirror in `host` instead of the canvas —
+  // used by FarmApp for the grid tile while the device is focused
+  // (canvas is in the focus pane). Same DeviceFrame scaffolding so
+  // bezel mode looks identical across the grid and focus pane.
+  FarmTile.prototype.attachMirror = function (host, opts) {
+    this.ensureMirrorStream();
+    this._mountIn(host, opts, this.mirror, /* fitObject */ 'fill');
+  };
+
+  // Shared mount path. `useBezel` swaps the wrapper: when true, the
+  // existing DeviceFrame builds the bezel <img> + screenArea + a fresh
+  // canvas; we discard that canvas and graft the requested element
+  // (canvas or video mirror) into the screenArea so the live pipeline
+  // isn't disturbed. When false, the element sits raw inside the host
+  // and edge-fills it.
+  FarmTile.prototype._mountIn = function (host, opts, element, fitObject) {
     if (!host) return;
     const useBezel = !!(opts && opts.useBezel && window.DeviceFrame);
     const layout = opts && opts.layout || null;
 
     if (useBezel) {
-      // Only rebuild the bezel chrome when the host or mode changed.
-      // Idempotent re-attach lets renderAll() run without thrashing.
-      if (host.dataset.bezelMounted === 'yes' && this.canvas.parentElement?.parentElement === host.firstChild) {
-        return;
-      }
+      // Always rebuild — element identity may have changed (canvas ↔
+      // mirror), or the layout may have arrived after a prior raw
+      // mount. The DeviceFrame DOM is cheap; the live element is
+      // re-grafted in place so the WebSocket / captureStream pipe
+      // never sees a teardown.
+      host.innerHTML = '';
       host.classList.add('with-bezel');
       const frame = new window.DeviceFrame({ udid: this.udid, layout });
       const surface = frame.mount(host);
-      // DeviceFrame creates its own canvas — replace it with ours.
-      surface.canvas.replaceWith(this.canvas);
-      this.canvas.style.cssText =
-        'display:block;width:100%;height:100%;object-fit:fill;background:#000';
+      surface.canvas.replaceWith(element);
+      element.style.cssText =
+        `display:block;width:100%;height:100%;object-fit:${fitObject};background:#000`;
       host.dataset.bezelMounted = 'yes';
       return;
     }
 
-    // Raw mode — strip any prior bezel scaffolding, drop the canvas in.
+    // Raw mode — strip any prior bezel scaffolding, drop the element in.
     if (host.dataset.bezelMounted === 'yes') {
       host.innerHTML = '';
       delete host.dataset.bezelMounted;
       host.classList.remove('with-bezel');
     }
-    this.canvas.style.cssText =
+    element.style.cssText =
       'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
-    if (this.canvas.parentElement !== host) host.appendChild(this.canvas);
+    if (element.parentElement !== host) host.appendChild(element);
+  };
+
+  // Wire the mirror video to the canvas's captureStream(). The track
+  // doesn't yield frames until the canvas has painted at least once,
+  // so this is called lazily on the first attachMirror() — by then
+  // the StreamSession has been alive long enough to draw frames.
+  FarmTile.prototype.ensureMirrorStream = function () {
+    if (this._mirrorStreamReady) return;
+    if (typeof this.canvas.captureStream !== 'function') return;
+    try {
+      this.mirror.srcObject = this.canvas.captureStream();
+      this._mirrorStreamReady = true;
+    } catch {
+      // Older browsers / non-hardware-accelerated contexts: leave the
+      // mirror dark. It's a UX nicety, not a correctness requirement.
+    }
   };
 
   FarmTile.prototype.start = function () {

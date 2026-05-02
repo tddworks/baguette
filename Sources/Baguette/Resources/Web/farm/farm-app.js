@@ -196,24 +196,25 @@
   };
 
   // After every render, walk the produced screen-host nodes and ask
-  // each tile to drop its canvas into the matching one. Idempotent —
-  // attach() no-ops when the parent + bezel mode didn't change.
+  // each tile to drop its canvas (or mirror) into the matching one.
+  // Idempotent — _mountIn() rebuilds when DOM identity changes and
+  // no-ops on the live element grafting itself.
   //
-  // The currently-focused tile is skipped: its canvas lives in the
-  // focus pane while focused, and re-attaching here would yank it
-  // back to the grid (leaving the focus preview empty). On clearFocus,
-  // FarmFocus.dispose() detaches the canvas from the focus pane and
-  // the next attachTilesToScreens reparents it back into the grid.
+  // For the focused udid, the canvas lives in the focus pane, so the
+  // grid host gets the tile's mirror <video> (sourced from the same
+  // canvas via captureStream). Both paths share the same bezel +
+  // chrome layout scaffolding so visually grid + focus stay in sync.
   FarmApp.prototype.attachTilesToScreens = function () {
     document.querySelectorAll('#farm-view-host [data-screen-host]').forEach(host => {
       const udid = host.dataset.screenHost;
-      if (udid === this.selectedUdid) return;
       const tile = this.tiles.get(udid);
       if (!tile) return;
-      tile.attach(host, {
+      const opts = {
         useBezel: this.showBezels,
         layout:   this.chromeLayouts.get(udid) || null
-      });
+      };
+      if (udid === this.selectedUdid) tile.attachMirror(host, opts);
+      else                            tile.attach(host, opts);
     });
   };
 

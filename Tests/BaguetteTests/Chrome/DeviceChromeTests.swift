@@ -85,6 +85,20 @@ struct DeviceChromeTests {
         #expect(power.anchor == .right)
     }
 
+    @Test func `button parses onTop with default false`() throws {
+        // watch4-shaped fixture: digital-crown is `onTop: false` (baked
+        // into the composite) and the orange action button is
+        // `onTop: true` (must overlay). Bare entries with no `onTop`
+        // key default to false to match the iPhone case.
+        let chrome = try DeviceChrome.parsing(json: Self.fixtureWatchOnTop)
+        let crown = chrome.buttons.first { $0.name == "digital-crown" }!
+        let action = chrome.buttons.first { $0.name == "action" }!
+        let bare = chrome.buttons.first { $0.name == "bare" }!
+        #expect(crown.onTop == false)
+        #expect(action.onTop == true)
+        #expect(bare.onTop == false)
+    }
+
     @Test func `parsing throws on missing identifier`() {
         let bad = Data(#"{"images":{},"paths":{},"inputs":[]}"#.utf8)
         #expect(throws: DeviceChromeParseError.missingIdentifier) {
@@ -346,6 +360,24 @@ private extension DeviceChromeTests {
       },
       "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
       "inputs": []
+    }
+    """#.utf8)
+
+    /// Watch-shaped inputs covering the `onTop` field. `digital-crown`
+    /// is `false`, `action` is `true`, `bare` omits the key entirely
+    /// to exercise the default.
+    static let fixtureWatchOnTop: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.watch4",
+      "inputs": [
+        { "name": "digital-crown", "image": "DigitalCrown", "anchor": "right",
+          "onTop": false,
+          "offsets": { "normal": { "x": -23, "y": 81 } } },
+        { "name": "action", "image": "StingButton", "anchor": "left",
+          "onTop": true,
+          "offsets": { "normal": { "x": 20, "y": 138 } } },
+        { "name": "bare", "image": "BTN", "anchor": "left" }
+      ]
     }
     """#.utf8)
 
