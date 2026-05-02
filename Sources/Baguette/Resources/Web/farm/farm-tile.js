@@ -39,8 +39,42 @@
   // Move the canvas into whichever screen-host element the latest view
   // produced for this udid. If the device is not booted, we leave the
   // host empty — its overlay (BOOTING / SHUTDOWN / etc.) shows through.
-  FarmTile.prototype.attach = function (host) {
+  //
+  // `opts.useBezel` swaps the wrapper: when true, the existing
+  // DeviceFrame builds the bezel <img> + screenArea + a fresh canvas;
+  // we discard that canvas and graft `this.canvas` (the live decoder
+  // target) into the screenArea so the WebSocket isn't disturbed.
+  // When false, the canvas sits raw inside the host and edge-fills it.
+  FarmTile.prototype.attach = function (host, opts) {
     if (!host) return;
+    const useBezel = !!(opts && opts.useBezel && window.DeviceFrame);
+    const layout = opts && opts.layout || null;
+
+    if (useBezel) {
+      // Only rebuild the bezel chrome when the host or mode changed.
+      // Idempotent re-attach lets renderAll() run without thrashing.
+      if (host.dataset.bezelMounted === 'yes' && this.canvas.parentElement?.parentElement === host.firstChild) {
+        return;
+      }
+      host.classList.add('with-bezel');
+      const frame = new window.DeviceFrame({ udid: this.udid, layout });
+      const surface = frame.mount(host);
+      // DeviceFrame creates its own canvas — replace it with ours.
+      surface.canvas.replaceWith(this.canvas);
+      this.canvas.style.cssText =
+        'display:block;width:100%;height:100%;object-fit:fill;background:#000';
+      host.dataset.bezelMounted = 'yes';
+      return;
+    }
+
+    // Raw mode — strip any prior bezel scaffolding, drop the canvas in.
+    if (host.dataset.bezelMounted === 'yes') {
+      host.innerHTML = '';
+      delete host.dataset.bezelMounted;
+      host.classList.remove('with-bezel');
+    }
+    this.canvas.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
     if (this.canvas.parentElement !== host) host.appendChild(this.canvas);
   };
 

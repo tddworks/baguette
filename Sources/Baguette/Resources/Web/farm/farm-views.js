@@ -92,6 +92,15 @@
       </section>
 
       <section>
+        <h3>Display</h3>
+        <label class="filter">
+          <input type="checkbox" data-display="bezel" ${ctx.display.bezel ? 'checked' : ''}>
+          <span class="name">Show bezels</span>
+          <span class="count">${ctx.display.bezel ? 'ON' : 'OFF'}</span>
+        </label>
+      </section>
+
+      <section>
         <h3>Bulk Action</h3>
         <button class="bulk-btn" data-bulk="boot"><span>Boot Filtered</span><span class="glyph">↗</span></button>
         <button class="bulk-btn" data-bulk="snapshot"><span>Snapshot All</span><span class="glyph">⌘ S</span></button>

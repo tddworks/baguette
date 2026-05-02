@@ -26,12 +26,14 @@
 
   function FarmApp() {
     this.devices = [];
-    this.tiles = new Map();          // udid → FarmTile
+    this.tiles = new Map();              // udid → FarmTile
+    this.chromeLayouts = new Map();      // udid → layout|null (null = no chrome)
     this.filter = new window.FarmFilter();
     this.view = 'grid';
     this.sort = { key: 'name', dir: 'asc' };
     this.selectedUdid = null;
     this.focus = null;
+    this.showBezels = false;
     this.fleetTelemetry = { live: 0, total: 0, fps: 0, bw: 0, lat: 0 };
   }
 
@@ -100,6 +102,7 @@
       search: this.filter.search,
       runtimes: [...this.filter.runtimes].sort(),
       counts, fleet,
+      display: { bezel: this.showBezels },
       selectedUdid: this.selectedUdid
     };
   };
@@ -113,6 +116,10 @@
       el.onchange = () => { this.filter.toggle('states', el.dataset.state); this.renderAll(); });
     document.querySelectorAll('#farm-rail .runtime-pill').forEach(p =>
       p.onclick = () => { this.filter.toggle('runtimes', p.dataset.runtime); this.renderAll(); });
+
+    // Display toggles (bezel, future: scanlines / crosshairs / grid pitch).
+    document.querySelectorAll('#farm-rail input[data-display]').forEach(el =>
+      el.onchange = () => this.toggleDisplay(el.dataset.display, el.checked));
 
     // Bulk actions
     document.querySelectorAll('#farm-rail [data-bulk]').forEach(b =>
@@ -183,12 +190,46 @@
 
   // After every render, walk the produced screen-host nodes and ask
   // each tile to drop its canvas into the matching one. Idempotent —
-  // attach() no-ops when the parent didn't change.
+  // attach() no-ops when the parent + bezel mode didn't change.
   FarmApp.prototype.attachTilesToScreens = function () {
     document.querySelectorAll('#farm-view-host [data-screen-host]').forEach(host => {
-      const tile = this.tiles.get(host.dataset.screenHost);
-      if (tile) tile.attach(host);
+      const udid = host.dataset.screenHost;
+      const tile = this.tiles.get(udid);
+      if (!tile) return;
+      tile.attach(host, {
+        useBezel: this.showBezels,
+        layout:   this.chromeLayouts.get(udid) || null
+      });
     });
+  };
+
+  // ---- bezel toggle --------------------------------------------------
+  FarmApp.prototype.toggleDisplay = async function (kind, enabled) {
+    if (kind !== 'bezel') return;
+    this.showBezels = enabled;
+    if (enabled) {
+      await this.loadChromeLayouts();
+    }
+    this.renderAll();
+  };
+
+  // Lazy chrome-layout fetch — only paid for once the user actually
+  // wants bezels. Hits `/simulators/<udid>/chrome.json` per device;
+  // a 404 means DeviceKit has no chrome bundle (Apple TV, watchOS),
+  // and DeviceFrame falls back to a flat fill in that case.
+  FarmApp.prototype.loadChromeLayouts = async function () {
+    const need = this.devices.filter(d =>
+      d.uiState !== 'off' && !this.chromeLayouts.has(d.udid));
+    await Promise.allSettled(need.map(async d => {
+      try {
+        const res = await fetch(`/simulators/${encodeURIComponent(d.udid)}/chrome.json`);
+        if (!res.ok) { this.chromeLayouts.set(d.udid, null); return; }
+        const layout = await res.json();
+        this.chromeLayouts.set(d.udid, layout);
+      } catch {
+        this.chromeLayouts.set(d.udid, null);
+      }
+    }));
   };
 
   // ---- selection / focus --------------------------------------------
