@@ -107,17 +107,37 @@
         `display:block;width:100%;height:100%;object-fit:${fitObject};background:#000`;
       // DeviceFrame sets the wrapper inline to `display:inline-block;
       // max-height:70vh` (sized for the single-device page). In the
-      // farm grid the wrapper sits inside a fixed-height tile; with
-      // an inline-block + 70vh cap the wrapper's height resolves to
-      // its content (the bezel image at natural size, ~2800 px), and
-      // the bezel bleeds out of the 320 px screen container. Pin the
-      // wrapper to the screen container's height so the inner image's
-      // `height:100%` resolves correctly.
+      // farm grid the wrapper sits inside a fixed-height tile; the
+      // image inside has `height: 100%` and `width: auto`, which —
+      // combined with `max-width: 100%` clipping the wrapper to the
+      // column width — leaves the wrapper at the column box but the
+      // image overflowing or letterboxed inside it. screenArea uses
+      // percentages of the *wrapper*, so its rendered rectangle drifts
+      // from the bezel's actual screen rect. Canvas with object-fit:
+      // fill stretches to that drifted rectangle (most visible on
+      // squarish devices like Apple Watch).
+      //
+      // Fix: size the wrapper in explicit pixels matching the
+      // composite's aspect ratio. We compute a fit-inside box of
+      // (host.width, host.height) that preserves the composite ratio,
+      // then pin wrapper.width/height to those numbers. The image at
+      // height:100%; width:auto then renders to exactly the wrapper
+      // bounds, screenArea percentages map onto the real bezel hole,
+      // and the canvas fills the device's true screen aspect.
       const wrapper = host.firstElementChild;
-      if (wrapper) {
-        wrapper.style.height = '100%';
-        wrapper.style.maxHeight = '100%';
-        wrapper.style.maxWidth = '100%';
+      if (wrapper && layout && layout.composite &&
+          layout.composite.width && layout.composite.height) {
+        const r = host.getBoundingClientRect();
+        const maxW = r.width  || host.clientWidth  || 232;
+        const maxH = r.height || host.clientHeight || 320;
+        const ratio = layout.composite.width / layout.composite.height;
+        // Fit-inside: pick the dimension where both bounds satisfy.
+        let w = maxH * ratio, h = maxH;
+        if (w > maxW) { w = maxW; h = maxW / ratio; }
+        wrapper.style.width  = w + 'px';
+        wrapper.style.height = h + 'px';
+        wrapper.style.maxWidth  = 'none';
+        wrapper.style.maxHeight = 'none';
       }
       host.dataset.bezelMounted = 'yes';
       host.dataset.activeKind = element.tagName;
