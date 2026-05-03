@@ -22,6 +22,11 @@ struct CommandParsingTests {
         ])
     }
 
+    @Test func `baguette root exposes version`() {
+        #expect(Baguette.configuration.version == baguetteVersion)
+        #expect(!baguetteVersion.isEmpty)
+    }
+
     // MARK: - list
 
     @Test func `list parses --device-set`() throws {
