@@ -1,354 +1,319 @@
 # Recording
 
-Server-side capture of the simulator's framebuffer to an MP4 file. One
-button in the stream sidebar (and the device-farm focus pane) toggles
-it on; the file appears as a download link the moment AVAssetWriter
-finishes flushing the moov atom.
+Browser-side capture of the live view (bezel + screen + pinch overlay)
+to a WebM/MP4 file. One button in the stream sidebar (and the device-
+farm focus pane) toggles it on; clicking again stops, the file shows
+up as a download link in the sidebar list.
 
-Lives at the existing `WS /simulators/:udid/stream` channel — the
-verbs `start_record` and `stop_record` ride the same socket the live
-stream uses. Finished files are served back over HTTP at
-`/simulators/:udid/recording/:filename`.
+The recording reuses what the live view already has on the page —
+the bezel `<img>` DeviceFrame loaded, the chrome layout already
+fetched, the live decoded canvas StreamSession is painting, and
+PinchOverlay's existing dot positions. Nothing extra is fetched or
+allocated until Record is pressed.
 
 If you want the end-to-end tap-to-`UITouch` story, read
-[`../ARCHITECTURE.md`](../ARCHITECTURE.md). This doc is scoped to the
-recording feature itself — what the pipeline looks like, why it sits
-alongside the live stream rather than taking over a tap point inside
-it, and the few non-obvious decisions worth pinning down.
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md). This doc is scoped to
+recording — the architecture, why we settled on a compose canvas
+that only exists while recording, and the few non-obvious decisions
+worth pinning down.
 
 ## Why
 
 Two requests pushed for it:
 
 - **Reproducible bug evidence** — bug reports against simulator builds
-  read better with a 10-second MP4 attached than a screenshot strip.
+  read better with a 10-second clip + visible pinch fingers than a
+  static screenshot strip.
 - **Demos / asset capture** — the same device-farm sessions used for
   reviews wanted a one-click "save the last minute" affordance.
 
-The constraint was strict: don't disturb the live stream. The
-streaming pipeline is already tuned for low-latency interactive use
-(per-format encoders, a keep-alive pump, dynamic reconfig). Tying a
-recorder to the live encoder couples recording quality to whatever
-the user picked for streaming — which is the wrong default. A 60 fps
-1290×2796 MP4 is the minimum bar regardless of whether the live
-stream is at 8 fps thumbnail mode in the farm or 60 fps full quality
-on the single-device page.
+The constraint was strict: don't disturb the live stream. The streaming
+pipeline already runs N hardware H.264 sessions in parallel under the
+device farm (one per booted simulator). Adding a server-side recorder
+spawned another VT compression session and pushed every device's
+frame-delivery off cadence — fixed by moving the whole recording
+client-side.
 
 ## Surface
 
 ```
-WS  /simulators/:udid/stream                — same channel as live stream
-                                               (verbs: start_record / stop_record)
-GET /simulators/:udid/recording/:filename   — finished MP4 download
+GET /recorder.js                    — BrowserRecorder module
 ```
 
-No new server endpoints; no client polls anything. The browser sends
-`{type:"start_record"}` over the existing WS, the server replies
-asynchronously with one of three text frames:
-
-```
-{"type":"record_started"}
-{"type":"record_finished","url":"/simulators/<udid>/recording/<file>","filename":"…","format":"mp4","duration":12.34,"bytes":4567890}
-{"type":"record_error","error":"…"}
-```
-
-`StreamSession.onText` (added alongside this feature) splits binary
-frames from JSON text frames at the WebSocket level, so the same
-socket carries encoded video bytes downstream and recording lifecycle
-notifications without confusion.
+No new server endpoints. The bezel image and chrome layout the
+recorder uses are the same `/simulators/:udid/bezel.png` and
+`/simulators/:udid/chrome.json` the live view already fetches; the
+recorder doesn't refetch them — it reuses the references DeviceFrame
+already holds.
 
 ## Pipeline
 
 ```
-SimulatorKit framebuffer → IOSurface stream
-    ├─→ Stream (mjpeg | avcc) → FrameSink → browser
-    └─→ Recorder (parallel)   → AVAssetWriter → MP4 file
+Live view (DOM, untouched while idle)
+  ├── DeviceFrame: <img bezel> + <div screenArea> + <canvas>
+  └── PinchOverlay: <div container> + <div> dots
+
+   ── Record pressed ──────────────────────────────────────
+   ↓
+BrowserRecorder.start()
+   1. allocate compose canvas at layout.composite size
+   2. start rAF compose loop:
+        clearRect
+        drawImage(frameImg)                     ← bezel under
+        clip(roundRect screen)
+          drawImage(sourceCanvas, screenRect)   ← live frames
+          paintOverlayDots(overlayHost)         ← pinch dots
+   3. compose.captureStream(60) → MediaRecorder
+
+   ── Stop pressed ───────────────────────────────────────
+   ↓
+BrowserRecorder.stop()
+   1. recorder.stop(), await final chunk
+   2. cancel rAF loop, drop compose canvas
+   3. blob = new Blob(chunks)
+   4. return { url, blob, filename, mimeType, durationSeconds, bytes }
 ```
 
-Two parallel `Screen` subscribers receive the same `IOSurface`
-callbacks each time SimulatorKit composites a frame. The live stream
-encodes for transport; the recorder encodes for storage. Neither
-queue blocks the other.
+When idle (no recording in flight) **nothing extra runs**. No paint
+loop, no compose canvas, no extra references held. The live view is
+exactly as it always was.
 
-`Screen.start(onFrame:)` registers a fresh callback UUID with
-`com.apple.framebuffer.display`, so each call returns an independent
-pipeline. Two parallel screens cost two callback registrations and
-two `IOSurface` ref bumps per frame — negligible compared to the
-encode work either side does.
+## Why a compose canvas, not a DOM-element capture?
 
-## Why not tap the live encoder?
+The web platform's `ctx.drawImage` only accepts `<img>`, `<canvas>`,
+`<video>`, `ImageBitmap`, and `SVGImageElement`. There's no
+"rasterize this DOM subtree" API at video frame rate:
 
-The first design tee'd the recorder into `AVCCStream`'s H.264 NALU
-output and let `ffmpeg -c copy` mux them into MP4. Conceptually
-clean — zero re-encode, near-zero CPU. In practice three things
-broke it:
+- **`Element.captureStream()`** — doesn't exist.
+- **`<foreignObject>` SVG hack** — slow (~30–80 ms/frame), and the
+  embedded `<canvas>` inside the foreignObject renders blank.
+- **`getDisplayMedia` + Region Capture** — Chrome only, requires a
+  permission prompt.
+- **`html2canvas`** — same speed/correctness issues as the SVG hack.
 
-- **The live encoder uses a 5-second keyframe interval** so mid-stream
-  IDRs don't stall the consumer. A recording started mid-stream had
-  to wait up to 5 s for SPS/PPS, or force an extra IDR (cosmetic
-  glitch on the live view).
-- **`H264Encoder` emits the avcC parameter-set blob exactly once per
-  session.** A recorder attaching mid-stream never saw it; ffmpeg
-  refused to mux. Caching + replaying the description was a
-  workaround, not a fix.
-- **The keep-alive pump duplicates the last surface every `1/fps` s**
-  to keep the consumer's `VideoDecoder` queue from going stale. Those
-  duplicates carry the same content but different PTS — `ffmpeg -c
-  copy` propagates them straight into the MP4, producing a video
-  that judders even though the source wasn't.
-- **MJPEG mode had no H.264 to copy.** Recording was simply unreachable
-  for the farm tiles that ran MJPEG when WebCodecs was missing.
+But our DOM tree is only three things — a bezel `<img>`, a `<canvas>`,
+and a few absolute-positioned dots. drawImage handles the first two
+natively and GPU-accelerated. The dots are 4 lines of "read
+`element.style.left`, `ctx.arc`". So "copy the DOM into a canvas"
+reduces to drawing each layer manually — which is what the compose
+loop does.
 
-The current design takes the bytes upstream of any of those choices.
-It costs one parallel encode, but on Apple Silicon VideoToolbox does
-that almost free.
+## Why not server-side?
 
-## Recorder
+Earlier server-side iterations didn't pan out:
 
-```swift
-protocol Recorder: AnyObject, Sendable {
-    func start(on screen: any Screen) throws
-    func stop() async throws -> RecordingArtifact
-    func cancel()
+1. **`ffmpeg -c copy` tap into AVCC** — `H264Encoder` emits SPS/PPS
+   only on the first IDR; a recorder attaching mid-stream never saw
+   them. The keep-alive pump duplicated the last surface every `1/fps`
+   to keep `VideoDecoder` fresh, and `-c copy` propagated those
+   duplicates into the MP4 — recording judders even though the source
+   is smooth. MJPEG mode had no H.264 to copy at all.
+2. **Parallel `Screen` subscription + `AVAssetWriter`** — frame-perfect
+   and format-agnostic, but each booted device already runs a VT
+   session for its live AVCC stream. Recording adds N+1 simultaneous
+   VT sessions; per-session throughput drops, every farm tile stutters.
+
+Browser-side sidesteps both: zero new server-side encode, the
+recording matches what the user sees post-bezel, post-overlay.
+
+## BrowserRecorder
+
+```js
+const rec = new BrowserRecorder({
+  canvas,        // surface.canvas — already painting
+  frameImg,      // surface.frameImg — already loaded
+  layout,        // chrome.json layout — already fetched
+  overlayHost,   // pinchOverlay.container — already in DOM
+  fps: 60,
+});
+rec.start();
+const artifact = await rec.stop();
+//   { url, blob, filename, mimeType, durationSeconds, bytes }
+rec.cancel();
+```
+
+Constructor takes references; nothing is fetched. `start()` allocates
+the compose canvas, kicks off the paint loop, and spins up
+`MediaRecorder` over `compose.captureStream(fps)`. `stop()` awaits the
+final chunk, releases the compose canvas, and returns the artifact.
+
+### MIME type probing
+
+```js
+const PREFERRED_MIME_TYPES = [
+  'video/mp4;codecs=avc1.42E01E',  // Safari + Chrome (≥113)
+  'video/webm;codecs=vp9',         // Chrome + Firefox
+  'video/webm;codecs=vp8',         // older browsers
+  'video/webm',                    // ultimate fallback
+];
+```
+
+The first MIME `MediaRecorder.isTypeSupported` accepts wins; falling
+through to `''` lets the browser pick its own default.
+
+### Per-frame paint
+
+```js
+ctx.clearRect(0, 0, cw, ch);
+if (useBezel) {
+  ctx.drawImage(frameImg, 0, 0, cw, ch);          // bezel under
+  ctx.save();
+  roundRectPath(ctx, s.x, s.y, s.width, s.height, r);
+  ctx.clip();
+  ctx.drawImage(sourceCanvas, s.x, s.y, s.width, s.height);
+  paintOverlayDots(ctx, s);                        // dots inside clip
+  ctx.restore();
+} else {
+  ctx.drawImage(sourceCanvas, 0, 0, cw, ch);
+  paintOverlayDots(ctx, { x: 0, y: 0, width: cw, height: ch });
 }
 ```
 
-One implementation today: `AVAssetWriterRecorder`. `start` opens the
-`Screen`, `stop` finalises the writer and returns the artifact,
-`cancel` aborts without producing one (used by the WS-close `defer`).
+DeviceKit composite PDFs have an opaque dark "off-glass" tint in the
+screen rect (designed to sit UNDER live content). Bezel goes first;
+screen on top — same z-order the live DOM uses (`screenArea` z-index
+2, frameImg z-index 1).
 
-### AVAssetWriter pipeline
+### Pinch overlay copy
 
-```
-IOSurface
-  → CVPixelBuffer (BGRA, IOSurface-backed)
-  → CVPixelBufferPool copy (recycled buffer; zero alloc steady-state)
-  → AVAssetWriterInputPixelBufferAdaptor.append(buf, withPresentationTime:)
-  → AVAssetWriter (H.264 / mp4 via VideoToolbox under the hood)
-  → moov atom flush on finish
-```
-
-Settings:
-
-| key | value | why |
-|-----|-------|-----|
-| codec | H.264 (High profile, auto level) | matches what the live AVCC stream uses, hardware-encoded |
-| bitrate | 8 Mbps (configurable) | full-quality default; not coupled to the live stream's bitrate |
-| keyframe interval | 60 (≈ 1 s) | smooth seek points without bloating file size |
-| frame reordering | disabled | constrains encoder latency, mirrors the live AVCC config |
-| `expectsMediaDataInRealTime` | true | tells AVAssetWriter to prioritise timeliness over peak quality |
-| `+faststart` | implicit | moov goes at the front so the file plays before fully downloaded |
-
-### PTS strategy
-
-```swift
-let elapsed = Date().timeIntervalSince(firstFrameWallClock)
-let pts = CMTime(seconds: elapsed, preferredTimescale: 600)
-```
-
-Wall-clock relative to the first real frame. Two reasons:
-
-- **Idle moments stay idle.** A synthetic frame counter at 60 fps
-  would compress idle pauses (no surface emitted ⇒ no frame ⇒
-  invisible gap on playback). Wall-clock PTS preserves the simulator's
-  real cadence; if the simulator stalls, the recording shows the
-  stall.
-- **The keep-alive pump does not exist on the recorder side.** The
-  recorder records only what SimulatorKit actually emits. No
-  duplicates, no drift.
-
-The `600` timescale is the standard QuickTime granularity — fine
-enough for 60 fps (each frame ≈ 10 ticks) without overflowing
-`CMTime` for any realistic recording length.
-
-### Back-pressure
-
-```swift
-guard input.isReadyForMoreMediaData else { return }
-```
-
-If AVAssetWriter's input buffer is full, drop the frame instead of
-blocking the screen queue. With `expectsMediaDataInRealTime = true`
-this rarely fires on Apple Silicon — VT keeps up. Dropping is the
-right failure mode anyway: the alternative would be back-pressure
-into SimulatorKit's framebuffer thread, which is shared with the
-live stream.
-
-### Pixel buffer pool
-
-The first frame primes
-`AVAssetWriterInputPixelBufferAdaptor.pixelBufferPool`. Subsequent
-frames `CVPixelBufferPoolCreatePixelBuffer` a recycled buffer and
-`memcpy` rows from the IOSurface-wrapped source into it. Net effect:
-zero allocation in the steady state, single contiguous BGRA buffer
-per append.
-
-The first few frames before the pool exists fall back to a direct
-`CVPixelBufferCreateWithIOSurface` so we don't drop the start of the
-recording.
-
-## File layout
-
-```
-$TMPDIR/baguette-recordings/<pid>/<udid>/<udid>-<ms-timestamp>.mp4
-```
-
-Per-process directory under `FileManager.default.temporaryDirectory`
-— on macOS that resolves to `/var/folders/.../T/baguette-recordings/`,
-not `/tmp/`. Each `baguette serve` run owns its own subtree, so a
-fresh server start can't accidentally serve files left by a previous
-session, and the OS reaps abandoned files on the usual schedule.
-
-`RecordingsDirectory.resolve(udid:filename:)` rejects empty inputs and
-any filename containing `/` or `..`, so the download route can't be
-talked into reading outside its sandbox.
-
-## Server dispatch
-
-```swift
-for try await frame in inbound {
-    guard frame.opcode == .text else { continue }
-    let line = String(buffer: frame.data)
-    if let cmd = RecordingControl.parse(line) {
-        await handleRecording(cmd, …)
-        continue
-    }
-    handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+```js
+const hostRect = overlayHost.getBoundingClientRect();
+const sx = screenRect.width  / hostRect.width;
+const sy = screenRect.height / hostRect.height;
+for (const dot of overlayHost.children) {
+  const left = parseFloat(dot.style.left);
+  const top  = parseFloat(dot.style.top);
+  ctx.arc(screenRect.x + left * sx,
+          screenRect.y + top  * sy,
+          18 * Math.max(sx, sy),
+          0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 }
 ```
 
-`RecordingControl.parse` is a tiny pure parser — same shape as
-`ReconfigParser`. It matches `start_record` / `stop_record` and
-returns nil otherwise so the rest of the dispatch chain (reconfig,
-gestures) keeps working unchanged.
+Reads PinchOverlay's existing DOM dots each tick — no caching, no
+mutation. Position scaling maps host-local pixels (PinchOverlay's
+host element) to composite-canvas coordinates.
 
-`handleRecording`:
+### Performance
 
-- **start** — create a fresh `simulator.screen()`, hand it to a new
-  `AVAssetWriterRecorder`, and stash the recorder in the WS task's
-  `var recorder: AVAssetWriterRecorder?` slot. Send `record_started`
-  back over the WS.
-- **stop** — `await recorder.stop()`, send `record_finished` (or
-  `record_error` on failure). The await suspends only this task;
-  Hummingbird keeps queuing inbound frames at the socket level and
-  we re-enter the loop when stop returns.
+| phase | per-frame cost | total |
+|---|---|---|
+| `drawImage(frameImg)` (3.6 MP bitmap blit) | ~0.3 ms | hardware-accelerated |
+| `drawImage(sourceCanvas)` clipped | ~0.5 ms | "" |
+| 0–2 pinch dots (`arc + fill`) | ~0.05 ms | negligible |
+| **per-frame paint total** | **~1 ms** | well under 60 fps budget |
+| **idle (not recording)** | **0 ms** | nothing runs |
 
-A `defer { recorder?.cancel() }` in `streamWS` covers the
-WS-disconnects-mid-recording case. `cancel()` stops the screen
-subscription, asks AVAssetWriter to abort, and removes the partial
-file.
+Recording adds ~6% of one core for the compose loop, plus whatever
+the browser's VT/VPx encoder uses (typically hardware). The live
+view stays untouched — DOM bezel, DOM PinchOverlay, current paint
+cadence.
 
-## Frontend
+## Lifecycle on the page
 
 ### `sim-stream.js`
 
-A `recordingState` closure variable holds the per-stream lifecycle:
-
 ```js
-const recordingState = { active, startedAt, timer, entries };
-```
-
-`window._simToggleRecord` sends the verb. `handleServerText` reacts
-to the three lifecycle events. Optimistic UI flips the button to
-"Saving…" the moment the user clicks Stop, since
-`AVAssetWriter.finishWriting` can take a beat while it flushes the
-moov atom.
-
-Finished entries render below the Record button as styled download
-links — filename, duration, size — using the standard `download="…"`
-attribute so a click hits the recording route and saves the MP4.
-
-### `farm-focus.js`
-
-Mirrors the same lifecycle on the farm's focus pane. The toggle is a
-new `data-action="toggle-record"` button in the Stream Controls card;
-the entries surface in the same pane.
-
-`FarmTile` gained an `onText` callback in its `StreamSession`
-construction so per-tile JSON text frames bubble up. `FarmApp` routes
-them to `FarmFocus.handleServerText` only when the udid is the
-selected one — tiles in the grid don't surface a Record button (yet),
-so dropping their text frames keeps the dispatch trivial.
-
-### `stream-session.js`
-
-A small but load-bearing change: `socket.onmessage` now splits binary
-(→ decoder) from text (→ `onText` callback + log forwarding). Before
-this, server-pushed text events were getting parsed by the decoder's
-error fallback and silently dropped.
-
-```js
-socket.onmessage = (e) => {
-  if (e.data instanceof ArrayBuffer) { this.decoder.feed(e); return; }
-  try {
-    const obj = JSON.parse(e.data);
-    if (onText) onText(obj);
-    if ((obj.type === 'error' || obj.ok === false) && obj.error) log(obj.error, true);
-  } catch { /* not JSON; ignore */ }
+const recordingState = {
+  recorder, layout,
+  active, startedAt, timer, entries,
 };
 ```
 
+`startStream` caches the chrome layout into `recordingState.layout`.
+`_simToggleRecord` either constructs a `BrowserRecorder` from the
+existing `surface.canvas` / `surface.frameImg` / `pinchOverlay.container`
+references and calls `start()`, or stops the active one and pushes
+the artifact onto `entries`. `stopStream` cancels any in-flight
+recording and revokes Blob URLs to keep long sessions from leaking
+memory.
+
+### `farm-focus.js`
+
+The focus pane gets a recorder context closure from FarmApp:
+
+```js
+this.focus.show(device, tile, {
+  ...,
+  getRecorderContext: () => ({
+    canvas:      tile?.canvas || null,
+    frameImg:    focusScreen?.querySelector('img'),
+    layout:      this.chromeLayouts.get(udid) || null,
+    overlayHost: tile?.pinchOverlay?.container || null,
+  }),
+});
+```
+
+Re-evaluated on each Record press so a re-focus mid-session can't
+strand the recorder on a stale tile. The focus pane owns its own
+`recording` state slot.
+
+## Frontend module layout
+
+```
+Resources/Web/
+├── recorder.js           BrowserRecorder (this feature)
+├── stream-session.js     decode + paint loop (unchanged)
+├── frame-decoder.js      MJPEG / AVCC decoders (unchanged)
+├── device-frame.js       bezel chrome for the live view (unchanged)
+├── capture-gallery.js    one-shot screenshot composite (unchanged)
+├── sim-input.js          PinchOverlay + MouseGestureSource (unchanged)
+├── sim-stream.js         single-device orchestrator
+└── farm/
+    ├── farm-focus.js     focus pane
+    ├── farm-tile.js      per-device StreamSession
+    └── …
+```
+
+`recorder.js` is loaded by both `sim.html` and `farm/farm.html` via
+`<script src="/recorder.js">` — same pattern as the other shared
+modules.
+
+## Browser support
+
+| browser | container | notes |
+| --- | --- | --- |
+| Chrome 113+ | MP4 (H.264) or WebM (VP9) | preferred path |
+| Safari 14.1+ | MP4 (H.264) | works; isTypeSupported reports MP4 |
+| Firefox | WebM (VP9 / VP8) | no MP4 muxer |
+| Older / strict CSP | n/a | Record button hides itself when `MediaRecorder` is undefined |
+
 ## Testing approach
 
-The pure / value parts are Chicago-style state-tested:
+The recorder is a small JS module wired into two orchestrators
+(`sim-stream.js`, `farm-focus.js`). It's exercised manually via the
+live UI today; a future iteration could add a thin offscreen-canvas
+test (`puppeteer + headless captureStream` works) — not yet in the
+repo.
 
-| target | suite |
-|---|---|
-| `RecordingFormat`, `RecordingArtifact` | `RecordingArtifactTests` |
-| `RecordingControl.parse` | `RecordingControlTests` |
-| `RecordingsDirectory` (path traversal, resolution) | `RecordingsDirectoryTests` |
-
-`AVAssetWriterRecorder` is tested via integration — running a real
-simulator screen against it requires a booted device, which lands
-in the manual test plan rather than CI. Its pure helpers
-(`makePooledBuffer`, the configure-on-first-frame branch) are
-covered indirectly via end-to-end runs.
+There are no Swift Testing suites for recording: the server isn't
+involved.
 
 ## Known limits
 
-- **One recording per stream session.** Concurrent recordings against
-  the same WS aren't useful (you'd get two files of the same screen)
-  and aren't gated explicitly — `start_record` while already recording
-  is a no-op.
 - **No audio.** SimulatorKit exposes audio through a separate path
-  that isn't wired into the recorder yet.
-- **Dimensions fix on the first frame.** A simulator that rotates
-  mid-recording will produce a file with letterboxed orientation.
-  Detecting orientation changes and reconfiguring the writer mid-
-  stream is doable but not done.
-- **No cleanup policy.** Files persist for the life of the
-  `baguette serve` process, then `/var/folders` reaps them on the
-  OS's normal schedule. A `--recording-dir` override + LRU eviction
-  would be a small follow-up.
+  not surfaced here, and recording the simulator's audio output
+  would need a `MediaStreamAudioSourceNode` we don't currently have.
+- **Tap rings aren't drawn.** Only pinch / 2-finger gestures populate
+  PinchOverlay today, so single taps don't show in the recording.
+  Extending PinchOverlay to render a brief auto-fading dot for taps
+  is a small follow-up; the recorder picks them up automatically.
+- **Long recordings live in RAM.** The Blob accumulates `chunks` until
+  Stop. Multi-minute recordings at 1080p are fine; multi-hour ones
+  are not.
 
 ## Extension points
 
-- **New container format**: add a case to `RecordingFormat`; the
-  artifact metadata and download route already key off
-  `format.fileExtension`. AVAssetWriter supports `.mov` natively —
-  one settings tweak away.
-- **Audio track**: add a second `AVAssetWriterInput` for audio,
-  connected to a SimulatorKit audio capture. The MP4 muxer accepts
-  multi-track input; the recording protocol would gain
-  `start_record` options.
-- **Server-side region crop / scale**: AVAssetWriter accepts a
-  `transform` matrix on its input. Useful for "record without bezel"
-  or "record at half-resolution" — both wireable as start_record
-  options.
-- **Per-tile recording in the farm grid**: today only the focused
-  tile has a Record button. The wiring is the same — every
-  `FarmTile` already routes server text frames; surface a button
-  per tile and route the verb through `FarmTile.startRecord` /
-  `stopRecord`.
-
-## Surface deltas vs. live stream
-
-| concern | live stream | recorder |
-| --- | --- | --- |
-| screen subscription | one (owned by the stream) | parallel, owned by recorder |
-| encoder | per-format (MJPEG / VT H.264) | VT H.264 via AVAssetWriter |
-| bitrate / fps / scale | reconfigurable mid-stream | fixed for a recording session |
-| timestamps | n/a (live) | wall-clock PTS, 600 timescale |
-| keep-alive pump | yes (1/fps) | no — only real surfaces |
-| transport | binary WS frames | MP4 file on disk |
-| cleanup | WS close stops the stream | WS close cancels in-flight recording |
+- **More overlays.** The compose loop is one function per layer;
+  adding a frame counter, a watermark, or a region highlight is one
+  `ctx.draw…` call away.
+- **Bezel toggle on the recorder.** Today the recorder uses bezel
+  whenever `frameImg` and a chrome layout are passed. A "record
+  without bezel" toggle is a one-line condition in
+  `BrowserRecorder._paint`.
+- **CLI-issued record trigger.** The browser is the recorder, but a
+  WS verb the page listens for (`{type:"record"}` → click the button)
+  would let `baguette serve` start recordings remotely without user
+  interaction.
