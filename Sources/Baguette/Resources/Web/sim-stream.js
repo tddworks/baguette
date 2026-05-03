@@ -29,15 +29,21 @@
   let captureWithFrame = false;
   let lastPaintedSize = { w: 0, h: 0 };
 
-  // Recording state. The server runs ffmpeg with `-c copy` on the AVCC
-  // stream's H.264 NALs — no re-encode, near-zero CPU. UI flips between
-  // idle / recording on the start_record / stop_record verbs the
-  // server acknowledges back over the same WS as text frames.
-  //   state.active : true between record_started and record_finished
-  //   state.startedAt : ms timestamp for the live timer
-  //   state.timer : interval handle that ticks the toolbar label
-  //   state.entries : finished recordings (download links)
-  const recordingState = { active: false, startedAt: 0, timer: null, entries: [] };
+  // Recording state. BrowserRecorder spins up a compose canvas only
+  // while active; references are pulled from what's already on the
+  // page (frameImg from DeviceFrame, layout from chrome.json, pinch
+  // dots from PinchOverlay's DOM container). Idle cost: zero.
+  //   state.recorder    : BrowserRecorder instance during a recording
+  //   state.layout      : cached chrome layout (composite + screen rect)
+  //   state.active      : true between start() and stop()
+  //   state.startedAt   : ms timestamp for the live timer
+  //   state.timer       : interval handle that ticks the toolbar label
+  //   state.entries     : finished recordings (download links)
+  const recordingState = {
+    recorder: null, layout: null,
+    active: false, startedAt: 0, timer: null,
+    entries: [],
+  };
 
   // --- Helpers ---
   const escapeHTML = window.escapeHTML || ((s) => String(s).replace(/[&<>"']/g,
@@ -132,12 +138,16 @@
         if (el) el.textContent = fps + ' fps';
       },
       onLog: log,
-      onText: handleServerText,
     });
     session.start();
 
     wireInput(udid, frame.screenSize());
     wireKeyboard();
+
+    // Cache the chrome layout for the recorder. The bezel <img> and
+    // pinch overlay are already in the page; the recorder pulls them
+    // by reference at start-time, so nothing extra runs while idle.
+    recordingState.layout = layout;
 
     gallery = new window.CaptureGallery({
       udid, layout, frameImg: surface.frameImg,
@@ -147,6 +157,9 @@
   }
 
   function stopStream() {
+    if (recordingState.recorder) {
+      try { recordingState.recorder.cancel(); } catch { /* ignore */ }
+    }
     if (session) { session.stop(); session = null; }
     if (mouseSource) { mouseSource.detach(); mouseSource = null; }
     if (pinchOverlay) { pinchOverlay.clear(); pinchOverlay = null; }
@@ -283,40 +296,54 @@
   };
 
   // --- Recording ----------------------------------------------------
-  // Recording runs server-side as a parallel screen subscription that
-  // feeds AVAssetWriter (hardware H.264 → MP4). It's independent of
-  // whatever wire format the live stream is using, so the toggle
-  // works in MJPEG mode as well as AVCC.
-  window._simToggleRecord = () => {
-    if (!session) return;
+  // Browser-side recording: captureStream() the live decoded canvas
+  // and feed it to MediaRecorder. No server round-trip, no offscreen
+  // canvases — whatever's in the live canvas is what gets recorded.
+  window._simToggleRecord = async () => {
+    if (!surface) return;
+
     if (recordingState.active) {
-      // Optimistic UI: stop the live timer right away, swap label to
-      // "Saving…" — the server's record_finished may take a moment
-      // while AVAssetWriter flushes the moov atom.
-      // onRecordFinished/onRecordError flips us back to idle.
+      const rec = recordingState.recorder;
+      // Optimistic UI: clear the live timer the instant the user
+      // clicks Stop. MediaRecorder.stop fires onstop after the final
+      // chunk lands; that can take a beat for longer recordings.
       recordingState.active = false;
+      recordingState.recorder = null;
       if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
       const label = document.getElementById('simRecordLabel');
       const timer = document.getElementById('simRecordTimer');
-      const btn = document.getElementById('simRecordBtn');
+      const btn   = document.getElementById('simRecordBtn');
       if (label) label.textContent = 'Saving…';
       if (timer) timer.textContent = '';
-      if (btn) btn.classList.remove('recording');
-      session.send({ type: 'stop_record' });
+      if (btn)   btn.classList.remove('recording');
+      try {
+        const artifact = await rec.stop();
+        onRecordFinished(artifact);
+      } catch (err) {
+        onRecordError(err);
+      }
       return;
     }
-    session.send({ type: 'start_record' });
-  };
 
-  function handleServerText(obj) {
-    if (!obj || typeof obj.type !== 'string') return;
-    switch (obj.type) {
-      case 'record_started':  onRecordStarted();   break;
-      case 'record_finished': onRecordFinished(obj); break;
-      case 'record_error':    onRecordError(obj);  break;
-      default: break;
+    if (!window.BrowserRecorder || !window.BrowserRecorder.isAvailable()) {
+      log('Recording: MediaRecorder not available in this browser', true);
+      return;
     }
-  }
+    try {
+      const rec = new window.BrowserRecorder({
+        canvas:      surface.canvas,
+        frameImg:    surface.frameImg,
+        layout:      recordingState.layout,
+        overlayHost: pinchOverlay ? pinchOverlay.container : null,
+        fps: 60,
+      });
+      rec.start();
+      recordingState.recorder = rec;
+      onRecordStarted();
+    } catch (err) {
+      onRecordError(err);
+    }
+  };
 
   function onRecordStarted() {
     recordingState.active = true;
@@ -328,35 +355,34 @@
     log('Recording started');
   }
 
-  function onRecordFinished(obj) {
-    recordingState.active = false;
-    if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
+  function onRecordFinished(artifact) {
     updateRecordButton();
     updateRecordTimer();
-    if (obj && typeof obj.url === 'string') {
-      recordingState.entries.unshift({
-        url: obj.url,
-        filename: obj.filename || 'recording.mp4',
-        duration: typeof obj.duration === 'number' ? obj.duration : 0,
-        bytes:    typeof obj.bytes === 'number'    ? obj.bytes    : 0,
-      });
-      renderRecordList();
-      log(`Recorded ${formatBytes(obj.bytes)} (${formatDuration(obj.duration)})`);
-    }
+    if (!artifact || typeof artifact.url !== 'string') return;
+    recordingState.entries.unshift(artifact);
+    renderRecordList();
+    log(`Recorded ${formatBytes(artifact.bytes)} (${formatDuration(artifact.durationSeconds)})`);
   }
 
-  function onRecordError(obj) {
+  function onRecordError(err) {
     recordingState.active = false;
+    recordingState.recorder = null;
     if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
     updateRecordButton();
     updateRecordTimer();
-    log('Record: ' + ((obj && obj.error) || 'failed'), true);
+    log('Record: ' + (err && err.message ? err.message : 'failed'), true);
   }
 
   function resetRecordingUI() {
     recordingState.active = false;
+    recordingState.recorder = null;
+    recordingState.layout = null;
     recordingState.startedAt = 0;
     if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
+    // Free Blob URLs we own — keeps long sessions from leaking memory.
+    recordingState.entries.forEach((e) => {
+      if (e.url && e.url.startsWith('blob:')) URL.revokeObjectURL(e.url);
+    });
     recordingState.entries = [];
   }
 
@@ -382,7 +408,7 @@
     if (!recordingState.entries.length) { host.innerHTML = ''; return; }
     const head = `<div class="rec-head">Recordings (${recordingState.entries.length})</div>`;
     const rows = recordingState.entries.map((e) => `
-      <a href="${e.url}" download="${escapeHTML(e.filename)}" title="Download MP4">
+      <a href="${e.url}" download="${escapeHTML(e.filename)}" title="Download recording">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>${formatDuration(e.duration)}</span>
         <span class="rec-meta">${formatBytes(e.bytes)}</span>

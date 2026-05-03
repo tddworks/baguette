@@ -22,9 +22,13 @@
 
     // Recording state for the focused device. Reset every time `show`
     // (re)builds the focus pane — different device → different stream
-    // → no carry-over. The timer keeps the live label in sync without
-    // needing a per-frame redraw.
-    this.recording = { active: false, startedAt: 0, timer: null, entries: [] };
+    // → no carry-over. BrowserRecorder captureStream's the focused
+    // tile's live canvas; nothing else to stitch.
+    this.recording = {
+      recorder: null,
+      active: false, startedAt: 0, timer: null,
+      entries: [],
+    };
   }
 
   FarmFocus.prototype.show = function (device, tile, callbacks) {
@@ -90,7 +94,7 @@
           <button class="preset" data-action="shutdown">Shutdown</button>
           <button class="preset" data-action="restart">Restart</button>
         </div>
-        <button class="preset record-btn" data-action="toggle-record" style="margin-top:10px;width:100%" title="Record an MP4 (H.264 -c copy via ffmpeg)">
+        <button class="preset record-btn" data-action="toggle-record" style="margin-top:10px;width:100%" title="Record the focused view with bezel + touch overlay (saved locally)">
           <span class="record-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:6px"></span>
           <span data-readout="record-label">Record</span>
           <span data-readout="record-timer" style="margin-left:auto;font-variant-numeric:tabular-nums"></span>
@@ -138,30 +142,56 @@
       };
     });
 
-    // Recording toggle. The host (FarmApp) provides a sender that
-    // drops the verb on the device's WS — FarmFocus stays decoupled
-    // from FarmTile internals, so the same handler works whether the
-    // tile is in thumbnail or full mode.
-    this._sendRecord = callbacks.onRecord || (() => {});
+    // Recording toggle. The recorder lives client-side and composes
+    // bezel + screen + pinch overlay from existing page elements.
+    // `getRecorderContext` is a closure FarmApp passes in so a
+    // re-focus mid-recording can't strand the recorder on a stale tile.
+    this._getRecorderContext = callbacks.getRecorderContext || (() => null);
     const recBtn = this.host.querySelector('[data-action="toggle-record"]');
     if (recBtn) {
-      recBtn.onclick = () => {
-        if (this.recording.active) {
-          // Optimistic UI: hide the live timer immediately and swap
-          // to "Saving…" — finish() runs on a detached task so the
-          // record_finished frame may arrive a beat later.
-          this.recording.active = false;
-          if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
-          const label = this.host.querySelector('[data-readout="record-label"]');
-          const timer = this.host.querySelector('[data-readout="record-timer"]');
-          if (label) label.textContent = 'Saving…';
-          if (timer) timer.textContent = '';
-          recBtn.classList.remove('recording');
-          this._sendRecord('stop');
-        } else {
-          this._sendRecord('start');
-        }
-      };
+      recBtn.onclick = () => this._toggleRecord(recBtn);
+    }
+  };
+
+  FarmFocus.prototype._toggleRecord = async function (recBtn) {
+    if (this.recording.active) {
+      const rec = this.recording.recorder;
+      this.recording.active = false;
+      this.recording.recorder = null;
+      if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+      const label = this.host.querySelector('[data-readout="record-label"]');
+      const timer = this.host.querySelector('[data-readout="record-timer"]');
+      if (label) label.textContent = 'Saving…';
+      if (timer) timer.textContent = '';
+      recBtn.classList.remove('recording');
+      try {
+        const artifact = await rec.stop();
+        this._onRecordFinished(artifact);
+      } catch (err) {
+        this._onRecordError(err);
+      }
+      return;
+    }
+
+    if (!window.BrowserRecorder || !window.BrowserRecorder.isAvailable()) {
+      this._onRecordError(new Error('MediaRecorder not available'));
+      return;
+    }
+    const ctx = this._getRecorderContext();
+    if (!ctx || !ctx.canvas) { this._onRecordError(new Error('no live canvas')); return; }
+    try {
+      const rec = new window.BrowserRecorder({
+        canvas:      ctx.canvas,
+        frameImg:    ctx.frameImg,
+        layout:      ctx.layout,
+        overlayHost: ctx.overlayHost,
+        fps: 60,
+      });
+      rec.start();
+      this.recording.recorder = rec;
+      this._onRecordStarted();
+    } catch (err) {
+      this._onRecordError(err);
     }
   };
 
@@ -173,19 +203,6 @@
     if (this.brEl  && t.br  !== undefined) this.brEl.textContent  = t.br  + ' kbps';
   };
 
-  // Server-side recording lifecycle hooks. FarmApp routes WS text
-  // frames here via the per-device session — `record_started` /
-  // `record_finished` / `record_error`.
-  FarmFocus.prototype.handleServerText = function (obj) {
-    if (!obj || typeof obj.type !== 'string') return;
-    switch (obj.type) {
-      case 'record_started':  this._onRecordStarted();   break;
-      case 'record_finished': this._onRecordFinished(obj); break;
-      case 'record_error':    this._onRecordError(obj);  break;
-      default: break;
-    }
-  };
-
   FarmFocus.prototype._onRecordStarted = function () {
     this.recording.active = true;
     this.recording.startedAt = Date.now();
@@ -195,32 +212,42 @@
     this._renderRecordTimer();
   };
 
-  FarmFocus.prototype._onRecordFinished = function (obj) {
-    this.recording.active = false;
-    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+  FarmFocus.prototype._onRecordFinished = function (artifact) {
     this._renderRecordButton();
     this._renderRecordTimer();
-    if (obj && typeof obj.url === 'string') {
-      this.recording.entries.unshift({
-        url: obj.url,
-        filename: obj.filename || 'recording.mp4',
-        duration: typeof obj.duration === 'number' ? obj.duration : 0,
-        bytes:    typeof obj.bytes === 'number'    ? obj.bytes    : 0,
-      });
-      this._renderRecordList();
-    }
+    if (!artifact || typeof artifact.url !== 'string') return;
+    this.recording.entries.unshift({
+      url: artifact.url,
+      filename: artifact.filename || 'recording.webm',
+      duration: typeof artifact.durationSeconds === 'number' ? artifact.durationSeconds : 0,
+      bytes:    typeof artifact.bytes === 'number'           ? artifact.bytes           : 0,
+    });
+    this._renderRecordList();
   };
 
-  FarmFocus.prototype._onRecordError = function (_obj) {
+  FarmFocus.prototype._onRecordError = function (err) {
     this.recording.active = false;
+    this.recording.recorder = null;
     if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
     this._renderRecordButton();
     this._renderRecordTimer();
+    if (err && err.message) console.warn('[FarmFocus] record error:', err.message);
   };
 
   FarmFocus.prototype._resetRecording = function () {
-    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
-    this.recording = { active: false, startedAt: 0, timer: null, entries: [] };
+    if (this.recording.recorder) {
+      try { this.recording.recorder.cancel(); } catch { /* ignore */ }
+    }
+    if (this.recording.timer) clearInterval(this.recording.timer);
+    // Free Blob URLs the previous focus session created.
+    (this.recording.entries || []).forEach((e) => {
+      if (e.url && e.url.startsWith('blob:')) URL.revokeObjectURL(e.url);
+    });
+    this.recording = {
+      recorder: null,
+      active: false, startedAt: 0, timer: null,
+      entries: [],
+    };
     this._renderRecordButton();
     this._renderRecordTimer();
     this._renderRecordList();
@@ -246,7 +273,7 @@
     const host = this.host.querySelector('[data-readout="record-list"]');
     if (!host) return;
     host.innerHTML = this.recording.entries.map((e) => `
-      <a href="${e.url}" download="${esc(e.filename)}" title="Download MP4"
+      <a href="${e.url}" download="${esc(e.filename)}" title="Download recording"
          style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:inherit;font-size:11px;text-decoration:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>${esc(e.filename)}</span>
@@ -255,8 +282,7 @@
   };
 
   FarmFocus.prototype.dispose = function () {
-    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
-    this.recording = { active: false, startedAt: 0, timer: null, entries: [] };
+    this._resetRecording();
     this.host.innerHTML = '';
     if (window.FarmViews) window.FarmViews.renderFocusEmpty(this.host);
     this.tile = null;

@@ -29,10 +29,6 @@
     this.udid   = opts.device.udid;
     this.onTelemetry = opts.onTelemetry || (() => {});
     this.onSize      = opts.onSize      || (() => {});
-    /// Server → client JSON text frames (record_started / _finished /
-    /// _error). FarmApp routes them to the focus pane while a tile
-    /// is focused; quiet otherwise.
-    this.onText      = opts.onText      || (() => {});
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = 'width:100%;height:100%;display:block;background:#000';
     // Live mirror — a second canvas that's redrawn from `this.canvas`
@@ -232,7 +228,6 @@
         this.onTelemetry(this.udid, { fps });
       },
       onLog:  () => {},
-      onText: (obj) => this.onText(this.udid, obj),
     });
     this.session.start();
     this.mode = 'thumb';
@@ -346,8 +341,6 @@
 
   FarmTile.prototype.forceIdr  = function () { this.session?.send?.({ type: 'force_idr' }); };
   FarmTile.prototype.snapshot  = function () { this.session?.send?.({ type: 'snapshot' }); };
-  FarmTile.prototype.startRecord = function () { this.session?.send?.({ type: 'start_record' }); };
-  FarmTile.prototype.stopRecord  = function () { this.session?.send?.({ type: 'stop_record' });  };
 
   FarmTile.prototype.stop = function () {
     this.unwireInput();
