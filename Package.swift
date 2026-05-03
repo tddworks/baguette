@@ -2,16 +2,16 @@
 
 import PackageDescription
 
-let privateFrameworkFlags: [String] = [
-    "-F/Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks",
-    "-F/Library/Developer/PrivateFrameworks",
-]
-
-let rpathFlags: [String] = [
-    "-Xlinker", "-rpath", "-Xlinker", "/Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks",
-    "-Xlinker", "-rpath", "-Xlinker", "/Library/Developer/PrivateFrameworks",
-]
-
+// SimulatorKit + CoreSimulator are deliberately NOT linked here. Nothing
+// in Sources/ does `import SimulatorKit` / `import CoreSimulator` — the
+// Swift code reaches into them via `NSClassFromString` + `dlsym` (see
+// `CoreSimulators.loadFrameworks()` and `IndigoHIDInput.warmUp()`),
+// after discovering the active Xcode through `xcode-select -p`.
+//
+// Linking them at build time would bake LC_LOAD_DYLIB entries that dyld
+// must resolve before `main()` runs, which fails for users whose Xcode
+// lives anywhere other than `/Applications/Xcode.app` (issue #1). The
+// runtime dlopen path already handles every install location correctly.
 let package = Package(
     name: "Baguette",
     platforms: [.macOS(.v15)],
@@ -41,14 +41,10 @@ let package = Package(
                 .copy("Resources/Web"),
             ],
             swiftSettings: [
-                .unsafeFlags(privateFrameworkFlags),
                 // MOCKING is debug-only; release strips mock code entirely.
                 .define("MOCKING", .when(configuration: .debug)),
             ],
             linkerSettings: [
-                .unsafeFlags(privateFrameworkFlags + rpathFlags),
-                .linkedFramework("CoreSimulator"),
-                .linkedFramework("SimulatorKit"),
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),
