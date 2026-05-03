@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.61] - 2026-05-03
+
 ### Fixed
 - **`baguette serve` no longer fails to launch when Xcode lives outside `/Applications/Xcode.app`** ([#1](https://github.com/tddworks/baguette/issues/1)). Two layers:
   - **Link-time:** `Package.swift` was declaring `SimulatorKit` and `CoreSimulator` as `linkedFramework`s, which baked LC_LOAD_DYLIB entries that dyld had to resolve before `main()` ran — and the rpaths it baked alongside them only matched `/Applications/Xcode.app`. Users with Xcode at e.g. `/Applications/Xcode_26.app` got `Library not loaded: @rpath/SimulatorKit.framework` and an immediate abort. Nothing in `Sources/` actually `import`s either framework, so the entries (and their rpath / `-F` flags) are gone; the binary now starts cleanly anywhere.
@@ -53,7 +57,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.61...HEAD
+[0.1.61]: https://github.com/tddworks/baguette/compare/v0.1.6...v0.1.61
 [0.1.6]: https://github.com/tddworks/baguette/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tddworks/baguette/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tddworks/baguette/compare/v0.1.1...v0.1.4
