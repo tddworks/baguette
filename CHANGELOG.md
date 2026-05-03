@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.4] - 2026-05-03
+
 ### Added
 - **Device farm — interactive multi-device control surface served by `baguette serve`.** A standalone web UI that streams every booted simulator side-by-side, with filtering, sorting, wall / list view modes, and live telemetry per tile. Pieces:
   - **Bezel display mode** with `DeviceFrame` integration; falls back to **9-slice bezel composition** when a device has no packaged frame asset. Chrome buttons can layer above the viewport via `onTop` z-order.
@@ -26,4 +30,5 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/tddworks/baguette/compare/v0.1.1...v0.1.4
