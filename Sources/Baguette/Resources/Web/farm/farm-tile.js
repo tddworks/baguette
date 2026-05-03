@@ -165,19 +165,41 @@
       // bounds, screenArea percentages map onto the real bezel hole,
       // and the canvas fills the device's true screen aspect.
       const wrapper = host.firstElementChild;
+      const bezelImg = wrapper && wrapper.querySelector('img');
+      // DeviceFrame's inline style includes `max-height: 70vh` for the
+      // single-device page where the host is otherwise unconstrained.
+      // In the farm the wrapper carries explicit pixel dimensions, so
+      // the 70vh fights the layout: when the viewport is shorter than
+      // the wrapper, the image clamps below wrapper height, the screen
+      // rect (% of wrapper) drifts off the bezel cutout. Override here.
+      if (bezelImg) {
+        bezelImg.style.maxHeight = '100%';
+        bezelImg.style.maxWidth  = '100%';
+      }
       if (wrapper && layout && layout.composite &&
           layout.composite.width && layout.composite.height) {
-        const r = host.getBoundingClientRect();
-        const maxW = r.width  || host.clientWidth  || 232;
-        const maxH = r.height || host.clientHeight || 320;
         const ratio = layout.composite.width / layout.composite.height;
-        // Fit-inside: pick the dimension where both bounds satisfy.
-        let w = maxH * ratio, h = maxH;
-        if (w > maxW) { w = maxW; h = maxW / ratio; }
-        wrapper.style.width  = w + 'px';
-        wrapper.style.height = h + 'px';
-        wrapper.style.maxWidth  = 'none';
-        wrapper.style.maxHeight = 'none';
+        // Fit the wrapper inside the host while preserving the
+        // composite's aspect ratio. Re-runs on host resize via the
+        // ResizeObserver below so window zoom / focus-pane resize
+        // keeps the bezel + screen rect aligned.
+        const fit = () => {
+          const r = host.getBoundingClientRect();
+          const maxW = r.width  || host.clientWidth  || 232;
+          const maxH = r.height || host.clientHeight || 320;
+          let w = maxH * ratio, h = maxH;
+          if (w > maxW) { w = maxW; h = maxW / ratio; }
+          wrapper.style.width  = w + 'px';
+          wrapper.style.height = h + 'px';
+          wrapper.style.maxWidth  = 'none';
+          wrapper.style.maxHeight = 'none';
+        };
+        fit();
+        if (this._fitObserver) this._fitObserver.disconnect();
+        if (typeof ResizeObserver !== 'undefined') {
+          this._fitObserver = new ResizeObserver(fit);
+          this._fitObserver.observe(host);
+        }
       }
       host.dataset.bezelMounted = 'yes';
       host.dataset.activeKind = element.tagName;
@@ -344,6 +366,7 @@
   FarmTile.prototype.stop = function () {
     this.unwireInput();
     this._stopMirrorCopy();
+    if (this._fitObserver) { this._fitObserver.disconnect(); this._fitObserver = null; }
     if (this.session) { this.session.stop(); this.session = null; }
     this.mode = 'idle';
     if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
