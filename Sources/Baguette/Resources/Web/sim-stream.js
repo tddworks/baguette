@@ -29,6 +29,16 @@
   let captureWithFrame = false;
   let lastPaintedSize = { w: 0, h: 0 };
 
+  // Recording state. The server runs ffmpeg with `-c copy` on the AVCC
+  // stream's H.264 NALs — no re-encode, near-zero CPU. UI flips between
+  // idle / recording on the start_record / stop_record verbs the
+  // server acknowledges back over the same WS as text frames.
+  //   state.active : true between record_started and record_finished
+  //   state.startedAt : ms timestamp for the live timer
+  //   state.timer : interval handle that ticks the toolbar label
+  //   state.entries : finished recordings (download links)
+  const recordingState = { active: false, startedAt: 0, timer: null, entries: [] };
+
   // --- Helpers ---
   const escapeHTML = window.escapeHTML || ((s) => String(s).replace(/[&<>"']/g,
     (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])));
@@ -122,6 +132,7 @@
         if (el) el.textContent = fps + ' fps';
       },
       onLog: log,
+      onText: handleServerText,
     });
     session.start();
 
@@ -145,6 +156,7 @@
     gallery = null;
     activeUdid = null;
     activeName = null;
+    resetRecordingUI();
 
     const view = document.getElementById('simPluginView');
     if (view) { view.style.display = 'none'; view.innerHTML = ''; }
@@ -269,6 +281,119 @@
       log('Capture failed', true);
     }
   };
+
+  // --- Recording ----------------------------------------------------
+  // Toggle handler bound to the Record button. The server side runs
+  // ffmpeg with `-c copy`, so this only works when the active stream
+  // format is `avcc` — pickFormat() persists the user's choice in
+  // localStorage; on `mjpeg` we point the user at the format toggle
+  // rather than firing a verb the server would reject.
+  window._simToggleRecord = () => {
+    if (!session) return;
+    if (recordingState.active) {
+      session.send({ type: 'stop_record' });
+      return;
+    }
+    if (localStorage.getItem('asc.simFormat') === 'mjpeg') {
+      log('Recording requires H.264 — switch the format above.', true);
+      return;
+    }
+    session.send({ type: 'start_record' });
+  };
+
+  function handleServerText(obj) {
+    if (!obj || typeof obj.type !== 'string') return;
+    switch (obj.type) {
+      case 'record_started':  onRecordStarted();   break;
+      case 'record_finished': onRecordFinished(obj); break;
+      case 'record_error':    onRecordError(obj);  break;
+      default: break;
+    }
+  }
+
+  function onRecordStarted() {
+    recordingState.active = true;
+    recordingState.startedAt = Date.now();
+    if (recordingState.timer) clearInterval(recordingState.timer);
+    recordingState.timer = setInterval(updateRecordTimer, 250);
+    updateRecordButton();
+    updateRecordTimer();
+    log('Recording started');
+  }
+
+  function onRecordFinished(obj) {
+    recordingState.active = false;
+    if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
+    updateRecordButton();
+    updateRecordTimer();
+    if (obj && typeof obj.url === 'string') {
+      recordingState.entries.unshift({
+        url: obj.url,
+        filename: obj.filename || 'recording.mp4',
+        duration: typeof obj.duration === 'number' ? obj.duration : 0,
+        bytes:    typeof obj.bytes === 'number'    ? obj.bytes    : 0,
+      });
+      renderRecordList();
+      log(`Recorded ${formatBytes(obj.bytes)} (${formatDuration(obj.duration)})`);
+    }
+  }
+
+  function onRecordError(obj) {
+    recordingState.active = false;
+    if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
+    updateRecordButton();
+    updateRecordTimer();
+    log('Record: ' + ((obj && obj.error) || 'failed'), true);
+  }
+
+  function resetRecordingUI() {
+    recordingState.active = false;
+    recordingState.startedAt = 0;
+    if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
+    recordingState.entries = [];
+  }
+
+  function updateRecordButton() {
+    const btn = document.getElementById('simRecordBtn');
+    const label = document.getElementById('simRecordLabel');
+    if (!btn || !label) return;
+    btn.classList.toggle('recording', recordingState.active);
+    label.textContent = recordingState.active ? 'Stop' : 'Record';
+  }
+
+  function updateRecordTimer() {
+    const el = document.getElementById('simRecordTimer');
+    if (!el) return;
+    if (!recordingState.active) { el.textContent = ''; return; }
+    const elapsed = (Date.now() - recordingState.startedAt) / 1000;
+    el.textContent = formatDuration(elapsed);
+  }
+
+  function renderRecordList() {
+    const host = document.getElementById('simRecordList');
+    if (!host) return;
+    host.innerHTML = recordingState.entries.map((e) => `
+      <a href="${e.url}" download="${escapeHTML(e.filename)}" title="Download MP4">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>${escapeHTML(e.filename)}</span>
+        <span class="rec-meta">${formatDuration(e.duration)} · ${formatBytes(e.bytes)}</span>
+      </a>`).join('');
+  }
+
+  function formatDuration(seconds) {
+    if (!isFinite(seconds) || seconds < 0) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes < 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let n = bytes, i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(n < 10 && i ? 1 : 0)} ${units[i]}`;
+  }
 
   // SimInput → Baguette wire-format translator. SimInput's payload
   // uses the asc-cli plugin's dialect; Baguette's GestureRegistry

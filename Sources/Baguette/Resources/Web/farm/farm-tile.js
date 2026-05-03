@@ -29,6 +29,10 @@
     this.udid   = opts.device.udid;
     this.onTelemetry = opts.onTelemetry || (() => {});
     this.onSize      = opts.onSize      || (() => {});
+    /// Server → client JSON text frames (record_started / _finished /
+    /// _error). FarmApp routes them to the focus pane while a tile
+    /// is focused; quiet otherwise.
+    this.onText      = opts.onText      || (() => {});
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = 'width:100%;height:100%;display:block;background:#000';
     // Live mirror — a second canvas that's redrawn from `this.canvas`
@@ -205,7 +209,13 @@
     if (this.session || this.device.uiState !== 'live') return;
     this.session = new window.StreamSession({
       udid:   this.udid,
-      format: 'mjpeg',           // MJPEG decodes anywhere — H.264/AVCC needs WebCodecs.
+      // Recording requires the server's H.264 NAL tap, which only
+      // exists for the AVCC pipeline (`-c copy` muxes those into MP4
+      // without a re-encode). MJPEG would need a full transcode.
+      // Default to AVCC where the browser supports it; fall back to
+      // MJPEG otherwise.
+      format: (window.FrameDecoder && window.FrameDecoder.isHardwareAvailable())
+        ? 'avcc' : 'mjpeg',
       version: 'v2',
       canvas: this.canvas,
       onSize: (w, h) => {
@@ -221,7 +231,8 @@
         this.lastFps = fps;
         this.onTelemetry(this.udid, { fps });
       },
-      onLog:  () => {}
+      onLog:  () => {},
+      onText: (obj) => this.onText(this.udid, obj),
     });
     this.session.start();
     this.mode = 'thumb';
@@ -335,6 +346,8 @@
 
   FarmTile.prototype.forceIdr  = function () { this.session?.send?.({ type: 'force_idr' }); };
   FarmTile.prototype.snapshot  = function () { this.session?.send?.({ type: 'snapshot' }); };
+  FarmTile.prototype.startRecord = function () { this.session?.send?.({ type: 'start_record' }); };
+  FarmTile.prototype.stopRecord  = function () { this.session?.send?.({ type: 'stop_record' });  };
 
   FarmTile.prototype.stop = function () {
     this.unwireInput();

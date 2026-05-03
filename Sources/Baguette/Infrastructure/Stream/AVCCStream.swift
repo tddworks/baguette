@@ -25,6 +25,12 @@ final class AVCCStream: Stream, @unchecked Sendable {
     /// Pre-armed at start so the first surface emits a JPEG seed; later
     /// flips back on via `requestSnapshot()`.
     private var pendingSeedSnapshot = true
+    /// Optional recorder that taps the encoder output. Nil unless the
+    /// caller has invoked `attach(recorder:)`. Holds a reference rather
+    /// than owning the lifecycle — Server creates / finishes the
+    /// recorder around the WS verbs so the stream stays oblivious to
+    /// where the bytes land.
+    private var recorder: (any H264Recorder)?
 
     init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
         self.config = config
@@ -85,6 +91,23 @@ final class AVCCStream: Stream, @unchecked Sendable {
     func requestKeyframe() { pendingForceKeyframe = true }
     func requestSnapshot() { pendingSeedSnapshot = true }
 
+    /// Subscribe a recorder to the encoder's output. Forces the next
+    /// frame to be an IDR + description so the recording starts on a
+    /// clean seek point — without this the recorder would queue deltas
+    /// it has no parameter sets for, and ffmpeg would drop them.
+    func attach(recorder: any H264Recorder) {
+        queue.async { [weak self] in
+            self?.recorder = recorder
+            self?.pendingForceKeyframe = true
+        }
+    }
+
+    /// Detach the recorder. Caller is responsible for finishing /
+    /// cancelling it — this only stops the tee.
+    func detachRecorder() {
+        queue.async { [weak self] in self?.recorder = nil }
+    }
+
     private func handle(_ surface: IOSurface) {
         queue.async { [weak self] in
             self?.lastSurface = surface
@@ -113,10 +136,26 @@ final class AVCCStream: Stream, @unchecked Sendable {
     private func write(_ encoded: H264Encoder.Encoded) {
         if let description = encoded.description {
             sink.write(AVCCEnvelope.description(avcc: description))
+            recorder?.write(description: description)
         }
         switch encoded.kind {
-        case .keyframe: sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))
-        case .delta:    sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
+        case .keyframe:
+            sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))
+            recorder?.write(keyframe: encoded.avcc)
+        case .delta:
+            sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
+            recorder?.write(delta: encoded.avcc)
         }
     }
 }
+
+/// Marker protocol the Server uses to discover whether a `Stream` impl
+/// can host a recorder. AVCCStream conforms; MJPEGStream doesn't,
+/// because re-muxing MJPEG into MP4 would mean a full re-encode and
+/// defeats the whole "tap the existing H.264 NALs" premise.
+protocol RecordableStream: AnyObject {
+    func attach(recorder: any H264Recorder)
+    func detachRecorder()
+}
+
+extension AVCCStream: RecordableStream {}

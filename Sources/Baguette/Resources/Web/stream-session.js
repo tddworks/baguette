@@ -9,6 +9,9 @@
 //     onSize: (w, h) => …,    // first frame + on resize
 //     onFps:  (fps) => …,     // every second
 //     onLog:  (msg, isErr) => …,
+//     onText: (obj) => …,     // server → client JSON text frames
+//                             //   (record_started / record_finished /
+//                             //    record_error). Optional.
 //   });
 //   session.start();
 //   // …
@@ -31,7 +34,7 @@
   }
 
   StreamSession.prototype.start = function () {
-    const { udid, format, version, canvas, onSize, onFps, onLog } = this.opts;
+    const { udid, format, version, canvas, onSize, onFps, onLog, onText } = this.opts;
     const ctx = canvas.getContext('2d');
     const log = onLog || (() => {});
 
@@ -63,7 +66,23 @@
     });
 
     socket.onopen    = () => log('WS connected');
-    socket.onmessage = (e) => this.decoder.feed(e);
+    socket.onmessage = (e) => {
+      // Binary → frame decoder. Text → JSON dispatch (record_*,
+      // server-side errors). Without the split, custom server-pushed
+      // events were getting parsed by the decoder's error fallback and
+      // silently dropped.
+      if (e.data instanceof ArrayBuffer) {
+        this.decoder.feed(e);
+        return;
+      }
+      try {
+        const obj = JSON.parse(e.data);
+        if (onText) onText(obj);
+        if ((obj.type === 'error' || obj.ok === false) && obj.error) {
+          log(obj.error, true);
+        }
+      } catch { /* not JSON; ignore */ }
+    };
     socket.onclose   = () => { log('WS disconnected'); this.alive = false; this.ws = null; };
     socket.onerror   = () => log('WS error', true);
 

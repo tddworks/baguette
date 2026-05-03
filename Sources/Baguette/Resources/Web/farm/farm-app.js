@@ -179,7 +179,8 @@
       if (d.uiState === 'live' && !this.tiles.has(d.udid)) {
         const tile = new window.FarmTile({
           device: d,
-          onTelemetry: (udid, t) => this.onTileTelemetry(udid, t)
+          onTelemetry: (udid, t) => this.onTileTelemetry(udid, t),
+          onText: (udid, obj) => this.onTileText(udid, obj)
         });
         this.tiles.set(d.udid, tile);
         tile.start();
@@ -257,7 +258,11 @@
       onClose: () => this.clearFocus(),
       onOpenTab: (d) => window.open(`/simulators/${encodeURIComponent(d.udid)}`, '_blank'),
       onLifecycle: (d, action) => this.runAction(d.udid, action),
-      onButton: (name) => tile?.button(name)
+      onButton: (name) => tile?.button(name),
+      onRecord: (verb) => {
+        if (verb === 'start') tile?.startRecord();
+        if (verb === 'stop')  tile?.stopRecord();
+      }
     });
     // Selection only affects two things — the highlight class on the
     // grid tile, and the focus pane content. The grid canvas keeps
@@ -297,6 +302,19 @@
     this.selectedUdid = null;
     if (this.focus) { this.focus.dispose(); }
     this.applySelectionHighlight();
+  };
+
+  // ---- per-tile server text frames → focus pane ---------------------
+  // Today the only server-pushed text frames are the recording
+  // lifecycle events (record_started / record_finished / record_error).
+  // They're routed through to the focus pane only when this udid is
+  // the selected one; tiles in the grid don't surface a Record button
+  // yet, so dropping their text frames keeps the rest of the system
+  // simple.
+  FarmApp.prototype.onTileText = function (udid, obj) {
+    if (this.selectedUdid === udid && this.focus) {
+      this.focus.handleServerText(obj);
+    }
   };
 
   // ---- per-tile telemetry → fleet aggregate -------------------------

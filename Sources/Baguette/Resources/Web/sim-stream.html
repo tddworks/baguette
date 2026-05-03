@@ -93,6 +93,12 @@
     #simStreamSidebar details.events[open] > summary::after{transform:rotate(90deg)}
     #simStreamSidebar details.events:not([open]) > summary{border-bottom:none}
     #simStreamSidebar details.events[open] > summary{border-bottom:1px solid var(--border)}
+    #simStreamSidebar #simRecordBtn.recording{background:var(--danger,#b91c1c);border-color:var(--danger,#b91c1c);color:#fff}
+    #simStreamSidebar #simRecordBtn.recording svg{color:#fff;animation:simRecPulse 1.2s ease-in-out infinite}
+    @keyframes simRecPulse{0%,100%{opacity:1}50%{opacity:.4}}
+    #simStreamSidebar #simRecordList a{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:#f1f5f9;border:1px solid var(--border);color:var(--text);font-size:11px;text-decoration:none}
+    #simStreamSidebar #simRecordList a:hover{background:#e2e8f0}
+    #simStreamSidebar #simRecordList a .rec-meta{color:var(--text-muted);font-variant-numeric:tabular-nums;margin-left:auto}
 
     /* Responsive — sidebar collapses to grid / single column on narrow
        widths. Moved here from sim-stream.js so the rules arrive with the
@@ -246,6 +252,12 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             Take screenshot
           </button>
+          <button id="simRecordBtn" class="btn btn-sm" onclick="window._simToggleRecord()" style="width:100%" title="Record an MP4 of the live stream (H.264 -c copy via ffmpeg)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>
+            <span id="simRecordLabel">Record</span>
+            <span id="simRecordTimer" style="font-variant-numeric:tabular-nums;color:var(--text-muted);font-size:11px;margin-left:4px"></span>
+          </button>
+          <div id="simRecordList" style="display:flex;flex-direction:column;gap:4px"></div>
           <div id="simCaptureGallery" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px">
             <div style="color:var(--text-muted);font-size:11px;padding:4px 2px">No captures yet</div>
           </div>
@@ -271,7 +283,7 @@
     document.body.classList.add('preview');
 
     // Stub server-bound handlers so interacting with the preview doesn't throw.
-    ['_simStopStream','_simButton','_simSendText','_simKey','_simSetQuality','_simSetFormat','_simCapture','_simToggleFrame']
+    ['_simStopStream','_simButton','_simSendText','_simKey','_simSetQuality','_simSetFormat','_simCapture','_simToggleFrame','_simToggleRecord']
       .forEach(function(name){
         window[name] = function(){ console.log('[preview]', name, arguments); };
       });

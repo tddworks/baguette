@@ -19,6 +19,12 @@
     this.fpsEl = null;
     this.latEl = null;
     this.brEl  = null;
+
+    // Recording state for the focused device. Reset every time `show`
+    // (re)builds the focus pane — different device → different stream
+    // → no carry-over. The timer keeps the live label in sync without
+    // needing a per-frame redraw.
+    this.recording = { active: false, startedAt: 0, timer: null, entries: [] };
   }
 
   FarmFocus.prototype.show = function (device, tile, callbacks) {
@@ -84,6 +90,12 @@
           <button class="preset" data-action="shutdown">Shutdown</button>
           <button class="preset" data-action="restart">Restart</button>
         </div>
+        <button class="preset record-btn" data-action="toggle-record" style="margin-top:10px;width:100%" title="Record an MP4 (H.264 -c copy via ffmpeg)">
+          <span class="record-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:6px"></span>
+          <span data-readout="record-label">Record</span>
+          <span data-readout="record-timer" style="margin-left:auto;font-variant-numeric:tabular-nums"></span>
+        </button>
+        <div data-readout="record-list" class="record-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
       </div>`;
 
     // FarmApp re-parents the live canvas into `previewScreen` after
@@ -94,6 +106,7 @@
     this.fpsEl = this.host.querySelector('[data-readout="fps"]');
     this.latEl = this.host.querySelector('[data-readout="lat"]');
     this.brEl  = this.host.querySelector('[data-readout="br"]');
+    this._resetRecording();
 
     // Wire actions back to the orchestrator.
     this.host.querySelector('[data-action="close"]').onclick     = () => callbacks.onClose();
@@ -124,6 +137,22 @@
         if (name) callbacks.onButton?.(name);
       };
     });
+
+    // Recording toggle. The host (FarmApp) provides a sender that
+    // drops the verb on the device's WS — FarmFocus stays decoupled
+    // from FarmTile internals, so the same handler works whether the
+    // tile is in thumbnail or full mode.
+    this._sendRecord = callbacks.onRecord || (() => {});
+    const recBtn = this.host.querySelector('[data-action="toggle-record"]');
+    if (recBtn) {
+      recBtn.onclick = () => {
+        if (this.recording.active) {
+          this._sendRecord('stop');
+        } else {
+          this._sendRecord('start');
+        }
+      };
+    }
   };
 
   // FarmApp pumps per-tile telemetry here — keeps the gauges live
@@ -134,12 +163,110 @@
     if (this.brEl  && t.br  !== undefined) this.brEl.textContent  = t.br  + ' kbps';
   };
 
+  // Server-side recording lifecycle hooks. FarmApp routes WS text
+  // frames here via the per-device session — `record_started` /
+  // `record_finished` / `record_error`.
+  FarmFocus.prototype.handleServerText = function (obj) {
+    if (!obj || typeof obj.type !== 'string') return;
+    switch (obj.type) {
+      case 'record_started':  this._onRecordStarted();   break;
+      case 'record_finished': this._onRecordFinished(obj); break;
+      case 'record_error':    this._onRecordError(obj);  break;
+      default: break;
+    }
+  };
+
+  FarmFocus.prototype._onRecordStarted = function () {
+    this.recording.active = true;
+    this.recording.startedAt = Date.now();
+    if (this.recording.timer) clearInterval(this.recording.timer);
+    this.recording.timer = setInterval(() => this._renderRecordTimer(), 250);
+    this._renderRecordButton();
+    this._renderRecordTimer();
+  };
+
+  FarmFocus.prototype._onRecordFinished = function (obj) {
+    this.recording.active = false;
+    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+    this._renderRecordButton();
+    this._renderRecordTimer();
+    if (obj && typeof obj.url === 'string') {
+      this.recording.entries.unshift({
+        url: obj.url,
+        filename: obj.filename || 'recording.mp4',
+        duration: typeof obj.duration === 'number' ? obj.duration : 0,
+        bytes:    typeof obj.bytes === 'number'    ? obj.bytes    : 0,
+      });
+      this._renderRecordList();
+    }
+  };
+
+  FarmFocus.prototype._onRecordError = function (_obj) {
+    this.recording.active = false;
+    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+    this._renderRecordButton();
+    this._renderRecordTimer();
+  };
+
+  FarmFocus.prototype._resetRecording = function () {
+    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+    this.recording = { active: false, startedAt: 0, timer: null, entries: [] };
+    this._renderRecordButton();
+    this._renderRecordTimer();
+    this._renderRecordList();
+  };
+
+  FarmFocus.prototype._renderRecordButton = function () {
+    const btn = this.host.querySelector('[data-action="toggle-record"]');
+    const label = this.host.querySelector('[data-readout="record-label"]');
+    if (!btn || !label) return;
+    btn.classList.toggle('recording', this.recording.active);
+    label.textContent = this.recording.active ? 'Stop' : 'Record';
+  };
+
+  FarmFocus.prototype._renderRecordTimer = function () {
+    const el = this.host.querySelector('[data-readout="record-timer"]');
+    if (!el) return;
+    if (!this.recording.active) { el.textContent = ''; return; }
+    const sec = (Date.now() - this.recording.startedAt) / 1000;
+    el.textContent = formatDuration(sec);
+  };
+
+  FarmFocus.prototype._renderRecordList = function () {
+    const host = this.host.querySelector('[data-readout="record-list"]');
+    if (!host) return;
+    host.innerHTML = this.recording.entries.map((e) => `
+      <a href="${e.url}" download="${esc(e.filename)}" title="Download MP4"
+         style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:inherit;font-size:11px;text-decoration:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>${esc(e.filename)}</span>
+        <span style="margin-left:auto;color:var(--text-muted,#888);font-variant-numeric:tabular-nums">${formatDuration(e.duration)} · ${formatBytes(e.bytes)}</span>
+      </a>`).join('');
+  };
+
   FarmFocus.prototype.dispose = function () {
+    if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+    this.recording = { active: false, startedAt: 0, timer: null, entries: [] };
     this.host.innerHTML = '';
     if (window.FarmViews) window.FarmViews.renderFocusEmpty(this.host);
     this.tile = null;
     this.device = null;
   };
+
+  function formatDuration(seconds) {
+    if (!isFinite(seconds) || seconds < 0) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes < 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let n = bytes, i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return n.toFixed(n < 10 && i ? 1 : 0) + ' ' + units[i];
+  }
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c =>
