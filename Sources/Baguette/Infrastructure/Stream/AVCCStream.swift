@@ -25,27 +25,6 @@ final class AVCCStream: Stream, @unchecked Sendable {
     /// Pre-armed at start so the first surface emits a JPEG seed; later
     /// flips back on via `requestSnapshot()`.
     private var pendingSeedSnapshot = true
-    /// Optional recorder that taps the encoder output. Nil unless the
-    /// caller has invoked `attach(recorder:)`. Holds a reference rather
-    /// than owning the lifecycle — Server creates / finishes the
-    /// recorder around the WS verbs so the stream stays oblivious to
-    /// where the bytes land.
-    ///
-    /// Read from VT's onEncoded callback (a different queue), so guard
-    /// every access with `recorderLock`. Without the lock, the very
-    /// first description / IDR right after attach() can land on the WS
-    /// thread before `self.recorder = recorder` is visible — which is
-    /// exactly the frame the recorder needs to spawn ffmpeg.
-    private var recorder: (any H264Recorder)?
-    private let recorderLock = NSLock()
-    /// Most recent avcC parameter-set blob seen on this encoder session.
-    /// `H264Encoder` emits a description exactly once per session (on
-    /// the very first IDR), so by the time a recorder attaches mid-
-    /// stream the description is long gone. Caching it lets us replay
-    /// it on attach so the recorder's AnnexBAssembler can prime its
-    /// SPS/PPS preamble; without it, no keyframe ever makes it past
-    /// the assembler and ffmpeg never spawns.
-    private var cachedDescription: Data?
 
     init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
         self.config = config
@@ -106,39 +85,6 @@ final class AVCCStream: Stream, @unchecked Sendable {
     func requestKeyframe() { pendingForceKeyframe = true }
     func requestSnapshot() { pendingSeedSnapshot = true }
 
-    /// Subscribe a recorder to the encoder's output. Forces the next
-    /// frame to be an IDR so the recording starts on a clean seek
-    /// point, and replays the cached avcC description so the recorder
-    /// has SPS/PPS before the keyframe arrives. `H264Encoder` only
-    /// emits description once per session, so without the replay the
-    /// recorder never primes its AnnexBAssembler and ffmpeg never
-    /// spawns. Synchronous — the recorder must be visible to VT's
-    /// encoder callback before the next frame fires.
-    func attach(recorder: any H264Recorder) {
-        recorderLock.lock()
-        self.recorder = recorder
-        let cached = cachedDescription
-        recorderLock.unlock()
-        if let cached { recorder.write(description: cached) }
-        queue.async { [weak self] in self?.pendingForceKeyframe = true }
-    }
-
-    /// Detach the recorder. Caller is responsible for finishing /
-    /// cancelling it — this only stops the tee.
-    func detachRecorder() {
-        recorderLock.lock()
-        self.recorder = nil
-        recorderLock.unlock()
-    }
-
-    /// Snapshot the current recorder under the lock — VT's encoder
-    /// queue calls this once per encoded frame, so we keep the lock
-    /// hold trivial and do the actual `write()` calls outside it.
-    private func currentRecorder() -> (any H264Recorder)? {
-        recorderLock.lock(); defer { recorderLock.unlock() }
-        return recorder
-    }
-
     private func handle(_ surface: IOSurface) {
         queue.async { [weak self] in
             self?.lastSurface = surface
@@ -166,33 +112,11 @@ final class AVCCStream: Stream, @unchecked Sendable {
 
     private func write(_ encoded: H264Encoder.Encoded) {
         if let description = encoded.description {
-            recorderLock.lock()
-            cachedDescription = description
-            recorderLock.unlock()
             sink.write(AVCCEnvelope.description(avcc: description))
         }
-        let activeRecorder = currentRecorder()
-        if let description = encoded.description {
-            activeRecorder?.write(description: description)
-        }
         switch encoded.kind {
-        case .keyframe:
-            sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))
-            activeRecorder?.write(keyframe: encoded.avcc)
-        case .delta:
-            sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
-            activeRecorder?.write(delta: encoded.avcc)
+        case .keyframe: sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))
+        case .delta:    sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
         }
     }
 }
-
-/// Marker protocol the Server uses to discover whether a `Stream` impl
-/// can host a recorder. AVCCStream conforms; MJPEGStream doesn't,
-/// because re-muxing MJPEG into MP4 would mean a full re-encode and
-/// defeats the whole "tap the existing H.264 NALs" premise.
-protocol RecordableStream: AnyObject {
-    func attach(recorder: any H264Recorder)
-    func detachRecorder()
-}
-
-extension AVCCStream: RecordableStream {}

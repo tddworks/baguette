@@ -283,18 +283,17 @@
   };
 
   // --- Recording ----------------------------------------------------
-  // Toggle handler bound to the Record button. The server side runs
-  // ffmpeg with `-c copy`, so this only works when the active stream
-  // format is `avcc` — pickFormat() persists the user's choice in
-  // localStorage; on `mjpeg` we point the user at the format toggle
-  // rather than firing a verb the server would reject.
+  // Recording runs server-side as a parallel screen subscription that
+  // feeds AVAssetWriter (hardware H.264 → MP4). It's independent of
+  // whatever wire format the live stream is using, so the toggle
+  // works in MJPEG mode as well as AVCC.
   window._simToggleRecord = () => {
     if (!session) return;
     if (recordingState.active) {
       // Optimistic UI: stop the live timer right away, swap label to
       // "Saving…" — the server's record_finished may take a moment
-      // because ffmpeg's moov-atom finalisation runs on a detached
-      // task. onRecordFinished/onRecordError flips us back to idle.
+      // while AVAssetWriter flushes the moov atom.
+      // onRecordFinished/onRecordError flips us back to idle.
       recordingState.active = false;
       if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
       const label = document.getElementById('simRecordLabel');
@@ -304,10 +303,6 @@
       if (timer) timer.textContent = '';
       if (btn) btn.classList.remove('recording');
       session.send({ type: 'stop_record' });
-      return;
-    }
-    if (localStorage.getItem('asc.simFormat') === 'mjpeg') {
-      log('Recording requires H.264 — switch the format above.', true);
       return;
     }
     session.send({ type: 'start_record' });

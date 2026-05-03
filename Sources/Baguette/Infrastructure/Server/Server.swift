@@ -249,10 +249,12 @@ struct Server: Sendable {
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
         let screen = sim.screen()
         let dispatcher = GestureDispatcher(input: sim.input())
-        // Per-session recorder slot. The lifetime is exactly the inbound
-        // loop — start_record sets it, stop_record clears it, and the
-        // defer below cancels any leftover when the WS closes.
-        var recorder: FFmpegRecorder?
+        // Per-session recorder slot. The recorder runs its own parallel
+        // screen subscription (see start_record) so it's independent of
+        // the live stream's wire format; the slot lifetime is exactly
+        // this WS loop — start_record sets it, stop_record clears it,
+        // and the defer below cancels any leftover when the WS closes.
+        var recorder: AVAssetWriterRecorder?
 
         do {
             try stream.start(on: screen)
@@ -264,7 +266,6 @@ struct Server: Sendable {
         }
         defer {
             recorder?.cancel()
-            (stream as? RecordableStream)?.detachRecorder()
             stream.stop()
             screen.stop()
         }
@@ -275,7 +276,7 @@ struct Server: Sendable {
                 let line = String(buffer: frame.data)
                 if let cmd = RecordingControl.parse(line) {
                     await handleRecording(
-                        cmd, udid: udid, stream: stream,
+                        cmd, udid: udid, simulator: sim,
                         recorder: &recorder, outbound: outbound
                     )
                     continue
@@ -313,62 +314,57 @@ struct Server: Sendable {
         _ = dispatcher.dispatch(line: line)
     }
 
-    /// Apply a recording verb. Recording is only wired into AVCC
-    /// streams (the only format whose encoder produces H.264 NALUs we
-    /// can copy into MP4 without a re-encode). For MJPEG, the start
-    /// verb is rejected with a `record_error` text frame so the UI
-    /// can surface it. Stop on a not-recording session is a no-op —
-    /// idempotent, so a stale toggle in the browser is harmless.
+    /// Apply a recording verb. Recording runs in parallel with the
+    /// live stream — opens its own `Screen` subscription against the
+    /// simulator so the wire format the browser is watching (MJPEG /
+    /// AVCC) doesn't matter. Stop on a not-recording session is a
+    /// no-op — idempotent, so a stale toggle in the browser is
+    /// harmless.
     private static func handleRecording(
         _ cmd: RecordingControl,
         udid: String,
-        stream: any Stream,
-        recorder: inout FFmpegRecorder?,
+        simulator: Simulator,
+        recorder: inout AVAssetWriterRecorder?,
         outbound: WebSocketOutboundWriter
     ) async {
         switch cmd {
         case .start:
             guard recorder == nil else { return }
-            guard let recordable = stream as? RecordableStream else {
-                log("recording rejected: stream is not avcc")
+            let url = RecordingsDirectory.newOutputURL(udid: udid, format: .mp4)
+            let r = AVAssetWriterRecorder(outputURL: url)
+            do {
+                try r.start(on: simulator.screen())
+            } catch {
+                let escaped = String(describing: error)
+                    .replacingOccurrences(of: "\"", with: "\\\"")
                 try? await outbound.write(.text(
-                    #"{"type":"record_error","error":"recording requires avcc format"}"#
+                    #"{"type":"record_error","error":"\#(escaped)"}"#
                 ))
                 return
             }
-            let url = RecordingsDirectory.newOutputURL(udid: udid, format: .mp4)
-            let r = FFmpegRecorder(outputURL: url)
-            recordable.attach(recorder: r)
             recorder = r
             log("recording started → \(url.path)")
             try? await outbound.write(.text(#"{"type":"record_started"}"#))
 
         case .stop:
             guard let r = recorder else { return }
-            (stream as? RecordableStream)?.detachRecorder()
             recorder = nil
-            // `r.finish()` blocks on `proc.waitUntilExit()` which can
-            // take a beat while ffmpeg flushes the moov atom — running
-            // it on the WS task would freeze every other inbound frame
-            // and delay the text response. Hand it off to a detached
-            // task; the socket stays responsive and the text frame
-            // arrives whenever ffmpeg actually closes.
-            let detachedRecorder = r
-            let detachedUdid = udid
-            let detachedOutbound = outbound
-            Task.detached(priority: .userInitiated) {
-                do {
-                    let artifact = try detachedRecorder.finish()
-                    log("recording saved: \(artifact.url.path) (\(artifact.bytes) bytes, \(String(format: "%.2f", artifact.durationSeconds))s)")
-                    let payload = recordingFinishedJSON(udid: detachedUdid, artifact: artifact)
-                    try? await detachedOutbound.write(.text(payload))
-                } catch {
-                    let escaped = String(describing: error)
-                        .replacingOccurrences(of: "\"", with: "\\\"")
-                    try? await detachedOutbound.write(.text(
-                        #"{"type":"record_error","error":"\#(escaped)"}"#
-                    ))
-                }
+            // `stop()` suspends until AVAssetWriter flushes the moov
+            // atom; that happens on the recorder's own queue. The WS
+            // task awaits it but other inbound frames stay queued at
+            // the socket level — Hummingbird's inbound stream serialises
+            // them and we re-enter the loop after the await.
+            do {
+                let artifact = try await r.stop()
+                log("recording saved: \(artifact.url.path) (\(artifact.bytes) bytes, \(String(format: "%.2f", artifact.durationSeconds))s)")
+                let payload = recordingFinishedJSON(udid: udid, artifact: artifact)
+                try? await outbound.write(.text(payload))
+            } catch {
+                let escaped = String(describing: error)
+                    .replacingOccurrences(of: "\"", with: "\\\"")
+                try? await outbound.write(.text(
+                    #"{"type":"record_error","error":"\#(escaped)"}"#
+                ))
             }
         }
     }
