@@ -205,13 +205,12 @@
     if (this.session || this.device.uiState !== 'live') return;
     this.session = new window.StreamSession({
       udid:   this.udid,
-      // Recording requires the server's H.264 NAL tap, which only
-      // exists for the AVCC pipeline (`-c copy` muxes those into MP4
-      // without a re-encode). MJPEG would need a full transcode.
-      // Default to AVCC where the browser supports it; fall back to
-      // MJPEG otherwise.
-      format: (window.FrameDecoder && window.FrameDecoder.isHardwareAvailable())
-        ? 'avcc' : 'mjpeg',
+      // MJPEG decodes anywhere — H.264/AVCC needs WebCodecs. The farm
+      // runs N parallel streams (one per booted device); MJPEG keeps
+      // the server out of the GPU's hardware-encoder budget, which
+      // matters once N gets above ~5 on Apple Silicon. Recording is
+      // browser-side now, so it doesn't need the AVCC NAL stream.
+      format: 'mjpeg',
       version: 'v2',
       canvas: this.canvas,
       onSize: (w, h) => {
