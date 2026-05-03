@@ -95,17 +95,6 @@ struct Server: Sendable {
             Self.bezelPNG(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
         }
 
-        // Finished MP4 recordings — `start_record` / `stop_record` over
-        // the live WS produce a file under `RecordingsDirectory.root`,
-        // and the WS sends back a `{type:"record_finished", filename}`
-        // text frame whose filename resolves here.
-        router.get("/simulators/:udid/recording/:filename") { r, _ in
-            Self.recordingFile(
-                udid: Self.udidParamAt(r, fromEnd: 3),
-                filename: Self.lastPathSegment(r)
-            )
-        }
-
         // Device-farm UI — multi-device dashboard. The HTML at /farm
         // is a thin shell that loads its own component scripts from
         // the `farm/` subfolder; sibling assets (CSS + per-component
@@ -227,9 +216,8 @@ struct Server: Sendable {
     /// + WS sink, runs until the client disconnects. Every inbound
     /// text frame is one JSON line dispatched in this order:
     ///   1. ReconfigParser   — set_bitrate / set_fps / set_scale
-    ///   2. RecordingControl — start_record / stop_record (avcc only)
-    ///   3. stream verbs     — force_idr / snapshot
-    ///   4. GestureDispatcher — tap / swipe / touch1-* / touch2-* /
+    ///   2. stream verbs     — force_idr / snapshot
+    ///   3. GestureDispatcher — tap / swipe / touch1-* / touch2-* /
     ///      button / scroll / pinch / pan / key / type
     /// Lines not matched by any of the above are ignored — same
     /// graceful behaviour the stdin control channel has.
@@ -249,12 +237,6 @@ struct Server: Sendable {
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
         let screen = sim.screen()
         let dispatcher = GestureDispatcher(input: sim.input())
-        // Per-session recorder slot. The recorder runs its own parallel
-        // screen subscription (see start_record) so it's independent of
-        // the live stream's wire format; the slot lifetime is exactly
-        // this WS loop — start_record sets it, stop_record clears it,
-        // and the defer below cancels any leftover when the WS closes.
-        var recorder: AVAssetWriterRecorder?
 
         do {
             try stream.start(on: screen)
@@ -265,7 +247,6 @@ struct Server: Sendable {
             return
         }
         defer {
-            recorder?.cancel()
             stream.stop()
             screen.stop()
         }
@@ -273,15 +254,11 @@ struct Server: Sendable {
         do {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
-                let line = String(buffer: frame.data)
-                if let cmd = RecordingControl.parse(line) {
-                    await handleRecording(
-                        cmd, udid: udid, simulator: sim,
-                        recorder: &recorder, outbound: outbound
-                    )
-                    continue
-                }
-                handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+                handleInbound(
+                    line: String(buffer: frame.data),
+                    stream: stream,
+                    dispatcher: dispatcher
+                )
             }
         } catch {
             // socket closed; defer cleans up
@@ -314,124 +291,12 @@ struct Server: Sendable {
         _ = dispatcher.dispatch(line: line)
     }
 
-    /// Apply a recording verb. Recording runs in parallel with the
-    /// live stream — opens its own `Screen` subscription against the
-    /// simulator so the wire format the browser is watching (MJPEG /
-    /// AVCC) doesn't matter. Stop on a not-recording session is a
-    /// no-op — idempotent, so a stale toggle in the browser is
-    /// harmless.
-    private static func handleRecording(
-        _ cmd: RecordingControl,
-        udid: String,
-        simulator: Simulator,
-        recorder: inout AVAssetWriterRecorder?,
-        outbound: WebSocketOutboundWriter
-    ) async {
-        switch cmd {
-        case .start:
-            guard recorder == nil else { return }
-            let url = RecordingsDirectory.newOutputURL(udid: udid, format: .mp4)
-            let r = AVAssetWriterRecorder(outputURL: url)
-            do {
-                try r.start(on: simulator.screen())
-            } catch {
-                let escaped = String(describing: error)
-                    .replacingOccurrences(of: "\"", with: "\\\"")
-                try? await outbound.write(.text(
-                    #"{"type":"record_error","error":"\#(escaped)"}"#
-                ))
-                return
-            }
-            recorder = r
-            log("recording started → \(url.path)")
-            try? await outbound.write(.text(#"{"type":"record_started"}"#))
-
-        case .stop:
-            guard let r = recorder else { return }
-            recorder = nil
-            // `stop()` suspends until AVAssetWriter flushes the moov
-            // atom; that happens on the recorder's own queue. The WS
-            // task awaits it but other inbound frames stay queued at
-            // the socket level — Hummingbird's inbound stream serialises
-            // them and we re-enter the loop after the await.
-            do {
-                let artifact = try await r.stop()
-                log("recording saved: \(artifact.url.path) (\(artifact.bytes) bytes, \(String(format: "%.2f", artifact.durationSeconds))s)")
-                let payload = recordingFinishedJSON(udid: udid, artifact: artifact)
-                try? await outbound.write(.text(payload))
-            } catch {
-                let escaped = String(describing: error)
-                    .replacingOccurrences(of: "\"", with: "\\\"")
-                try? await outbound.write(.text(
-                    #"{"type":"record_error","error":"\#(escaped)"}"#
-                ))
-            }
-        }
-    }
-
-    /// Build the JSON the browser receives after a successful recording
-    /// stop. The download URL is reachable via the
-    /// `/simulators/:udid/recording/:filename` route registered above.
-    private static func recordingFinishedJSON(
-        udid: String, artifact: RecordingArtifact
-    ) -> String {
-        var payload: [String: Any] = artifact.dictionary
-        payload["type"] = "record_finished"
-        payload["url"] = "/simulators/\(udid)/recording/\(artifact.filename)"
-        let data = try! JSONSerialization.data(
-            withJSONObject: payload, options: [.sortedKeys]
-        )
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    /// Serve a finished MP4 recording. The route's path shape is
-    /// `/simulators/<udid>/recording/<filename>`, so the request URL has
-    /// 4 segments after the leading slash. RecordingsDirectory enforces
-    /// the file lives inside the per-udid subtree — no path traversal.
-    private static func recordingFile(udid: String, filename: String) -> Response {
-        guard let url = RecordingsDirectory.resolve(udid: udid, filename: filename),
-              let data = try? Data(contentsOf: url) else {
-            return Response(
-                status: .notFound,
-                headers: [.contentType: "text/plain; charset=utf-8"],
-                body: .init(byteBuffer: ByteBuffer(string: "recording not found"))
-            )
-        }
-        let contentType: String = filename.hasSuffix(".mp4")
-            ? "video/mp4" : "application/octet-stream"
-        return Response(
-            status: .ok,
-            headers: [
-                .contentType: contentType,
-                .cacheControl: "no-cache",
-                .contentDisposition: "attachment; filename=\"\(filename)\"",
-            ],
-            body: .init(byteBuffer: ByteBuffer(data: data))
-        )
-    }
-
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.
     /// `<verb>` is the last segment, `<udid>` the one before.
     private static func udidParam(_ request: Request) -> String {
         let parts = request.uri.path.split(separator: "/")
         guard parts.count >= 3 else { return "" }
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
-    }
-
-    /// Pull a path segment counted from the right, used by routes
-    /// deeper than `/simulators/:udid/:verb`. For
-    /// `/simulators/<udid>/recording/<file>`, the udid is at fromEnd=3.
-    private static func udidParamAt(_ request: Request, fromEnd: Int) -> String {
-        let parts = request.uri.path.split(separator: "/")
-        guard parts.count >= fromEnd, fromEnd >= 1 else { return "" }
-        return String(parts[parts.count - fromEnd]).removingPercentEncoding ?? ""
-    }
-
-    /// The trailing path segment — the bare filename for recording
-    /// downloads and static assets.
-    private static func lastPathSegment(_ request: Request) -> String {
-        String(request.uri.path.split(separator: "/").last ?? "")
-            .removingPercentEncoding ?? ""
     }
 
 
