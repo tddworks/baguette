@@ -44,6 +44,11 @@ jobs:
       - name: Create release directory
         run: mkdir -p release
 
+      - name: Update version in source
+        run: |
+          sed -i '' "s/let baguetteVersion = \".*\"/let baguetteVersion = \"${{ steps.version.outputs.version }}\"/" Sources/Baguette/App/Version.swift
+          grep baguetteVersion Sources/Baguette/App/Version.swift
+
       - name: Build arm64
         run: |
           swift build -c release --arch arm64 --disable-sandbox

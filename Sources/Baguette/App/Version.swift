@@ -1,4 +1,6 @@
-// Single source of truth for the CLI version string. Homebrew's formula
-// patches this literal at build time via `inreplace`, so the value here
-// only needs to match the most recent release for local builds.
-let baguetteVersion = "0.1.5"
+// Single source of truth for the CLI version string. The release
+// workflow rewrites this literal in CI before `swift build` (see
+// `.github/workflows/release.yml` step "Inject release version") so
+// shipped binaries report their actual tag. The value committed here
+// is what local debug / Homebrew-from-source builds report.
+let baguetteVersion = "0.1.61"
