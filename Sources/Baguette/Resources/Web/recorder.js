@@ -51,6 +51,11 @@
     this.layout      = opts.layout      || null;
     this.overlayHost = opts.overlayHost || null;
     this.fps         = opts.fps || 60;
+    // Visible-quality knob. Default 12 Mbps — well above the browser's
+    // built-in (~2.5 Mbps) without exploding file size; H.264 at this
+    // bitrate is artifact-free for an iPhone-sized canvas. Override via
+    // `bitrate` for archive-grade or transport-sized recordings.
+    this.bitrate     = opts.bitrate || 12_000_000;
 
     this.mimeType = pickMimeType();
     this.compose = null;
@@ -82,14 +87,21 @@
     this.compose.width  = size.w;
     this.compose.height = size.h;
     this.composeCtx = this.compose.getContext('2d');
+    // High-quality scaling matters when the live stream is below the
+    // bezel composite's native resolution (e.g. scale=2 or scale=3 in
+    // the streaming sidebar). Default `'low'` produces visible nearest-
+    // neighbour stair-stepping; `'high'` invokes the browser's better
+    // resampler (Lanczos / bicubic depending on engine).
+    this.composeCtx.imageSmoothingEnabled = true;
+    this.composeCtx.imageSmoothingQuality = 'high';
 
     this._startPaintLoop();
 
     const stream = this.compose.captureStream(this.fps);
-    this.recorder = new MediaRecorder(
-      stream,
-      this.mimeType ? { mimeType: this.mimeType } : undefined
-    );
+    const recorderOpts = {};
+    if (this.mimeType) recorderOpts.mimeType = this.mimeType;
+    if (this.bitrate)  recorderOpts.videoBitsPerSecond = this.bitrate;
+    this.recorder = new MediaRecorder(stream, recorderOpts);
     this.recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) this.chunks.push(e.data);
     };

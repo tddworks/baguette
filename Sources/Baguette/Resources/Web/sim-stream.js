@@ -33,17 +33,49 @@
   // while active; references are pulled from what's already on the
   // page (frameImg from DeviceFrame, layout from chrome.json, pinch
   // dots from PinchOverlay's DOM container). Idle cost: zero.
-  //   state.recorder    : BrowserRecorder instance during a recording
-  //   state.layout      : cached chrome layout (composite + screen rect)
-  //   state.active      : true between start() and stop()
-  //   state.startedAt   : ms timestamp for the live timer
-  //   state.timer       : interval handle that ticks the toolbar label
-  //   state.entries     : finished recordings (download links)
+  //   state.recorder      : BrowserRecorder instance during a recording
+  //   state.layout        : cached chrome layout (composite + screen rect)
+  //   state.savedQuality  : pre-recording stream config; restored on stop
+  //   state.active        : true between start() and stop()
+  //   state.startedAt     : ms timestamp for the live timer
+  //   state.timer         : interval handle that ticks the toolbar label
+  //   state.entries       : finished recordings (download links)
   const recordingState = {
-    recorder: null, layout: null,
+    recorder: null, layout: null, savedQuality: null,
     active: false, startedAt: 0, timer: null,
     entries: [],
   };
+
+  // Picks the currently selected `simQ` knob for one of scale / fps /
+  // bps so we can restore it after recording. Reads the active button
+  // class instead of a separate state slot — single source of truth.
+  function readActiveQuality() {
+    const pick = (k) => {
+      const btn = document.querySelector(
+        `#simStreamSidebar .simQ[data-k="${k}"].btn-primary`
+      );
+      return btn ? parseInt(btn.dataset.v, 10) : null;
+    };
+    return { scale: pick('scale'), fps: pick('fps'), bps: pick('bps') };
+  }
+
+  // Apply scale / fps / bitrate to the active stream + reflect the
+  // selection on the sidebar buttons. Mirrors what `_simSetQuality`
+  // does on a click, but driven by recording lifecycle.
+  function applyQuality({ scale, fps, bps }) {
+    if (!session) return;
+    if (scale != null) session.send({ type: 'set_scale',   scale });
+    if (fps   != null) session.send({ type: 'set_fps',     fps   });
+    if (bps   != null) session.send({ type: 'set_bitrate', bps   });
+    const reflect = (k, v) => {
+      if (v == null) return;
+      document.querySelectorAll(`#simStreamSidebar .simQ[data-k="${k}"]`)
+        .forEach((b) => b.classList.toggle('btn-primary', parseInt(b.dataset.v, 10) === v));
+    };
+    reflect('scale', scale);
+    reflect('fps',   fps);
+    reflect('bps',   bps);
+  }
 
   // --- Helpers ---
   const escapeHTML = window.escapeHTML || ((s) => String(s).replace(/[&<>"']/g,
@@ -316,6 +348,11 @@
       if (label) label.textContent = 'Saving…';
       if (timer) timer.textContent = '';
       if (btn)   btn.classList.remove('recording');
+      // Restore the stream quality the user had before we bumped it.
+      if (recordingState.savedQuality) {
+        applyQuality(recordingState.savedQuality);
+        recordingState.savedQuality = null;
+      }
       try {
         const artifact = await rec.stop();
         onRecordFinished(artifact);
@@ -330,6 +367,14 @@
       return;
     }
     try {
+      // Bump the live stream to full quality so the source canvas the
+      // recorder reads is at native resolution. The composite canvas
+      // is bezel-sized; drawImage upscaling a low-res canvas is the
+      // single biggest visible-quality drag, so we ratchet here and
+      // restore on stop.
+      recordingState.savedQuality = readActiveQuality();
+      applyQuality({ scale: 1, fps: 60, bps: 8_000_000 });
+
       const rec = new window.BrowserRecorder({
         canvas:      surface.canvas,
         frameImg:    surface.frameImg,
@@ -377,6 +422,7 @@
     recordingState.active = false;
     recordingState.recorder = null;
     recordingState.layout = null;
+    recordingState.savedQuality = null;
     recordingState.startedAt = 0;
     if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
     // Free Blob URLs we own — keeps long sessions from leaking memory.
