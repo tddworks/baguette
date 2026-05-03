@@ -330,6 +330,7 @@ struct Server: Sendable {
         case .start:
             guard recorder == nil else { return }
             guard let recordable = stream as? RecordableStream else {
+                log("recording rejected: stream is not avcc")
                 try? await outbound.write(.text(
                     #"{"type":"record_error","error":"recording requires avcc format"}"#
                 ))
@@ -339,22 +340,35 @@ struct Server: Sendable {
             let r = FFmpegRecorder(outputURL: url)
             recordable.attach(recorder: r)
             recorder = r
+            log("recording started → \(url.path)")
             try? await outbound.write(.text(#"{"type":"record_started"}"#))
 
         case .stop:
             guard let r = recorder else { return }
             (stream as? RecordableStream)?.detachRecorder()
             recorder = nil
-            do {
-                let artifact = try r.finish()
-                let payload = recordingFinishedJSON(udid: udid, artifact: artifact)
-                try? await outbound.write(.text(payload))
-            } catch {
-                let escaped = String(describing: error)
-                    .replacingOccurrences(of: "\"", with: "\\\"")
-                try? await outbound.write(.text(
-                    #"{"type":"record_error","error":"\#(escaped)"}"#
-                ))
+            // `r.finish()` blocks on `proc.waitUntilExit()` which can
+            // take a beat while ffmpeg flushes the moov atom — running
+            // it on the WS task would freeze every other inbound frame
+            // and delay the text response. Hand it off to a detached
+            // task; the socket stays responsive and the text frame
+            // arrives whenever ffmpeg actually closes.
+            let detachedRecorder = r
+            let detachedUdid = udid
+            let detachedOutbound = outbound
+            Task.detached(priority: .userInitiated) {
+                do {
+                    let artifact = try detachedRecorder.finish()
+                    log("recording saved: \(artifact.url.path) (\(artifact.bytes) bytes, \(String(format: "%.2f", artifact.durationSeconds))s)")
+                    let payload = recordingFinishedJSON(udid: detachedUdid, artifact: artifact)
+                    try? await detachedOutbound.write(.text(payload))
+                } catch {
+                    let escaped = String(describing: error)
+                        .replacingOccurrences(of: "\"", with: "\\\"")
+                    try? await detachedOutbound.write(.text(
+                        #"{"type":"record_error","error":"\#(escaped)"}"#
+                    ))
+                }
             }
         }
     }

@@ -147,6 +147,16 @@
     if (recBtn) {
       recBtn.onclick = () => {
         if (this.recording.active) {
+          // Optimistic UI: hide the live timer immediately and swap
+          // to "Saving…" — finish() runs on a detached task so the
+          // record_finished frame may arrive a beat later.
+          this.recording.active = false;
+          if (this.recording.timer) { clearInterval(this.recording.timer); this.recording.timer = null; }
+          const label = this.host.querySelector('[data-readout="record-label"]');
+          const timer = this.host.querySelector('[data-readout="record-timer"]');
+          if (label) label.textContent = 'Saving…';
+          if (timer) timer.textContent = '';
+          recBtn.classList.remove('recording');
           this._sendRecord('stop');
         } else {
           this._sendRecord('start');

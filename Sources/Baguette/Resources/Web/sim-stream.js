@@ -291,6 +291,18 @@
   window._simToggleRecord = () => {
     if (!session) return;
     if (recordingState.active) {
+      // Optimistic UI: stop the live timer right away, swap label to
+      // "Saving…" — the server's record_finished may take a moment
+      // because ffmpeg's moov-atom finalisation runs on a detached
+      // task. onRecordFinished/onRecordError flips us back to idle.
+      recordingState.active = false;
+      if (recordingState.timer) { clearInterval(recordingState.timer); recordingState.timer = null; }
+      const label = document.getElementById('simRecordLabel');
+      const timer = document.getElementById('simRecordTimer');
+      const btn = document.getElementById('simRecordBtn');
+      if (label) label.textContent = 'Saving…';
+      if (timer) timer.textContent = '';
+      if (btn) btn.classList.remove('recording');
       session.send({ type: 'stop_record' });
       return;
     }
@@ -372,12 +384,15 @@
   function renderRecordList() {
     const host = document.getElementById('simRecordList');
     if (!host) return;
-    host.innerHTML = recordingState.entries.map((e) => `
+    if (!recordingState.entries.length) { host.innerHTML = ''; return; }
+    const head = `<div class="rec-head">Recordings (${recordingState.entries.length})</div>`;
+    const rows = recordingState.entries.map((e) => `
       <a href="${e.url}" download="${escapeHTML(e.filename)}" title="Download MP4">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>${escapeHTML(e.filename)}</span>
-        <span class="rec-meta">${formatDuration(e.duration)} · ${formatBytes(e.bytes)}</span>
+        <span>${formatDuration(e.duration)}</span>
+        <span class="rec-meta">${formatBytes(e.bytes)}</span>
       </a>`).join('');
+    host.innerHTML = head + rows;
   }
 
   function formatDuration(seconds) {

@@ -96,9 +96,12 @@
     #simStreamSidebar #simRecordBtn.recording{background:var(--danger,#b91c1c);border-color:var(--danger,#b91c1c);color:#fff}
     #simStreamSidebar #simRecordBtn.recording svg{color:#fff;animation:simRecPulse 1.2s ease-in-out infinite}
     @keyframes simRecPulse{0%,100%{opacity:1}50%{opacity:.4}}
-    #simStreamSidebar #simRecordList a{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:#f1f5f9;border:1px solid var(--border);color:var(--text);font-size:11px;text-decoration:none}
-    #simStreamSidebar #simRecordList a:hover{background:#e2e8f0}
-    #simStreamSidebar #simRecordList a .rec-meta{color:var(--text-muted);font-variant-numeric:tabular-nums;margin-left:auto}
+    #simStreamSidebar #simRecordList{display:flex;flex-direction:column;gap:4px}
+    #simStreamSidebar #simRecordList:not(:empty){margin-top:4px;padding-top:8px;border-top:1px dashed var(--border-light,#eef2f7)}
+    #simStreamSidebar #simRecordList .rec-head{font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);padding:0 2px 2px}
+    #simStreamSidebar #simRecordList a{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:11px;font-weight:600;text-decoration:none}
+    #simStreamSidebar #simRecordList a:hover{background:#dbeafe;border-color:#93c5fd}
+    #simStreamSidebar #simRecordList a .rec-meta{color:#475569;font-weight:500;font-variant-numeric:tabular-nums;margin-left:auto}
 
     /* Responsive — sidebar collapses to grid / single column on narrow
        widths. Moved here from sim-stream.js so the rules arrive with the
