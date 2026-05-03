@@ -795,7 +795,12 @@ main {
   border-bottom: 1px solid var(--rule);
   position: sticky; top: 0;
   background: var(--panel-2);
-  z-index: 2;
+  /* DeviceFrame's screenArea has inline z-index:2 (so the canvas
+     paints above the bezel <img> at z-index:1). When the focus pane
+     scrolls, an equal z-index here lets DOM order win — the canvas
+     comes later, so it paints OVER the sticky header. Bump above 2
+     so both bezel AND screen scroll behind the head. */
+  z-index: 10;
 }
 .focus-head .row1 {
   display: flex; align-items: center; justify-content: space-between;
