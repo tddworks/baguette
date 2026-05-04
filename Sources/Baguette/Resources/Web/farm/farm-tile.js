@@ -56,6 +56,7 @@
     // detach handle so the same tile can re-promote without leaks.
     this.simInput = null;
     this.mouseSource = null;
+    this.keyboardCapture = null;
     this.pinchOverlay = null;    // visual HUD shown during 2-finger gestures
     this.inputLayout = null;     // chrome layout snapshot for sizing
   }
@@ -331,6 +332,19 @@
       log:   () => {}
     });
     this.mouseSource.attach();
+
+    // Mac keyboard → focused tile. Same focus-gated capture used by
+    // sim-native: mousedown on the mirror takes focus; while focused,
+    // every supported keystroke flows through `simInput.key`. Click
+    // out (or focus another tile) → host browser shortcuts work again.
+    if (window.KeyboardCapture) {
+      target.addEventListener('mousedown', () => target.focus());
+      this.keyboardCapture = new window.KeyboardCapture({
+        target,
+        simInput: () => this.simInput,
+      });
+      this.keyboardCapture.start();
+    }
   };
 
   FarmTile.prototype.unwireInput = function () {
@@ -338,6 +352,10 @@
       try { this.mouseSource.detach(); } catch {}
     }
     this.mouseSource = null;
+    if (this.keyboardCapture && typeof this.keyboardCapture.stop === 'function') {
+      try { this.keyboardCapture.stop(); } catch {}
+    }
+    this.keyboardCapture = null;
     this.simInput = null;
     if (this.pinchOverlay && this.pinchOverlay.container?.parentElement) {
       this.pinchOverlay.container.parentElement.removeChild(this.pinchOverlay.container);
