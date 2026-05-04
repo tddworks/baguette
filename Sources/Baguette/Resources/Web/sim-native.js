@@ -97,6 +97,42 @@
     wireKeyboard();
     wireActions();
     wireUnload();
+    applyStoredTheme();
+  }
+
+  // Theme toggle. Three logical states — "auto" (no manual pin,
+  // follow OS via prefers-color-scheme), "light", "dark". The pill
+  // in the bottom-right corner cycles light ↔ dark; we don't
+  // expose "auto" from the click cycle because the icon set has
+  // only two states. The user can reset to auto by deleting the
+  // localStorage key in DevTools if needed.
+  const THEME_KEY = 'baguette.simTheme';
+
+  function applyStoredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === 'light' || stored === 'dark') {
+      setTheme(stored);
+    }
+  }
+
+  function currentTheme() {
+    const root = document.getElementById('simNativeView');
+    const pinned = root && root.getAttribute('data-theme');
+    if (pinned === 'light' || pinned === 'dark') return pinned;
+    return window.matchMedia('(prefers-color-scheme: light)').matches
+      ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    const root = document.getElementById('simNativeView');
+    if (!root) return;
+    if (theme === 'light' || theme === 'dark') {
+      root.setAttribute('data-theme', theme);
+      localStorage.setItem(THEME_KEY, theme);
+    } else {
+      root.removeAttribute('data-theme');
+      localStorage.removeItem(THEME_KEY);
+    }
   }
 
   // Open (or reopen) a StreamSession on the existing surface for a
@@ -245,6 +281,9 @@
       if (current === next && session) return;
       localStorage.setItem('asc.simFormat', next);
       startSession(next);
+    };
+    window.__nativeToggleTheme = () => {
+      setTheme(currentTheme() === 'light' ? 'dark' : 'light');
     };
   }
 
