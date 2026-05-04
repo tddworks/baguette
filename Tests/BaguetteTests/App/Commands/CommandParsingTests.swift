@@ -18,6 +18,7 @@ struct CommandParsingTests {
         #expect(Set(names) == [
             "list", "boot", "shutdown", "input", "stream",
             "tap", "swipe", "pinch", "pan", "press",
+            "key", "type",
             "chrome", "screenshot", "serve",
         ])
     }
