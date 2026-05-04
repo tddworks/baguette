@@ -43,7 +43,12 @@ recipe.
   bogus `0.001` doesn't underrun the simulator's HID dispatch.
 
 The CLI mirrors the wire field: `--duration 1.2` produces the same
-effect.
+effect. HID codes are NOT on the wire — `DeviceButton` is the
+rich-domain entity that knows its own standard `(page, usage)` pair
+via `standardHIDUsage`, and `IndigoHIDInput` reads it directly. If a
+future device ships non-standard codes, edit the switch on
+`DeviceButton.standardHIDUsage` rather than threading per-press
+overrides through the wire.
 
 ## Why duration matters
 
@@ -64,7 +69,9 @@ there's no implicit hold.
 
 ## Dispatch — the two paths
 
-`IndigoHIDInput.button(_:duration:)` switches on the button enum:
+`Press.execute(on:)` calls `button.press(duration:on:)`, which
+forwards to `Input.button(_:duration:)`. `IndigoHIDInput.button`
+switches on the case:
 
 ### `home` / `lock` → `IndigoHIDMessageForButton`
 
@@ -120,11 +127,13 @@ DeviceKit's `chrome.json` for each device declares the HID
 }
 ```
 
-Currently `IndigoHIDInput` hard-codes the same values in
-`hidUsage(for:)`. They match the standard HID spec assignments and
-agree across every iPhone chrome bundle we've inspected. If a future
-device ships different codes we'll plumb them through chrome.json
-parsing rather than chasing per-device branches.
+`DeviceButton.standardHIDUsage` carries the same values, hardcoded.
+chrome.json is consulted for *visual* button placement only — its
+HID fields agree with the spec across every iPhone chrome bundle
+we've inspected, so we don't read them at dispatch time. If a
+future device ships non-standard codes, add a case to
+`standardHIDUsage` rather than threading per-press overrides
+through the wire.
 
 ## Browser overlay
 
@@ -133,7 +142,9 @@ button image over the bare bezel using the offsets baked into
 chrome.json, animates rollover / press states, and fires
 `onPress(name, durationSeconds)` on `mouseup`. The wrapper in
 `device-frame.js` forwards that to `simInput.button(name, duration)`,
-which encodes the wire envelope.
+which encodes the wire envelope. The frontend stays a dumb sender —
+no HID codes, no chrome lookups; the rich domain (button identity +
+HID resolution) lives entirely in Swift.
 
 Buttons that aren't in the `WIRE_BUTTON` table render but stay
 inert with a tooltip explaining why — keeps the visual layout
@@ -142,18 +153,20 @@ honest without firing a no-op event.
 ## Adding a new button
 
 1. Extend `DeviceButton` in `Domain/Common/CoordinateTypes.swift` with a
-   case whose `rawValue` matches the wire / chrome.json name.
+   case whose `rawValue` matches the wire / chrome.json name. Add a
+   case to `standardHIDUsage` returning the right `HIDUsage` (or
+   `nil` if it routes through the legacy `*ForButton` symbol).
 2. Update `Press.allowed` so error messages list it.
-3. If it lives on a non-standard HID page, add an entry to
-   `IndigoHIDInput.hidUsage(for:)`. If it needs the legacy
-   `*ForButton` path instead, add to `buttonCodes(for:)` and the
-   switch in `button(_:duration:)`.
-4. Add a parse + execute test in `Tests/BaguetteTests/Input/GestureTests.swift`
-   following the `parses <name> button` / `executes against the input
-   surface` pattern.
+3. In `IndigoHIDInput.button(_:duration:)`, decide which arm of the
+   switch handles it — legacy (`pressLegacyButton`) or
+   arbitrary-HID (`pressArbitraryHID`). If legacy, add a
+   `buttonCodes(for:)` entry.
+4. Add tests in `Tests/BaguetteTests/Input/GestureTests.swift`
+   following the existing `parses <name> button` / DeviceButton
+   suite patterns.
 5. Map the chrome.json `name` to the wire value in
    `Resources/Web/bezel-buttons.js`'s `WIRE_BUTTON` table so the
-   overlay actually fires it.
+   overlay fires it.
 
 ## Known limits
 
