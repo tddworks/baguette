@@ -17,6 +17,8 @@ struct Baguette: AsyncParsableCommand {
             PinchCommand.self,
             PanCommand.self,
             PressCommand.self,
+            KeyCommand.self,
+            TypeCommand.self,
             ChromeCommand.self,
             ScreenshotCommand.self,
             ServeCommand.self,

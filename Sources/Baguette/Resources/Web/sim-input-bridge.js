@@ -47,10 +47,14 @@
         if (typeof p.duration === 'number' && p.duration > 0) env.duration = p.duration;
         return env;
       }
-      case 'key':
+      case 'key': {
+        const env = { type: 'key', code: p.code };
+        if (Array.isArray(p.modifiers) && p.modifiers.length) env.modifiers = p.modifiers;
+        if (typeof p.duration === 'number' && p.duration > 0) env.duration = p.duration;
+        return env;
+      }
       case 'type':
-        log(`${p.kind}: not on Baguette's host-HID path`, true);
-        return null;
+        return { type: 'type', text: p.text };
       default:
         return null;
     }

@@ -113,8 +113,14 @@
       return this._post({ kind: 'type', text });
     }
 
-    key(keycode) {
-      return this._post({ kind: 'key', keycode });
+    // `code` is a W3C KeyboardEvent.code (`'KeyA'`, `'Digit1'`,
+    // `'Enter'`, …). `modifiers` is an array of
+    // `'shift' | 'control' | 'option' | 'command'`. Backend resolves
+    // the HID usage; the frontend stays a dumb forwarder.
+    key(code, modifiers) {
+      const body = { kind: 'key', code };
+      if (modifiers && modifiers.length) body.modifiers = modifiers;
+      return this._post(body);
     }
 
     // --- Transport ---

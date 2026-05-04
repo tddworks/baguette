@@ -37,6 +37,7 @@
   let simInput = null;
   let mouseSource = null;
   let pinchOverlay = null;
+  let keyboardCapture = null;
   let lastPaintedSize = { w: 0, h: 0 };
   let layout = null;
   let deviceName = '';
@@ -263,26 +264,17 @@
     mouseSource.attach();
   }
 
+  // Wire host-keyboard → simulator. Focus-gated: while the screen
+  // area has focus, every supported keystroke is forwarded as a wire
+  // `key` event (W3C `event.code` + modifier flags); when focus is
+  // elsewhere (toolbar, header, etc.) the host browser keeps its
+  // shortcuts. `mousedown` on the screen takes focus so the gate
+  // opens automatically when the user starts interacting with iOS.
   function wireKeyboard() {
-    const KEY_HID = {
-      Backspace: 42, Enter: 40, Tab: 43, Escape: 41,
-      ArrowUp: 82, ArrowDown: 81, ArrowLeft: 80, ArrowRight: 79,
-    };
     const el = surface.screenArea;
     el.addEventListener('mousedown', () => el.focus());
-    el.addEventListener('keydown', (e) => {
-      if (e.metaKey || e.ctrlKey) return;
-      const hid = KEY_HID[e.key];
-      if (hid !== undefined) {
-        e.preventDefault();
-        simInput.key(hid);
-        return;
-      }
-      if (e.key.length === 1 && !e.altKey) {
-        e.preventDefault();
-        simInput.type(e.key);
-      }
-    });
+    keyboardCapture = new window.KeyboardCapture({ target: el, simInput: () => simInput });
+    keyboardCapture.start();
   }
 
   function wireActions() {
@@ -323,6 +315,7 @@
     if (!frame) return;
     if (mouseSource) { try { mouseSource.detach(); } catch (_) {} mouseSource = null; }
     if (pinchOverlay) { try { pinchOverlay.clear(); } catch (_) {} pinchOverlay = null; }
+    if (keyboardCapture) { try { keyboardCapture.stop(); } catch (_) {} keyboardCapture = null; }
     if (surface && surface.bezelButtons) {
       try { surface.bezelButtons.unmount(); } catch (_) { /* ignore */ }
     }
@@ -336,6 +329,7 @@
     // remount produced a fresh canvas so we have to reopen the
     // session against it. Reuse the format the user already chose.
     startSession(pickFormat());
+    wireKeyboard();
   }
 
   function reflectActionable() {
@@ -347,6 +341,7 @@
     window.addEventListener('beforeunload', () => {
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (mouseSource) mouseSource.detach(); } catch (_) { /* ignore */ }
+      try { if (keyboardCapture) keyboardCapture.stop(); } catch (_) { /* ignore */ }
     });
   }
 
