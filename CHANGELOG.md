@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.64] - 2026-05-04
+
 ### Added
 - **One-shot JPEG screenshot endpoint + CLI.** New `GET /simulators/:udid/screenshot.jpg[?quality=&scale=]` route on `baguette serve` returns the current framebuffer as `image/jpeg`, so embedding pages can refresh on demand with a plain `<img src="…?t=…">` — no WebSocket plumbing required. New `baguette screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]` CLI mirrors it; defaults write to stdout so it composes with shell redirection. Both share `ScreenSnapshot.capture(...)`: open Screen, await one IOSurface (2 s timeout with a single-shot guard for the timer / callback / start-throw race), encode via the existing `JPEGEncoder` + optional `Scaler`, stop. See [`docs/features/screenshot.md`](docs/features/screenshot.md).
 
@@ -78,7 +82,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.63...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.64...HEAD
+[0.1.64]: https://github.com/tddworks/baguette/compare/v0.1.63...v0.1.64
 [0.1.63]: https://github.com/tddworks/baguette/compare/v0.1.62...v0.1.63
 [0.1.62]: https://github.com/tddworks/baguette/compare/v0.1.61...v0.1.62
 [0.1.61]: https://github.com/tddworks/baguette/compare/v0.1.6...v0.1.61
