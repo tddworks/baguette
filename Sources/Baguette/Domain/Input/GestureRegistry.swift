@@ -54,6 +54,8 @@ final class GestureRegistry {
         r.register(Scroll.self)
         r.register(Pinch.self)
         r.register(Pan.self)
+        r.register(Key.self)
+        r.register(TypeText.self)
         r.registerPhased(Touch1.self)
         r.registerPhased(Touch2.self)
         return r

@@ -40,7 +40,7 @@ enum GesturePhase: String, Sendable, Equatable, CaseIterable {
 /// HID (page, usage) pair — the wire-level code SimulatorKit needs
 /// to identify an arbitrary-HID button press. iPhone side buttons
 /// live on consumer (page 12) and telephony (page 11) HID pages.
-struct HIDUsage: Equatable, Sendable {
+struct HIDUsage: Equatable, Hashable, Sendable {
     let page: UInt32
     let usage: UInt32
 }

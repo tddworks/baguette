@@ -117,6 +117,35 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
     }
 
+    func key(_ key: KeyboardKey, modifiers: Set<KeyModifier>, duration: Double) -> Bool {
+        guard let c = ensureWarm(), let kfn = hidArbFn else {
+            log("[hid] key — IndigoHIDMessageForHIDArbitrary unresolved")
+            return false
+        }
+        let holdUs = holdMicroseconds(for: duration)
+        let target = Self.touchDigitizer
+        // Sort modifiers so the down/up order is deterministic; iOS
+        // doesn't care, but tests + logs become reproducible.
+        let mods = modifiers.sorted { $0.rawValue < $1.rawValue }
+        log("[hid] key page=\(key.hidUsage.page) usage=\(key.hidUsage.usage) modifiers=\(mods.map(\.rawValue)) hold=\(holdUs)us")
+
+        // Modifier-down → key-down → hold → key-up → modifier-up.
+        for m in mods {
+            guard let down = kfn(target, m.hidUsage.page, m.hidUsage.usage, 1) else { return false }
+            send(message: down, to: c)
+        }
+        guard let keyDown = kfn(target, key.hidUsage.page, key.hidUsage.usage, 1) else { return false }
+        send(message: keyDown, to: c)
+        usleep(holdUs)
+        guard let keyUp = kfn(target, key.hidUsage.page, key.hidUsage.usage, 2) else { return false }
+        send(message: keyUp, to: c)
+        for m in mods.reversed() {
+            guard let up = kfn(target, m.hidUsage.page, m.hidUsage.usage, 2) else { return false }
+            send(message: up, to: c)
+        }
+        return true
+    }
+
     /// Default tap is 100 ms — long enough for iOS to register the press
     /// without crossing into "long press" territory. A non-zero duration
     /// (in seconds) overrides; we clamp the floor so a 0.001 s request

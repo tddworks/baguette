@@ -151,3 +151,68 @@ struct PressCommand: ParsableCommand {
         runOrExit(gesture.execute(on: sim.input()), action: "press")
     }
 }
+
+// MARK: - key
+
+struct KeyCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "key",
+        abstract: "Press a single keyboard key with optional modifiers"
+    )
+
+    @OptionGroup var options: DeviceOption
+    @Option(help: "W3C KeyboardEvent.code — KeyA-Z, Digit0-9, Enter, Escape, Backspace, Tab, Space, Arrow*, common punctuation")
+    var code: String
+    @Option(help: "Comma-separated modifiers (shift,control,option,command)")
+    var modifiers: String = ""
+    @Option(help: "Hold duration in seconds (0 = short tap)") var duration: Double = 0
+
+    func run() {
+        guard let key = KeyboardKey.from(wireCode: code) else {
+            log("Unknown key code: \(code)")
+            Foundation.exit(1)
+        }
+        var mods: Set<KeyModifier> = []
+        for raw in modifiers.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) })
+        where !raw.isEmpty {
+            guard let m = KeyModifier(rawValue: raw) else {
+                log("Unknown modifier: \(raw) (allowed: shift | control | option | command)")
+                Foundation.exit(1)
+            }
+            mods.insert(m)
+        }
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        runOrExit(
+            key.press(modifiers: mods, duration: duration, on: sim.input()),
+            action: "key"
+        )
+    }
+}
+
+// MARK: - type
+
+struct TypeCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "type",
+        abstract: "Type a string of US-ASCII text into the focused field"
+    )
+
+    @OptionGroup var options: DeviceOption
+    @Option(help: "Text to type. Non-ASCII / dead-key characters are rejected.")
+    var text: String
+
+    func run() {
+        let gesture: TypeText
+        do {
+            gesture = try TypeText.parse(["text": text])
+        } catch let error as GestureError {
+            log("Cannot type: \(error.message)")
+            Foundation.exit(1)
+        } catch {
+            log("Cannot type: \(error)")
+            Foundation.exit(1)
+        }
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        runOrExit(gesture.execute(on: sim.input()), action: "type")
+    }
+}

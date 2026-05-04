@@ -18,6 +18,13 @@ protocol Input: Sendable {
     /// `button.press(duration:on:)` over calling this directly so
     /// callers get the rich-domain ergonomics.
     func button(_ button: DeviceButton, duration: Double) -> Bool
+
+    /// Press a single keyboard key with `modifiers` held. The adapter
+    /// brackets the keystroke: each modifier down → key down → hold
+    /// for `duration` (or a default short tap) → key up → modifiers
+    /// up. Prefer `key.press(modifiers:duration:on:)` for the
+    /// rich-domain ergonomics.
+    func key(_ key: KeyboardKey, modifiers: Set<KeyModifier>, duration: Double) -> Bool
     func scroll(deltaX: Double, deltaY: Double) -> Bool
 
     /// Two-finger interpolated path — both pinch and pan reduce to "each
