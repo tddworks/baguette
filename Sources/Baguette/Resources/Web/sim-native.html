@@ -20,116 +20,105 @@
 <!--
   Focus mode template. sim-native.js extracts everything inside
   #simNativeView (plus the <style> below) and injects it when the
-  page is loaded directly at /simulators/<udid>. Mirrors the macOS
-  Simulator window chrome — traffic lights, centered title, top-right
-  action toolbar, and the device on a soft gradient stage.
+  page is loaded directly at /simulators/<udid>.
+
+  No fake macOS window — the device floats free on the page and a
+  single glass toolbar at the bottom carries the device label,
+  action buttons (Home / Screenshot / App-switcher), the format
+  picker, and the live fps. Less chrome, more device.
 -->
 <style>
   #simNativeView {
     position: fixed; inset: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 14px;
+    padding: 24px 24px 88px;  /* 88px reserves room for the toolbar */
+    box-sizing: border-box;
     background: transparent;
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
-  /* macOS-Simulator style window: shrink-wraps the device + toolbar.
-     The dark area around it is the body / page background, so the
-     window reads as a real proxy for the desktop Simulator app
-     rather than a full-page chrome. */
-  #simNativeView .native-window {
-    position: relative;
-    display: inline-flex; flex-direction: column;
-    background: #2a2a30;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    box-shadow:
-      0 18px 50px rgba(0, 0, 0, 0.55),
-      0 1px 0 rgba(255, 255, 255, 0.05) inset;
-    overflow: hidden;
-    max-width: calc(100vw - 32px);
-    max-height: calc(100vh - 80px);
-  }
-  /* macOS Simulator toolbar — slim translucent bar, no gradient.
-     The bar floats over the stage with a soft dark blur so the
-     device content runs right up to the chrome edge. */
-  #simNativeView .native-titlebar {
-    position: relative;
-    display: flex; align-items: center;
-    height: 30px;
-    padding: 0 10px;
-    background: rgba(36, 36, 40, 0.78);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(18px) saturate(1.4);
-    -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  }
-  #simNativeView .traffic-lights { display: flex; gap: 7px; align-items: center; }
-  #simNativeView .tl {
-    width: 10px; height: 10px; border-radius: 50%;
-    border: 0.5px solid rgba(0, 0, 0, 0.25);
-    cursor: default;
-  }
-  #simNativeView .tl-red    { background: #ff5f57; }
-  #simNativeView .tl-yellow { background: #febc2e; }
-  #simNativeView .tl-green  { background: #28c840; }
-  #simNativeView .tl-red    { cursor: pointer; }
-  #simNativeView .tl-red:hover    { filter: brightness(1.08); }
 
-  #simNativeView .native-title {
-    position: absolute; left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center; pointer-events: none;
-    line-height: 1.15;
-    /* Cap so the centered title can't slide under the right-side
-       action group on narrow viewports. The action group has a
-       higher z-index as a belt-and-braces guard for very-narrow
-       windows where even the cap isn't enough. */
-    max-width: min(60vw, 320px);
-    z-index: 1;
+  /* Device floats free. Sized from the available viewport so it
+     dominates the page; aspect ratio comes from the bezel <img>. */
+  #simNativeView #nativeDeviceFrame {
+    position: relative; display: inline-block;
+    max-height: calc(100vh - 24px - 88px);
   }
-  #simNativeView .native-actions { z-index: 2; }
-  #simNativeView .title-name {
-    color: #f5f5f7;
-    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-    letter-spacing: 0.01em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  #simNativeView .title-os {
-    color: rgba(245, 245, 247, 0.55);
-    font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-    margin-top: 1px;
+  #simNativeView #nativeDeviceFrame img,
+  #simNativeView #nativeDeviceFrame canvas {
+    max-height: calc(100vh - 24px - 88px);
   }
 
-  #simNativeView .native-actions {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 4px;
-  }
-  #simNativeView .native-actions .ico-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 26px; height: 22px; padding: 0;
-    background: transparent; border: none; border-radius: 5px;
-    color: rgba(245, 245, 247, 0.92); cursor: pointer;
-    transition: background 0.12s ease;
-  }
-  #simNativeView .native-actions .ico-btn:hover { background: rgba(255, 255, 255, 0.10); }
-  #simNativeView .native-actions .ico-btn:active { background: rgba(255, 255, 255, 0.18); }
-  #simNativeView .native-actions .ico-btn svg { display: block; }
-
-  /* Floating HUD: format picker + fps badge. Sits OUTSIDE the
-     window on the page background — the desktop area around the
-     simulator window. The flex column on #simNativeView (gap: 14px)
-     places it directly under the window, centered on the page. */
-  #simNativeView .native-hud {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 4px 6px;
+  /* Floating bottom toolbar. One glass pill carrying everything:
+       [device label]  ·  [actions]  ·  [format picker]  ·  [fps]
+     Each section is divided by a hairline so the groups read as
+     distinct controls without needing extra rows. */
+  #simNativeView .float-bar {
+    position: fixed; bottom: 22px; left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 6px 8px;
     background: rgba(20, 20, 24, 0.78);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(14px) saturate(1.4);
-    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.55),
+      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: #f5f5f7;
+    max-width: calc(100vw - 24px);
   }
+  #simNativeView .fb-divider {
+    width: 1px; height: 18px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  /* Device label — clickable, returns to the simulator list.
+     Subtle chevron hints at the back action without shouting. */
+  #simNativeView .fb-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+    color: inherit; text-decoration: none;
+    transition: background 0.12s ease;
+  }
+  #simNativeView .fb-label:hover { background: rgba(255, 255, 255, 0.08); }
+  #simNativeView .fb-label .fb-back {
+    color: rgba(245, 245, 247, 0.55);
+    flex-shrink: 0;
+  }
+  #simNativeView .fb-label .fb-name {
+    color: #f5f5f7;
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 22ch;
+  }
+  #simNativeView .fb-label .fb-os {
+    color: rgba(245, 245, 247, 0.5);
+    font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    white-space: nowrap;
+  }
+
+  /* Action button group — Home / Screenshot / App switcher. */
+  #simNativeView .fb-actions {
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  #simNativeView .fb-actions .ico-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: rgba(245, 245, 247, 0.92); cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  #simNativeView .fb-actions .ico-btn:hover { background: rgba(255, 255, 255, 0.10); }
+  #simNativeView .fb-actions .ico-btn:active { background: rgba(255, 255, 255, 0.18); }
+  #simNativeView .fb-actions .ico-btn svg { display: block; }
+
+  /* Format segmented control. Active button is filled blue; the
+     other is a quiet ghost button. */
   #simNativeView .fmt-picker {
     display: inline-flex; align-items: stretch;
     padding: 2px;
@@ -139,7 +128,7 @@
   }
   #simNativeView .fmt-btn {
     appearance: none; -webkit-appearance: none;
-    border: 0; padding: 0 10px; height: 20px;
+    border: 0; padding: 0 10px; height: 22px;
     background: transparent; color: rgba(245, 245, 247, 0.65);
     font: 700 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     letter-spacing: 0.04em;
@@ -152,35 +141,26 @@
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   }
 
-  #simNativeView .native-stage {
-    position: relative;
-    display: flex; align-items: center; justify-content: center;
-    padding: 10px 12px 12px;
-    overflow: hidden;
-  }
-  /* Device sizes from the available viewport (minus the title bar,
-     stage padding, the HUD row below the window, and a small
-     safety margin). The window shrink-wraps to whatever width the
-     bezel's aspect ratio resolves to. */
-  #simNativeView #nativeDeviceFrame {
-    position: relative; display: inline-block;
-    max-height: calc(100vh - 30px - 22px - 56px);
-  }
-  #simNativeView #nativeDeviceFrame img,
-  #simNativeView #nativeDeviceFrame canvas {
-    max-height: calc(100vh - 30px - 22px - 56px);
-  }
-
-  /* fps badge — sits inside the floating bottom HUD next to the
-     format picker. Hidden until the stream reports a frame rate. */
+  /* Live fps. Hidden when empty so the toolbar collapses on
+     stream startup before the first frame is decoded. */
   #simNativeView #nativeStatus {
     color: rgba(245, 245, 247, 0.55);
     font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     font-variant-numeric: tabular-nums;
     pointer-events: none;
-    padding: 0 6px 0 2px;
+    padding: 0 8px 0 2px;
+    white-space: nowrap;
   }
   #simNativeView #nativeStatus:empty { display: none; }
+  #simNativeView #nativeStatus:empty + .fb-divider { display: none; }
+
+  /* Narrow viewports — drop the device label down to just the
+     back chevron + name (hide the OS subtitle). */
+  @media (max-width: 520px) {
+    #simNativeView .fb-label .fb-os { display: none; }
+    #simNativeView .float-bar { gap: 6px; padding: 5px 6px; }
+    #simNativeView .fb-actions .ico-btn { width: 28px; height: 26px; }
+  }
 
   /* Preview ribbon — only when opened via file:// */
   #simNativeView .preview-banner {
@@ -195,60 +175,57 @@
 <div id="simNativeView">
   <span class="preview-banner">PREVIEW</span>
 
-  <div class="native-window">
-    <div class="native-titlebar">
-      <div class="traffic-lights">
-        <span class="tl tl-red" title="Close" onclick="window.__nativeClose && window.__nativeClose()"></span>
-        <span class="tl tl-yellow" title="Minimize"></span>
-        <span class="tl tl-green" title="Zoom"></span>
-      </div>
-      <div class="native-title">
-        <div class="title-name" id="nativeDeviceName">iPhone</div>
-        <div class="title-os" id="nativeDeviceOS">iOS</div>
-      </div>
-      <div class="native-actions">
-        <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-            <path d="M3 11.2 12 4l9 7.2"/>
-            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
-          </svg>
-        </button>
-        <button class="ico-btn" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-            <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
-            <circle cx="12" cy="13" r="3.5"/>
-          </svg>
-        </button>
-        <button class="ico-btn" title="Lock" onclick="window.__nativeLock && window.__nativeLock()">
-          <!-- "Stack of windows" glyph mirroring the native Simulator
-               toolbar's third icon — two overlapping rounded squares. -->
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-            <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
-            <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
-          </svg>
-        </button>
-      </div>
+  <div id="nativeDeviceFrame"></div>
+
+  <div class="float-bar" role="toolbar" aria-label="Simulator controls">
+    <a class="fb-label" id="nativeBackLink" href="/simulators" title="Back to simulators">
+      <svg class="fb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      <span class="fb-name" id="nativeDeviceName">iPhone</span>
+      <span class="fb-os"   id="nativeDeviceOS">iOS</span>
+    </a>
+
+    <span class="fb-divider"></span>
+
+    <div class="fb-actions">
+      <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <path d="M3 11.2 12 4l9 7.2"/>
+          <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+        </svg>
+      </button>
+      <button class="ico-btn" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
+          <circle cx="12" cy="13" r="3.5"/>
+        </svg>
+      </button>
+      <button class="ico-btn" title="Lock" onclick="window.__nativeLock && window.__nativeLock()">
+        <!-- "Stack of windows" glyph mirroring the native Simulator
+             toolbar's app-switcher icon — two overlapping rounded squares. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
+          <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
+        </svg>
+      </button>
     </div>
 
-    <div class="native-stage">
-      <div id="nativeDeviceFrame"></div>
-    </div>
-  </div>
+    <span class="fb-divider"></span>
 
-  <!-- HUD lives OUTSIDE the simulator window, on the page
-       background below it. Mirrors how Apple's Simulator app sits
-       on the desktop with floating overlays around it. -->
-  <div class="native-hud">
     <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
       <button class="fmt-btn" data-v="avcc"  title="H.264 (hardware-decoded). Smaller, more compressed."
               onclick="window.__nativeSetFormat && window.__nativeSetFormat('avcc')">H.264</button>
       <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
               onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
     </div>
+
     <span id="nativeStatus"></span>
+    <span class="fb-divider"></span>
   </div>
 </div>
 
@@ -258,13 +235,17 @@
   (function () {
     if (location.protocol !== 'file:') return;
     document.body.classList.add('preview');
+    document.body.style.cssText = 'margin:0;background:#1a1a1f';
     document.getElementById('nativeDeviceName').textContent = 'iPhone 17 Pro Max';
     document.getElementById('nativeDeviceOS').textContent = 'iOS 26.4';
     var host = document.getElementById('nativeDeviceFrame');
     var img = document.createElement('img');
     img.src = '../frames/iPhone 17 Pro Max.png';
-    img.style.cssText = 'display:block;height:78vh;max-height:calc(96vh - 84px);pointer-events:none';
+    img.style.cssText = 'display:block;height:88vh;max-height:calc(100vh - 112px);pointer-events:none';
     host.appendChild(img);
+    // Reflect a default active format for the preview.
+    document.querySelector('.fmt-btn[data-v="avcc"]').classList.add('active');
+    document.getElementById('nativeStatus').textContent = '60 fps';
   })();
 </script>
 </body>
