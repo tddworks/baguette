@@ -254,9 +254,9 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     }
 
     /// Overshoot margins — how far each button image extends past the
-    /// composite edge along its anchored side. Ported from kittyfarm's
-    /// chrome shell so visual parity is preserved across the two
-    /// clients.
+    /// composite edge along its anchored side. Used to expand the
+    /// merged-bezel canvas so the cap visually pokes out instead of
+    /// being clipped at the device-body edge.
     private func computeMargins(
         buttons: [(button: ChromeButton, image: ChromeImage)]
     ) -> Insets {
@@ -277,10 +277,21 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     }
 
     /// Top-left draw position for a button image inside the expanded
-    /// canvas. Kittyfarm anchors the button image's *centre* at
-    /// `(compX + offset.x, compY + offset.y)` (and the analogous
-    /// anchor-derived points); this converts that centre to a
-    /// top-left for `compose(...)`'s layer geometry.
+    /// canvas. Returns the point passed to `compose(...)`'s layer
+    /// geometry.
+    ///
+    /// chrome.json semantics for the four anchors (verified against
+    /// Apple's Simulator):
+    ///   • LEFT / RIGHT: `x` is the image's CENTRE inside the bezel
+    ///     (cap straddles the side rail). `y` is the image's TOP
+    ///     edge, NOT its centre — the convention scales with image
+    ///     height: a 16-px-tall action cap and a 101-px-tall power
+    ///     cap with the same y both START at the same y, so offsets
+    ///     line up with native rendering. Treating y as centre
+    ///     drifts taller caps downward by half-image-height (~5% of
+    ///     bezel for the power button).
+    ///   • TOP / BOTTOM: same y-as-edge logic on the perpendicular
+    ///     axis (x is CENTRE, y is the offset from the bezel edge).
     private func buttonTopLeft(
         button: ChromeButton,
         imageSize: Size,
@@ -289,28 +300,28 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     ) -> Point {
         let compX = margins.left
         let compY = margins.top
-        let cx: Double
-        let cy: Double
+        let cx: Double  // image CENTRE on x
+        let topY: Double  // image TOP-LEFT y (already the value we return)
         switch button.anchor {
         case .left:
             cx = compX + button.offset.x
-            cy = compY + button.offset.y
+            topY = compY + button.offset.y
         case .right:
             cx = compX + compositeSize.width + button.offset.x
-            cy = compY + button.offset.y
+            topY = compY + button.offset.y
         case .top:
             let baseX = button.align == .trailing
                 ? compX + compositeSize.width
                 : compX
             cx = baseX + button.offset.x
-            cy = compY + button.offset.y
+            topY = compY + button.offset.y
         case .bottom:
             let baseX = button.align == .trailing
                 ? compX + compositeSize.width
                 : compX
             cx = baseX + button.offset.x
-            cy = compY + compositeSize.height + button.offset.y
+            topY = compY + compositeSize.height + button.offset.y
         }
-        return Point(x: cx - imageSize.width / 2, y: cy - imageSize.height / 2)
+        return Point(x: cx - imageSize.width / 2, y: topY)
     }
 }

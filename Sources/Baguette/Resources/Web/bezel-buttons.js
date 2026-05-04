@@ -221,48 +221,54 @@
     // the button image's CENTRE at the chosen offset — we mirror
     // that here so positions line up with the static composite.
     const halfWPct = (iw / 2 / bareW) * 100;
-    const halfHPct = (ih / 2 / bareH) * 100;
     const off = b.rolloverOffset || b.offset || b.normalOffset || { x: 0, y: 0 };
+    // chrome.json semantics: offset.x is the image CENTRE on the
+    // anchored axis (cap straddles the bezel edge). offset.y is
+    // the image TOP edge, NOT its centre — taller caps (e.g. the
+    // 101-px-tall power button) start at the same y as shorter ones
+    // (e.g. the 34-px-tall action button) when their offset.y values
+    // are the same. Treating y as centre instead drifts tall caps
+    // downward by half-image-height (~5% of bezel for power).
 
     switch (b.anchor) {
       case 'left': {
-        // Centre at (off.x, off.y) inside the bare bezel's left edge.
+        // Centre at (off.x), TOP at (off.y) inside the bare bezel.
         const cxPct = (off.x / bareW) * 100;
-        const cyPct = (off.y / bareH) * 100;
+        const tyPct = (off.y / bareH) * 100;
         wrap.style.left = `${cxPct - halfWPct}%`;
-        wrap.style.top  = `${cyPct - halfHPct}%`;
+        wrap.style.top  = `${tyPct}%`;
         break;
       }
       case 'right': {
-        // Centre at (bareW + off.x, off.y) — chrome.json's right
-        // anchor uses negative offset.x to push the cap inward.
+        // Centre at (bareW + off.x) — chrome.json's right anchor
+        // uses negative offset.x to push the cap inward.
         const cxPct = ((bareW + off.x) / bareW) * 100;
-        const cyPct = (off.y / bareH) * 100;
+        const tyPct = (off.y / bareH) * 100;
         wrap.style.left = `${cxPct - halfWPct}%`;
-        wrap.style.top  = `${cyPct - halfHPct}%`;
+        wrap.style.top  = `${tyPct}%`;
         break;
       }
       case 'top': {
         const baseX = b.align === 'trailing' ? bareW : 0;
         const cxPct = ((baseX + off.x) / bareW) * 100;
-        const cyPct = (off.y / bareH) * 100;
+        const tyPct = (off.y / bareH) * 100;
         wrap.style.left = `${cxPct - halfWPct}%`;
-        wrap.style.top  = `${cyPct - halfHPct}%`;
+        wrap.style.top  = `${tyPct}%`;
         break;
       }
       case 'bottom': {
         const baseX = b.align === 'trailing' ? bareW : 0;
         const cxPct = ((baseX + off.x) / bareW) * 100;
-        const cyPct = ((bareH + off.y) / bareH) * 100;
+        const tyPct = ((bareH + off.y) / bareH) * 100;
         wrap.style.left = `${cxPct - halfWPct}%`;
-        wrap.style.top  = `${cyPct - halfHPct}%`;
+        wrap.style.top  = `${tyPct}%`;
         break;
       }
       default: {
         const cxPct = (off.x / bareW) * 100;
-        const cyPct = (off.y / bareH) * 100;
+        const tyPct = (off.y / bareH) * 100;
         wrap.style.left = `${cxPct - halfWPct}%`;
-        wrap.style.top  = `${cyPct - halfHPct}%`;
+        wrap.style.top  = `${tyPct}%`;
       }
     }
   };

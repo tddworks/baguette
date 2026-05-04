@@ -40,8 +40,8 @@
     // matching how Xcode previews the device). The legacy hand-rolled
     // PNGs had a transparent screen cutout, so the old plugin put the
     // bezel on top. With DeviceKit data we layer the screen *above*
-    // the bezel and clip it to the inner corner radius — the same
-    // order kittyfarm's SwiftUI ZStack uses.
+    // the bezel and clip it to the inner corner radius — same Z order
+    // as Apple's own Simulator window.
     //
     // In actionable mode we ask for `?buttons=false` so the bezel
     // image carries only the device body — `BezelButtons` overlays
