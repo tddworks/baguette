@@ -23,7 +23,7 @@ import NIOCore
 ///   GET  /simulators/:udid/chrome.json      → chrome layout JSON
 ///   GET  /simulators/:udid/bezel.png        → composite PNG
 ///   POST /simulators/:udid/input            → gesture     (TODO)
-///   GET  /simulators/:udid/screenshot.jpg   → JPEG        (TODO)
+///   GET  /simulators/:udid/screenshot.jpg   → JPEG (?quality=&scale=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
@@ -93,6 +93,18 @@ struct Server: Sendable {
         }
         router.get("/simulators/:udid/bezel.png") { [simulators, chromes] r, _ in
             Self.bezelPNG(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
+        }
+
+        // One-shot JPEG of the current framebuffer. Spins up Screen,
+        // awaits one IOSurface, encodes, and tears down — `?quality=`
+        // and `?scale=` mirror the WS stream knobs for parity.
+        router.get("/simulators/:udid/screenshot.jpg") { [simulators] r, _ in
+            await Self.screenshotJPEG(
+                udid: Self.udidParam(r),
+                quality: r.uri.queryParameters.get("quality").flatMap(Double.init) ?? 0.85,
+                scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
+                simulators: simulators
+            )
         }
 
         // Device-farm UI — multi-device dashboard. The HTML at /farm
@@ -190,6 +202,31 @@ struct Server: Sendable {
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],
             body: .init(byteBuffer: ByteBuffer(string: assets.layoutJSON()))
         )
+    }
+
+    private static func screenshotJPEG(
+        udid: String,
+        quality: Double,
+        scale: Int,
+        simulators: any Simulators
+    ) async -> Response {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        }
+        do {
+            let bytes = try await ScreenSnapshot.capture(
+                screen: sim.screen(),
+                quality: quality,
+                scale: max(1, scale)
+            )
+            return Response(
+                status: .ok,
+                headers: [.contentType: "image/jpeg", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(data: bytes))
+            )
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
     }
 
     private static func bezelPNG(
