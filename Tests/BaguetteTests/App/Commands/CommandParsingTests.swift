@@ -18,7 +18,7 @@ struct CommandParsingTests {
         #expect(Set(names) == [
             "list", "boot", "shutdown", "input", "stream",
             "tap", "swipe", "pinch", "pan", "press",
-            "chrome", "serve",
+            "chrome", "screenshot", "serve",
         ])
     }
 
@@ -169,6 +169,29 @@ struct CommandParsingTests {
         let cmd = try PressCommand.parse(["--udid", "ABC", "--button", "home"])
         #expect(cmd.button == "home")
         #expect(PressCommand.configuration.commandName == "press")
+    }
+
+    // MARK: - screenshot
+
+    @Test func `screenshot defaults match snapshot helper`() throws {
+        let cmd = try ScreenshotCommand.parse(["--udid", "ABC"])
+        #expect(cmd.options.udid == "ABC")
+        #expect(cmd.output == nil)
+        #expect(cmd.quality == 0.85)
+        #expect(cmd.scale == 1)
+        #expect(ScreenshotCommand.configuration.commandName == "screenshot")
+    }
+
+    @Test func `screenshot accepts --output --quality --scale`() throws {
+        let cmd = try ScreenshotCommand.parse([
+            "--udid", "ABC",
+            "--output", "/tmp/x.jpg",
+            "--quality", "0.5",
+            "--scale", "2",
+        ])
+        #expect(cmd.output == "/tmp/x.jpg")
+        #expect(cmd.quality == 0.5)
+        #expect(cmd.scale == 2)
     }
 
     // MARK: - serve
