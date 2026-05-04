@@ -178,7 +178,23 @@ final class LiveChromes: Chromes, @unchecked Sendable {
             }
 
         if buttonImages.isEmpty {
-            return DeviceChromeAssets(chrome: chrome, composite: composite)
+            return DeviceChromeAssets(
+                chrome: chrome,
+                composite: composite,
+                bareComposite: composite,
+                buttonImages: [:]
+            )
+        }
+
+        // Retain the per-button rasterized PNGs keyed by name so the
+        // server can hand them out via `/chrome-button/<name>.png` for
+        // the actionable-bezel UI. Map preserves insertion order for
+        // the unlikely case of duplicate names — last-write wins,
+        // matching how the merger picks the top layer.
+        var perButton: [String: ChromeImage] = [:]
+        perButton.reserveCapacity(buttonImages.count)
+        for entry in buttonImages {
+            perButton[entry.button.name] = entry.image
         }
 
         let margins = computeMargins(buttons: buttonImages)
@@ -231,6 +247,8 @@ final class LiveChromes: Chromes, @unchecked Sendable {
         return DeviceChromeAssets(
             chrome: chrome,
             composite: merged,
+            bareComposite: composite,
+            buttonImages: perButton,
             buttonMargins: margins
         )
     }

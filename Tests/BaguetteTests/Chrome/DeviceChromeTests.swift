@@ -283,6 +283,48 @@ struct DeviceChromeTests {
         let chromeJSON = chrome.layoutJSON(compositeSize: Size(width: 393, height: 852))
         #expect(assets.layoutJSON() == chromeJSON)
     }
+
+    // MARK: - imageUrl injection (actionable bezel)
+
+    @Test func `assets layoutJSON omits imageUrl when no prefix is given`() throws {
+        // Back-compat: today's callers pass nothing and get exactly the
+        // shape they get today. No imageUrl field on any button entry.
+        let chrome = Self.makeChromeWithButtons()
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 100, height: 200))
+        )
+
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON().utf8)
+        ) as? [String: Any]
+        let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
+        #expect(buttons.allSatisfy { $0["imageUrl"] == nil })
+    }
+
+    @Test func `assets layoutJSON adds imageUrl per button when prefix is given`() throws {
+        // The server passes "/simulators/<udid>/chrome-button/" so each
+        // button entry advertises a fetchable URL for its rasterized
+        // image. The domain stays URL-agnostic — the prefix is the
+        // server's responsibility, the suffix is `<name>.png`.
+        let chrome = Self.makeChromeWithButtons()
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 100, height: 200))
+        )
+
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON(
+                buttonImageURLPrefix: "/simulators/UDID-XYZ/chrome-button/"
+            ).utf8)
+        ) as? [String: Any]
+        let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
+        let urls = buttons.compactMap { $0["imageUrl"] as? String }
+        #expect(urls == [
+            "/simulators/UDID-XYZ/chrome-button/powerButton.png",
+            "/simulators/UDID-XYZ/chrome-button/volumeUp.png",
+        ])
+    }
 }
 
 // MARK: - fixtures
@@ -303,6 +345,28 @@ private extension DeviceChromeTests {
             buttons: buttons,
             compositeImageName: compositeImageName
         )
+    }
+
+    /// Two-button fixture — names mirror what real DeviceKit chromes
+    /// emit (`powerButton`, `volumeUp`). Used for `imageUrl` injection
+    /// tests where the values matter, not the geometry.
+    static func makeChromeWithButtons() -> DeviceChrome {
+        makeChrome(buttons: [
+            ChromeButton(
+                name: "powerButton",
+                imageName: "PWR",
+                anchor: .right,
+                align: .leading,
+                offset: Point(x: 0, y: 200)
+            ),
+            ChromeButton(
+                name: "volumeUp",
+                imageName: "VOL+",
+                anchor: .left,
+                align: .leading,
+                offset: Point(x: 0, y: 100)
+            ),
+        ])
     }
 
     /// Same shape as `fixturePhone11` but with `images.composite` removed

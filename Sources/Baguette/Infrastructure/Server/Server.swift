@@ -92,7 +92,43 @@ struct Server: Sendable {
             Self.chromeJSON(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
         }
         router.get("/simulators/:udid/bezel.png") { [simulators, chromes] r, _ in
-            Self.bezelPNG(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
+            // ?buttons=false → bare device body (no buttons baked in).
+            // The actionable-bezel front end layers per-button images on
+            // top via the /chrome-button/<name>.png route below.
+            // Default (true) preserves today's merged composite.
+            let withButtons = r.uri.queryParameters.get("buttons")
+                .map { $0.lowercased() != "false" } ?? true
+            return Self.bezelPNG(
+                udid: Self.udidParam(r),
+                simulators: simulators,
+                chromes: chromes,
+                withButtons: withButtons
+            )
+        }
+        // Per-button rasterized PNG — feeds the actionable-bezel UI.
+        // `:file` is the last URL segment, typically `<name>.png`
+        // matching a `ChromeButton.name` in `chrome.json` (e.g.
+        // `powerButton.png`, `actionButton.png`, `volumeUp.png`).
+        // Registered before the catch-all `/:file` so the longer
+        // template wins.
+        //
+        // UDID extraction here uses positional indexing on the path
+        // (`parts[1]`) instead of `udidParam` — that helper assumes
+        // a 3-segment path and grabs the second-to-last component,
+        // which breaks for this 4-segment template.
+        router.get("/simulators/:udid/chrome-button/:file") { [simulators, chromes] r, _ in
+            let parts = r.uri.path.split(separator: "/")
+            let udid = parts.count >= 4
+                ? String(parts[1]).removingPercentEncoding ?? ""
+                : ""
+            let last = String(parts.last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.chromeButtonPNG(
+                udid: udid,
+                buttonFile: last,
+                simulators: simulators,
+                chromes: chromes
+            )
         }
 
         // One-shot JPEG of the current framebuffer. Spins up Screen,
@@ -193,14 +229,37 @@ struct Server: Sendable {
         simulators: any Simulators,
         chromes: any Chromes
     ) -> Response {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
-              let assets = sim.chrome(in: chromes) else {
+        guard let json = chromeJSONString(
+            udid: udid, simulators: simulators, chromes: chromes
+        ) else {
             return errorJSON("no chrome for udid \(udid)", status: .notFound)
         }
         return Response(
             status: .ok,
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-            body: .init(byteBuffer: ByteBuffer(string: assets.layoutJSON()))
+            body: .init(byteBuffer: ByteBuffer(string: json))
+        )
+    }
+
+    /// Pure data producer for `chrome.json`. Internal so handler-level
+    /// tests can drive it with mock `Simulators` + `Chromes` and assert
+    /// on the JSON string directly. The route closure (`chromeJSON`)
+    /// is the thin wrapper that builds the `Response`.
+    ///
+    /// Includes `imageUrl` per button — the actionable-bezel front end
+    /// fetches each rasterized button from the
+    /// `/simulators/<udid>/chrome-button/<name>.png` route below.
+    static func chromeJSONString(
+        udid: String,
+        simulators: any Simulators,
+        chromes: any Chromes
+    ) -> String? {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
+              let assets = sim.chrome(in: chromes) else {
+            return nil
+        }
+        return assets.layoutJSON(
+            buttonImageURLPrefix: "/simulators/\(udid)/chrome-button/"
         )
     }
 
@@ -232,10 +291,13 @@ struct Server: Sendable {
     private static func bezelPNG(
         udid: String,
         simulators: any Simulators,
-        chromes: any Chromes
+        chromes: any Chromes,
+        withButtons: Bool = true
     ) -> Response {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
-              let assets = sim.chrome(in: chromes) else {
+        guard let bytes = bezelImage(
+            udid: udid, simulators: simulators,
+            chromes: chromes, withButtons: withButtons
+        ) else {
             return Response(
                 status: .notFound,
                 headers: [.contentType: "text/plain"],
@@ -245,8 +307,80 @@ struct Server: Sendable {
         return Response(
             status: .ok,
             headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
-            body: .init(byteBuffer: ByteBuffer(data: assets.composite.data))
+            body: .init(byteBuffer: ByteBuffer(data: bytes))
         )
+    }
+
+    /// Pure data producer for the bezel image. Returns `nil` for
+    /// unknown UDIDs / chromes so the route closure can collapse to
+    /// 404 uniformly.
+    ///
+    /// `withButtons: false` returns the bare device body (`?buttons=
+    /// false` on the route) — the actionable-bezel front end layers
+    /// per-button images on top, animating each independently.
+    /// `withButtons: true` (the default) returns the merged composite
+    /// — today's behaviour.
+    static func bezelImage(
+        udid: String,
+        simulators: any Simulators,
+        chromes: any Chromes,
+        withButtons: Bool
+    ) -> Data? {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
+              let assets = sim.chrome(in: chromes) else {
+            return nil
+        }
+        return withButtons ? assets.composite.data : assets.bareComposite.data
+    }
+
+    private static func chromeButtonPNG(
+        udid: String,
+        buttonFile: String,
+        simulators: any Simulators,
+        chromes: any Chromes
+    ) -> Response {
+        guard let bytes = chromeButtonImage(
+            udid: udid, buttonFile: buttonFile,
+            simulators: simulators, chromes: chromes
+        ) else {
+            return Response(
+                status: .notFound,
+                headers: [.contentType: "text/plain"],
+                body: .init(byteBuffer: ByteBuffer(
+                    string: "no button \(buttonFile) for \(udid)"
+                ))
+            )
+        }
+        return Response(
+            status: .ok,
+            headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
+            body: .init(byteBuffer: ByteBuffer(data: bytes))
+        )
+    }
+
+    /// Pure data producer for the per-button image route. `buttonFile`
+    /// is the last URL path segment (e.g. `"powerButton.png"`). The
+    /// `.png` extension is stripped — the front end may or may not
+    /// include it, both spellings resolve the same button. Returns
+    /// `nil` when the udid / chrome / button name is unknown so the
+    /// route 404s uniformly.
+    static func chromeButtonImage(
+        udid: String,
+        buttonFile: String,
+        simulators: any Simulators,
+        chromes: any Chromes
+    ) -> Data? {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
+              let assets = sim.chrome(in: chromes) else {
+            return nil
+        }
+        let name: String = {
+            if buttonFile.hasSuffix(".png") {
+                return String(buttonFile.dropLast(4))
+            }
+            return buttonFile
+        }()
+        return assets.buttonImages[name]?.data
     }
 
     /// One WebSocket = one streaming session. Opens Screen + Stream

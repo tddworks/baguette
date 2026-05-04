@@ -296,6 +296,100 @@ struct LiveChromesTests {
         #expect(assets?.buttonMargins == Insets(top: 0, left: 0, bottom: 0, right: 0))
         verify(rasterizer).compose(canvasSize: .any, layers: .any).called(0)
     }
+
+    // MARK: - bare composite + per-button images (actionable bezel)
+    //
+    // The actionable-bezel UI needs the device body without the
+    // buttons baked in (so it can layer per-button images on top
+    // and animate them). LiveChromes already rasterizes each
+    // button individually in `assemble`; these tests pin the
+    // requirement that those individual images and the bare
+    // composite are *retained* on the returned assets, instead of
+    // being dropped after the merge.
+
+    @Test func `assets retains the bare composite separate from the merged composite`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let composite = ChromeImage(data: Data("composite-bare".utf8), size: Size(width: 100, height: 200))
+        let buttonImage = ChromeImage(data: Data("btn".utf8), size: Size(width: 10, height: 20))
+        let merged = ChromeImage(data: Data("merged".utf8), size: Size(width: 120, height: 240))
+
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONFourAnchors)
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("PhoneComposite"))
+            .willReturn(Data("composite-pdf".utf8))
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("BTN"))
+            .willReturn(Data("btn-pdf".utf8))
+        given(rasterizer).rasterize(pdfData: .value(Data("composite-pdf".utf8)))
+            .willReturn(composite)
+        given(rasterizer).rasterize(pdfData: .value(Data("btn-pdf".utf8)))
+            .willReturn(buttonImage)
+        given(rasterizer).compose(canvasSize: .any, layers: .any).willReturn(merged)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        let assets = chromes.assets(forDeviceName: "iPhone 17 Pro")
+
+        // `composite` is the merged bezel (today's behavior).
+        // `bareComposite` is the device body alone — the new contract.
+        #expect(assets?.composite == merged)
+        #expect(assets?.bareComposite == composite)
+    }
+
+    @Test func `assets retains every button image keyed by name`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 100, height: 200))
+        let buttonImage = ChromeImage(data: Data("btn".utf8), size: Size(width: 10, height: 20))
+        let merged = ChromeImage(data: Data("merged".utf8), size: Size(width: 120, height: 240))
+
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONFourAnchors)
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("PhoneComposite"))
+            .willReturn(Data("composite-pdf".utf8))
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("BTN"))
+            .willReturn(Data("btn-pdf".utf8))
+        given(rasterizer).rasterize(pdfData: .value(Data("composite-pdf".utf8)))
+            .willReturn(composite)
+        given(rasterizer).rasterize(pdfData: .value(Data("btn-pdf".utf8)))
+            .willReturn(buttonImage)
+        given(rasterizer).compose(canvasSize: .any, layers: .any).willReturn(merged)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        let assets = chromes.assets(forDeviceName: "iPhone 17 Pro")
+
+        // FourAnchors fixture has six inputs (L, R, TT, TL, BL, BT)
+        // — every name should map to the rasterized button image.
+        let images = try #require(assets?.buttonImages)
+        #expect(Set(images.keys) == ["L", "R", "TT", "TL", "BL", "BT"])
+        for (_, img) in images {
+            #expect(img == buttonImage)
+        }
+    }
+
+    @Test func `assets falls back bareComposite to composite when chrome has no buttons`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let pdf = Data("pdf".utf8)
+        let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 1, height: 1))
+
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        // fixtureChromeJSON has `"inputs": []` — no buttons, no merge.
+        given(store).chromeJSONData(chromeIdentifier: .any).willReturn(Self.fixtureChromeJSON)
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .any).willReturn(pdf)
+        given(rasterizer).rasterize(pdfData: .any).willReturn(composite)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        let assets = chromes.assets(forDeviceName: "iPhone 17 Pro")
+
+        // No buttons → bare and merged are the same image; per-button
+        // dictionary is empty. The contract has to hold for the
+        // no-button case so callers don't need a special path.
+        #expect(assets?.composite == composite)
+        #expect(assets?.bareComposite == composite)
+        #expect(assets?.buttonImages.isEmpty == true)
+    }
 }
 
 // MARK: - fixtures

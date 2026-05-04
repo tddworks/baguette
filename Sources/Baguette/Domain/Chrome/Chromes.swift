@@ -43,6 +43,17 @@ protocol Chromes: AnyObject, Sendable {
 struct DeviceChromeAssets: Sendable, Equatable {
     let chrome: DeviceChrome
     let composite: ChromeImage
+    /// The device body alone — same composite *without* the buttons
+    /// merged in. Always present (equals `composite` when the chrome
+    /// has no buttons). Served by `bezel.png?buttons=false` so the
+    /// front end can render the buttons as separate, animatable DOM
+    /// elements layered over a bare bezel.
+    let bareComposite: ChromeImage
+    /// Per-button rasterized PNGs, keyed by `ChromeButton.name`
+    /// (e.g. `"powerButton"`, `"actionButton"`, `"volumeUp"`). Served
+    /// by `/simulators/<udid>/chrome-button/<name>.png`. Empty when
+    /// the chrome carries no buttons.
+    let buttonImages: [String: ChromeImage]
     /// Overshoot of buttons past each edge of the original composite,
     /// in chrome pixels. All zero when no buttons (or buttons fit
     /// inside the device body).
@@ -51,10 +62,18 @@ struct DeviceChromeAssets: Sendable, Equatable {
     init(
         chrome: DeviceChrome,
         composite: ChromeImage,
+        bareComposite: ChromeImage? = nil,
+        buttonImages: [String: ChromeImage] = [:],
         buttonMargins: Insets = Insets(top: 0, left: 0, bottom: 0, right: 0)
     ) {
         self.chrome = chrome
         self.composite = composite
+        // Default `bareComposite` to `composite` when not supplied —
+        // covers chromes with no buttons (the merged and bare bezels
+        // are identical) and keeps existing test fixtures working
+        // without changes.
+        self.bareComposite = bareComposite ?? composite
+        self.buttonImages = buttonImages
         self.buttonMargins = buttonMargins
     }
 
@@ -64,12 +83,26 @@ struct DeviceChromeAssets: Sendable, Equatable {
     /// with the rendered bezel.png), but emits the parsed chrome's
     /// `innerCornerRadius` directly — the screen corner curve doesn't
     /// stretch when buttons add canvas around the device body.
-    func layoutJSON() -> String {
+    ///
+    /// `buttonImageURLPrefix` lets the route handler inject an
+    /// `imageUrl` per button entry — e.g. pass
+    /// `"/simulators/<udid>/chrome-button/"` and each button gets
+    /// `imageUrl: "<prefix><name>.png"`. Pass `nil` (or omit) to
+    /// emit the legacy shape with no `imageUrl` field. The domain
+    /// stays URL-agnostic; the server owns the URL template.
+    func layoutJSON(buttonImageURLPrefix: String? = nil) -> String {
         let originalCompositeSize = Size(
             width:  composite.size.width  - buttonMargins.left - buttonMargins.right,
             height: composite.size.height - buttonMargins.top  - buttonMargins.bottom
         )
         let baseScreen = chrome.screenRect(in: originalCompositeSize)
+        let buttons: [[String: Any]] = chrome.buttons.map { b in
+            var entry = b.json
+            if let prefix = buttonImageURLPrefix {
+                entry["imageUrl"] = "\(prefix)\(b.name).png"
+            }
+            return entry
+        }
         let dict: [String: Any] = [
             "identifier": chrome.identifier,
             "outerCornerRadius": chrome.outerCornerRadius,
@@ -84,7 +117,7 @@ struct DeviceChromeAssets: Sendable, Equatable {
                 "width":  baseScreen.size.width,
                 "height": baseScreen.size.height,
             ],
-            "buttons": chrome.buttons.map(\.json),
+            "buttons": buttons,
         ]
         let data = try! JSONSerialization.data(
             withJSONObject: dict, options: [.sortedKeys]
