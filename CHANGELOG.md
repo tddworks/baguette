@@ -18,6 +18,13 @@ For releases prior to this changelog, see the
 
 ---
 
+## [0.1.65] - 2026-05-04
+
+### Changed
+- Bug fixes and improvements.
+
+---
+
 ## [0.1.64] - 2026-05-04
 
 ### Added
@@ -88,7 +95,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.64...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.65...HEAD
+[0.1.65]: https://github.com/tddworks/baguette/compare/v0.1.64...v0.1.65
 [0.1.64]: https://github.com/tddworks/baguette/compare/v0.1.63...v0.1.64
 [0.1.63]: https://github.com/tddworks/baguette/compare/v0.1.62...v0.1.63
 [0.1.62]: https://github.com/tddworks/baguette/compare/v0.1.61...v0.1.62
