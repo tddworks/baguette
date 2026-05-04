@@ -22,43 +22,56 @@
   #simNativeView (plus the <style> below) and injects it when the
   page is loaded directly at /simulators/<udid>.
 
-  No fake macOS window — the device floats free on the page and a
-  single glass toolbar at the bottom carries the device label,
-  action buttons (Home / Screenshot / App-switcher), the format
-  picker, and the live fps. Less chrome, more device.
+  No fake window, no bottom HUD. The whole UI is one slim
+  translucent bar at the top carrying every control:
+
+    [← iPhone 17 Pro Max · iOS 26.4]    [60 fps  H.264|MJPEG  🏠 📷 🪟]
+
+  The device floats free on the dark page below — biggest possible
+  device, least possible chrome.
 -->
 <style>
   #simNativeView {
     position: fixed; inset: 0;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 24px 24px 88px;  /* 88px reserves room for the toolbar */
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
     box-sizing: border-box;
     background: transparent;
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
 
-  /* Device floats free. Sized from the available viewport so it
-     dominates the page; aspect ratio comes from the bezel <img>. */
-  #simNativeView #nativeDeviceFrame {
-    position: relative; display: inline-block;
-    max-height: calc(100vh - 24px - 88px);
+  /* The device IS the page — claim the entire viewport. The
+     floating top bar overlaps the bezel's notch area on top; both
+     are dark so the overlap is visually invisible while we recover
+     ~56 px of vertical room for the screen itself.
+
+     `!important` overrides device-frame.js's inline `max-height: 70vh`
+     on both the wrapper <div> and the bezel <img> — those defaults
+     are tuned for the sidebar layout and would cap the device to
+     70% of the viewport here. */
+  #simNativeView #nativeDeviceFrame,
+  #simNativeView #nativeDeviceFrame > div {
+    max-height: 100vh !important;
+    max-width: 100vw !important;
   }
   #simNativeView #nativeDeviceFrame img,
   #simNativeView #nativeDeviceFrame canvas {
-    max-height: calc(100vh - 24px - 88px);
+    max-height: 100vh !important;
+    max-width: 100vw !important;
   }
 
-  /* Floating bottom toolbar. One glass pill carrying everything:
-       [device label]  ·  [actions]  ·  [format picker]  ·  [fps]
-     Each section is divided by a hairline so the groups read as
-     distinct controls without needing extra rows. */
-  #simNativeView .float-bar {
-    position: fixed; bottom: 22px; left: 50%;
+  /* Floating top bar — slim glass pill spanning a comfortable
+     middle width, not edge-to-edge so it reads as a control
+     surface and not as page chrome. Three groups laid out with
+     `justify-content: space-between`: label · spacer · controls. */
+  #simNativeView .top-bar {
+    position: fixed; top: 14px; left: 50%;
     transform: translateX(-50%);
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 6px 8px;
+    display: inline-flex; align-items: center; gap: 12px;
+    height: 36px;
+    padding: 4px 6px 4px 4px;
+    max-width: calc(100vw - 24px);
     background: rgba(20, 20, 24, 0.78);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
@@ -68,57 +81,58 @@
     backdrop-filter: blur(18px) saturate(1.5);
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     color: #f5f5f7;
-    max-width: calc(100vw - 24px);
-  }
-  #simNativeView .fb-divider {
-    width: 1px; height: 18px;
-    background: rgba(255, 255, 255, 0.12);
   }
 
-  /* Device label — clickable, returns to the simulator list.
-     Subtle chevron hints at the back action without shouting. */
-  #simNativeView .fb-label {
-    display: inline-flex; align-items: center; gap: 6px;
+  /* Label group — clickable, returns to the simulator list. The
+     chevron + device name + OS subtitle read as one breadcrumb. */
+  #simNativeView .tb-label {
+    display: inline-flex; align-items: center; gap: 8px;
     padding: 4px 10px 4px 8px;
     border-radius: 999px;
     color: inherit; text-decoration: none;
     transition: background 0.12s ease;
+    min-width: 0; /* enable ellipsis inside the flex item */
   }
-  #simNativeView .fb-label:hover { background: rgba(255, 255, 255, 0.08); }
-  #simNativeView .fb-label .fb-back {
+  #simNativeView .tb-label:hover { background: rgba(255, 255, 255, 0.10); }
+  #simNativeView .tb-label .tb-back {
     color: rgba(245, 245, 247, 0.55);
     flex-shrink: 0;
   }
-  #simNativeView .fb-label .fb-name {
+  #simNativeView .tb-label .tb-name {
     color: #f5f5f7;
-    font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    font: 600 13px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     letter-spacing: 0.01em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     max-width: 22ch;
   }
-  #simNativeView .fb-label .fb-os {
+  #simNativeView .tb-label .tb-os {
     color: rgba(245, 245, 247, 0.5);
-    font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    font: 500 11px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     white-space: nowrap;
+    padding-left: 2px;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
   }
 
-  /* Action button group — Home / Screenshot / App switcher. */
-  #simNativeView .fb-actions {
-    display: inline-flex; align-items: center; gap: 2px;
+  /* Right-side controls cluster: fps badge · format picker · actions. */
+  #simNativeView .tb-controls {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding-right: 4px;
   }
-  #simNativeView .fb-actions .ico-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 28px; padding: 0;
-    background: transparent; border: 0; border-radius: 8px;
-    color: rgba(245, 245, 247, 0.92); cursor: pointer;
-    transition: background 0.12s ease;
-  }
-  #simNativeView .fb-actions .ico-btn:hover { background: rgba(255, 255, 255, 0.10); }
-  #simNativeView .fb-actions .ico-btn:active { background: rgba(255, 255, 255, 0.18); }
-  #simNativeView .fb-actions .ico-btn svg { display: block; }
 
-  /* Format segmented control. Active button is filled blue; the
-     other is a quiet ghost button. */
+  /* fps — small monospace label. Hidden until the stream reports a
+     value so the bar isn't carrying dead text on startup. */
+  #simNativeView #nativeStatus {
+    color: rgba(245, 245, 247, 0.55);
+    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 0 2px;
+  }
+  #simNativeView #nativeStatus:empty { display: none; }
+
+  /* Format segmented control. Active is filled blue; the other is
+     a quiet ghost that lifts on hover. */
   #simNativeView .fmt-picker {
     display: inline-flex; align-items: stretch;
     padding: 2px;
@@ -141,25 +155,31 @@
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   }
 
-  /* Live fps. Hidden when empty so the toolbar collapses on
-     stream startup before the first frame is decoded. */
-  #simNativeView #nativeStatus {
-    color: rgba(245, 245, 247, 0.55);
-    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-variant-numeric: tabular-nums;
-    pointer-events: none;
-    padding: 0 8px 0 2px;
-    white-space: nowrap;
+  /* Action buttons — Home / Screenshot / App-switcher. */
+  #simNativeView .tb-actions {
+    display: inline-flex; align-items: center; gap: 2px;
   }
-  #simNativeView #nativeStatus:empty { display: none; }
-  #simNativeView #nativeStatus:empty + .fb-divider { display: none; }
+  #simNativeView .ico-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: rgba(245, 245, 247, 0.92); cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  #simNativeView .ico-btn:hover { background: rgba(255, 255, 255, 0.10); }
+  #simNativeView .ico-btn:active { background: rgba(255, 255, 255, 0.18); }
+  #simNativeView .ico-btn svg { display: block; }
 
-  /* Narrow viewports — drop the device label down to just the
-     back chevron + name (hide the OS subtitle). */
-  @media (max-width: 520px) {
-    #simNativeView .fb-label .fb-os { display: none; }
-    #simNativeView .float-bar { gap: 6px; padding: 5px 6px; }
-    #simNativeView .fb-actions .ico-btn { width: 28px; height: 26px; }
+  /* Narrow viewports — drop the OS subtitle and the fps badge so
+     the bar collapses gracefully instead of wrapping. */
+  @media (max-width: 560px) {
+    #simNativeView .tb-label .tb-os { display: none; }
+    #simNativeView #nativeStatus { display: none; }
+    #simNativeView .top-bar { gap: 8px; }
+  }
+  @media (max-width: 420px) {
+    #simNativeView .fmt-picker { display: none; }
+    #simNativeView .tb-label .tb-name { max-width: 16ch; }
   }
 
   /* Preview ribbon — only when opened via file:// */
@@ -177,55 +197,52 @@
 
   <div id="nativeDeviceFrame"></div>
 
-  <div class="float-bar" role="toolbar" aria-label="Simulator controls">
-    <a class="fb-label" id="nativeBackLink" href="/simulators" title="Back to simulators">
-      <svg class="fb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  <div class="top-bar" role="toolbar" aria-label="Simulator controls">
+    <a class="tb-label" id="nativeBackLink" href="/simulators" title="Back to simulators">
+      <svg class="tb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
         <polyline points="15 18 9 12 15 6"/>
       </svg>
-      <span class="fb-name" id="nativeDeviceName">iPhone</span>
-      <span class="fb-os"   id="nativeDeviceOS">iOS</span>
+      <span class="tb-name" id="nativeDeviceName">iPhone</span>
+      <span class="tb-os"   id="nativeDeviceOS">iOS</span>
     </a>
 
-    <span class="fb-divider"></span>
+    <div class="tb-controls">
+      <span id="nativeStatus"></span>
 
-    <div class="fb-actions">
-      <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-          <path d="M3 11.2 12 4l9 7.2"/>
-          <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
-        </svg>
-      </button>
-      <button class="ico-btn" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-          <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
-          <circle cx="12" cy="13" r="3.5"/>
-        </svg>
-      </button>
-      <button class="ico-btn" title="Lock" onclick="window.__nativeLock && window.__nativeLock()">
-        <!-- "Stack of windows" glyph mirroring the native Simulator
-             toolbar's app-switcher icon — two overlapping rounded squares. -->
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
-          <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
-          <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
-        </svg>
-      </button>
+      <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
+        <button class="fmt-btn" data-v="avcc"  title="H.264 (hardware-decoded). Smaller, more compressed."
+                onclick="window.__nativeSetFormat && window.__nativeSetFormat('avcc')">H.264</button>
+        <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
+                onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
+      </div>
+
+      <div class="tb-actions">
+        <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <path d="M3 11.2 12 4l9 7.2"/>
+            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+          </svg>
+        </button>
+        <button class="ico-btn" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+          </svg>
+        </button>
+        <button class="ico-btn" title="Lock" onclick="window.__nativeLock && window.__nativeLock()">
+          <!-- "App-switcher" glyph mirroring the native Simulator
+               toolbar's third icon — two overlapping rounded squares. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
+            <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
+          </svg>
+        </button>
+      </div>
     </div>
-
-    <span class="fb-divider"></span>
-
-    <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
-      <button class="fmt-btn" data-v="avcc"  title="H.264 (hardware-decoded). Smaller, more compressed."
-              onclick="window.__nativeSetFormat && window.__nativeSetFormat('avcc')">H.264</button>
-      <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
-              onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
-    </div>
-
-    <span id="nativeStatus"></span>
-    <span class="fb-divider"></span>
   </div>
 </div>
 
@@ -241,9 +258,8 @@
     var host = document.getElementById('nativeDeviceFrame');
     var img = document.createElement('img');
     img.src = '../frames/iPhone 17 Pro Max.png';
-    img.style.cssText = 'display:block;height:88vh;max-height:calc(100vh - 112px);pointer-events:none';
+    img.style.cssText = 'display:block;height:88vh;max-height:calc(100vh - 72px);pointer-events:none';
     host.appendChild(img);
-    // Reflect a default active format for the preview.
     document.querySelector('.fmt-btn[data-v="avcc"]').classList.add('active');
     document.getElementById('nativeStatus').textContent = '60 fps';
   })();
