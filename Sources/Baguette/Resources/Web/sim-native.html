@@ -34,53 +34,61 @@
   #simNativeView {
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    padding: 0;
+    padding: 12px;
     box-sizing: border-box;
     background: transparent;
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
 
-  /* The device IS the page — claim the entire viewport. The
-     floating top bar overlaps the bezel's notch area on top; both
-     are dark so the overlap is visually invisible while we recover
-     ~56 px of vertical room for the screen itself.
-
-     `!important` overrides device-frame.js's inline `max-height: 70vh`
-     on both the wrapper <div> and the bezel <img> — those defaults
-     are tuned for the sidebar layout and would cap the device to
-     70% of the viewport here. */
-  #simNativeView #nativeDeviceFrame,
-  #simNativeView #nativeDeviceFrame > div {
-    max-height: 100vh !important;
-    max-width: 100vw !important;
-  }
-  #simNativeView #nativeDeviceFrame img,
-  #simNativeView #nativeDeviceFrame canvas {
-    max-height: 100vh !important;
-    max-width: 100vw !important;
+  /* SwiftUI-style VStack: toolbar pill above the device, both
+     centered horizontally, stacked vertically with a small gap.
+     Each child keeps its own intrinsic width; nothing stretches
+     to match the other. */
+  #simNativeView .device-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-height: 100%;
+    min-width: 0;
   }
 
-  /* Floating top bar — slim glass pill spanning a comfortable
-     middle width, not edge-to-edge so it reads as a control
-     surface and not as page chrome. Three groups laid out with
-     `justify-content: space-between`: label · spacer · controls. */
+  /* Toolbar pill — its own content-based width (label + controls).
+     Sits directly above the device as the upper child of the
+     VStack. */
   #simNativeView .top-bar {
-    position: fixed; top: 14px; left: 50%;
-    transform: translateX(-50%);
-    display: inline-flex; align-items: center; gap: 12px;
+    display: inline-flex; align-items: center;
+    flex-shrink: 0;
+    gap: 12px;
     height: 36px;
     padding: 4px 6px 4px 4px;
-    max-width: calc(100vw - 24px);
     background: rgba(20, 20, 24, 0.78);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
     box-shadow:
-      0 12px 36px rgba(0, 0, 0, 0.55),
+      0 8px 24px rgba(0, 0, 0, 0.45),
       0 1px 0 rgba(255, 255, 255, 0.05) inset;
     backdrop-filter: blur(18px) saturate(1.5);
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     color: #f5f5f7;
+    max-width: 100%;
+  }
+
+  /* `!important` overrides device-frame.js's inline `max-height: 70vh`
+     on both the wrapper <div> and the bezel <img> — those defaults
+     are tuned for the sidebar layout and would cap the device to
+     70% of the viewport here. The 68px subtracts the toolbar
+     (36px) + column gap (8px) + container padding (24px). */
+  #simNativeView #nativeDeviceFrame,
+  #simNativeView #nativeDeviceFrame > div {
+    max-height: calc(100vh - 68px) !important;
+    max-width: 100% !important;
+  }
+  #simNativeView #nativeDeviceFrame img,
+  #simNativeView #nativeDeviceFrame canvas {
+    max-height: calc(100vh - 68px) !important;
+    max-width: 100% !important;
   }
 
   /* Label group — clickable, returns to the simulator list. The
@@ -195,8 +203,7 @@
 <div id="simNativeView">
   <span class="preview-banner">PREVIEW</span>
 
-  <div id="nativeDeviceFrame"></div>
-
+  <div class="device-column">
   <div class="top-bar" role="toolbar" aria-label="Simulator controls">
     <a class="tb-label" id="nativeBackLink" href="/simulators" title="Back to simulators">
       <svg class="tb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -243,6 +250,9 @@
         </button>
       </div>
     </div>
+  </div>
+
+    <div id="nativeDeviceFrame"></div>
   </div>
 </div>
 
