@@ -1,0 +1,26 @@
+{
+  "skill_name": "baguette",
+  "evals": [
+    {
+      "id": 1,
+      "name": "settings-airplane-mode-script",
+      "prompt": "Write me a shell script that uses the baguette CLI to: (a) find a booted iPhone simulator, (b) press Home, (c) tap the Settings app icon on the home screen, (d) wait for Settings to open, (e) capture a single JPEG frame proving Settings is on screen, and save it to /tmp/settings.jpg. Assume baguette is installed and at least one iPhone is booted. Be concrete with the actual commands and the wire-format JSON the script needs. Inline any tap coordinates with comments explaining how you derived them.",
+      "expected_output": "A bash script that uses `baguette list --json` to pick a UDID, `baguette chrome layout` to get screen size, `baguette press --button home`, `baguette tap` with width/height passed in (NOT normalized 0-1 coords), and `baguette stream --format mjpeg --fps 1 | head -c …` for the snapshot. Should NOT propose `baguette key` or `baguette type`.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "maps-pinch-stream",
+      "prompt": "I need to stream a series of gestures to a long-running baguette session: open Maps, then perform a smooth two-finger pinch-to-zoom-in on the centre of the screen, then pan north by 200 points. The simulator is an iPhone 17 Pro Max (UDID: AAAA-BBBB-CCCC-DDDD). Generate the exact newline-delimited JSON I should pipe into `baguette input --udid AAAA-BBBB-CCCC-DDDD`, including any home/launch steps. Explain why you're using `touch2-*` vs `touch1-*` for the pinch.",
+      "expected_output": "Newline-delimited JSON using `touch2-down/move/up` (NOT touch1) for the pinch, with x1/y1/x2/y2 in device points based on iPhone 17 Pro Max screen 438x954, and width/height fields on every gesture. Should explain that single-finger streaming routes correctly but iOS treats it as a pan, not a pinch — so two-finger is required for UIPinchGestureRecognizer.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "type-text-fallback",
+      "prompt": "Write a baguette command that types the text 'hello' into a TextField that's currently focused on the booted iPhone simulator. The UDID is XXXX-YYYY.",
+      "expected_output": "Should NOT propose `baguette type` or `baguette key` — those return errors because keyboard isn't on the host-HID path. Correct answer: explain the limitation and fall back to `xcrun simctl io <UDID> text 'hello'` or AXe. A failure mode would be the agent confidently writing `baguette type --text hello` and pretending it works.",
+      "files": []
+    }
+  ]
+}
