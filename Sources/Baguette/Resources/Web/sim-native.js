@@ -158,16 +158,13 @@
   }
 
   function wireInput(targetUdid, screenSize) {
+    const log = (msg) => console.log('[native]', msg);
     simInput = new window.SimInput({
       udid: targetUdid,
-      log: (msg) => console.log('[native]', msg),
-      // Same SimInput → Baguette wire translation as sim-stream.js.
-      // Kept inline so the focus mode has zero coupling to the
-      // sidebar orchestrator (which is its own private IIFE).
-      transport: (payload) => {
-        const wire = toBaguetteWire(payload);
-        if (wire && session) session.send(wire);
-      },
+      log,
+      // Shared translator from sim-input-bridge.js — same dialect
+      // adapter sim-stream.js and farm-tile.js use.
+      transport: window.SimInputBridge.makeTransport(session, log),
     });
     simInput.setScreenSize(screenSize.w, screenSize.h);
     pinchOverlay = new window.PinchOverlay(surface.screenArea);
@@ -244,62 +241,6 @@
         a.remove();
       });
     }, 'image/png');
-  }
-
-  // SimInput → Baguette wire-format translator (mirrors sim-stream.js).
-  function toBaguetteWire(p) {
-    const w = p.width, h = p.height;
-    const base = { width: w, height: h };
-    const px = (x) => x * w;
-    const py = (y) => y * h;
-    switch (p.kind) {
-      case 'tap':
-        return { type: 'tap', x: px(p.x), y: py(p.y),
-                 duration: p.duration != null ? p.duration : 0.05, ...base };
-      case 'swipe':
-        return {
-          type: 'swipe',
-          startX: px(p.x1), startY: py(p.y1),
-          endX:   px(p.x2), endY:   py(p.y2),
-          duration: p.duration != null ? p.duration : 0.25,
-          ...base,
-        };
-      case 'touchDown':
-      case 'touchMove':
-      case 'touchUp':
-        return phasedTouchWire(p, base, px, py);
-      case 'scroll':
-        return { type: 'scroll', deltaX: p.deltaX, deltaY: p.deltaY };
-      case 'button':
-        return { type: 'button', button: p.button };
-      case 'key':
-      case 'type':
-        // Not on Baguette's host-HID path yet — drop quietly.
-        return null;
-      default:
-        return null;
-    }
-  }
-
-  function phasedTouchWire(p, base, px, py) {
-    const phase = p.kind.replace('touch', '').toLowerCase();
-    const fingers = p.fingers || [];
-    if (fingers.length === 1) {
-      return {
-        type: `touch1-${phase}`,
-        x: px(fingers[0].x), y: py(fingers[0].y),
-        ...base,
-      };
-    }
-    if (fingers.length === 2) {
-      return {
-        type: `touch2-${phase}`,
-        x1: px(fingers[0].x), y1: py(fingers[0].y),
-        x2: px(fingers[1].x), y2: py(fingers[1].y),
-        ...base,
-      };
-    }
-    return null;
   }
 
   console.log('[Baguette] sim-native.js active for', udid);

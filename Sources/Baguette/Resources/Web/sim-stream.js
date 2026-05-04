@@ -215,16 +215,11 @@
       udid,
       log,
       // Input + control rides over the same WebSocket the stream
-      // session opened. SimInput speaks the asc-cli plugin's dialect
-      // (`kind:"tap"`, `kind:"touchDown"` with `fingers[]`); Baguette's
-      // GestureRegistry expects its own dialect (`type:"tap"`,
-      // `type:"touch1-down"`, `startX/endX` instead of `x1/x2`). The
-      // translator lives here — the only place that knows it's
-      // bridging two wire dialects.
-      transport: (payload) => {
-        const wire = toBaguetteWire(payload);
-        if (wire) session.send(wire);
-      },
+      // session opened. SimInputBridge translates SimInput's asc-cli
+      // dialect (kind:"tap", fingers[]) to Baguette's GestureRegistry
+      // dialect (type:"tap", touch1-/touch2-, points-not-normalized);
+      // also shared by farm-tile.js and sim-native.js.
+      transport: window.SimInputBridge.makeTransport(session, log),
     });
     simInput.setScreenSize(screenSize.w, screenSize.h);
     pinchOverlay = new PinchOverlay(surface.screenArea);
@@ -475,75 +470,6 @@
     let n = bytes, i = 0;
     while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
     return `${n.toFixed(n < 10 && i ? 1 : 0)} ${units[i]}`;
-  }
-
-  // SimInput → Baguette wire-format translator. SimInput's payload
-  // uses the asc-cli plugin's dialect; Baguette's GestureRegistry
-  // expects its own. Returns the rewritten dict, or null when the
-  // gesture has no Baguette equivalent (e.g. `key`/`type` aren't on
-  // Baguette's host-HID path yet — they fall through to AXe in the
-  // plugin world; standalone serve drops them with a log).
-  // SimInput sends normalized [0,1] coords + `width`/`height` device
-  // points. Baguette's wire (per `IndigoHIDInput.sendMouse`) expects
-  // x/y in *device-point space* and re-normalizes internally — the
-  // plugin's TapHandler does this multiplication too. Skipping it
-  // sends every touch to the literal top-left corner.
-  function toBaguetteWire(p) {
-    const w = p.width, h = p.height;
-    const base = { width: w, height: h };
-    const px = (x) => x * w;
-    const py = (y) => y * h;
-    switch (p.kind) {
-      case 'tap':
-        return { type: 'tap', x: px(p.x), y: py(p.y),
-                 duration: p.duration ?? 0.05, ...base };
-      case 'swipe':
-        return {
-          type: 'swipe',
-          startX: px(p.x1), startY: py(p.y1),
-          endX:   px(p.x2), endY:   py(p.y2),
-          duration: p.duration ?? 0.25,
-          ...base,
-        };
-      case 'touchDown':
-      case 'touchMove':
-      case 'touchUp':
-        return phasedTouchWire(p, base, px, py);
-      case 'scroll':
-        return { type: 'scroll', deltaX: p.deltaX, deltaY: p.deltaY };
-      case 'button':
-        return { type: 'button', button: p.button };
-      case 'key':
-      case 'type':
-        log(`${p.kind}: not on Baguette's host-HID path`, true);
-        return null;
-      default:
-        return null;
-    }
-  }
-
-  /// `touchDown`/`touchMove`/`touchUp` with N fingers fan out to
-  /// `touch1-<phase>` (one finger) or `touch2-<phase>` (two fingers).
-  /// Anything else gets dropped — Baguette only supports 1 or 2.
-  function phasedTouchWire(p, base, px, py) {
-    const phase = p.kind.replace('touch', '').toLowerCase(); // down|move|up
-    const fingers = p.fingers || [];
-    if (fingers.length === 1) {
-      return {
-        type: `touch1-${phase}`,
-        x: px(fingers[0].x), y: py(fingers[0].y),
-        ...base,
-      };
-    }
-    if (fingers.length === 2) {
-      return {
-        type: `touch2-${phase}`,
-        x1: px(fingers[0].x), y1: py(fingers[0].y),
-        x2: px(fingers[1].x), y2: py(fingers[1].y),
-        ...base,
-      };
-    }
-    return null;
   }
 
   // --- Affordance handler ---
