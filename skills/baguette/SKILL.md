@@ -5,7 +5,8 @@ description: |
   multi-finger gestures, hardware buttons, frame capture, all without opening
   Xcode. Use this skill when:
   (1) The agent needs to interact with a booted iOS simulator from a script
-      (tap a coordinate, swipe between points, send Home / Lock, type text)
+      (tap a coordinate, swipe between points, send Home / Lock / Volume /
+      Action / Power, type ASCII text via the keyboard)
   (2) Building a smoke test, demo recording, or UI flow that drives a
       simulator end-to-end
   (3) Pairing iOS development with Claude Code, where the agent needs to
@@ -147,14 +148,23 @@ fresh captures `baguette screenshot` is one HTTP-free command.
 Wired (use freely):
 - `tap`, `swipe`, `touch1-{down,move,up}`, `touch2-{down,move,up}`,
   `pinch`, `pan`, `scroll`
-- `button`: `home`, `lock` only
+- `button`: `home`, `lock`, `power`, `volume-up`, `volume-down`,
+  `action`. Optional `--duration` / `"duration"` for long-press
+  semantics (action button "Hold for Ring", power → Siri / SOS, …).
+- `key` (single keystroke) and `type` (US-ASCII string). CLI:
+  `baguette key --code KeyA --modifiers shift,command --duration 0.2`
+  and `baguette type --text "hello"`. `code` is a W3C
+  `KeyboardEvent.code`; modifiers are `shift | control | option | command`.
 
 NOT wired (skill should NOT propose these):
-- `key` / `type` — keyboard isn't on the host-HID path yet. If the user
-  needs to type text into a TextField, fall back to `xcrun simctl io …`
-  or AXe, or accept the limitation.
-- `button: "siri"` — crashes `backboardd` via every known path. Refused
-  by the CLI.
+- **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji
+  isn't on the host-HID path yet. Fall back to
+  `xcrun simctl io <UDID> text "…"` for those strings, or split the
+  task so only ASCII goes through `baguette type`.
+- **F-keys, Page Up/Down, Home/End** through `key` — outside the
+  phase-1 supported code set. Most iOS apps don't use them anyway.
+- `button: "siri"` — crashes `backboardd` via every known path.
+  Refused by the CLI.
 
 ## Composing flows — the smoke-test pattern
 

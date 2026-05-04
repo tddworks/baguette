@@ -103,22 +103,57 @@ Negative `deltaY` scrolls content up (same convention as macOS). No
 ```json
 {"type":"button","button":"home"}
 {"type":"button","button":"lock"}
+{"type":"button","button":"power"}
+{"type":"button","button":"volume-up"}
+{"type":"button","button":"volume-down"}
+{"type":"button","button":"action","duration":1.2}
 ```
 
-Only `home` and `lock` reach a working target on iOS 26.4. Other
-button names return `{"ok":false,"error":"…"}`. **Do not propose
-`button:"siri"`** — it crashes `backboardd` via every known Indigo
-path and is rejected by the CLI before reaching SimulatorHID.
+Allowed names: `home | lock | power | volume-up | volume-down | action`.
+`duration` is the optional hold time in seconds — `0`/absent → ~100 ms
+short tap; longer holds drive iOS long-press semantics ("Hold for
+Ring" on `action`, Siri / SOS on `power`, etc.). The browser bezel
+overlay measures real `mousedown` → `mouseup` and forwards the
+elapsed time, so click-and-hold on a side button just works.
 
-## Not yet wired
+**Do not propose `button:"siri"`** — it crashes `backboardd` via
+every known Indigo path and is rejected by the CLI before reaching
+SimulatorHID.
 
-- **`key`** (single keycode) — not on host-HID path. Will return
-  `{"ok":false,"error":"key: not on Baguette's host-HID path"}`.
-- **`type`** (text string) — same. If you need to type into a TextField,
-  fall back to `xcrun simctl io <UDID> text "hello"` or use AXe.
+## Keyboard
 
-If a task requires text input, do not try to use `key` / `type`
-through baguette — use the fallback and tell the user about it.
+### Single keystroke
+
+```json
+{"type":"key","code":"KeyA"}
+{"type":"key","code":"KeyA","modifiers":["shift"]}
+{"type":"key","code":"KeyA","modifiers":["shift","command"],"duration":0.2}
+{"type":"key","code":"Enter"}
+```
+
+`code` is a W3C `KeyboardEvent.code`. Supported set: `KeyA`–`KeyZ`,
+`Digit0`–`Digit9`, `Enter`, `Escape`, `Backspace`, `Tab`, `Space`,
+`ArrowUp`/`Down`/`Left`/`Right`, US punctuation (`Minus`, `Equal`,
+`BracketLeft/Right`, `Backslash`, `Semicolon`, `Quote`, `Backquote`,
+`Comma`, `Period`, `Slash`). Modifiers: `shift`, `control`, `option`,
+`command`. Unknown codes / modifiers fail the parse with
+`{"ok":false,"error":"…"}`.
+
+### Typed text
+
+```json
+{"type":"type","text":"hello world"}
+{"type":"type","text":"Login: alice@example.com"}
+```
+
+Decomposed at parse time into the same `(KeyboardKey, modifiers)`
+pairs the wire `key` shape uses, then dispatched in order. **US ASCII
+printable only** — non-ASCII (`é`, `中`, `🦄`) fails the parse rather
+than silently dropping mid-string.
+
+**Phase-1 limits:** no IME / Pinyin / dead keys / emoji / non-Latin
+scripts — those need `IndigoHIDMessageForKeyboardNSEvent` (phase 2).
+For non-ASCII text, fall back to `xcrun simctl io <UDID> text "…"`.
 
 ## WebSocket-only verbs (during `baguette serve`)
 

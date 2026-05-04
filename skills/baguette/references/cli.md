@@ -66,11 +66,56 @@ baguette pinch --udid X --cx 219 --cy 478 --startSpread 60 --endSpread 240 \
                        --width 438 --height 954 [--duration 0.6]
 baguette pan   --udid X --x1 175 --y1 478 --x2 263 --y2 478 \
                        --dx 0 --dy 200 --width 438 --height 954 [--duration 0.5]
-baguette press --udid X --button home    # or lock
+baguette press --udid X --button home              # home | lock | power | volume-up | volume-down | action
+baguette press --udid X --button action --duration 1.2   # long-press → "Hold for Ring"
+baguette key   --udid X --code KeyA --modifiers shift,command [--duration 0.2]
+baguette type  --udid X --text "hello world"
 ```
 
 `x` / `y` etc. are device points (see `wire-protocol.md` for the
 coordinate convention). `width` / `height` come from `chrome layout`.
+
+### Hardware buttons — `press`
+
+```bash
+baguette press --udid X --button home                       # short tap
+baguette press --udid X --button power --duration 2.5       # Siri / SOS hold
+baguette press --udid X --button volume-up
+```
+
+| Button        | iOS effect                  | Long-hold (≥ ~0.8 s)              |
+|---------------|-----------------------------|-----------------------------------|
+| `home`        | Home / app switcher         | n/a                               |
+| `lock`        | Sleep / wake                | n/a                               |
+| `power`       | Sleep / wake                | Siri (~1.5 s) / SOS slider (~5 s) |
+| `volume-up`   | Volume up                   | Accessibility shortcut            |
+| `volume-down` | Volume down                 | Accessibility shortcut            |
+| `action`      | iPhone 15 Pro action button | "Hold for Ring" / silent flip     |
+
+`--duration <seconds>` is optional (default ~100 ms). `siri` is
+explicitly rejected — it crashes `backboardd` through every known
+Indigo path. See [`docs/features/buttons.md`](../../../docs/features/buttons.md).
+
+### Keyboard — `key` / `type`
+
+```bash
+# Single keystroke. `--code` is a W3C KeyboardEvent.code.
+baguette key --udid X --code KeyA                          # types 'a'
+baguette key --udid X --code KeyA --modifiers shift        # 'A'
+baguette key --udid X --code KeyA --modifiers shift,command --duration 0.2
+
+# Multi-character text (US ASCII only).
+baguette type --udid X --text "hello world"
+baguette type --udid X --text "Login: alice@example.com"
+```
+
+Supported codes: `KeyA`–`KeyZ`, `Digit0`–`Digit9`, `Enter`, `Escape`,
+`Backspace`, `Tab`, `Space`, `ArrowUp/Down/Left/Right`, US punctuation
+(`Minus`, `Equal`, `BracketLeft`, …). Modifiers: `shift`, `control`,
+`option`, `command` (comma-separated on the CLI). Phase-1 limits:
+**no IME, no emoji, no accented characters** — those need
+`KeyboardNSEvent` (phase 2). See
+[`docs/features/keyboard.md`](../../../docs/features/keyboard.md).
 
 ## Streaming gestures — `input`
 
