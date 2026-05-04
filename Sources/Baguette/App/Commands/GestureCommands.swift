@@ -139,6 +139,7 @@ struct PressCommand: ParsableCommand {
 
     @OptionGroup var options: DeviceOption
     @Option(help: "Hardware button: \(Press.allowed)") var button: String
+    @Option(help: "Hold duration in seconds (0 = short tap)") var duration: Double = 0
 
     func run() {
         guard let device = DeviceButton(rawValue: button) else {
@@ -146,7 +147,7 @@ struct PressCommand: ParsableCommand {
             Foundation.exit(1)
         }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = Press(button: device)
+        let gesture = Press(button: device, duration: duration)
         runOrExit(gesture.execute(on: sim.input()), action: "press")
     }
 }

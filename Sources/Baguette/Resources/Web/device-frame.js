@@ -18,8 +18,9 @@
 // `actionable` (default false) swaps the bezel for the buttons-less
 // variant (`bezel.png?buttons=false`) and overlays each chrome button
 // as its own animatable DOM element via `BezelButtons`. Hardware-
-// button clicks fire the `onPress(name)` callback so the host page
-// can route them through SimInput.
+// button presses fire `onPress(name, durationSeconds)` so the host
+// page can forward the real hold time to SimInput — needed for iOS
+// long-press semantics like the action button's "Hold for Ring".
 (function () {
   'use strict';
 

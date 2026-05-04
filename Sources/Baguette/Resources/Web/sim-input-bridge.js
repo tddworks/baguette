@@ -42,8 +42,11 @@
         return phasedTouch(p, base, px, py);
       case 'scroll':
         return { type: 'scroll', deltaX: p.deltaX, deltaY: p.deltaY };
-      case 'button':
-        return { type: 'button', button: p.button };
+      case 'button': {
+        const env = { type: 'button', button: p.button };
+        if (typeof p.duration === 'number' && p.duration > 0) env.duration = p.duration;
+        return env;
+      }
       case 'key':
       case 'type':
         log(`${p.kind}: not on Baguette's host-HID path`, true);

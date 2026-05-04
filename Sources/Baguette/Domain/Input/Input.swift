@@ -10,7 +10,9 @@ protocol Input: Sendable {
     func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool
     func touch1(phase: GesturePhase, at point: Point, size: Size) -> Bool
     func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool
-    func button(_ button: DeviceButton) -> Bool
+    /// Press-and-hold a hardware button. `duration` is the hold time in
+    /// seconds; pass `0` for a default short tap.
+    func button(_ button: DeviceButton, duration: Double) -> Bool
     func scroll(deltaX: Double, deltaY: Double) -> Bool
 
     /// Two-finger interpolated path — both pinch and pan reduce to "each

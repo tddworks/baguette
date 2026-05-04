@@ -94,7 +94,7 @@
     frame = new window.DeviceFrame({
       udid, layout,
       actionable: actionableEnabled(),
-      onPress: (name) => simInput && simInput.button(name),
+      onPress: (name, duration) => simInput && simInput.button(name, duration),
     });
     surface = frame.mount(document.getElementById('nativeDeviceFrame'));
 
@@ -329,7 +329,7 @@
     frame = new window.DeviceFrame({
       udid, layout,
       actionable: actionableEnabled(),
-      onPress: (name) => simInput && simInput.button(name),
+      onPress: (name, duration) => simInput && simInput.button(name, duration),
     });
     surface = frame.mount(document.getElementById('nativeDeviceFrame'));
     // StreamSession captures the canvas at construction; the

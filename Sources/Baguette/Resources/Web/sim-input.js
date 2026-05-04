@@ -103,8 +103,10 @@
       return this._post({ kind: 'scroll', deltaX, deltaY });
     }
 
-    button(name) {
-      return this._post({ kind: 'button', button: name });
+    button(name, duration) {
+      const body = { kind: 'button', button: name };
+      if (typeof duration === 'number' && duration > 0) body.duration = duration;
+      return this._post(body);
     }
 
     type(text) {

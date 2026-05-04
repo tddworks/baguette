@@ -105,14 +105,25 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return sendMouse(client: c, p1: first, p2: second, eventType: et, direction: dir, size: size)
     }
 
-    func button(_ button: DeviceButton) -> Bool {
+    func button(_ button: DeviceButton, duration: Double) -> Bool {
         guard let c = ensureWarm() else { return false }
+        let holdUs = holdMicroseconds(for: duration)
         switch button {
         case .home, .lock:
-            return pressLegacyButton(button, on: c)
+            return pressLegacyButton(button, holdUs: holdUs, on: c)
         case .power, .volumeUp, .volumeDown, .action:
-            return pressArbitraryHID(button, on: c)
+            return pressArbitraryHID(button, holdUs: holdUs, on: c)
         }
+    }
+
+    /// Default tap is 100 ms — long enough for iOS to register the press
+    /// without crossing into "long press" territory. A non-zero duration
+    /// (in seconds) overrides; we clamp the floor so a 0.001 s request
+    /// doesn't underrun the simulator's HID dispatch.
+    private func holdMicroseconds(for duration: Double) -> UInt32 {
+        guard duration > 0 else { return 100_000 }
+        let us = duration * 1_000_000
+        return UInt32(min(max(us, 20_000), Double(UInt32.max)))
     }
 
     func scroll(deltaX: Double, deltaY: Double) -> Bool {
@@ -186,19 +197,19 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
     }
 
-    private func pressLegacyButton(_ button: DeviceButton, on client: AnyObject) -> Bool {
+    private func pressLegacyButton(_ button: DeviceButton, holdUs: UInt32, on client: AnyObject) -> Bool {
         guard let bfn = buttonFn else {
             log("[hid] press \(button.rawValue) — buttonFn unresolved")
             return false
         }
         let (arg0, target) = buttonCodes(for: button)
-        log("[hid] press \(button.rawValue) via legacy arg0=\(arg0) target=0x\(String(target, radix: 16))")
+        log("[hid] press \(button.rawValue) via legacy arg0=\(arg0) target=0x\(String(target, radix: 16)) hold=\(holdUs)us")
         guard let down = bfn(arg0, 1, target) else {
             log("[hid] press \(button.rawValue) — down message build returned nil")
             return false
         }
         send(message: down, to: client)
-        usleep(100_000)  // 100ms hold
+        usleep(holdUs)
         // Release — direction 2; 0 crashes backboardd on iOS 26.4.
         guard let up = bfn(arg0, 2, target) else {
             log("[hid] press \(button.rawValue) — up message build returned nil")
@@ -208,7 +219,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return true
     }
 
-    private func pressArbitraryHID(_ button: DeviceButton, on client: AnyObject) -> Bool {
+    private func pressArbitraryHID(_ button: DeviceButton, holdUs: UInt32, on client: AnyObject) -> Bool {
         guard let kfn = hidArbFn else {
             log("[hid] press \(button.rawValue) — IndigoHIDMessageForHIDArbitrary unresolved")
             return false
@@ -218,13 +229,13 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             return false
         }
         let target = Self.touchDigitizer
-        log("[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(page) usage=\(usage)")
+        log("[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(page) usage=\(usage) hold=\(holdUs)us")
         guard let down = kfn(target, page, usage, 1) else {
             log("[hid] press \(button.rawValue) — down message build returned nil")
             return false
         }
         send(message: down, to: client)
-        usleep(100_000)
+        usleep(holdUs)
         guard let up = kfn(target, page, usage, 2) else {
             log("[hid] press \(button.rawValue) — up message build returned nil")
             return false

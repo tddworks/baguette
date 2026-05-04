@@ -23,7 +23,10 @@
 // ships TWO offsets in DeviceKit's data — `normalOffset` (at-rest) and
 // `rolloverOffset` (popped out a few px on hover). We position at
 // normal, animate to rollover on hover, and depress slightly past
-// normal on mousedown. Click fires `onPress(name)`.
+// normal on mousedown. Releasing fires
+// `onPress(name, durationSeconds)` so the host page can forward the
+// real hold time — needed for iOS long-press semantics like the
+// action button's "Hold for Ring" prompt.
 //
 // Buttons whose names map to wire events (`power` → `lock`, `home` →
 // `home`) are active; the rest are visible but show a tooltip
@@ -158,12 +161,30 @@
     // DeviceKit specified — not 1/30th of that.
     img.addEventListener('load', () => this._wireAnim(wrap, img, b));
     if (img.complete && img.naturalWidth) this._wireAnim(wrap, img, b);
+    // Measure real hold time so iOS can resolve tap vs long-press.
+    // The action button needs ~1s to flip silent/ring; power needs
+    // ~2s for Siri / SOS. We capture the user's mousedown→mouseup
+    // window and forward it as `duration` (seconds).
+    let pressedAt = 0;
+    const startHold = () => { pressedAt = performance.now(); };
+    const finishHold = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!pressedAt) return;
+      const seconds = Math.max(0, (performance.now() - pressedAt) / 1000);
+      pressedAt = 0;
+      if (wire) this.onPress(wire, seconds);
+      // Inert buttons silently no-op — title attribute already
+      // explains why nothing happened.
+    };
+    const cancelHold = () => { pressedAt = 0; };
+    wrap.addEventListener('mousedown', startHold);
+    wrap.addEventListener('mouseup', finishHold);
+    wrap.addEventListener('mouseleave', cancelHold);
+    // Block the synthetic click — we already fired on mouseup.
     wrap.addEventListener('click', (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      if (wire) this.onPress(wire);
-      // Inert buttons silently no-op — title attribute already
-      // explains why nothing happened.
     });
 
     return wrap;

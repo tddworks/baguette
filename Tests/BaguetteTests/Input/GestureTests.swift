@@ -173,6 +173,16 @@ struct PressTests {
         #expect(g == Press(button: .action))
     }
 
+    @Test func `parses duration when present`() throws {
+        let g = try Press.parse(["button": "action", "duration": 1.5])
+        #expect(g == Press(button: .action, duration: 1.5))
+    }
+
+    @Test func `defaults duration to zero when absent`() throws {
+        let g = try Press.parse(["button": "home"])
+        #expect(g.duration == 0)
+    }
+
     @Test func `rejects unknown button`() {
         #expect(throws: GestureError.invalidValue(
             "button",
@@ -184,10 +194,18 @@ struct PressTests {
 
     @Test func `executes against the input surface`() {
         let input = MockInput()
-        given(input).button(.any).willReturn(true)
+        given(input).button(.any, duration: .any).willReturn(true)
 
         _ = Press(button: .home).execute(on: input)
-        verify(input).button(.value(.home)).called(1)
+        verify(input).button(.value(.home), duration: .value(0)).called(1)
+    }
+
+    @Test func `passes hold duration through to input`() {
+        let input = MockInput()
+        given(input).button(.any, duration: .any).willReturn(true)
+
+        _ = Press(button: .action, duration: 2.0).execute(on: input)
+        verify(input).button(.value(.action), duration: .value(2.0)).called(1)
     }
 }
 
