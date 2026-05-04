@@ -26,18 +26,19 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         Double, Double         // widthPoints, heightPoints
     ) -> UnsafeMutableRawPointer?
     private typealias ButtonFn = @convention(c) (UInt32, UInt32, UInt32) -> UnsafeMutableRawPointer?
-    // IndigoHIDMessageForKeyboardArbitrary — routes any (usagePage, usage)
-    // HID consumer / keyboard code through the same digitizer pipeline that
-    // `*ForButton` rides. State: 1=down, 2=up. The 4th arg is a mach
-    // timestamp (the existing 3-arg button path passes 0x33 here, but the
-    // arbitrary path actually needs `mach_absolute_time()`).
-    private typealias KeyboardFn = @convention(c) (UInt32, UInt32, UInt32, UInt64) -> UnsafeMutableRawPointer?
+    // IndigoHIDMessageForHIDArbitrary — routes any (page, usage) HID
+    // event through the digitizer target. iOS 26 signature is
+    //   (target, page, usage, operation)
+    // — NOT (page, usage, op, timestamp) as some open-source bridges
+    // assume. target=0x32 (the same digitizer constant the mouse path
+    // uses); operation 1=down, 2=up. No timestamp.
+    private typealias HIDArbitraryFn = @convention(c) (UInt32, UInt32, UInt32, UInt32) -> UnsafeMutableRawPointer?
     private typealias ScrollFn = @convention(c) (UInt32, Double, Double, Double) -> UnsafeMutableRawPointer?
     private typealias ServiceFn = @convention(c) () -> UnsafeMutableRawPointer?
 
     private var mouseFn: MouseFn?
     private var buttonFn: ButtonFn?
-    private var keyboardFn: KeyboardFn?
+    private var hidArbFn: HIDArbitraryFn?
     private var scrollFn: ScrollFn?
     private var createPointerSvc: ServiceFn?
     private var createMouseSvc: ServiceFn?
@@ -186,24 +187,50 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     }
 
     private func pressLegacyButton(_ button: DeviceButton, on client: AnyObject) -> Bool {
-        guard let bfn = buttonFn else { return false }
+        guard let bfn = buttonFn else {
+            log("[hid] press \(button.rawValue) — buttonFn unresolved")
+            return false
+        }
         let (arg0, target) = buttonCodes(for: button)
-        guard let down = bfn(arg0, 1, target) else { return false }
+        log("[hid] press \(button.rawValue) via legacy arg0=\(arg0) target=0x\(String(target, radix: 16))")
+        guard let down = bfn(arg0, 1, target) else {
+            log("[hid] press \(button.rawValue) — down message build returned nil")
+            return false
+        }
         send(message: down, to: client)
         usleep(100_000)  // 100ms hold
         // Release — direction 2; 0 crashes backboardd on iOS 26.4.
-        guard let up = bfn(arg0, 2, target) else { return false }
+        guard let up = bfn(arg0, 2, target) else {
+            log("[hid] press \(button.rawValue) — up message build returned nil")
+            return false
+        }
         send(message: up, to: client)
         return true
     }
 
     private func pressArbitraryHID(_ button: DeviceButton, on client: AnyObject) -> Bool {
-        guard let kfn = keyboardFn, let (page, usage) = hidUsage(for: button) else { return false }
-        guard let down = kfn(page, usage, 1, mach_absolute_time()) else { return false }
+        guard let kfn = hidArbFn else {
+            log("[hid] press \(button.rawValue) — IndigoHIDMessageForHIDArbitrary unresolved")
+            return false
+        }
+        guard let (page, usage) = hidUsage(for: button) else {
+            log("[hid] press \(button.rawValue) — no HID usage mapping")
+            return false
+        }
+        let target = Self.touchDigitizer
+        log("[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(page) usage=\(usage)")
+        guard let down = kfn(target, page, usage, 1) else {
+            log("[hid] press \(button.rawValue) — down message build returned nil")
+            return false
+        }
         send(message: down, to: client)
         usleep(100_000)
-        guard let up = kfn(page, usage, 2, mach_absolute_time()) else { return false }
+        guard let up = kfn(target, page, usage, 2) else {
+            log("[hid] press \(button.rawValue) — up message build returned nil")
+            return false
+        }
         send(message: up, to: client)
+        log("[hid] press \(button.rawValue) — sent down+up")
         return true
     }
 
@@ -316,11 +343,12 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
         mouseFn    = dlsym(handle, "IndigoHIDMessageForMouseNSEvent").map { unsafeBitCast($0, to: MouseFn.self) }
         buttonFn   = dlsym(handle, "IndigoHIDMessageForButton").map { unsafeBitCast($0, to: ButtonFn.self) }
-        keyboardFn = dlsym(handle, "IndigoHIDMessageForKeyboardArbitrary").map { unsafeBitCast($0, to: KeyboardFn.self) }
+        hidArbFn   = dlsym(handle, "IndigoHIDMessageForHIDArbitrary").map { unsafeBitCast($0, to: HIDArbitraryFn.self) }
         scrollFn   = dlsym(handle, "IndigoHIDMessageForScrollEvent").map { unsafeBitCast($0, to: ScrollFn.self) }
         createPointerSvc = dlsym(handle, "IndigoHIDMessageToCreatePointerService").map { unsafeBitCast($0, to: ServiceFn.self) }
         createMouseSvc   = dlsym(handle, "IndigoHIDMessageToCreateMouseService").map { unsafeBitCast($0, to: ServiceFn.self) }
         removePointerSvc = dlsym(handle, "IndigoHIDMessageToRemovePointerService").map { unsafeBitCast($0, to: ServiceFn.self) }
+        log("[hid] symbols resolved — mouse:\(mouseFn != nil) button:\(buttonFn != nil) hidArb:\(hidArbFn != nil) scroll:\(scrollFn != nil)")
     }
 
     private func warmServices(on client: AnyObject) {
