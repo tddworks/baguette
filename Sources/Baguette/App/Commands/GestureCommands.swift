@@ -134,15 +134,15 @@ struct PanCommand: ParsableCommand {
 struct PressCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "press",
-        abstract: "Press-and-release a hardware button (home | lock)"
+        abstract: "Press-and-release a hardware button (\(Press.allowed))"
     )
 
     @OptionGroup var options: DeviceOption
-    @Option(help: "Hardware button: home | lock") var button: String
+    @Option(help: "Hardware button: \(Press.allowed)") var button: String
 
     func run() {
         guard let device = DeviceButton(rawValue: button) else {
-            log("Unknown button: \(button) (allowed: home | lock)")
+            log("Unknown button: \(button) (allowed: \(Press.allowed))")
             Foundation.exit(1)
         }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)

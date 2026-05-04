@@ -32,13 +32,19 @@
   'use strict';
 
   // Map chrome.json `name` (hyphenated, as DeviceKit ships them) to
-  // the wire `button` value the GestureRegistry accepts. iOS 26.4
-  // only routes `home` and `lock` — every other button is visible
-  // but inert with an explanatory tooltip.
+  // the wire `button` value the GestureRegistry accepts. The Swift
+  // side routes `power` / `volume-up` / `volume-down` / `action`
+  // through `IndigoHIDMessageForKeyboardArbitrary` keyed by the HID
+  // (usagePage, usage) declared in each device's chrome.json.
+  // Anything outside this table renders but is inert with a tooltip.
   const WIRE_BUTTON = {
-    power:        'lock',  // iPhone power / sleep-wake (right side)
-    'side-button': 'lock',  // future-proof if DeviceKit renames
-    home:         'home',  // older iPhones
+    power:         'power',
+    'side-button': 'power',  // future-proof if DeviceKit renames
+    'volume-up':   'volume-up',
+    'volume-down': 'volume-down',
+    action:        'action',
+    home:          'home',
+    lock:          'lock',
   };
 
   function BezelButtons({ udid, layout, onPress }) {
