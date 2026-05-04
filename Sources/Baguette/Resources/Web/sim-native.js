@@ -85,7 +85,19 @@
     surface = frame.mount(document.getElementById('nativeDeviceFrame'));
 
     // 5. Open stream + wire input.
-    const format = pickFormat();
+    startSession(pickFormat());
+
+    wireKeyboard();
+    wireActions();
+    wireUnload();
+  }
+
+  // Open (or reopen) a StreamSession on the existing surface for a
+  // given wire format. Tearing down + restarting is the cheapest way
+  // to swap formats — the WS protocol is per-connection and the
+  // server's makeStream(...) is keyed at session open.
+  function startSession(format) {
+    if (session) { try { session.stop(); } catch (_) {} session = null; }
     session = new window.StreamSession({
       udid, format, version: 'v2',
       canvas: surface.canvas,
@@ -97,11 +109,14 @@
       onLog: (msg) => console.log('[native]', msg),
     });
     session.start();
-
+    reflectFormat(format);
     wireInput(udid, frame.screenSize());
-    wireKeyboard();
-    wireActions();
-    wireUnload();
+  }
+
+  function reflectFormat(format) {
+    document.querySelectorAll('#nativeFormatPicker .fmt-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.v === format);
+    });
   }
 
   // --- Helpers -----------------------------------------------------
@@ -158,6 +173,13 @@
   }
 
   function wireInput(targetUdid, screenSize) {
+    // Detach any prior wiring — startSession() can be called multiple
+    // times when the user swaps formats, and a fresh transport must
+    // be bound to the new session. Without the detach the old
+    // overlay handlers stack up and pinch dots leak.
+    if (mouseSource) { try { mouseSource.detach(); } catch (_) {} mouseSource = null; }
+    if (pinchOverlay) { try { pinchOverlay.clear(); } catch (_) {} pinchOverlay = null; }
+
     const log = (msg) => console.log('[native]', msg);
     simInput = new window.SimInput({
       udid: targetUdid,
@@ -172,7 +194,7 @@
       el: surface.screenArea,
       input: simInput,
       overlay: pinchOverlay,
-      log: (msg) => console.log('[native]', msg),
+      log,
     });
     mouseSource.attach();
   }
@@ -209,6 +231,13 @@
       // back to navigating to the list.
       try { window.close(); } catch (_) { /* ignore */ }
       if (!window.closed) location.href = '/simulators';
+    };
+    window.__nativeSetFormat = (next) => {
+      if (next !== 'avcc' && next !== 'mjpeg') return;
+      const current = localStorage.getItem('asc.simFormat') || pickFormat();
+      if (current === next && session) return;
+      localStorage.setItem('asc.simFormat', next);
+      startSession(next);
     };
   }
 
