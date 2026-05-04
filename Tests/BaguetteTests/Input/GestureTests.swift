@@ -194,80 +194,51 @@ struct PressTests {
 
     @Test func `executes against the input surface`() {
         let input = MockInput()
-        given(input).button(.any, hidUsage: .any, duration: .any).willReturn(true)
+        given(input).button(.any, duration: .any).willReturn(true)
 
         _ = Press(button: .home).execute(on: input)
-        verify(input).button(
-            .value(.home), hidUsage: .value(nil), duration: .value(0)
-        ).called(1)
+        verify(input).button(.value(.home), duration: .value(0)).called(1)
     }
 
     @Test func `passes hold duration through to input`() {
         let input = MockInput()
-        given(input).button(.any, hidUsage: .any, duration: .any).willReturn(true)
+        given(input).button(.any, duration: .any).willReturn(true)
 
         _ = Press(button: .action, duration: 2.0).execute(on: input)
-        verify(input).button(
-            .value(.action), hidUsage: .value(nil), duration: .value(2.0)
-        ).called(1)
-    }
-
-    @Test func `parses usagePage and usage into hidUsage override`() throws {
-        let g = try Press.parse([
-            "button": "action",
-            "usagePage": 11,
-            "usage": 45,
-        ])
-        #expect(g.hidUsage == HIDUsage(page: 11, usage: 45))
-    }
-
-    @Test func `defaults hidUsage to nil when wire omits HID fields`() throws {
-        let g = try Press.parse(["button": "action"])
-        #expect(g.hidUsage == nil)
-    }
-
-    @Test func `passes hidUsage override through to input`() {
-        let input = MockInput()
-        given(input).button(.any, hidUsage: .any, duration: .any).willReturn(true)
-
-        let custom = HIDUsage(page: 99, usage: 7)
-        _ = Press(button: .action, duration: 0, hidUsage: custom).execute(on: input)
-        verify(input).button(
-            .value(.action), hidUsage: .value(custom), duration: .value(0)
-        ).called(1)
+        verify(input).button(.value(.action), duration: .value(2.0)).called(1)
     }
 }
 
-// MARK: - HID usage resolution
+// MARK: - DeviceButton
 
-@Suite("DeviceButton.hidUsage")
-struct DeviceButtonHIDUsageTests {
-    @Test func `home and lock have no HID usage`() {
-        #expect(DeviceButton.home.hidUsage(override: nil) == nil)
-        #expect(DeviceButton.lock.hidUsage(override: nil) == nil)
+@Suite("DeviceButton")
+struct DeviceButtonTests {
+    @Test func `home and lock have no standard HID usage`() {
+        #expect(DeviceButton.home.standardHIDUsage == nil)
+        #expect(DeviceButton.lock.standardHIDUsage == nil)
     }
 
-    @Test func `arbitrary buttons fall back to standard HID defaults`() {
-        #expect(DeviceButton.power.hidUsage(override: nil)
-            == HIDUsage(page: 12, usage: 48))
-        #expect(DeviceButton.volumeUp.hidUsage(override: nil)
-            == HIDUsage(page: 12, usage: 233))
-        #expect(DeviceButton.volumeDown.hidUsage(override: nil)
-            == HIDUsage(page: 12, usage: 234))
-        #expect(DeviceButton.action.hidUsage(override: nil)
-            == HIDUsage(page: 11, usage: 45))
+    @Test func `arbitrary-HID buttons carry standard iPhone-family codes`() {
+        #expect(DeviceButton.power.standardHIDUsage      == HIDUsage(page: 12, usage: 48))
+        #expect(DeviceButton.volumeUp.standardHIDUsage   == HIDUsage(page: 12, usage: 233))
+        #expect(DeviceButton.volumeDown.standardHIDUsage == HIDUsage(page: 12, usage: 234))
+        #expect(DeviceButton.action.standardHIDUsage     == HIDUsage(page: 11, usage: 45))
     }
 
-    @Test func `chrome override beats defaults for arbitrary buttons`() {
-        let custom = HIDUsage(page: 99, usage: 7)
-        #expect(DeviceButton.action.hidUsage(override: custom) == custom)
-        #expect(DeviceButton.power.hidUsage(override: custom)  == custom)
+    @Test func `press delegates to input button with the given duration`() {
+        let input = MockInput()
+        given(input).button(.any, duration: .any).willReturn(true)
+
+        DeviceButton.action.press(duration: 1.5, on: input)
+        verify(input).button(.value(.action), duration: .value(1.5)).called(1)
     }
 
-    @Test func `home and lock ignore overrides`() {
-        let custom = HIDUsage(page: 99, usage: 7)
-        #expect(DeviceButton.home.hidUsage(override: custom) == nil)
-        #expect(DeviceButton.lock.hidUsage(override: custom) == nil)
+    @Test func `press defaults duration to zero`() {
+        let input = MockInput()
+        given(input).button(.any, duration: .any).willReturn(true)
+
+        DeviceButton.home.press(on: input)
+        verify(input).button(.value(.home), duration: .value(0)).called(1)
     }
 }
 

@@ -37,6 +37,14 @@ enum GesturePhase: String, Sendable, Equatable, CaseIterable {
     case down, move, up
 }
 
+/// HID (page, usage) pair — the wire-level code SimulatorKit needs
+/// to identify an arbitrary-HID button press. iPhone side buttons
+/// live on consumer (page 12) and telephony (page 11) HID pages.
+struct HIDUsage: Equatable, Sendable {
+    let page: UInt32
+    let usage: UInt32
+}
+
 /// Hardware buttons routable via the host-HID path on iOS 26.4.
 ///
 /// `home` / `lock` ride `IndigoHIDMessageForButton`. The four
@@ -52,26 +60,29 @@ enum DeviceButton: String, Sendable, Equatable, Hashable {
 }
 
 extension DeviceButton {
-    /// Standard HID (page, usage) for the arbitrary-HID buttons. Codes
-    /// match the iPhone family's chrome.json declarations and Apple's
-    /// HID consumer/telephony page assignments.
-    private static let standardHIDUsage: [DeviceButton: HIDUsage] = [
-        .power:      HIDUsage(page: 12, usage: 48),
-        .volumeUp:   HIDUsage(page: 12, usage: 233),
-        .volumeDown: HIDUsage(page: 12, usage: 234),
-        .action:     HIDUsage(page: 11, usage: 45),
-    ]
-
-    /// Effective HID code for this button. `home`/`lock` always return
-    /// `nil` — they ride a different SimulatorKit symbol entirely. For
-    /// the four arbitrary-HID buttons, the chrome.json `override`
-    /// (when non-nil) wins; otherwise the standard iPhone-family
-    /// defaults apply.
-    func hidUsage(override: HIDUsage?) -> HIDUsage? {
+    /// Standard HID (page, usage) for the arbitrary-HID side buttons.
+    /// `home`/`lock` return `nil` — they ride a different SimulatorKit
+    /// symbol (`IndigoHIDMessageForButton`) and don't go through the
+    /// arbitrary-HID path. Codes match Apple's HID consumer (page 12)
+    /// and telephony (page 11) page assignments and agree with every
+    /// shipping iPhone's chrome.json.
+    var standardHIDUsage: HIDUsage? {
         switch self {
         case .home, .lock: return nil
-        case .power, .volumeUp, .volumeDown, .action:
-            return override ?? Self.standardHIDUsage[self]
+        case .power:      return HIDUsage(page: 12, usage: 48)
+        case .volumeUp:   return HIDUsage(page: 12, usage: 233)
+        case .volumeDown: return HIDUsage(page: 12, usage: 234)
+        case .action:     return HIDUsage(page: 11, usage: 45)
         }
+    }
+
+    /// Press-and-release this button on the given input. `duration` is
+    /// the hold time in seconds; `0` defers to the infrastructure
+    /// default (~100 ms tap). Encapsulates the HID-vs-legacy split:
+    /// the input adapter routes by case while the caller just says
+    /// "this button, this long."
+    @discardableResult
+    func press(duration: Double = 0, on input: any Input) -> Bool {
+        input.button(self, duration: duration)
     }
 }

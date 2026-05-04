@@ -23,10 +23,16 @@
 // ships TWO offsets in DeviceKit's data — `normalOffset` (at-rest) and
 // `rolloverOffset` (popped out a few px on hover). We position at
 // normal, animate to rollover on hover, and depress slightly past
-// normal on mousedown. Releasing fires
-// `onPress(name, durationSeconds)` so the host page can forward the
-// real hold time — needed for iOS long-press semantics like the
-// action button's "Hold for Ring" prompt.
+// normal on mousedown. Releasing fires `onPress(press)` with a single
+// press value:
+//
+//   { name, duration, hidUsage: { page, usage } | null }
+//
+// `name` is the wire button (e.g. `'volume-up'`), `duration` is the
+// real mousedown→mouseup hold in seconds, and `hidUsage` is the HID
+// (page, usage) pulled from chrome.json — when present, it overrides
+// the Swift dispatch's built-in defaults. Callers forward the value
+// to `simInput.button(press)`.
 //
 // Buttons whose names map to wire events (`power` → `lock`, `home` →
 // `home`) are active; the rest are visible but show a tooltip
@@ -37,7 +43,7 @@
   // Map chrome.json `name` (hyphenated, as DeviceKit ships them) to
   // the wire `button` value the GestureRegistry accepts. The Swift
   // side routes `power` / `volume-up` / `volume-down` / `action`
-  // through `IndigoHIDMessageForKeyboardArbitrary` keyed by the HID
+  // through `IndigoHIDMessageForHIDArbitrary` keyed by the HID
   // (usagePage, usage) declared in each device's chrome.json.
   // Anything outside this table renders but is inert with a tooltip.
   const WIRE_BUTTON = {
@@ -163,14 +169,9 @@
     if (img.complete && img.naturalWidth) this._wireAnim(wrap, img, b);
     // Measure real hold time so iOS can resolve tap vs long-press.
     // The action button needs ~1s to flip silent/ring; power needs
-    // ~2s for Siri / SOS. We capture the user's mousedown→mouseup
-    // window and forward it as `duration` (seconds). chrome.json
-    // ships per-button HID codes (`usagePage` / `usage`); we forward
-    // them so the Swift dispatch can route the right HID without
-    // doing its own chrome lookup — keeps IndigoHIDInput SRP-clean.
-    const hidUsage = (typeof b.usagePage === 'number' && typeof b.usage === 'number')
-      ? { page: b.usagePage, usage: b.usage }
-      : null;
+    // ~2s for Siri / SOS. We capture mousedown→mouseup and forward
+    // (name, durationSeconds) — the backend resolves the HID code
+    // from the device's chrome, so the wire stays minimal.
     let pressedAt = 0;
     const startHold = () => { pressedAt = performance.now(); };
     const finishHold = (ev) => {
@@ -179,7 +180,7 @@
       if (!pressedAt) return;
       const seconds = Math.max(0, (performance.now() - pressedAt) / 1000);
       pressedAt = 0;
-      if (wire) this.onPress(wire, seconds, hidUsage);
+      if (wire) this.onPress(wire, seconds);
       // Inert buttons silently no-op — title attribute already
       // explains why nothing happened.
     };

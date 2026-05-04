@@ -105,14 +105,14 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return sendMouse(client: c, p1: first, p2: second, eventType: et, direction: dir, size: size)
     }
 
-    func button(_ button: DeviceButton, hidUsage: HIDUsage?, duration: Double) -> Bool {
+    func button(_ button: DeviceButton, duration: Double) -> Bool {
         guard let c = ensureWarm() else { return false }
         let holdUs = holdMicroseconds(for: duration)
         switch button {
         case .home, .lock:
             return pressLegacyButton(button, holdUs: holdUs, on: c)
         case .power, .volumeUp, .volumeDown, .action:
-            guard let usage = button.hidUsage(override: hidUsage) else { return false }
+            guard let usage = button.standardHIDUsage else { return false }
             return pressArbitraryHID(button, usage: usage, holdUs: holdUs, on: c)
         }
     }

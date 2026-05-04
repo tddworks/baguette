@@ -45,10 +45,6 @@
       case 'button': {
         const env = { type: 'button', button: p.button };
         if (typeof p.duration === 'number' && p.duration > 0) env.duration = p.duration;
-        if (typeof p.usagePage === 'number' && typeof p.usage === 'number') {
-          env.usagePage = p.usagePage;
-          env.usage = p.usage;
-        }
         return env;
       }
       case 'key':

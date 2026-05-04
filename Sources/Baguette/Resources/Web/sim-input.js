@@ -103,20 +103,9 @@
       return this._post({ kind: 'scroll', deltaX, deltaY });
     }
 
-    // Accepts either a wire name (`'home'`) or a press value
-    // — `{ name, duration, hidUsage: { page, usage } }`. The press
-    // value comes from the bezel overlay, which already knows how
-    // long the user held and which HID codes the chrome ships;
-    // callers just forward the value. Plain-string callers (manual
-    // helpers, tests) get a default short tap with built-in defaults.
-    button(press) {
-      const p = (typeof press === 'string') ? { name: press } : (press || {});
-      const body = { kind: 'button', button: p.name };
-      if (typeof p.duration === 'number' && p.duration > 0) body.duration = p.duration;
-      if (p.hidUsage && typeof p.hidUsage.page === 'number' && typeof p.hidUsage.usage === 'number') {
-        body.usagePage = p.hidUsage.page;
-        body.usage = p.hidUsage.usage;
-      }
+    button(name, duration) {
+      const body = { kind: 'button', button: name };
+      if (typeof duration === 'number' && duration > 0) body.duration = duration;
       return this._post(body);
     }
 
