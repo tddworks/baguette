@@ -114,6 +114,9 @@ baguette <command> [options]
   shutdown --udid <UDID>                     Shutdown
   stream   --udid <UDID> [--fps 60] [--format mjpeg|avcc]
                                              Stream frames on stdout
+  screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
+                                             Capture one JPEG frame
+                                             (defaults to stdout)
   input    --udid <UDID>                     Read JSON gestures from stdin
 
   # Standalone web UI on localhost. Serves /simulators (single-device
@@ -166,6 +169,7 @@ served root for live-iteration without rebuilding.
 | `POST` | `/simulators/:udid/shutdown`               | `simulator.shutdown()`       |
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
+| `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG of the framebuffer (`?quality=&scale=`) |
 | `WS`   | `/simulators/:udid/stream?format=mjpeg|avcc` | live frames + control + input |
 | `GET`  | `/farm`                                    | device-farm HTML             |
 | `GET`  | `/farm/:file`                              | farm UI asset (`farm.css`, `farm-*.js`, …) |
