@@ -87,8 +87,15 @@
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
 
-    // 4. Mount frame.
-    frame = new window.DeviceFrame({ udid, layout });
+    // 4. Mount frame. Actionable mode is opt-in (toolbar toggle,
+    //    persisted to localStorage). When on, `bezel.png?buttons=
+    //    false` is fetched and BezelButtons overlays each hardware
+    //    button with hover/click animations that fire SimInput.
+    frame = new window.DeviceFrame({
+      udid, layout,
+      actionable: actionableEnabled(),
+      onPress: (name) => simInput && simInput.button(name),
+    });
     surface = frame.mount(document.getElementById('nativeDeviceFrame'));
 
     // 5. Open stream + wire input.
@@ -98,6 +105,20 @@
     wireActions();
     wireUnload();
     applyStoredTheme();
+    reflectActionable();
+  }
+
+  // Actionable-bezel toggle. Off by default — the bezel renders
+  // as today's flat composite. On, the device-frame swaps to
+  // `bezel.png?buttons=false` and BezelButtons overlays each
+  // hardware button with hover/click animations.
+  const ACTIONABLE_KEY = 'baguette.actionableBezel';
+  function actionableEnabled() {
+    return localStorage.getItem(ACTIONABLE_KEY) === '1';
+  }
+  function setActionable(on) {
+    if (on) localStorage.setItem(ACTIONABLE_KEY, '1');
+    else    localStorage.removeItem(ACTIONABLE_KEY);
   }
 
   // Theme toggle. Three logical states — "auto" (no manual pin,
@@ -285,6 +306,41 @@
     window.__nativeToggleTheme = () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
     };
+    window.__nativeToggleActionable = () => {
+      const next = !actionableEnabled();
+      setActionable(next);
+      reflectActionable();
+      remountFrame();
+    };
+  }
+
+  // Re-mount the device frame after the actionable toggle flips. Tear
+  // down current input wiring + bezel buttons, rebuild the frame in
+  // the new mode, and re-bind a fresh SimInput chain over the new
+  // surface. The live stream stays open — the canvas is the same
+  // element, only the bezel image and overlays change.
+  function remountFrame() {
+    if (!frame) return;
+    if (mouseSource) { try { mouseSource.detach(); } catch (_) {} mouseSource = null; }
+    if (pinchOverlay) { try { pinchOverlay.clear(); } catch (_) {} pinchOverlay = null; }
+    if (surface && surface.bezelButtons) {
+      try { surface.bezelButtons.unmount(); } catch (_) { /* ignore */ }
+    }
+    frame = new window.DeviceFrame({
+      udid, layout,
+      actionable: actionableEnabled(),
+      onPress: (name) => simInput && simInput.button(name),
+    });
+    surface = frame.mount(document.getElementById('nativeDeviceFrame'));
+    // StreamSession captures the canvas at construction; the
+    // remount produced a fresh canvas so we have to reopen the
+    // session against it. Reuse the format the user already chose.
+    startSession(pickFormat());
+  }
+
+  function reflectActionable() {
+    const btn = document.getElementById('nativeActionableToggle');
+    if (btn) btn.classList.toggle('active', actionableEnabled());
   }
 
   function wireUnload() {

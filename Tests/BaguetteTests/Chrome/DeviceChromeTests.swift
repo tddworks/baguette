@@ -66,23 +66,52 @@ struct DeviceChromeTests {
         #expect(chrome.buttons.map(\.name) == ["action", "volume-up", "power"])
     }
 
-    @Test func `button parses anchor align imageName and offset preferring rollover`() throws {
+    @Test func `button parses anchor align imageName and both offsets`() throws {
+        // chrome.json carries TWO offsets per input — `normal` (at-rest)
+        // and `rollover` (hovered, popped out a few pixels). The
+        // actionable-bezel UI animates between them, so both must be
+        // retained on the parsed value (not collapsed to a single
+        // Point as the older "prefer rollover" parser did).
         let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
         let action = chrome.buttons.first { $0.name == "action" }!
 
         #expect(action.imageName == "Mute BTN")
         #expect(action.anchor == .left)
         #expect(action.align == .leading)
-        // rollover wins over normal
-        #expect(action.offset == Point(x: 3, y: 160))
+        #expect(action.normalOffset   == Point(x: 8, y: 160))
+        #expect(action.rolloverOffset == Point(x: 3, y: 160))
     }
 
-    @Test func `button falls back to normal offset when rollover absent`() throws {
+    @Test func `button falls back to identical offsets when only one variant given`() throws {
+        // power in the fixture supplies only `normal` (no rollover key).
+        // Parser should populate both `normalOffset` and
+        // `rolloverOffset` from whichever variant is present so
+        // downstream animation code never has to special-case nil.
         let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
         let power = chrome.buttons.first { $0.name == "power" }!
-        // power has only "normal" offsets in the fixture
-        #expect(power.offset == Point(x: 5, y: 200))
+        #expect(power.normalOffset   == Point(x: 5, y: 200))
+        #expect(power.rolloverOffset == Point(x: 5, y: 200))
         #expect(power.anchor == .right)
+    }
+
+    @Test func `chrome JSON exposes both normal and rollover offsets per button`() throws {
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 100, height: 200))
+        )
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON().utf8)
+        ) as? [String: Any]
+        let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
+        let action = try #require(buttons.first { ($0["name"] as? String) == "action" })
+
+        let normal = try #require(action["normalOffset"] as? [String: Any])
+        let rollover = try #require(action["rolloverOffset"] as? [String: Any])
+        #expect(normal["x"] as? Double == 8)
+        #expect(normal["y"] as? Double == 160)
+        #expect(rollover["x"] as? Double == 3)
+        #expect(rollover["y"] as? Double == 160)
     }
 
     @Test func `button parses onTop with default false`() throws {

@@ -235,6 +235,7 @@
   }
   #simNativeView .ico-btn:hover { background: var(--nv-btn-hover); }
   #simNativeView .ico-btn:active { background: var(--nv-btn-active); }
+  #simNativeView .ico-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
   #simNativeView .ico-btn svg { display: block; }
 
   /* Theme toggle — floating glass pill at the bottom-right
@@ -318,6 +319,23 @@
         <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
                 onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
       </div>
+
+      <!-- Actionable-bezel toggle. When active, hardware buttons on
+           the bezel become hover-animated, click-able overlays that
+           fire SimInput.button(name). Off by default — flat
+           composite is the safe baseline. -->
+      <button class="ico-btn" id="nativeActionableToggle"
+              title="Toggle actionable bezel buttons"
+              aria-label="Toggle actionable bezel buttons"
+              onclick="window.__nativeToggleActionable && window.__nativeToggleActionable()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <rect x="6"  y="3"  width="12" height="18" rx="3"/>
+          <line x1="3" y1="9"  x2="6"  y2="9"/>
+          <line x1="3" y1="13" x2="6"  y2="13"/>
+          <line x1="18" y1="9" x2="21" y2="9"/>
+        </svg>
+      </button>
 
       <div class="tb-actions">
         <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">

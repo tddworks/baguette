@@ -234,7 +234,22 @@ struct ChromeButton: Equatable, Sendable {
     let imageName: String
     let anchor: Anchor
     let align: Align
-    let offset: Point
+    /// At-rest position (chrome.json's `offsets.normal`). The button
+    /// cap sits flush with the device side; only the small overshoot
+    /// past the bezel edge is visible.
+    let normalOffset: Point
+    /// Hover / pressed position (chrome.json's `offsets.rollover`).
+    /// Pops the cap outward by a few chrome pixels — the actionable-
+    /// bezel UI animates between `normalOffset` and `rolloverOffset`
+    /// on hover.
+    let rolloverOffset: Point
+    /// Convenience: today's static-composite path (LiveChromes
+    /// bake-in) wants a single offset to position the button image
+    /// inside the merged canvas. The merged image is meant to depict
+    /// the rollover / pressed state, so this returns the rollover
+    /// offset. New callers should pick `normalOffset` /
+    /// `rolloverOffset` explicitly.
+    var offset: Point { rolloverOffset }
     /// Z-order against the device composite. `true` = drawn ON TOP of
     /// the bezel (Apple Watch's orange action button, the digital crown
     /// and side button on watch ≤ watch5b/5s where they aren't baked
@@ -250,7 +265,13 @@ struct ChromeButton: Equatable, Sendable {
             "imageName": imageName,
             "anchor": anchor.rawValue,
             "align": align.rawValue,
-            "offset": ["x": offset.x, "y": offset.y],
+            // Legacy `offset` keeps the rollover value so existing
+            // (static-composite) front-end code keeps working. New
+            // code should read `normalOffset` / `rolloverOffset`
+            // directly to drive the at-rest → hover animation.
+            "offset": ["x": rolloverOffset.x, "y": rolloverOffset.y],
+            "normalOffset":   ["x": normalOffset.x,   "y": normalOffset.y],
+            "rolloverOffset": ["x": rolloverOffset.x, "y": rolloverOffset.y],
             "onTop": onTop,
         ]
     }
@@ -258,15 +279,39 @@ struct ChromeButton: Equatable, Sendable {
     init(
         name: String, imageName: String,
         anchor: Anchor, align: Align,
-        offset: Point,
+        normalOffset: Point,
+        rolloverOffset: Point? = nil,
         onTop: Bool = false
     ) {
         self.name = name
         self.imageName = imageName
         self.anchor = anchor
         self.align = align
-        self.offset = offset
+        self.normalOffset = normalOffset
+        // When only one variant is supplied, the button has no
+        // distinct hover state — both offsets point at the same
+        // place so animation code becomes a no-op rather than
+        // requiring a nil branch.
+        self.rolloverOffset = rolloverOffset ?? normalOffset
         self.onTop = onTop
+    }
+
+    /// Convenience initialiser preserving the legacy single-offset
+    /// shape. Older callers (and a few tests) construct buttons with
+    /// just one Point and don't care about the hover-state animation;
+    /// this routes them to both offsets so the value is well-defined.
+    init(
+        name: String, imageName: String,
+        anchor: Anchor, align: Align,
+        offset: Point,
+        onTop: Bool = false
+    ) {
+        self.init(
+            name: name, imageName: imageName,
+            anchor: anchor, align: align,
+            normalOffset: offset, rolloverOffset: offset,
+            onTop: onTop
+        )
     }
 
     /// Build from one entry of `inputs[]`. Returns nil for entries
@@ -280,19 +325,28 @@ struct ChromeButton: Equatable, Sendable {
         let anchor = (dict["anchor"] as? String).flatMap(Anchor.init(rawValue:)) ?? .left
         let align  = (dict["align"]  as? String).flatMap(Align.init(rawValue:))  ?? .leading
 
-        // Prefer rollover (the "active" offset) over normal so the
-        // bezel sits over the button cap that's actually drawn.
+        // Retain BOTH offsets so the actionable-bezel UI can animate
+        // between at-rest (normal) and popped-out (rollover) on
+        // hover. Either variant alone falls back to the other so the
+        // pair is always well-formed.
         let offsets = dict["offsets"] as? [String: Any]
-        let offsetDict = (offsets?["rollover"] as? [String: Any])
-            ?? (offsets?["normal"] as? [String: Any])
-            ?? [:]
+        let normalDict   = (offsets?["normal"]   as? [String: Any])
+        let rolloverDict = (offsets?["rollover"] as? [String: Any])
+        let primary = normalDict ?? rolloverDict ?? [:]
+        let normal = Point(
+            x: coerceDouble(primary["x"]),
+            y: coerceDouble(primary["y"])
+        )
+        let secondary = rolloverDict ?? normalDict ?? [:]
+        let rollover = Point(
+            x: coerceDouble(secondary["x"]),
+            y: coerceDouble(secondary["y"])
+        )
         self.init(
             name: name, imageName: imageName,
             anchor: anchor, align: align,
-            offset: Point(
-                x: coerceDouble(offsetDict["x"]),
-                y: coerceDouble(offsetDict["y"])
-            ),
+            normalOffset: normal,
+            rolloverOffset: rollover,
             onTop: dict["onTop"] as? Bool ?? false
         )
     }
