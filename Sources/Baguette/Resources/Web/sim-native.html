@@ -31,14 +31,57 @@
   device, least possible chrome.
 -->
 <style>
+  /* Theme tokens — defaults are dark; the prefers-color-scheme:
+     light media query at the bottom flips them. Native form
+     controls also pick up `color-scheme` so scrollbars / focus
+     rings match the surrounding theme. */
   #simNativeView {
+    color-scheme: light dark;
+    --nv-page-bg:        #1a1a1f;
+    --nv-bar-bg:         rgba(20, 20, 24, 0.78);
+    --nv-bar-border:     rgba(255, 255, 255, 0.08);
+    --nv-bar-shadow:     0 8px 24px rgba(0, 0, 0, 0.45);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --nv-text:           #f5f5f7;
+    --nv-text-muted:     rgba(245, 245, 247, 0.55);
+    --nv-text-faint:     rgba(245, 245, 247, 0.5);
+    --nv-divider:        rgba(255, 255, 255, 0.12);
+    --nv-btn-hover:      rgba(255, 255, 255, 0.10);
+    --nv-btn-active:     rgba(255, 255, 255, 0.18);
+    --nv-fmt-track-bg:   rgba(255, 255, 255, 0.06);
+    --nv-fmt-track-border: rgba(255, 255, 255, 0.06);
+    --nv-fmt-btn-text:   rgba(245, 245, 247, 0.65);
+    --nv-accent:         #2563eb;
+    --nv-accent-text:    #fff;
+
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
     padding: 12px;
     box-sizing: border-box;
-    background: transparent;
+    background: var(--nv-page-bg);
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
+  }
+  /* Light theme overrides. Same token set, light-leaning values.
+     Toolbar background switches to a translucent white so the
+     glass effect stays consistent with macOS Tahoe controls. */
+  @media (prefers-color-scheme: light) {
+    #simNativeView {
+      --nv-page-bg:        #f1f3f6;
+      --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+      --nv-bar-border:     rgba(15, 23, 42, 0.08);
+      --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+      --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+      --nv-text:           #1d1d1f;
+      --nv-text-muted:     rgba(29, 29, 31, 0.65);
+      --nv-text-faint:     rgba(29, 29, 31, 0.55);
+      --nv-divider:        rgba(15, 23, 42, 0.14);
+      --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+      --nv-btn-active:     rgba(15, 23, 42, 0.12);
+      --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+      --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+      --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
+    }
   }
 
   /* SwiftUI-style VStack: toolbar pill above the device, both
@@ -63,15 +106,13 @@
     gap: 12px;
     height: 36px;
     padding: 4px 6px 4px 4px;
-    background: rgba(20, 20, 24, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
     border-radius: 999px;
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.45),
-      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
     backdrop-filter: blur(18px) saturate(1.5);
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
-    color: #f5f5f7;
+    color: var(--nv-text);
     max-width: 100%;
   }
 
@@ -101,24 +142,24 @@
     transition: background 0.12s ease;
     min-width: 0; /* enable ellipsis inside the flex item */
   }
-  #simNativeView .tb-label:hover { background: rgba(255, 255, 255, 0.10); }
+  #simNativeView .tb-label:hover { background: var(--nv-btn-hover); }
   #simNativeView .tb-label .tb-back {
-    color: rgba(245, 245, 247, 0.55);
+    color: var(--nv-text-muted);
     flex-shrink: 0;
   }
   #simNativeView .tb-label .tb-name {
-    color: #f5f5f7;
+    color: var(--nv-text);
     font: 600 13px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     letter-spacing: 0.01em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     max-width: 22ch;
   }
   #simNativeView .tb-label .tb-os {
-    color: rgba(245, 245, 247, 0.5);
+    color: var(--nv-text-faint);
     font: 500 11px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     white-space: nowrap;
     padding-left: 2px;
-    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 1px solid var(--nv-divider);
   }
 
   /* Right-side controls cluster: fps badge · format picker · actions. */
@@ -130,7 +171,7 @@
   /* fps — small monospace label. Hidden until the stream reports a
      value so the bar isn't carrying dead text on startup. */
   #simNativeView #nativeStatus {
-    color: rgba(245, 245, 247, 0.55);
+    color: var(--nv-text-muted);
     font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     font-variant-numeric: tabular-nums;
     pointer-events: none;
@@ -144,22 +185,22 @@
   #simNativeView .fmt-picker {
     display: inline-flex; align-items: stretch;
     padding: 2px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-fmt-track-border);
     border-radius: 999px;
   }
   #simNativeView .fmt-btn {
     appearance: none; -webkit-appearance: none;
     border: 0; padding: 0 10px; height: 22px;
-    background: transparent; color: rgba(245, 245, 247, 0.65);
+    background: transparent; color: var(--nv-fmt-btn-text);
     font: 700 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
     letter-spacing: 0.04em;
     border-radius: 999px; cursor: pointer;
     transition: background 0.12s ease, color 0.12s ease;
   }
-  #simNativeView .fmt-btn:hover { color: #f5f5f7; }
+  #simNativeView .fmt-btn:hover { color: var(--nv-text); }
   #simNativeView .fmt-btn.active {
-    background: #2563eb; color: #fff;
+    background: var(--nv-accent); color: var(--nv-accent-text);
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   }
 
@@ -171,11 +212,11 @@
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 28px; padding: 0;
     background: transparent; border: 0; border-radius: 8px;
-    color: rgba(245, 245, 247, 0.92); cursor: pointer;
+    color: var(--nv-text); cursor: pointer;
     transition: background 0.12s ease;
   }
-  #simNativeView .ico-btn:hover { background: rgba(255, 255, 255, 0.10); }
-  #simNativeView .ico-btn:active { background: rgba(255, 255, 255, 0.18); }
+  #simNativeView .ico-btn:hover { background: var(--nv-btn-hover); }
+  #simNativeView .ico-btn:active { background: var(--nv-btn-active); }
   #simNativeView .ico-btn svg { display: block; }
 
   /* Narrow viewports — drop the OS subtitle and the fps badge so

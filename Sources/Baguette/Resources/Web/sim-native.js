@@ -49,10 +49,13 @@
   }
 
   async function boot() {
-    // Reset whatever sim.html landed with (style block is fine; the
-    // <body> background gets overridden by the focus-mode <style>).
+    // Reset whatever sim.html landed with. Body gets `margin:0;
+    // overflow:hidden;` so the focus-mode UI fills the viewport,
+    // but the *background* is left to the focus-mode stylesheet —
+    // it tracks the user's prefers-color-scheme via CSS variables,
+    // so hardcoding a colour here would defeat the theme switch.
     document.body.innerHTML = '';
-    document.body.style.cssText = 'margin:0;padding:0;background:#1a1a1f;overflow:hidden';
+    document.body.style.cssText = 'margin:0;padding:0;overflow:hidden';
 
     // 1. Load template + inline styles from sim-native.html.
     const html = await fetchTemplate();
