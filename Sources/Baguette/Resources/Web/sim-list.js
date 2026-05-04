@@ -19,7 +19,7 @@
     devices: [],
     search: '',
     family: 'iphones',
-    runtime: 'latest',
+    runtime: 'all',
     loading: false,
     error: null
   };
@@ -246,8 +246,8 @@
     const runtimes = Array.from(new Set(state.devices.map(d => d.runtime).filter(Boolean)))
       .sort((a, b) => compareVersions(b, a));
     return [
-      '<option value="latest">Latest Runtime</option>',
-      '<option value="all">All Runtimes</option>',
+      `<option value="all" ${state.runtime === 'all' ? 'selected' : ''}>All Runtimes</option>`,
+      `<option value="latest" ${state.runtime === 'latest' ? 'selected' : ''}>Latest Runtime</option>`,
       ...runtimes.map(runtime => `<option value="${escapeHTML(runtime)}" ${state.runtime === runtime ? 'selected' : ''}>${escapeHTML(runtime)}</option>`)
     ].join('');
   }
