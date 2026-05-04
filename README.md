@@ -109,7 +109,8 @@ linking `CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`,
 ```
 baguette <command> [options]
 
-  list                                       List devices (default + custom sets)
+  list [--json]                              List devices (default + custom sets;
+                                             --json emits {"running":[…],"available":[…]})
   boot     --udid <UDID>                     Boot headlessly
   shutdown --udid <UDID>                     Shutdown
   stream   --udid <UDID> [--fps 60] [--format mjpeg|avcc]

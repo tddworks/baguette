@@ -38,6 +38,12 @@ struct CommandParsingTests {
     @Test func `list defaults device-set to nil`() throws {
         let cmd = try ListCommand.parse([])
         #expect(cmd.deviceSet == nil)
+        #expect(cmd.json == false)
+    }
+
+    @Test func `list parses --json flag`() throws {
+        let cmd = try ListCommand.parse(["--json"])
+        #expect(cmd.json == true)
     }
 
     // MARK: - boot / shutdown share DeviceOption

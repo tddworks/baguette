@@ -9,10 +9,17 @@ struct ListCommand: ParsableCommand {
     @Option(name: .long, help: "Custom device set path")
     var deviceSet: String?
 
+    @Flag(name: .long, help: "Emit one running/available JSON envelope (matches /simulators.json)")
+    var json: Bool = false
+
     func run() {
         let simulators = CoreSimulators(deviceSetPath: deviceSet)
-        for sim in simulators.all {
-            print(sim.json)
+        if json {
+            print(simulators.listJSON)
+        } else {
+            for sim in simulators.all {
+                print(sim.json)
+            }
         }
     }
 }
