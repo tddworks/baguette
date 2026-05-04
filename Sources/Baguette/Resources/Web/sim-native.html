@@ -62,11 +62,13 @@
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
-  /* Light theme overrides. Same token set, light-leaning values.
-     Toolbar background switches to a translucent white so the
-     glass effect stays consistent with macOS Tahoe controls. */
+  /* Light + dark token blocks. Defined as both a media query (for
+     "follow system" mode) and a `data-theme` attribute selector
+     (for the manual toggle). The attribute selector has higher
+     specificity than the media query, so a user-pinned theme
+     wins over the OS preference. */
   @media (prefers-color-scheme: light) {
-    #simNativeView {
+    #simNativeView:not([data-theme="dark"]) {
       --nv-page-bg:        #f1f3f6;
       --nv-bar-bg:         rgba(255, 255, 255, 0.82);
       --nv-bar-border:     rgba(15, 23, 42, 0.08);
@@ -82,6 +84,22 @@
       --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
       --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
     }
+  }
+  #simNativeView[data-theme="light"] {
+    --nv-page-bg:        #f1f3f6;
+    --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+    --nv-bar-border:     rgba(15, 23, 42, 0.08);
+    --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    --nv-text:           #1d1d1f;
+    --nv-text-muted:     rgba(29, 29, 31, 0.65);
+    --nv-text-faint:     rgba(29, 29, 31, 0.55);
+    --nv-divider:        rgba(15, 23, 42, 0.14);
+    --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+    --nv-btn-active:     rgba(15, 23, 42, 0.12);
+    --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+    --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+    --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
   }
 
   /* SwiftUI-style VStack: toolbar pill above the device, both
@@ -219,6 +237,42 @@
   #simNativeView .ico-btn:active { background: var(--nv-btn-active); }
   #simNativeView .ico-btn svg { display: block; }
 
+  /* Theme toggle — floating glass pill at the bottom-right
+     corner. Carries one icon (sun in light theme, moon in dark
+     theme); click flips the manual override. The same pill
+     tokens as the toolbar so it reads as a sibling control. */
+  #simNativeView .theme-toggle {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .theme-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .theme-toggle:active { transform: scale(0.96); }
+  /* Show only the icon that matches the active theme. The other
+     is collapsed via display: none — both icons live in the DOM
+     so screen readers can announce either label. */
+  #simNativeView .theme-toggle .ic-sun  { display: none; }
+  #simNativeView .theme-toggle .ic-moon { display: block; }
+  @media (prefers-color-scheme: light) {
+    #simNativeView:not([data-theme="dark"]) .theme-toggle .ic-sun  { display: block; }
+    #simNativeView:not([data-theme="dark"]) .theme-toggle .ic-moon { display: none; }
+  }
+  #simNativeView[data-theme="light"] .theme-toggle .ic-sun  { display: block; }
+  #simNativeView[data-theme="light"] .theme-toggle .ic-moon { display: none; }
+  #simNativeView[data-theme="dark"]  .theme-toggle .ic-sun  { display: none; }
+  #simNativeView[data-theme="dark"]  .theme-toggle .ic-moon { display: block; }
+
   /* Narrow viewports — drop the OS subtitle and the fps badge so
      the bar collapses gracefully instead of wrapping. */
   @media (max-width: 560px) {
@@ -295,6 +349,25 @@
 
     <div id="nativeDeviceFrame"></div>
   </div>
+
+  <button class="theme-toggle" id="nativeThemeToggle" title="Toggle theme"
+          aria-label="Toggle light or dark theme"
+          onclick="window.__nativeToggleTheme && window.__nativeToggleTheme()">
+    <!-- Sun (visible in light theme). -->
+    <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2"/><path d="M12 20v2"/>
+      <path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
+      <path d="M2 12h2"/><path d="M20 12h2"/>
+      <path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/>
+    </svg>
+    <!-- Moon (visible in dark theme). -->
+    <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+    </svg>
+  </button>
 </div>
 
 <script>

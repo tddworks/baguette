@@ -56,6 +56,10 @@
     // so hardcoding a colour here would defeat the theme switch.
     document.body.innerHTML = '';
     document.body.style.cssText = 'margin:0;padding:0;overflow:hidden';
+    // Match <body> background to the active focus-mode page bg so
+    // the page never flashes white during theme transitions or
+    // before the template paints.
+    document.body.style.background = 'var(--nv-page-bg, #1a1a1f)';
 
     // 1. Load template + inline styles from sim-native.html.
     const html = await fetchTemplate();
