@@ -269,11 +269,13 @@ struct DeviceChromeTests {
         #expect(screen?["height"] as? Double == 872)
     }
 
-    @Test func `assets layoutJSON with default zero margins matches the chrome projection`() throws {
-        // No buttons → zero margins → asset projection lines up with
-        // the existing per-chrome projection. Locks down the
-        // back-compat path: chromes that don't compose buttons
-        // produce identical layout JSON.
+    @Test func `assets layoutJSON with default zero margins keeps the chrome projection geometry`() throws {
+        // No buttons → zero margins → composite size, screen rect,
+        // and corner radii match the chrome's own projection. The
+        // asset version always carries the additive `buttonMargins`
+        // block (all zeros here) so today's consumers see a
+        // superset, not a strictly identical document. We compare on
+        // the geometry fields that *must* line up, not byte-for-byte.
         let chrome = Self.makeChrome()
         let assets = DeviceChromeAssets(
             chrome: chrome,
@@ -281,7 +283,22 @@ struct DeviceChromeTests {
         )
 
         let chromeJSON = chrome.layoutJSON(compositeSize: Size(width: 393, height: 852))
-        #expect(assets.layoutJSON() == chromeJSON)
+        let chromeParsed = try JSONSerialization.jsonObject(
+            with: Data(chromeJSON.utf8)
+        ) as? [String: Any]
+        let assetParsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON().utf8)
+        ) as? [String: Any]
+
+        for key in ["composite", "screen", "innerCornerRadius",
+                    "outerCornerRadius", "identifier"] {
+            #expect(
+                "\(assetParsed?[key] ?? "nil")" == "\(chromeParsed?[key] ?? "nil")",
+                "asset/chrome JSON disagree on \(key)"
+            )
+        }
+        let m = try #require(assetParsed?["buttonMargins"] as? [String: Any])
+        #expect(m.values.allSatisfy { ($0 as? Double) == 0 })
     }
 
     // MARK: - imageUrl injection (actionable bezel)
@@ -300,6 +317,30 @@ struct DeviceChromeTests {
         ) as? [String: Any]
         let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
         #expect(buttons.allSatisfy { $0["imageUrl"] == nil })
+    }
+
+    @Test func `assets layoutJSON exposes buttonMargins so the front end can derive bare composite size`() throws {
+        // The actionable-bezel front end fetches `bezel.png?buttons=false`
+        // (smaller than the merged composite). To position the screen
+        // rect + per-button images against the *bare* bezel it needs
+        // to know how much margin the merge added — exposing the four
+        // overshoot values in chrome.json keeps the math client-side
+        // without a second metadata fetch.
+        let chrome = Self.makeChrome()
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 466, height: 908)),
+            buttonMargins: Insets(top: 0, left: 13, bottom: 0, right: 17)
+        )
+
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON().utf8)
+        ) as? [String: Any]
+        let m = try #require(parsed?["buttonMargins"] as? [String: Any])
+        #expect(m["top"]    as? Double == 0)
+        #expect(m["left"]   as? Double == 13)
+        #expect(m["bottom"] as? Double == 0)
+        #expect(m["right"]  as? Double == 17)
     }
 
     @Test func `assets layoutJSON adds imageUrl per button when prefix is given`() throws {

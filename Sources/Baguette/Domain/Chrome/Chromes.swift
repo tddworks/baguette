@@ -117,6 +117,19 @@ struct DeviceChromeAssets: Sendable, Equatable {
                 "width":  baseScreen.size.width,
                 "height": baseScreen.size.height,
             ],
+            // The four overshoot values the merge added around the
+            // bare device body. The actionable-bezel front end uses
+            // them to derive bare composite size + bare screen rect:
+            //     bareW       = composite.width  - left - right
+            //     bareScreenX = screen.x         - left
+            //     (and analogously for vertical / right / bottom).
+            // Today's consumers ignore the field — pure additive.
+            "buttonMargins": [
+                "top":    buttonMargins.top,
+                "left":   buttonMargins.left,
+                "bottom": buttonMargins.bottom,
+                "right":  buttonMargins.right,
+            ],
             "buttons": buttons,
         ]
         let data = try! JSONSerialization.data(
