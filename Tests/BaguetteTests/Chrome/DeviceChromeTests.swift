@@ -137,6 +137,116 @@ struct DeviceChromeTests {
         #expect(action.imageDownDrawMode == nil)
     }
 
+    @Test func `button parses usagePage and usage when present`() throws {
+        let json = Data(#"""
+        {
+          "identifier": "phoneN",
+          "inputs": [
+            {
+              "name": "action",
+              "image": "Mute BTN",
+              "usagePage": 11,
+              "usage": 45,
+              "offsets": { "normal": { "x": 8, "y": 180 } }
+            },
+            {
+              "name": "volume-up",
+              "image": "Vol BTN",
+              "usagePage": 12,
+              "usage": 233,
+              "offsets": { "normal": { "x": 8, "y": 268 } }
+            }
+          ]
+        }
+        """#.utf8)
+        let chrome = try DeviceChrome.parsing(json: json)
+        let action = try #require(chrome.buttons.first { $0.name == "action" })
+        let volUp  = try #require(chrome.buttons.first { $0.name == "volume-up" })
+        #expect(action.usagePage == 11)
+        #expect(action.usage     == 45)
+        #expect(volUp.usagePage  == 12)
+        #expect(volUp.usage      == 233)
+    }
+
+    @Test func `button leaves usagePage and usage nil when chrome.json omits them`() throws {
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
+        let action = try #require(chrome.buttons.first { $0.name == "action" })
+        #expect(action.usagePage == nil)
+        #expect(action.usage == nil)
+    }
+
+    @Test func `assets layoutJSON exposes usagePage and usage for HID-bearing buttons`() throws {
+        // The browser's bezel overlay needs HID codes in the layout
+        // payload so it can include them in the wire envelope on
+        // press. Buttons WITHOUT HID fields (decorative inputs) must
+        // omit them — keeping the projection a strict superset.
+        let chrome = DeviceChrome(
+            identifier: "phoneN",
+            screenInsets: Insets(top: 0, left: 0, bottom: 0, right: 0),
+            outerCornerRadius: 0,
+            buttons: [
+                ChromeButton(
+                    name: "action", imageName: "Mute BTN",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 8, y: 180),
+                    usagePage: 11, usage: 45
+                ),
+                ChromeButton(
+                    name: "decorative", imageName: "LED",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 0, y: 0)
+                ),
+            ],
+            compositeImageName: nil
+        )
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 100, height: 200))
+        )
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON().utf8)
+        ) as? [String: Any]
+        let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
+        let action = try #require(buttons.first { ($0["name"] as? String) == "action" })
+        let bare   = try #require(buttons.first { ($0["name"] as? String) == "decorative" })
+        #expect(action["usagePage"] as? Int == 11)
+        #expect(action["usage"]     as? Int == 45)
+        #expect(bare["usagePage"] == nil)
+        #expect(bare["usage"]     == nil)
+    }
+
+    @Test func `chrome resolves hidUsage by wire-button name`() {
+        let chrome = DeviceChrome(
+            identifier: "phoneN",
+            screenInsets: Insets(top: 0, left: 0, bottom: 0, right: 0),
+            outerCornerRadius: 0,
+            buttons: [
+                ChromeButton(
+                    name: "action", imageName: "Mute BTN",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 8, y: 180),
+                    usagePage: 11, usage: 45
+                ),
+                ChromeButton(
+                    name: "volume-down", imageName: "Vol BTN",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 8, y: 354),
+                    usagePage: 12, usage: 234
+                ),
+                ChromeButton(
+                    name: "decorative", imageName: "LED",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 0, y: 0)
+                ),
+            ],
+            compositeImageName: nil
+        )
+        #expect(chrome.hidUsage(forButton: "action")      == HIDUsage(page: 11, usage: 45))
+        #expect(chrome.hidUsage(forButton: "volume-down") == HIDUsage(page: 12, usage: 234))
+        #expect(chrome.hidUsage(forButton: "decorative")  == nil)
+        #expect(chrome.hidUsage(forButton: "bogus")       == nil)
+    }
+
     @Test func `button parses onTop with default false`() throws {
         // watch4-shaped fixture: digital-crown is `onTop: false` (baked
         // into the composite) and the orange action button is

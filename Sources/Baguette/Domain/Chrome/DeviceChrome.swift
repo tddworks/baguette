@@ -270,6 +270,14 @@ struct ChromeButton: Equatable, Sendable {
     /// (every iPhone power / volume button). Sourced from chrome.json's
     /// `inputs[].onTop`; defaults to `false` to match the iPhone case.
     let onTop: Bool
+    /// HID usage page declared in chrome.json (e.g. 12 = consumer
+    /// page, 11 = telephony, 7 = keyboard). `nil` for entries without
+    /// the field — typically `home`/`lock` on legacy chromes that ride
+    /// `IndigoHIDMessageForButton` instead of the arbitrary-HID path.
+    let usagePage: UInt32?
+    /// HID usage code paired with `usagePage` (volume-up = 233 on
+    /// page 12, etc.). `nil` matches `usagePage`.
+    let usage: UInt32?
 
     var json: [String: Any] {
         var dict: [String: Any] = [
@@ -292,6 +300,12 @@ struct ChromeButton: Equatable, Sendable {
         if let imageDownDrawMode {
             dict["imageDownDrawMode"] = imageDownDrawMode
         }
+        // Surface HID codes when chrome.json declares them. The
+        // browser includes these in the wire envelope on press so
+        // the Swift dispatch can route the right HID usage without
+        // a back-channel chrome lookup.
+        if let usagePage { dict["usagePage"] = usagePage }
+        if let usage     { dict["usage"]     = usage }
         return dict
     }
 
@@ -302,7 +316,9 @@ struct ChromeButton: Equatable, Sendable {
         anchor: Anchor, align: Align,
         normalOffset: Point,
         rolloverOffset: Point? = nil,
-        onTop: Bool = false
+        onTop: Bool = false,
+        usagePage: UInt32? = nil,
+        usage: UInt32? = nil
     ) {
         self.name = name
         self.imageName = imageName
@@ -317,6 +333,8 @@ struct ChromeButton: Equatable, Sendable {
         // requiring a nil branch.
         self.rolloverOffset = rolloverOffset ?? normalOffset
         self.onTop = onTop
+        self.usagePage = usagePage
+        self.usage = usage
     }
 
     /// Convenience initialiser preserving the legacy single-offset
@@ -329,7 +347,9 @@ struct ChromeButton: Equatable, Sendable {
         imageDownDrawMode: String? = nil,
         anchor: Anchor, align: Align,
         offset: Point,
-        onTop: Bool = false
+        onTop: Bool = false,
+        usagePage: UInt32? = nil,
+        usage: UInt32? = nil
     ) {
         self.init(
             name: name, imageName: imageName,
@@ -337,7 +357,8 @@ struct ChromeButton: Equatable, Sendable {
             imageDownDrawMode: imageDownDrawMode,
             anchor: anchor, align: align,
             normalOffset: offset, rolloverOffset: offset,
-            onTop: onTop
+            onTop: onTop,
+            usagePage: usagePage, usage: usage
         )
     }
 
@@ -376,9 +397,42 @@ struct ChromeButton: Equatable, Sendable {
             anchor: anchor, align: align,
             normalOffset: normal,
             rolloverOffset: rollover,
-            onTop: dict["onTop"] as? Bool ?? false
+            onTop: dict["onTop"] as? Bool ?? false,
+            usagePage: coerceOptionalUInt32(dict["usagePage"]),
+            usage:     coerceOptionalUInt32(dict["usage"])
         )
     }
+}
+
+/// HID (page, usage) pair sourced from chrome.json. The Domain type
+/// keeps `IndigoHIDInput` agnostic of how the codes were resolved.
+struct HIDUsage: Equatable, Sendable {
+    let page: UInt32
+    let usage: UInt32
+}
+
+extension DeviceChrome {
+    /// HID code for a wire-button name (e.g. `"action"`,
+    /// `"volume-up"`). Returns `nil` when the chrome doesn't ship
+    /// that button or when the entry omits HID fields — callers
+    /// fall back to whatever defaults they carry.
+    func hidUsage(forButton wireName: String) -> HIDUsage? {
+        guard let button = buttons.first(where: { $0.name == wireName }) else {
+            return nil
+        }
+        guard let page = button.usagePage, let usage = button.usage else {
+            return nil
+        }
+        return HIDUsage(page: page, usage: usage)
+    }
+}
+
+/// JSONSerialization bridges JSON numerics through NSNumber. Mirrors
+/// the pattern of `coerceDouble` for fields that are integers in
+/// chrome.json — preserves a missing-key return of `nil`.
+fileprivate func coerceOptionalUInt32(_ any: Any?) -> UInt32? {
+    if let n = any as? NSNumber { return n.uint32Value }
+    return nil
 }
 
 /// Failures while parsing a `chrome.json` payload. Identifier missing

@@ -41,12 +41,37 @@ enum GesturePhase: String, Sendable, Equatable, CaseIterable {
 ///
 /// `home` / `lock` ride `IndigoHIDMessageForButton`. The four
 /// chrome.json side-buttons (`power` / `volumeUp` / `volumeDown` /
-/// `action`) ride `IndigoHIDMessageForKeyboardArbitrary` keyed by HID
+/// `action`) ride `IndigoHIDMessageForHIDArbitrary` keyed by HID
 /// usagePage / usage codes from each device's chrome.json. `siri`
 /// remains rejected — it crashes backboardd through every known path.
-enum DeviceButton: String, Sendable, Equatable {
+enum DeviceButton: String, Sendable, Equatable, Hashable {
     case home, lock
     case power, action
     case volumeUp = "volume-up"
     case volumeDown = "volume-down"
+}
+
+extension DeviceButton {
+    /// Standard HID (page, usage) for the arbitrary-HID buttons. Codes
+    /// match the iPhone family's chrome.json declarations and Apple's
+    /// HID consumer/telephony page assignments.
+    private static let standardHIDUsage: [DeviceButton: HIDUsage] = [
+        .power:      HIDUsage(page: 12, usage: 48),
+        .volumeUp:   HIDUsage(page: 12, usage: 233),
+        .volumeDown: HIDUsage(page: 12, usage: 234),
+        .action:     HIDUsage(page: 11, usage: 45),
+    ]
+
+    /// Effective HID code for this button. `home`/`lock` always return
+    /// `nil` — they ride a different SimulatorKit symbol entirely. For
+    /// the four arbitrary-HID buttons, the chrome.json `override`
+    /// (when non-nil) wins; otherwise the standard iPhone-family
+    /// defaults apply.
+    func hidUsage(override: HIDUsage?) -> HIDUsage? {
+        switch self {
+        case .home, .lock: return nil
+        case .power, .volumeUp, .volumeDown, .action:
+            return override ?? Self.standardHIDUsage[self]
+        }
+    }
 }

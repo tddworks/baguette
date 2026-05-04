@@ -10,9 +10,15 @@ protocol Input: Sendable {
     func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool
     func touch1(phase: GesturePhase, at point: Point, size: Size) -> Bool
     func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool
-    /// Press-and-hold a hardware button. `duration` is the hold time in
-    /// seconds; pass `0` for a default short tap.
-    func button(_ button: DeviceButton, duration: Double) -> Bool
+    /// Press-and-hold a hardware button. `duration` is the hold time
+    /// in seconds; pass `0` for a default short tap. `hidUsage`
+    /// overrides the (page, usage) the dispatch layer will route
+    /// through `IndigoHIDMessageForHIDArbitrary` for arbitrary-HID
+    /// buttons (power / volume / action). `nil` keeps the standard
+    /// iPhone-family defaults (`DeviceButton.hidUsage(override:)`).
+    /// home / lock ignore the override entirely — they ride a
+    /// different SimulatorKit symbol.
+    func button(_ button: DeviceButton, hidUsage: HIDUsage?, duration: Double) -> Bool
     func scroll(deltaX: Double, deltaY: Double) -> Bool
 
     /// Two-finger interpolated path — both pinch and pan reduce to "each

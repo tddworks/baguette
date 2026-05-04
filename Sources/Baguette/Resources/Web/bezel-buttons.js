@@ -164,7 +164,13 @@
     // Measure real hold time so iOS can resolve tap vs long-press.
     // The action button needs ~1s to flip silent/ring; power needs
     // ~2s for Siri / SOS. We capture the user's mousedown→mouseup
-    // window and forward it as `duration` (seconds).
+    // window and forward it as `duration` (seconds). chrome.json
+    // ships per-button HID codes (`usagePage` / `usage`); we forward
+    // them so the Swift dispatch can route the right HID without
+    // doing its own chrome lookup — keeps IndigoHIDInput SRP-clean.
+    const hidUsage = (typeof b.usagePage === 'number' && typeof b.usage === 'number')
+      ? { page: b.usagePage, usage: b.usage }
+      : null;
     let pressedAt = 0;
     const startHold = () => { pressedAt = performance.now(); };
     const finishHold = (ev) => {
@@ -173,7 +179,7 @@
       if (!pressedAt) return;
       const seconds = Math.max(0, (performance.now() - pressedAt) / 1000);
       pressedAt = 0;
-      if (wire) this.onPress(wire, seconds);
+      if (wire) this.onPress(wire, seconds, hidUsage);
       // Inert buttons silently no-op — title attribute already
       // explains why nothing happened.
     };

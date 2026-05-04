@@ -105,14 +105,15 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return sendMouse(client: c, p1: first, p2: second, eventType: et, direction: dir, size: size)
     }
 
-    func button(_ button: DeviceButton, duration: Double) -> Bool {
+    func button(_ button: DeviceButton, hidUsage: HIDUsage?, duration: Double) -> Bool {
         guard let c = ensureWarm() else { return false }
         let holdUs = holdMicroseconds(for: duration)
         switch button {
         case .home, .lock:
             return pressLegacyButton(button, holdUs: holdUs, on: c)
         case .power, .volumeUp, .volumeDown, .action:
-            return pressArbitraryHID(button, holdUs: holdUs, on: c)
+            guard let usage = button.hidUsage(override: hidUsage) else { return false }
+            return pressArbitraryHID(button, usage: usage, holdUs: holdUs, on: c)
         }
     }
 
@@ -184,19 +185,6 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
     }
 
-    /// HID (usagePage, usage) for the chrome.json side-buttons. Values
-    /// match the iPhone 12 chrome.json shipped under DeviceKit and the
-    /// standard HID consumer-page assignments.
-    private func hidUsage(for button: DeviceButton) -> (UInt32, UInt32)? {
-        switch button {
-        case .power:      return (12, 48)   // sleep / wake
-        case .volumeUp:   return (12, 233)
-        case .volumeDown: return (12, 234)
-        case .action:     return (11, 45)   // mute / ringer slider
-        case .home, .lock: return nil
-        }
-    }
-
     private func pressLegacyButton(_ button: DeviceButton, holdUs: UInt32, on client: AnyObject) -> Bool {
         guard let bfn = buttonFn else {
             log("[hid] press \(button.rawValue) — buttonFn unresolved")
@@ -219,24 +207,20 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return true
     }
 
-    private func pressArbitraryHID(_ button: DeviceButton, holdUs: UInt32, on client: AnyObject) -> Bool {
+    private func pressArbitraryHID(_ button: DeviceButton, usage: HIDUsage, holdUs: UInt32, on client: AnyObject) -> Bool {
         guard let kfn = hidArbFn else {
             log("[hid] press \(button.rawValue) — IndigoHIDMessageForHIDArbitrary unresolved")
             return false
         }
-        guard let (page, usage) = hidUsage(for: button) else {
-            log("[hid] press \(button.rawValue) — no HID usage mapping")
-            return false
-        }
         let target = Self.touchDigitizer
-        log("[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(page) usage=\(usage) hold=\(holdUs)us")
-        guard let down = kfn(target, page, usage, 1) else {
+        log("[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(usage.page) usage=\(usage.usage) hold=\(holdUs)us")
+        guard let down = kfn(target, usage.page, usage.usage, 1) else {
             log("[hid] press \(button.rawValue) — down message build returned nil")
             return false
         }
         send(message: down, to: client)
         usleep(holdUs)
-        guard let up = kfn(target, page, usage, 2) else {
+        guard let up = kfn(target, usage.page, usage.usage, 2) else {
             log("[hid] press \(button.rawValue) — up message build returned nil")
             return false
         }
