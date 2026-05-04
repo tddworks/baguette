@@ -3,6 +3,14 @@
 (function() {
   'use strict';
 
+  // sim-native.js owns the page when the URL is `/simulators/<udid>`
+  // and sets this flag synchronously at script-eval time. Bail out so
+  // we don't paint the list shell underneath the focus-mode chrome.
+  if (window.__baguetteNativeMode) {
+    console.log('[ASC Pro] sim-list.js suspended (native mode)');
+    return;
+  }
+
   const escapeHTML = window.escapeHTML || (value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c])));

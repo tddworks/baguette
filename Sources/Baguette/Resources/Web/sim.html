@@ -54,6 +54,11 @@
 <script src="/recorder.js"></script>
 <script src="/stream-session.js"></script>
 <script src="/sim-stream.js"></script>
+<!-- sim-native.js must run BEFORE sim-list.js: it sets the
+     `__baguetteNativeMode` flag synchronously when the URL is a
+     /simulators/<udid> deep link, which sim-list.js checks at the
+     top of its IIFE to bail out cleanly. Order matters here. -->
+<script src="/sim-native.js"></script>
 <script src="/sim-list.js"></script>
 </body>
 </html>
