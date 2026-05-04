@@ -120,6 +120,18 @@
     img.style.cssText = 'display:block;pointer-events:none;width:100%;height:100%';
     wrap.appendChild(img);
 
+    // Pre-fetch the depressed sprite (`imageDown`) when the chrome
+    // ships one so the mousedown swap is instant — no flash waiting
+    // on the network. DeviceKit's `imageDownDrawMode` is `"replace"`
+    // for every iPhone button (swap the whole sprite, don't blend
+    // on top); unknown modes are ignored, falling back to the
+    // pure positional press animation.
+    if (b.imageDownUrl
+        && (b.imageDownDrawMode || 'replace').toLowerCase() === 'replace') {
+      const pre = new Image();
+      pre.src = b.imageDownUrl;
+    }
+
     img.addEventListener('load', () => this._size(wrap, img, b, bareW, bareH));
     if (img.complete && img.naturalWidth) this._size(wrap, img, b, bareW, bareH);
 
@@ -174,19 +186,34 @@
     wrap.style.setProperty('--out-dx', `${outDx}%`);
     wrap.style.setProperty('--out-dy', `${outDy}%`);
 
+    // Sprite swap on press, when chrome.json ships an `imageDown`
+    // variant under "replace" drawMode (every iPhone button on iOS
+    // 26). We restore on both `mouseup` AND `mouseleave` so a drag-
+    // off-then-release leaves the cap visually at-rest, matching
+    // macOS Tahoe Simulator.
+    const restSrc = b.imageUrl;
+    const downSrc =
+      (b.imageDownUrl
+        && (b.imageDownDrawMode || 'replace').toLowerCase() === 'replace')
+        ? b.imageDownUrl
+        : null;
+
     wrap.addEventListener('mouseenter', () => {
       wrap.style.transform = 'translate(var(--out-dx), var(--out-dy))';
     });
     wrap.addEventListener('mouseleave', () => {
       wrap.style.transform = '';
+      if (downSrc) img.src = restSrc;
     });
     wrap.addEventListener('mousedown', () => {
       // Press back to NORMAL — opposite sign of the rollover delta.
       wrap.style.transform =
         'translate(calc(var(--out-dx) * -1), calc(var(--out-dy) * -1))';
+      if (downSrc) img.src = downSrc;
     });
     wrap.addEventListener('mouseup', () => {
       wrap.style.transform = 'translate(var(--out-dx), var(--out-dy))';
+      if (downSrc) img.src = restSrc;
     });
   };
 

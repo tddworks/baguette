@@ -56,6 +56,8 @@ Single resource tree, no `/api/` prefix; UDID always in path; format distinguish
 
 ## Testing approach
 
+**TDD first.** Write the failing test before the implementation — every behaviour change to a Domain or Infrastructure type starts with a red `@Test`, then the smallest impl that turns it green, then refactor. Don't ship parser / aggregate / serialization changes ahead of their tests, even when "obvious"; the codebase's confidence rests on the test suite covering each new field at the moment it lands. JS modules under `Resources/Web/` have no test harness — keep their changes minimal and exercise them through the Swift layer that produces their JSON inputs.
+
 Chicago-school state-based throughout. Every external boundary is an `@Mockable` protocol; tests substitute auto-generated `MockXxx` fakes and assert on returned values rather than recorded calls. Patterns:
 
 - Pure parsers (`DeviceChrome`, `DeviceProfile`, `ReconfigParser`, `GestureRegistry`) — feed JSON / plist, assert parsed value.

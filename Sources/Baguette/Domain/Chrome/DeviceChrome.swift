@@ -232,6 +232,18 @@ struct ChromeButton: Equatable, Sendable {
 
     let name: String
     let imageName: String
+    /// Optional pressed-state asset (chrome.json's `imageDown`).
+    /// Apple ships a darker / depressed sprite per button; the
+    /// actionable-bezel UI swaps to it on `mousedown`. `nil` when
+    /// the chrome doesn't carry a depressed variant — callers fall
+    /// back to the at-rest `imageName`.
+    let imageDownName: String?
+    /// How the depressed sprite should be drawn relative to the
+    /// at-rest one (chrome.json's `imageDownDrawMode`). Apple's
+    /// known values: `"replace"` (swap entirely) and absent
+    /// (overlay). Stored verbatim so we don't bake an assumption
+    /// here; consumers interpret it. `nil` when no down asset.
+    let imageDownDrawMode: String?
     let anchor: Anchor
     let align: Align
     /// At-rest position (chrome.json's `offsets.normal`). The button
@@ -260,7 +272,7 @@ struct ChromeButton: Equatable, Sendable {
     let onTop: Bool
 
     var json: [String: Any] {
-        [
+        var dict: [String: Any] = [
             "name": name,
             "imageName": imageName,
             "anchor": anchor.rawValue,
@@ -274,10 +286,19 @@ struct ChromeButton: Equatable, Sendable {
             "rolloverOffset": ["x": rolloverOffset.x, "y": rolloverOffset.y],
             "onTop": onTop,
         ]
+        if let imageDownName {
+            dict["imageDownName"] = imageDownName
+        }
+        if let imageDownDrawMode {
+            dict["imageDownDrawMode"] = imageDownDrawMode
+        }
+        return dict
     }
 
     init(
         name: String, imageName: String,
+        imageDownName: String? = nil,
+        imageDownDrawMode: String? = nil,
         anchor: Anchor, align: Align,
         normalOffset: Point,
         rolloverOffset: Point? = nil,
@@ -285,6 +306,8 @@ struct ChromeButton: Equatable, Sendable {
     ) {
         self.name = name
         self.imageName = imageName
+        self.imageDownName = imageDownName
+        self.imageDownDrawMode = imageDownDrawMode
         self.anchor = anchor
         self.align = align
         self.normalOffset = normalOffset
@@ -302,12 +325,16 @@ struct ChromeButton: Equatable, Sendable {
     /// this routes them to both offsets so the value is well-defined.
     init(
         name: String, imageName: String,
+        imageDownName: String? = nil,
+        imageDownDrawMode: String? = nil,
         anchor: Anchor, align: Align,
         offset: Point,
         onTop: Bool = false
     ) {
         self.init(
             name: name, imageName: imageName,
+            imageDownName: imageDownName,
+            imageDownDrawMode: imageDownDrawMode,
             anchor: anchor, align: align,
             normalOffset: offset, rolloverOffset: offset,
             onTop: onTop
@@ -344,6 +371,8 @@ struct ChromeButton: Equatable, Sendable {
         )
         self.init(
             name: name, imageName: imageName,
+            imageDownName: dict["imageDown"] as? String,
+            imageDownDrawMode: dict["imageDownDrawMode"] as? String,
             anchor: anchor, align: align,
             normalOffset: normal,
             rolloverOffset: rollover,

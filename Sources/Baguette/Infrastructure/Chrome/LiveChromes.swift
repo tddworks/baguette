@@ -191,10 +191,24 @@ final class LiveChromes: Chromes, @unchecked Sendable {
         // the actionable-bezel UI. Map preserves insertion order for
         // the unlikely case of duplicate names — last-write wins,
         // matching how the merger picks the top layer.
+        //
+        // When the chrome ships an `imageDown` variant we also
+        // rasterize and stash it under `<name>-down` so the front
+        // end can swap to a depressed sprite on `mousedown` (the
+        // macOS Tahoe Simulator look). A failed down rasterize is
+        // non-fatal — the press animation just falls back to the
+        // pure positional depress.
         var perButton: [String: ChromeImage] = [:]
         perButton.reserveCapacity(buttonImages.count)
         for entry in buttonImages {
             perButton[entry.button.name] = entry.image
+            if let downName = entry.button.imageDownName,
+               let pdf = try? store.chromeAssetPDF(
+                   chromeIdentifier: chromeIdentifier, imageName: downName
+               ),
+               let downImage = try? rasterizer.rasterize(pdfData: pdf) {
+                perButton["\(entry.button.name)-down"] = downImage
+            }
         }
 
         let margins = computeMargins(buttons: buttonImages)

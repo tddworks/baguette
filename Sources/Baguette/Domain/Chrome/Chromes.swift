@@ -100,6 +100,15 @@ struct DeviceChromeAssets: Sendable, Equatable {
             var entry = b.json
             if let prefix = buttonImageURLPrefix {
                 entry["imageUrl"] = "\(prefix)\(b.name).png"
+                // When the chrome ships a depressed sprite, advertise
+                // a fetchable URL under `<name>-down.png`. The front
+                // end swaps `<img>.src` to it on mousedown for the
+                // macOS Tahoe Simulator press feel; the rasterized
+                // counterpart is stashed by LiveChromes under the
+                // same key.
+                if b.imageDownName != nil {
+                    entry["imageDownUrl"] = "\(prefix)\(b.name)-down.png"
+                }
             }
             return entry
         }

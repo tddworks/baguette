@@ -37,9 +37,16 @@ enum GesturePhase: String, Sendable, Equatable, CaseIterable {
     case down, move, up
 }
 
-/// Hardware buttons routable via the host-HID path on iOS 26.4. Other
-/// buttons (Siri, Side, volume) crash backboardd through this path and
-/// route through AXe instead.
+/// Hardware buttons routable via the host-HID path on iOS 26.4.
+///
+/// `home` / `lock` ride `IndigoHIDMessageForButton`. The four
+/// chrome.json side-buttons (`power` / `volumeUp` / `volumeDown` /
+/// `action`) ride `IndigoHIDMessageForKeyboardArbitrary` keyed by HID
+/// usagePage / usage codes from each device's chrome.json. `siri`
+/// remains rejected — it crashes backboardd through every known path.
 enum DeviceButton: String, Sendable, Equatable {
     case home, lock
+    case power, action
+    case volumeUp = "volume-up"
+    case volumeDown = "volume-down"
 }

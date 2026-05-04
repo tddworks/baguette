@@ -153,8 +153,31 @@ struct PressTests {
         #expect(g == Press(button: .lock))
     }
 
+    @Test func `parses power button`() throws {
+        let g = try Press.parse(["button": "power"])
+        #expect(g == Press(button: .power))
+    }
+
+    @Test func `parses volume-up button`() throws {
+        let g = try Press.parse(["button": "volume-up"])
+        #expect(g == Press(button: .volumeUp))
+    }
+
+    @Test func `parses volume-down button`() throws {
+        let g = try Press.parse(["button": "volume-down"])
+        #expect(g == Press(button: .volumeDown))
+    }
+
+    @Test func `parses action button`() throws {
+        let g = try Press.parse(["button": "action"])
+        #expect(g == Press(button: .action))
+    }
+
     @Test func `rejects unknown button`() {
-        #expect(throws: GestureError.invalidValue("button", expected: "home | lock")) {
+        #expect(throws: GestureError.invalidValue(
+            "button",
+            expected: "home | lock | power | volume-up | volume-down | action"
+        )) {
             try Press.parse(["button": "siri"])
         }
     }

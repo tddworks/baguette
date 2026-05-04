@@ -114,6 +114,29 @@ struct DeviceChromeTests {
         #expect(rollover["y"] as? Double == 160)
     }
 
+    @Test func `button parses imageDown and imageDownDrawMode when present`() throws {
+        // Apple's chrome.json (e.g. phone13.devicechrome) ships a
+        // depressed sprite per button — `imageDown` plus an
+        // `imageDownDrawMode` ("replace" everywhere we've seen).
+        // The actionable-bezel UI swaps to the depressed sprite on
+        // mousedown, so both fields must round-trip through parsing.
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePhone13Down)
+        let action = try #require(chrome.buttons.first { $0.name == "action" })
+        #expect(action.imageDownName == "Mute BTN Dn")
+        #expect(action.imageDownDrawMode == "replace")
+    }
+
+    @Test func `button leaves imageDown nil when chrome.json omits it`() throws {
+        // Older chromes (every fixture below `fixturePhone13Down`)
+        // don't ship a depressed variant. The parser must tolerate
+        // the absent keys — both fields stay nil so the front end
+        // falls back to its position-only press animation.
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
+        let action = try #require(chrome.buttons.first { $0.name == "action" })
+        #expect(action.imageDownName == nil)
+        #expect(action.imageDownDrawMode == nil)
+    }
+
     @Test func `button parses onTop with default false`() throws {
         // watch4-shaped fixture: digital-crown is `onTop: false` (baked
         // into the composite) and the orange action button is
@@ -372,6 +395,94 @@ struct DeviceChromeTests {
         #expect(m["right"]  as? Double == 17)
     }
 
+    @Test func `assets layoutJSON adds imageDownUrl when chrome ships imageDown`() throws {
+        // When the parsed chrome carries an `imageDownName`, the
+        // injected layout JSON advertises a fetchable URL under
+        // `<name>-down.png` so the front end can preload + swap on
+        // press. Buttons WITHOUT a depressed variant still get
+        // `imageUrl` but no `imageDownUrl`, keeping the field
+        // strictly opt-in.
+        let chrome = DeviceChrome(
+            identifier: "phone13",
+            screenInsets: Insets(top: 18, left: 18, bottom: 18, right: 18),
+            outerCornerRadius: 80,
+            buttons: [
+                ChromeButton(
+                    name: "action",
+                    imageName: "Mute BTN",
+                    imageDownName: "Mute BTN Dn",
+                    imageDownDrawMode: "replace",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 8, y: 160)
+                ),
+                ChromeButton(
+                    name: "bare",
+                    imageName: "BTN",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 8, y: 220)
+                ),
+            ],
+            compositeImageName: "PhoneComposite"
+        )
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 100, height: 200))
+        )
+
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON(
+                buttonImageURLPrefix: "/simulators/UDID-XYZ/chrome-button/"
+            ).utf8)
+        ) as? [String: Any]
+        let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
+        let action = try #require(buttons.first { ($0["name"] as? String) == "action" })
+        let bare = try #require(buttons.first { ($0["name"] as? String) == "bare" })
+
+        #expect(action["imageUrl"] as? String
+            == "/simulators/UDID-XYZ/chrome-button/action.png")
+        #expect(action["imageDownUrl"] as? String
+            == "/simulators/UDID-XYZ/chrome-button/action-down.png")
+        #expect(action["imageDownDrawMode"] as? String == "replace")
+
+        #expect(bare["imageUrl"] as? String
+            == "/simulators/UDID-XYZ/chrome-button/bare.png")
+        #expect(bare["imageDownUrl"] == nil)
+        #expect(bare["imageDownDrawMode"] == nil)
+    }
+
+    @Test func `assets layoutJSON omits imageDownUrl when no prefix is given`() throws {
+        // Domain-only callers (no URL prefix) still see the parsed
+        // imageDownName / drawMode on the value type, but the JSON
+        // shape stays free of URL fields — same back-compat rule
+        // already holds for `imageUrl`.
+        let chrome = DeviceChrome(
+            identifier: "phone13",
+            screenInsets: Insets(top: 18, left: 18, bottom: 18, right: 18),
+            outerCornerRadius: 80,
+            buttons: [
+                ChromeButton(
+                    name: "action", imageName: "Mute BTN",
+                    imageDownName: "Mute BTN Dn",
+                    imageDownDrawMode: "replace",
+                    anchor: .left, align: .leading,
+                    offset: Point(x: 8, y: 160)
+                ),
+            ],
+            compositeImageName: "PhoneComposite"
+        )
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(data: Data(), size: Size(width: 100, height: 200))
+        )
+
+        let parsed = try JSONSerialization.jsonObject(
+            with: Data(assets.layoutJSON().utf8)
+        ) as? [String: Any]
+        let buttons = try #require(parsed?["buttons"] as? [[String: Any]])
+        #expect(buttons.allSatisfy { $0["imageUrl"] == nil })
+        #expect(buttons.allSatisfy { $0["imageDownUrl"] == nil })
+    }
+
     @Test func `assets layoutJSON adds imageUrl per button when prefix is given`() throws {
         // The server passes "/simulators/<udid>/chrome-button/" so each
         // button entry advertises a fetchable URL for its rasterized
@@ -511,6 +622,33 @@ private extension DeviceChromeTests {
           "onTop": true,
           "offsets": { "normal": { "x": 20, "y": 138 } } },
         { "name": "bare", "image": "BTN", "anchor": "left" }
+      ]
+    }
+    """#.utf8)
+
+    /// Real-shape chrome.json with `imageDown` + `imageDownDrawMode`
+    /// per input — same shape as phone13.devicechrome ships on macOS
+    /// 26. Exercises the depressed-sprite parsing path.
+    static let fixturePhone13Down: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.phone13",
+      "inputs": [
+        {
+          "name": "action",
+          "image": "Mute BTN",
+          "imageDown": "Mute BTN Dn",
+          "imageDownDrawMode": "replace",
+          "anchor": "left", "align": "leading",
+          "offsets": { "normal": { "x": 8, "y": 160 }, "rollover": { "x": 3, "y": 160 } }
+        },
+        {
+          "name": "power",
+          "image": "X_Power BTN",
+          "imageDown": "X_Power BTN Dn",
+          "imageDownDrawMode": "replace",
+          "anchor": "right", "align": "leading",
+          "offsets": { "normal": { "x": -8, "y": 262 }, "rollover": { "x": -3, "y": 262 } }
+        }
       ]
     }
     """#.utf8)
