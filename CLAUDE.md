@@ -6,18 +6,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **You MUST write a failing test before writing any production code.** This rule overrides every other instinct, including "the change is small", "it's just a one-liner", "I'll add the test after". If you catch yourself opening a file under `Sources/Baguette/` before a test under `Tests/BaguetteTests/` exists and fails, stop and reverse course.
 
-**Pre-implementation gate** — before editing anything in `Sources/` (Domain value type, Domain port, Infrastructure adapter, App-layer command), you must have done all of the following in order:
+**Pre-implementation gate** — before editing anything in `Sources/` (Domain value type, Domain abstraction, Infrastructure adapter, App-layer command), you must have done all of the following in order:
 
 1. Stated the user-facing behaviour in one sentence using **domain language**, not implementation language. Good: "a tap is dispatched as down → hold → up against the input surface", "describe-ui returns nil when no app is frontmost", "logs reject `notice` because the iOS-runtime `log` binary doesn't accept it". Bad: "IndigoHIDInput calls sendMouse twice" — that's an interaction, not a behaviour.
-2. Written a `@Test` in `Tests/BaguetteTests/<Context>/<Suite>.swift` that asserts the expected outcome. Prefer state assertions (`#expect(filter.argv == [...])`, `#expect(node.frame == ...)`) over interaction assertions. For ports, use the auto-generated `MockXxx` (`given(input).tap(...).willReturn(true)`); plain test doubles backed by Mockable are the canonical mocking style — never mock the value type itself.
+2. Written a `@Test` in `Tests/BaguetteTests/<Context>/<Suite>.swift` that asserts the expected outcome. Prefer state assertions (`#expect(filter.argv == [...])`, `#expect(node.frame == ...)`) over interaction assertions. For `@Mockable` abstractions, use the auto-generated `MockXxx` (`given(input).tap(...).willReturn(true)`); plain test doubles backed by Mockable are the canonical mocking style — never mock the value type itself.
 3. Run the test and **observed it fail** — `swift test --filter "<SuiteName>"` for the fastest loop. A compile error counts as red only when the failing symbol is the one the test names (`KeyboardKey.from(wireCode:)` doesn't exist yet); a generic build error somewhere else doesn't.
 4. Reported the red result back to the user (one line is fine: "test `parses lowercase letter wire codes onto HID page 7` fails: `KeyboardKey.from is not a member`").
 
 Only after step 4 may you write code under `Sources/`. Pure docs / CHANGELOG edits and Resources/Web/ JS tweaks are exempt; the moment a Domain type, Infrastructure adapter, or App command changes, the gate applies.
 
-**Coverage target: ~100% of Domain + Infrastructure adapter code that doesn't touch private SimulatorKit / CoreSimulator / AccessibilityPlatformTranslation symbols directly.** Adapters that DO touch those frameworks are split: error-path branches (host nil, device not booted, `alreadyStarted`, idempotent `stop`, etc.) are unit-tested via `@Mockable` ports; the actual private-API call path is integration-only — manually smoke-tested against a booted simulator. New code must include the unit-testable portion.
+### Naming the abstractions
 
-**If you skip the gate, you are violating the project's primary rule.** The Chicago-school workflow, value-type domain, and `@Mockable` port pattern are described in [Testing approach](#testing-approach).
+Every `@Mockable protocol` in this codebase is named **for the role it plays in the domain**, never for its architectural pattern. Look at the existing list — `Simulators`, `Simulator`, `Input`, `Screen`, `Stream`, `Accessibility`, `LogStream`, `DeviceHost`, `Chromes`. **The word "Port" never appears**, and you're not adding it. If you find yourself reaching for `XxxPort`, `XxxRepository`, `XxxService`, or `XxxManager`, the abstraction isn't named yet — keep going until the noun describes what the thing *is* in the domain. "A subprocess" is fine; "a log process port" is not.
+
+### Splitting an adapter that wraps 3rd-party I/O
+
+When an Infrastructure adapter wraps a private framework or external I/O (private SimulatorKit / CoreSimulator / AccessibilityPlatformTranslation symbols, `Foundation.Process`, `Pipe`, `dlopen`, …), the file gets two responsibilities:
+
+- **What it does** — the value-domain orchestration (state transitions, recursion, byte-to-line splitting, frame projection, error mapping). This MUST be unit-tested.
+- **How it talks to the outside** — the irreducible private-API call (`dlopen`, `class_getMethodImplementation`, `Process.run`, `kill(pid)`). This is integration-only.
+
+Always separate the two. Two patterns, picked by the **shape of the irreducible call**:
+
+1. **One-shot fetch** — the adapter makes a single private-API call, then operates on the value it gets back (e.g. `AXPTranslator.frontmostApplicationWithDisplayId:` returns one `AXPMacPlatformElement`, then we walk it). Lift the post-fetch logic into a **pure static factory or value type in `Domain/`** (`AXNode.walk(from:transform:)`, `AXFrameTransform.map(_:)`, `LineBuffer`). Drive it directly with `Fake…` `NSObject` subclasses that override KVC. The Infrastructure adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
+
+2. **Conversational I/O** — the adapter talks back-and-forth with the outside (start / stream-bytes / signal-exit / terminate). Pure helpers don't capture the state machine cleanly. Introduce **one small `@Mockable` collaborator named like a domain noun** (`Subprocess`, never `LogProcessPort`) — start / terminate / `onBytes` / `onExit`. The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess` and drive the state machine deterministically. The concrete impl (`HostSubprocess`) is a thin wrapper over `Foundation.Process` (~30 LOC) — integration-only.
+
+The naming bar is the same for both: **collaborators are domain nouns, never pattern labels**. If the noun isn't obvious, the abstraction probably shouldn't exist yet.
+
+### Coverage target
+
+**~100% of Domain.** Every Domain value type, every static factory, every `@Mockable` collaborator's behaviour-spec is covered.
+
+**Infrastructure adapters split as above.** The orchestrator inside the adapter is unit-tested via the collaborator's `MockXxx`; only the irreducible call lines stay uncovered. Concretely: in `AXPTranslatorAccessibility`, the `dlopen` + `+sharedInstance` + `frontmostApplicationWithDisplayId:` + `macPlatformElementFromTranslation:` four-line dance is the only integration-only block — everything else (the walk, the transform, the value extractors, the dispatcher's lifecycle) lives in `Domain/` and is unit-covered. In `SimDeviceLogStream`, the `Process.run` + `kill(pid)` lines are integration-only; the state machine + `LineBuffer` flush are covered via `MockSubprocess`. New code must include the unit-testable portion before it lands.
+
+**If you skip the gate, you are violating the project's primary rule.** The Chicago-school workflow, value-type domain, and `@Mockable` collaborator pattern are described in [Testing approach](#testing-approach).
 
 ## Build & test
 
@@ -40,8 +63,8 @@ Three-layer split with strict inward-flowing imports: `App` → `Domain` + `Infr
 ```
 Sources/Baguette/
 ├── App/                CLI dispatch (ArgumentParser) + use-case orchestration
-├── Domain/             pure Swift; value types + @Mockable aggregate ports
-├── Infrastructure/     concrete @Mockable port impls (private-API code lives here only)
+├── Domain/             pure Swift; value types + @Mockable abstractions named after their domain role
+├── Infrastructure/     concrete @Mockable abstraction impls (private-API code lives here only)
 └── Resources/Web/      vanilla IIFE modules served by `baguette serve`
 ```
 
@@ -49,7 +72,7 @@ Sources/Baguette/
 
 ### Two consumers, one pipeline
 
-Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → `Input` port → `IndigoHIDInput`. The only difference is the App-layer entry point.
+Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → `Input` → `IndigoHIDInput`. The only difference is the App-layer entry point.
 
 ### The crucial detail: 9-arg `IndigoHIDMessageForMouseNSEvent`
 
