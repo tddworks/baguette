@@ -169,6 +169,52 @@ Same defaults, same bytes — the route and the CLI share `ScreenSnapshot.captur
 **Limits:** JPEG only (no PNG / WebP / AVIF yet); raw framebuffer (no
 bezel composite — that's a browser-side concern via `bezel.png`).
 
+## Accessibility tree — `describe-ui`
+
+```bash
+baguette describe-ui --udid <UDID>                                   # full frontmost-app tree, JSON to stdout
+baguette describe-ui --udid <UDID> --x 172 --y 880                   # hit-test: topmost AX node at (172, 880)
+baguette describe-ui --udid <UDID> --output /tmp/tree.json
+```
+
+Returns one JSON object (the root `AXNode`) per call:
+
+```json
+{
+  "role": "AXButton",
+  "subrole": null,
+  "label": "Safari",
+  "value": null,
+  "identifier": "Safari",
+  "title": null,
+  "help": "Double tap to open",
+  "frame": { "x": 136, "y": 844.33, "width": 72, "height": 72 },
+  "enabled": true, "focused": false, "hidden": false,
+  "children": []
+}
+```
+
+`frame` is in **device points** — same units as `tap` / `swipe`
+wire fields (`x`, `y`, `width`, `height`). An agent that wants to
+"tap the Safari button" reads `frame.x + frame.width/2`,
+`frame.y + frame.height/2` straight back into a `tap` envelope.
+
+| Flag       | Default | Effect                                                       |
+|------------|---------|--------------------------------------------------------------|
+| `--x`      | unset   | Hit-test x coordinate (device points). Pair with `--y`.      |
+| `--y`      | unset   | Hit-test y coordinate (device points). Pair with `--x`.      |
+| `--output` | stdout  | Write the JSON to a file instead of stdout.                  |
+
+Both `--x` and `--y` must be given together; either alone errors.
+
+**Failure modes:**
+- **`no accessibility data`** — simulator not booted, or the
+  frontmost slot is empty (e.g. lock screen with nothing focused).
+  Exits non-zero. Wake the screen with a gesture or boot the sim.
+- **Framework load failure.** `baguette` logs `[ax]` lines on
+  stderr; the CLI exits non-zero. Most common cause is running on
+  an Xcode older than 26 — the dispatcher recipe targets iOS 26+.
+
 ## Live frame stream — `stream`
 
 ```bash
