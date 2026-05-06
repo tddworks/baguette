@@ -380,31 +380,49 @@ feature lives in one place across both layers.
 │   │   ├── Logger.swift
 │   │   └── Commands/                 one file per CLI subcommand
 │   │       (list / boot / shutdown / stream / input / serve / chrome /
-│   │        gesture one-shots)
+│   │        screenshot / describe-ui / logs / gesture one-shots /
+│   │        keyboard / press)
 │   │
 │   ├── Domain/                       pure Swift, no Apple private APIs
-│   │   ├── Common/                   CoordinateTypes (Point, Size, Rect, Insets)
-│   │   ├── Simulator/                Simulator value type + Simulators aggregate
+│   │   ├── Common/                   CoordinateTypes (Point, Size, Rect, Insets,
+│   │   │                             HIDUsage, DeviceButton)
+│   │   ├── Simulator/                Simulator value type + Simulators aggregate +
+│   │   │                             DeviceHost port (the seam adapters depend on)
 │   │   ├── Input/                    Input port + Gesture / GestureRegistry +
 │   │   │                             Tap / Swipe / Touch1 / Touch2 / Press /
-│   │   │                             Scroll / Pinch / Pan
+│   │   │                             Scroll / Pinch / Pan / Key / TypeText /
+│   │   │                             Keyboard
 │   │   ├── Screen/                   Screen port (frame source)
 │   │   ├── Stream/                   Stream port + StreamConfig / StreamFormat
 │   │   │                             + Envelope (MJPEG / AVCC framing)
-│   │   └── Chrome/                   Chromes aggregate + DeviceChrome /
-│   │                                 DeviceProfile (bezel layout)
+│   │   ├── Chrome/                   Chromes aggregate + DeviceChrome /
+│   │   │                             DeviceProfile (bezel layout)
+│   │   ├── Accessibility/            AXNode value type + Accessibility port
+│   │   │                             (on-screen UI tree)
+│   │   └── Logs/                     LogFilter value type + LogStream port
+│   │                                 (live unified-log feed)
 │   │
-│   ├── Infrastructure/               @Mockable ports + concrete impls
+│   ├── Infrastructure/               concrete @Mockable port impls (private-API
+│   │                                 code lives ONLY here)
 │   │   ├── Simulator/                CoreSimulators (CoreSimulator + SimulatorKit
-│   │   │                             ObjC bridge)
+│   │   │                             ObjC bridge); conforms to Simulators +
+│   │   │                             DeviceHost
 │   │   ├── Input/                    IndigoHIDInput (9-arg
-│   │   │                             IndigoHIDMessageForMouseNSEvent)
-│   │   ├── Screen/                   SimulatorKitScreen (framebuffer callbacks)
+│   │   │                             IndigoHIDMessageForMouseNSEvent + button +
+│   │   │                             HIDArbitrary + keyboard paths)
+│   │   ├── Screen/                   SimulatorKitScreen (framebuffer callbacks),
+│   │   │                             ScreenSnapshot (one-shot JPEG capture)
 │   │   ├── Stream/                   MJPEG / AVCC encoders, JPEG / H.264
 │   │   │                             encoders, Scaler, SeedFilter, Stdout /
 │   │   │                             WebSocket FrameSinks, ControlChannel
 │   │   ├── Chrome/                   LiveChromes + ChromeStore /
 │   │   │                             FileSystemChromeStore + PDFRasterizer
+│   │   ├── Accessibility/            AXPTranslatorAccessibility (AXPTranslator +
+│   │   │                             TokenDispatcher bridge for the iOS-26
+│   │   │                             out-of-Simulator.app accessibility path)
+│   │   ├── Logs/                     SimDeviceLogStream (shells out to
+│   │   │                             `xcrun simctl spawn` for the in-sim
+│   │   │                             `/usr/bin/log stream` child)
 │   │   └── Server/                   Server (Hummingbird HTTP + WS) + WebRoot
 │   │
 │   └── Resources/Web/                static UI for `serve`
@@ -413,18 +431,32 @@ feature lives in one place across both layers.
 │       ├── sim-stream.js             stream-page orchestrator
 │       ├── sim-stream.html           stream view markup
 │       ├── sim-input.js              SimInput / MouseGestureSource / PinchOverlay
+│       ├── sim-input-bridge.js       SimInput → baguette wire-format mapper
+│       ├── sim-native.js             focus-mode (single-sim fullscreen) view
 │       ├── frame-decoder.js          MJPEG / AVCC strategy
 │       ├── device-frame.js           bezel + screen DOM
 │       ├── stream-session.js         WebSocket + paint loop
-│       └── capture-gallery.js        screenshot fetch + thumbs
+│       ├── capture-gallery.js        screenshot fetch + thumbs
+│       └── farm/                     multi-device dashboard (farm.html, farm.css,
+│                                     farm-tile.js, farm-grid.js, …)
 │
 └── Tests/BaguetteTests/              mirrors Sources/ contexts
-    ├── App/                          GestureDispatcher / ReconfigParser tests
-    ├── Simulator/                    Simulator / Simulators tests
-    ├── Input/                        Gesture / GestureRegistry tests
+    ├── App/                          GestureDispatcher / ReconfigParser /
+    │                                 Logger / Commands (CommandParsing,
+    │                                 ChromeCommand) tests
+    ├── Simulator/                    Simulator / Simulators / DeviceHost tests
+    ├── Input/                        Gesture / GestureRegistry / Keyboard /
+    │                                 IndigoHIDInput error-path tests
+    ├── Screen/                       (none yet — Screen port covered via
+    │                                 mocks in Server tests)
     ├── Stream/                       Envelope / StreamConfig / StreamFormat tests
-    └── Chrome/                       DeviceChrome / DeviceProfile / LiveChromes /
-                                      CoreGraphicsPDFRasterizer / integration tests
+    ├── Server/                       BezelRoutes / WebRootSubdir tests
+    ├── Chrome/                       DeviceChrome / DeviceProfile / LiveChromes /
+    │                                 CoreGraphicsPDFRasterizer / integration tests
+    ├── Accessibility/                AXNode / Accessibility port /
+    │                                 AXPTranslatorAccessibility error-path tests
+    └── Logs/                         LogFilter / LogStream port /
+                                      SimDeviceLogStream error-path tests
 ```
 
 ## Testing
