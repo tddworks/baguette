@@ -21,6 +21,11 @@ protocol Simulators: AnyObject, Sendable {
 
     /// Produce an `Input` for the simulator.
     func input(for simulator: Simulator) -> any Input
+
+    /// Produce an `Accessibility` snapshot port for the simulator.
+    /// Each call returns a fresh handle; the underlying translator
+    /// is a process-wide singleton, so allocations are cheap.
+    func accessibility(for simulator: Simulator) -> any Accessibility
 }
 
 extension Simulators {

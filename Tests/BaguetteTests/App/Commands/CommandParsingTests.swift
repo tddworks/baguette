@@ -19,7 +19,7 @@ struct CommandParsingTests {
             "list", "boot", "shutdown", "input", "stream",
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
-            "chrome", "screenshot", "serve",
+            "chrome", "screenshot", "describe-ui", "serve",
         ])
     }
 
@@ -199,6 +199,26 @@ struct CommandParsingTests {
         #expect(cmd.output == "/tmp/x.jpg")
         #expect(cmd.quality == 0.5)
         #expect(cmd.scale == 2)
+    }
+
+    // MARK: - describe-ui
+
+    @Test func `describe-ui requires --udid and defaults to full tree`() throws {
+        let cmd = try DescribeUICommand.parse(["--udid", "ABC"])
+        #expect(cmd.options.udid == "ABC")
+        #expect(cmd.x == nil && cmd.y == nil)
+        #expect(cmd.output == nil)
+        #expect(DescribeUICommand.configuration.commandName == "describe-ui")
+    }
+
+    @Test func `describe-ui accepts --x --y --output`() throws {
+        let cmd = try DescribeUICommand.parse([
+            "--udid", "ABC",
+            "--x", "120", "--y", "400",
+            "--output", "/tmp/tree.json",
+        ])
+        #expect(cmd.x == 120 && cmd.y == 400)
+        #expect(cmd.output == "/tmp/tree.json")
     }
 
     // MARK: - serve

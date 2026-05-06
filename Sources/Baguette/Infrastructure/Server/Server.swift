@@ -425,8 +425,14 @@ struct Server: Sendable {
         do {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
+                let line = String(buffer: frame.data)
+                if await handleDescribeUI(
+                    line: line, sim: sim, outbound: outbound
+                ) {
+                    continue
+                }
                 handleInbound(
-                    line: String(buffer: frame.data),
+                    line: line,
                     stream: stream,
                     dispatcher: dispatcher
                 )
@@ -434,6 +440,50 @@ struct Server: Sendable {
         } catch {
             // socket closed; defer cleans up
         }
+    }
+
+    /// `describe_ui` text message — needs the `Simulator` (to reach
+    /// the AX port) and the outbound writer (to ship the result
+    /// back), neither of which `handleInbound` carries. Returns
+    /// `true` when the line was a `describe_ui` envelope (handled
+    /// or rejected with an error JSON), `false` for any other
+    /// shape so the caller falls through to the gesture / reconfig
+    /// pipeline.
+    private static func handleDescribeUI(
+        line: String,
+        sim: Simulator,
+        outbound: WebSocketOutboundWriter
+    ) async -> Bool {
+        guard let data = line.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (dict["type"] as? String) == "describe_ui" else {
+            return false
+        }
+        let ax = sim.accessibility()
+        let result: AXNode?
+        do {
+            if let xv = (dict["x"] as? Double) ?? (dict["x"] as? Int).map(Double.init),
+               let yv = (dict["y"] as? Double) ?? (dict["y"] as? Int).map(Double.init) {
+                result = try ax.describeAt(point: Point(x: xv, y: yv))
+            } else {
+                result = try ax.describeAll()
+            }
+        } catch {
+            try? await outbound.write(.text(
+                #"{"type":"describe_ui_result","ok":false,"error":"\#(String(describing: error))"}"#
+            ))
+            return true
+        }
+        if let tree = result {
+            try? await outbound.write(.text(
+                #"{"type":"describe_ui_result","ok":true,"tree":\#(tree.json)}"#
+            ))
+        } else {
+            try? await outbound.write(.text(
+                #"{"type":"describe_ui_result","ok":false,"error":"no accessibility data"}"#
+            ))
+        }
+        return true
     }
 
     /// Triage one upstream text line: stream config first (cheapest
