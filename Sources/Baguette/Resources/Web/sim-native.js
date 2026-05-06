@@ -38,6 +38,7 @@
   let mouseSource = null;
   let pinchOverlay = null;
   let keyboardCapture = null;
+  let logPanel = null;
   let lastPaintedSize = { w: 0, h: 0 };
   let layout = null;
   let deviceName = '';
@@ -304,6 +305,32 @@
       reflectActionable();
       remountFrame();
     };
+    window.__nativeToggleLogs = () => toggleLogs();
+  }
+
+  // Log sheet: lazy-mount on first open, leave the LogPanel attached
+  // across subsequent toggles so a "close → reopen" doesn't drop the
+  // backlog. Only `unmount` on page unload (or explicit close button
+  // — same code path). The toolbar button toggles the
+  // `[data-logs="open"]` attribute on `#simNativeView`; CSS handles
+  // the slide-up animation and visibility.
+  function toggleLogs() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeLogsHost');
+    const btn  = document.getElementById('nativeLogsToggle');
+    const open = view && view.getAttribute('data-logs') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-logs');
+      if (btn) btn.classList.remove('active');
+    } else {
+      view.setAttribute('data-logs', 'open');
+      if (btn) btn.classList.add('active');
+      if (!logPanel && window.LogPanel && udid) {
+        host.innerHTML = '';
+        logPanel = new window.LogPanel(host, { udid, level: 'info' });
+      }
+    }
   }
 
   // Re-mount the device frame after the actionable toggle flips. Tear

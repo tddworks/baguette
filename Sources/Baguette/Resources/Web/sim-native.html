@@ -286,6 +286,60 @@
     #simNativeView .tb-label .tb-name { max-width: 16ch; }
   }
 
+  /* Live-log sheet — slides up from the bottom on toggle. Hidden
+     by default; the toolbar's `__nativeToggleLogs` flips
+     `[data-logs="open"]` on `#simNativeView`. The sheet uses the
+     same glass tokens as the toolbar so it reads as a sibling
+     control, and the inner panel adopts the Events-card monospace
+     styling so colour-coding pops the same way as the sidebar
+     view. */
+  #simNativeView .logs-sheet {
+    position: fixed;
+    left: 16px; right: 16px; bottom: 16px;
+    max-height: 50vh;
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    transform: translateY(calc(100% + 24px));
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+                opacity 0.18s ease;
+    z-index: 60;
+  }
+  #simNativeView[data-logs="open"] .logs-sheet {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #simNativeView .logs-sheet[aria-hidden="true"] { display: flex; }
+  #simNativeView .logs-sheet-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .logs-sheet-close {
+    width: 26px; height: 24px;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .logs-sheet-body {
+    flex: 1; min-height: 0; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  /* The LogPanel renders into .logs-sheet-body. Its inner list
+     needs to flex inside this column so it scrolls properly. */
+  #simNativeView .logs-sheet-body > [data-role="list"],
+  #simNativeView .logs-sheet-body div[data-role="list"] {
+    flex: 1; min-height: 0; max-height: none !important;
+  }
+
   /* Preview ribbon — only when opened via file:// */
   #simNativeView .preview-banner {
     display: none; position: fixed; top: 10px; right: 10px; z-index: 999;
