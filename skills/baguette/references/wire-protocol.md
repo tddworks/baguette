@@ -168,6 +168,7 @@ text channel that carries gestures also accepts stream-control verbs:
 {"type":"snapshot"}                      // request one snapshot frame
 {"type":"describe_ui"}                   // dump the AX tree (frontmost app)
 {"type":"describe_ui","x":172,"y":880}   // hit-test the topmost AX node at a point
+{"type":"stop"}                          // terminate a /logs subscription early (sent on the logs socket)
 ```
 
 `describe_ui` replies on the same socket with one text frame:
@@ -185,6 +186,27 @@ counterpart to `screenshot.jpg` — pair the screenshot with the
 tree, or skip the image and act on the labels and frames directly.
 
 These do not exist for `baguette input` (no stream there).
+
+## Logs WebSocket — `WS /simulators/<UDID>/logs`
+
+Dedicated socket for the live unified-log feed. Filter is fixed at
+connect time via query string (`level`, `style`, `predicate`,
+`bundleId`); restart the socket to change it.
+
+Server → client text frames:
+
+```json
+{"type":"log_started"}
+{"type":"log","line":"2026-05-06 11:56:13.835 Df locationd[5526:…] @ClxSimulated, Fix, …"}
+{"type":"log_stopped","reason":"client closed"}
+```
+
+Client → server: `{"type":"stop"}` terminates early; otherwise the
+socket runs until the simulator dies or the client closes. Levels:
+**`default | info | debug` only** — the iOS-runtime `log` binary
+rejects `notice / error / fault` (host macOS supports them; the
+simulator's slimmer interface does not). For higher-severity-only
+filtering, use `predicate=messageType == "error"`.
 
 ## Debugging a "tap missed"
 

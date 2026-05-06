@@ -41,9 +41,21 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 - **Frame streaming** — MJPEG or H.264 / AVCC over stdout or WebSocket.
   Runtime-tunable bitrate / fps / scale.
 - **Host-HID input** — taps / swipes / streaming 1- and 2-finger gestures /
-  home & lock buttons / scroll wheel, all through SimulatorKit's 9-argument
+  home, lock, power, action, volume buttons / Mac keyboard / scroll wheel,
+  all through SimulatorKit's 9-argument
   `IndigoHIDMessageForMouseNSEvent` from Xcode 26's preview-kit. No dylib
   injection, no `DYLD_INSERT_LIBRARIES`, no per-app priming.
+- **Accessibility tree** — `baguette describe-ui` returns the on-screen
+  AX tree as JSON: per-node `role`, `label`, `value`, `identifier`, and
+  `frame` in the same device-point coordinates as `tap` / `swipe`. Hit-test
+  mode (`--x --y`) returns the topmost node under a coordinate. Powered by
+  the private `AccessibilityPlatformTranslation` framework with a
+  `bridgeTokenDelegate` we install ourselves to make the dispatcher work
+  out of Simulator.app.
+- **Live unified-log stream** — `baguette logs --udid <X>` streams the
+  booted simulator's `os_log` output line-by-line to stdout; `WS
+  /simulators/:udid/logs` does the same to a browser. Predicate /
+  bundle-id filters supported.
 - **Standalone web UI** — `baguette serve` opens `http://localhost:8421/simulators`
   with a list page, live stream, gesture input, and DeviceKit-sourced
   bezels for every simulator family.
@@ -52,9 +64,13 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
   / list, with filtering and sorting; click a tile to focus it for
   full-quality streaming + gesture and hardware-button input through the
   same `GestureDispatcher` → `IndigoHIDInput` pipeline as the CLI.
-- **Layered, test-driven** — bounded-context Domain / Infrastructure / App
-  split; 110+ Mockable-backed tests; `swift test` runs without a booted
-  simulator.
+- **TDD non-negotiable, layered, mock-injected** — bounded-context
+  Domain / Infrastructure / App split; ~290 Swift Testing cases backed
+  by auto-generated `MockXxx` fakes for every external port (`Input`,
+  `Screen`, `Accessibility`, `LogStream`, `Chromes`, `DeviceHost`).
+  Adapters take `any DeviceHost` rather than the concrete
+  `CoreSimulators` so error-path branches are unit-tested without a
+  booted sim. `swift test` requires no simulator at all.
 
 ## Install
 
@@ -120,6 +136,19 @@ baguette <command> [options]
   screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
                                              Capture one JPEG frame
                                              (defaults to stdout)
+  describe-ui --udid <UDID> [--x <px> --y <px>] [--output <path>]
+                                             Dump on-screen accessibility tree
+                                             as JSON (full tree or hit-test);
+                                             frames are in DEVICE POINTS so
+                                             they pipe straight back into a tap.
+  logs --udid <UDID> [--level info|debug|default]
+                     [--style default|compact|json|ndjson|syslog]
+                     [--predicate <NSPredicate>] [--bundle-id <id>]
+                                             Stream the booted simulator's
+                                             unified log to stdout, line by line
+                                             (SIGINT to stop). Levels are the
+                                             three the iOS-runtime `log stream`
+                                             accepts — not host-`log`'s five.
   input    --udid <UDID>                     Read JSON gestures from stdin
 
   # Standalone web UI on localhost. Serves /simulators (single-device
@@ -173,7 +202,8 @@ served root for live-iteration without rebuilding.
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
 | `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG of the framebuffer (`?quality=&scale=`) |
-| `WS`   | `/simulators/:udid/stream?format=mjpeg|avcc` | live frames + control + input |
+| `WS`   | `/simulators/:udid/stream?format=mjpeg|avcc` | live frames + control + input + `describe_ui` |
+| `WS`   | `/simulators/:udid/logs?level=&style=&predicate=&bundleId=` | live unified-log stream (one `{"type":"log","line":…}` text frame per entry) |
 | `GET`  | `/farm`                                    | device-farm HTML             |
 | `GET`  | `/farm/:file`                              | farm UI asset (`farm.css`, `farm-*.js`, …) |
 | `GET`  | `/<file>.{html,js,css}`                    | static UI asset              |
@@ -399,10 +429,30 @@ feature lives in one place across both layers.
 
 ## Testing
 
-110+ tests using **Swift Testing** (`@Suite`, `@Test`, `#expect`), not
-XCTest. Chicago-school state-based: every external boundary is an
-`@Mockable` protocol, tests substitute auto-generated fakes, and assert
-on returned values rather than recorded calls.
+**TDD is non-negotiable** — every behaviour change to a Domain or
+Infrastructure type lands in a failing `@Test` under `Tests/` first,
+then the smallest implementation that turns it green, then refactor.
+Read `CLAUDE.md`'s "TDD is non-negotiable" pre-implementation gate
+before contributing — that's the project's primary rule and it
+overrides "the change is small" / "I'll add the test after".
+
+~290 tests using **Swift Testing** (`@Suite`, `@Test`, `#expect`),
+not XCTest. Chicago-school state-based: every external boundary is
+an `@Mockable` protocol (`Input`, `Screen`, `Accessibility`,
+`LogStream`, `Chromes`, `DeviceHost`); tests substitute
+auto-generated `MockXxx` fakes, and assert on returned values rather
+than recorded calls.
+
+Adapters that talk to private SimulatorKit / CoreSimulator /
+AccessibilityPlatformTranslation symbols (`IndigoHIDInput`,
+`AXPTranslatorAccessibility`, `SimDeviceLogStream`,
+`SimulatorKitScreen`) take `any DeviceHost` rather than the concrete
+`CoreSimulators` aggregate, so their error-path branches —
+`simulatorNotBooted`, idempotent `stop`, host-deallocated, etc. —
+are unit-tested via `MockDeviceHost` without needing a real booted
+simulator. The successful private-API call path stays
+integration-only — manually smoke-tested through the CLI and serve
+UI against a booted iOS sim.
 
 ```bash
 swift test                                              # all tests

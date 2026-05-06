@@ -215,6 +215,40 @@ Both `--x` and `--y` must be given together; either alone errors.
   stderr; the CLI exits non-zero. Most common cause is running on
   an Xcode older than 26 — the dispatcher recipe targets iOS 26+.
 
+## Live unified log — `logs`
+
+```bash
+baguette logs --udid <UDID>                                 # info-and-above, line-buffered to stdout
+baguette logs --udid <UDID> --level debug                   # everything including debug-level chatter
+baguette logs --udid <UDID> --style json                    # one JSON object per line
+baguette logs --udid <UDID> --bundle-id com.apple.MobileSafari
+baguette logs --udid <UDID> --predicate 'subsystem == "com.apple.UIKit"'
+baguette logs --udid <UDID> | grep -i error                 # composes with shell pipelines; SIGINT to stop
+```
+
+| Flag           | Default   | Effect                                                            |
+|----------------|-----------|-------------------------------------------------------------------|
+| `--level`      | `info`    | `default` \| `info` \| `debug`. iOS-runtime `log stream` accepts only these three; **not** `notice / error / fault`. |
+| `--style`      | `default` | `default` \| `compact` \| `json` \| `ndjson` \| `syslog`.         |
+| `--predicate`  | unset     | Raw `NSPredicate` passed to `log stream --predicate` verbatim.    |
+| `--bundle-id`  | unset     | Shorthand → `process == "<id>"`. ANDs with `--predicate` when both given. |
+
+Equivalent WebSocket route during `baguette serve`:
+
+```
+WS  /simulators/<UDID>/logs?level=info&style=default[&predicate=…&bundleId=…]
+→ {"type":"log_started"}
+→ {"type":"log","line":"<entry>"}
+→ {"type":"log_stopped","reason":"…"}
+```
+
+Filter is fixed at connect time — restart the socket to change it. Send `{"type":"stop"}` to terminate early.
+
+**Failure modes:**
+- **`logs: invalid --level '<x>'`** — the simulator's `log` binary only accepts `default | info | debug`. Map `error` / `fault` requirements onto a predicate (`messageType == 'error'`).
+- **Spawn failure.** Surfaced on stderr as `logs: <error>`. Most common: simulator not booted.
+- **Slow consumer (WS only).** Buffered to 2048 lines per socket; older lines drop silently if the client falls behind.
+
 ## Live frame stream — `stream`
 
 ```bash

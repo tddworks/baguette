@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## TDD is non-negotiable (read this first)
+
+**You MUST write a failing test before writing any production code.** This rule overrides every other instinct, including "the change is small", "it's just a one-liner", "I'll add the test after". If you catch yourself opening a file under `Sources/Baguette/` before a test under `Tests/BaguetteTests/` exists and fails, stop and reverse course.
+
+**Pre-implementation gate** — before editing anything in `Sources/` (Domain value type, Domain port, Infrastructure adapter, App-layer command), you must have done all of the following in order:
+
+1. Stated the user-facing behaviour in one sentence using **domain language**, not implementation language. Good: "a tap is dispatched as down → hold → up against the input surface", "describe-ui returns nil when no app is frontmost", "logs reject `notice` because the iOS-runtime `log` binary doesn't accept it". Bad: "IndigoHIDInput calls sendMouse twice" — that's an interaction, not a behaviour.
+2. Written a `@Test` in `Tests/BaguetteTests/<Context>/<Suite>.swift` that asserts the expected outcome. Prefer state assertions (`#expect(filter.argv == [...])`, `#expect(node.frame == ...)`) over interaction assertions. For ports, use the auto-generated `MockXxx` (`given(input).tap(...).willReturn(true)`); plain test doubles backed by Mockable are the canonical mocking style — never mock the value type itself.
+3. Run the test and **observed it fail** — `swift test --filter "<SuiteName>"` for the fastest loop. A compile error counts as red only when the failing symbol is the one the test names (`KeyboardKey.from(wireCode:)` doesn't exist yet); a generic build error somewhere else doesn't.
+4. Reported the red result back to the user (one line is fine: "test `parses lowercase letter wire codes onto HID page 7` fails: `KeyboardKey.from is not a member`").
+
+Only after step 4 may you write code under `Sources/`. Pure docs / CHANGELOG edits and Resources/Web/ JS tweaks are exempt; the moment a Domain type, Infrastructure adapter, or App command changes, the gate applies.
+
+**Coverage target: ~100% of Domain + Infrastructure adapter code that doesn't touch private SimulatorKit / CoreSimulator / AccessibilityPlatformTranslation symbols directly.** Adapters that DO touch those frameworks are split: error-path branches (host nil, device not booted, `alreadyStarted`, idempotent `stop`, etc.) are unit-tested via `@Mockable` ports; the actual private-API call path is integration-only — manually smoke-tested against a booted simulator. New code must include the unit-testable portion.
+
+**If you skip the gate, you are violating the project's primary rule.** The Chicago-school workflow, value-type domain, and `@Mockable` port pattern are described in [Testing approach](#testing-approach).
+
 ## Build & test
 
 ```bash
