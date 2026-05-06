@@ -1,54 +1,40 @@
 import Foundation
 
-/// Production `LogStream` — runs `xcrun simctl spawn <udid> log
-/// stream …` as a host child process, line-buffers its stdout
-/// back to the consumer.
-///
-/// Why not call `SimDevice.spawnWith…` directly from CoreSimulator?
-/// The signature is published and a direct call *almost* works,
-/// but on iOS-26 simulators the spawned `/usr/bin/log` rejects the
-/// invocation with "Must be admin to run 'stream' command" — the
-/// CoreSimulator daemon's spawn pipeline runs the child with a
-/// bootstrap context that fails `log`'s membership check unless
-/// the calling process is `simctl` (Apple-signed and known to
-/// `com.apple.CoreSimulator.CoreSimulatorService`). Shelling out
-/// to `simctl` sidesteps that entitlement gap; it's guaranteed
-/// installed alongside the device set we're already targeting.
+/// `LogStream` orchestrator. Owns the state machine —
+/// already-started, stopped, line buffering, error mapping — and
+/// delegates the actual OS-level spawn to a `Subprocess`
+/// collaborator. The `Subprocess` is the only piece in the path
+/// that touches `Foundation.Process` / `Pipe` / `kill(pid)`;
+/// `SimDeviceLogStream` itself is pure logic and ~100% unit-
+/// covered via `MockSubprocess`.
 ///
 /// One spawn per `start(...)` call; multiple parallel subscribers
-/// are fine (each instance is independent), but a single instance
-/// rejects a second `start` — re-issue a fresh `LogStream`.
+/// are fine (each instance owns its own subprocess), but a
+/// single instance rejects a second `start` — re-issue a fresh
+/// `LogStream` instead.
 final class SimDeviceLogStream: LogStream, @unchecked Sendable {
     private let udid: String
-    private weak var host: AnyObject?
+    private let host: any DeviceHost
+    private let subprocess: any Subprocess
 
     private let lock = NSLock()
-    private var process: Process?
-    private var pipe: Pipe?
     private var lineBuffer = LineBuffer()
     private var started = false
     private var stopped = false
     private var onLineCb: (@Sendable (String) -> Void)?
     private var onTermCb: (@Sendable (Error?) -> Void)?
 
-    init(udid: String, host: any DeviceHost) {
+    /// Production callers default to `HostSubprocess()` (a thin
+    /// `Foundation.Process` wrapper). Tests inject `MockSubprocess`
+    /// to drive the state machine deterministically.
+    init(udid: String, host: any DeviceHost, subprocess: any Subprocess = HostSubprocess()) {
         self.udid = udid
-        self.host = host as AnyObject
+        self.host = host
+        self.subprocess = subprocess
     }
 
-    /// Resolve the device through the injected port, if it's still
-    /// alive. Returns `nil` once the host has been deallocated.
     private func resolveDevice() -> NSObject? {
-        guard let host = host as? any DeviceHost else { return nil }
-        return host.resolveDevice(udid: udid)
-    }
-
-    deinit {
-        if let process, process.isRunning {
-            process.terminate()
-        }
-        try? pipe?.fileHandleForReading.close()
-        try? pipe?.fileHandleForWriting.close()
+        host.resolveDevice(udid: udid)
     }
 
     // MARK: - LogStream
@@ -72,94 +58,54 @@ final class SimDeviceLogStream: LogStream, @unchecked Sendable {
             lock.unlock()
             throw LogStreamError.simulatorNotBooted(udid: udid)
         }
-
-        let pipe = Pipe()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        // simctl args: spawn <udid> <argv0> <argv1...>. We strip the
-        // synthetic `log` argv[0] from filter.argv since simctl
-        // appends it itself; what simctl wants is the binary name
-        // as the first positional, which it then runs inside the
-        // simulator's user context. Pass `log` (the binary), then
-        // `stream …` (the subcommand + flags).
-        process.arguments = ["simctl", "spawn", udid] + filter.argv
-        process.standardOutput = pipe
-        process.standardError  = pipe
-        // Detach from any controlling terminal. Without this a
-        // SIGINT handed to the parent (Ctrl-C in `baguette logs`)
-        // would also kill the child via the foreground pgid before
-        // our own SIGTERM handler runs.
-        process.standardInput  = FileHandle.nullDevice
-        process.environment = ProcessInfo.processInfo.environment
-
-        self.pipe = pipe
-        self.process = process
         self.onLineCb = onLine
         self.onTermCb = onTerminate
         self.started = true
         lock.unlock()
 
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let bytes = handle.availableData
-            if bytes.isEmpty { return }
-            self?.consume(bytes)
-        }
-
-        process.terminationHandler = { [weak self] proc in
-            let status = proc.terminationStatus
-            // SIGTERM (status 15 / negative-signal codes via Process)
-            // is intentional — caused by `stop()`. Anything else is
-            // a real exit and we surface it.
-            if status == 0 {
-                self?.handleTermination(error: nil)
-            } else {
-                self?.handleTermination(error: LogStreamError.nonZeroExit(code: status))
-            }
-        }
+        // Always shell out via `xcrun simctl spawn` — the direct
+        // `SimDevice.spawn…` path on iOS 26 fails the simulator's
+        // admin-group check unless the caller is Apple-signed
+        // (which simctl is and we aren't). simctl is guaranteed
+        // installed alongside the device set we're targeting, so
+        // the indirection is cheap. Argv: simctl args + filter argv.
+        let argv = ["simctl", "spawn", udid] + filter.argv
 
         do {
-            try process.run()
+            try subprocess.run(
+                executable: URL(fileURLWithPath: "/usr/bin/xcrun"),
+                arguments: argv,
+                onBytes: { [weak self] bytes in self?.consume(bytes) },
+                onExit:  { [weak self] code  in self?.handleExit(code) }
+            )
         } catch {
-            unwireAfterSpawnFailure(pipe: pipe)
+            // Spawn failed synchronously: clear state so a future
+            // re-issue isn't blocked by the `alreadyStarted` flag,
+            // and surface the failure to the caller.
+            lock.lock()
+            self.onLineCb = nil
+            self.onTermCb = nil
+            self.started = false
+            lock.unlock()
             throw LogStreamError.spawnFailed(reason: error.localizedDescription)
         }
-        log("[logs] simctl spawn pid=\(process.processIdentifier) udid=\(udid)")
+        log("[logs] subprocess spawned for udid=\(udid)")
     }
 
     func stop() {
         lock.lock()
         guard started, !stopped else { lock.unlock(); return }
         stopped = true
-        let proc = self.process
-        let pipe = self.pipe
-        let term = self.onTermCb
-        self.onLineCb = nil
-        self.onTermCb = nil
+        let term = onTermCb
+        onLineCb = nil
+        onTermCb = nil
         lock.unlock()
 
-        if let proc, proc.isRunning {
-            proc.terminate()
-        }
-        pipe?.fileHandleForReading.readabilityHandler = nil
-        try? pipe?.fileHandleForReading.close()
-        try? pipe?.fileHandleForWriting.close()
+        subprocess.terminate()
         term?(nil)
     }
 
     // MARK: - private
-
-    private func unwireAfterSpawnFailure(pipe: Pipe) {
-        lock.lock()
-        self.pipe = nil
-        self.process = nil
-        self.onLineCb = nil
-        self.onTermCb = nil
-        self.started = false
-        lock.unlock()
-        pipe.fileHandleForReading.readabilityHandler = nil
-        try? pipe.fileHandleForReading.close()
-        try? pipe.fileHandleForWriting.close()
-    }
 
     private func consume(_ bytes: Data) {
         lock.lock()
@@ -172,17 +118,22 @@ final class SimDeviceLogStream: LogStream, @unchecked Sendable {
         for line in lines { cb(line) }
     }
 
-    private func handleTermination(error: Error?) {
+    private func handleExit(_ status: Int32) {
         lock.lock()
+        // `stop()` flips `stopped` first and fires onTerminate
+        // synchronously, so a follow-up onExit from the dying
+        // child has nothing left to report. Drop it.
         if stopped { lock.unlock(); return }
         stopped = true
         let term = onTermCb
-        let pipe = self.pipe
         onLineCb = nil
         onTermCb = nil
         lock.unlock()
-        pipe?.fileHandleForReading.readabilityHandler = nil
-        try? pipe?.fileHandleForReading.close()
-        term?(error)
+
+        if status == 0 {
+            term?(nil)
+        } else {
+            term?(LogStreamError.nonZeroExit(code: status))
+        }
     }
 }

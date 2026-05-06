@@ -10,7 +10,7 @@ import ObjectiveC
 /// lifetime; deinit releases the services.
 final class IndigoHIDInput: Input, @unchecked Sendable {
     private let udid: String
-    private weak var host: AnyObject?
+    private let host: any DeviceHost
 
     private var client: AnyObject?
     private var warmed = false
@@ -55,12 +55,11 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
 
     init(udid: String, host: any DeviceHost) {
         self.udid = udid
-        self.host = host as AnyObject
+        self.host = host
     }
 
     private func resolveDevice() -> NSObject? {
-        guard let host = host as? any DeviceHost else { return nil }
-        return host.resolveDevice(udid: udid)
+        host.resolveDevice(udid: udid)
     }
 
     deinit {

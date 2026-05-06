@@ -39,7 +39,7 @@ import CoreGraphics
 /// out-of-Simulator.app dispatcher pattern that we know of.
 final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     private let udid: String
-    private weak var host: AnyObject?
+    private let host: any DeviceHost
 
     /// Cap on tree-walk recursion depth. Real iOS screens rarely
     /// exceed 20–30 levels; the cap prevents pathological cycles.
@@ -52,12 +52,11 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
     init(udid: String, host: any DeviceHost) {
         self.udid = udid
-        self.host = host as AnyObject
+        self.host = host
     }
 
     private func resolveDevice() -> NSObject? {
-        guard let host = host as? any DeviceHost else { return nil }
-        return host.resolveDevice(udid: udid)
+        host.resolveDevice(udid: udid)
     }
 
     // MARK: - Accessibility
