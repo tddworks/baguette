@@ -172,6 +172,13 @@ struct Server: Sendable {
             )
         }
 
+        // Live unified-log feed — dedicated socket so logs don't
+        // share lifetime / backpressure with the frame stream.
+        // Filter is fixed at connect time (query string); restart
+        // the socket to change the filter. Closing the socket from
+        // the client tears down the spawned `log` child.
+        registerLogsRoute(on: router)
+
         // Static UI siblings — JS / HTML / CSS files in Resources/Web/
         // accessed by name. Path component is the bare filename.
         router.get("/:file") { r, _ in
@@ -486,6 +493,116 @@ struct Server: Sendable {
         return true
     }
 
+    /// Register the `/simulators/:udid/logs` WebSocket route. Lives
+    /// in its own helper because Hummingbird's router-builder
+    /// inference grinds to a halt when too many `router.ws` /
+    /// `router.get` closures share a single function body.
+    private func registerLogsRoute(on router: Router<BasicWebSocketRequestContext>) {
+        let simulators = self.simulators
+        router.ws("/simulators/:udid/logs") { inbound, outbound, context in
+            let req = context.request
+            let opts = LogsRouteOptions.from(request: req)
+            await Self.logsWS(
+                opts: opts,
+                simulators: simulators,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
+    }
+
+    /// Live log-stream over the dedicated `/simulators/:udid/logs`
+    /// WebSocket. Filter is fixed at connect time via query string
+    /// (`level`, `style`, `predicate`, `bundleId`). The spawned
+    /// `/usr/bin/log stream` child runs for the lifetime of the
+    /// socket; closing the socket from either end tears it down.
+    ///
+    /// Wire envelopes (server → client text frames):
+    ///   {"type":"log_started"}
+    ///   {"type":"log","line":"<emitted line>"}
+    ///   {"type":"log_stopped","reason":"<text>"}
+    ///
+    /// Client → server: a single `{"type":"stop"}` text frame
+    /// terminates early. Otherwise the server waits for the child
+    /// to exit or the socket to close.
+    private static func logsWS(
+        opts: LogsRouteOptions,
+        simulators: any Simulators,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        guard !opts.udid.isEmpty, let sim = simulators.find(udid: opts.udid) else {
+            try? await outbound.write(.text(#"{"type":"log_stopped","reason":"unknown udid"}"#))
+            return
+        }
+        guard let lvl = LogFilter.Level(wire: opts.level) else {
+            try? await outbound.write(.text(
+                #"{"type":"log_stopped","reason":"invalid level: \#(opts.level)"}"#
+            ))
+            return
+        }
+        guard let sty = LogFilter.Style(wire: opts.style) else {
+            try? await outbound.write(.text(
+                #"{"type":"log_stopped","reason":"invalid style: \#(opts.style)"}"#
+            ))
+            return
+        }
+        let filter = LogFilter(
+            level: lvl, style: sty,
+            predicate: opts.predicate, bundleId: opts.bundleId
+        )
+
+        let stream = sim.logs()
+        let lineQueue = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(2048))
+
+        do {
+            try stream.start(
+                filter: filter,
+                onLine: { line in
+                    lineQueue.continuation.yield(line)
+                },
+                onTerminate: { _ in
+                    lineQueue.continuation.finish()
+                }
+            )
+        } catch {
+            try? await outbound.write(.text(
+                #"{"type":"log_stopped","reason":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return
+        }
+
+        try? await outbound.write(.text(#"{"type":"log_started"}"#))
+        defer { stream.stop() }
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await line in lineQueue.stream {
+                    let envelope = #"{"type":"log","line":"\#(jsonEscape(line))"}"#
+                    if (try? await outbound.write(.text(envelope))) == nil { break }
+                }
+            }
+            group.addTask {
+                do {
+                    for try await frame in inbound {
+                        guard frame.opcode == .text else { continue }
+                        let line = String(buffer: frame.data)
+                        if let data = line.data(using: .utf8),
+                           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           (dict["type"] as? String) == "stop" {
+                            break
+                        }
+                    }
+                } catch {
+                    // socket closed; defer cleans up
+                }
+            }
+            await group.next()
+            group.cancelAll()
+        }
+        try? await outbound.write(.text(#"{"type":"log_stopped","reason":"client closed"}"#))
+    }
+
     /// Triage one upstream text line: stream config first (cheapest
     /// to detect), then format-level verbs, then gesture dispatch as
     /// the catch-all. ReconfigParser returns the same config when
@@ -547,6 +664,66 @@ private func errorJSON(_ message: String, status: HTTPResponse.Status) -> Respon
             "{\"ok\":false,\"error\":\"\(escaped)\"}"
         ))
     )
+}
+
+/// Plain-old-data carrier for the `/simulators/:udid/logs` query
+/// string + path UDID. Pulled into its own struct so the route
+/// closure stays a one-liner — Hummingbird's router-builder
+/// inference deteriorates fast when the closure body argues with
+/// 8-parameter calls inline.
+private struct LogsRouteOptions: Sendable {
+    let udid: String
+    let level: String
+    let style: String
+    let predicate: String?
+    let bundleId: String?
+
+    static func from(request: Request) -> LogsRouteOptions {
+        let parts = request.uri.path.split(separator: "/")
+        var udid = ""
+        if parts.count >= 3 {
+            udid = String(parts[parts.count - 2]).removingPercentEncoding ?? ""
+        }
+        let q = request.uri.queryParameters
+        let level: String     = q.get("level").map { String($0) }     ?? "info"
+        let style: String     = q.get("style").map { String($0) }     ?? "default"
+        let predicate: String? = q.get("predicate").map { String($0) }
+        let bundleId: String?  = q.get("bundleId").map { String($0) }
+        return LogsRouteOptions(
+            udid: udid,
+            level: level,
+            style: style,
+            predicate: predicate,
+            bundleId: bundleId
+        )
+    }
+}
+
+/// Minimal JSON-string escaper: backslash, quote, and the ASCII
+/// control characters that JSON forbids unescaped. Sufficient for
+/// embedding a log line into a `{"line":"…"}` envelope without
+/// rebuilding the whole dict via JSONSerialization.
+private func jsonEscape(_ s: String) -> String {
+    var out = ""
+    out.reserveCapacity(s.count + 8)
+    for ch in s.unicodeScalars {
+        switch ch {
+        case "\"":  out.append("\\\"")
+        case "\\":  out.append("\\\\")
+        case "\n":  out.append("\\n")
+        case "\r":  out.append("\\r")
+        case "\t":  out.append("\\t")
+        case "\u{08}": out.append("\\b")
+        case "\u{0C}": out.append("\\f")
+        default:
+            if ch.value < 0x20 {
+                out.append(String(format: "\\u%04x", ch.value))
+            } else {
+                out.append(Character(ch))
+            }
+        }
+    }
+    return out
 }
 
 private func contentType(for filename: String) -> String {

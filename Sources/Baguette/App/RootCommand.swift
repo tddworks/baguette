@@ -22,6 +22,7 @@ struct Baguette: AsyncParsableCommand {
             ChromeCommand.self,
             ScreenshotCommand.self,
             DescribeUICommand.self,
+            LogsCommand.self,
             ServeCommand.self,
         ]
     )

@@ -74,6 +74,10 @@ final class CoreSimulators: Simulators, @unchecked Sendable {
         AXPTranslatorAccessibility(udid: simulator.udid, host: self)
     }
 
+    func logs(for simulator: Simulator) -> any LogStream {
+        SimDeviceLogStream(udid: simulator.udid, host: self)
+    }
+
     // MARK: - resolution
 
     /// Look up the underlying `SimDevice` ObjC object for a UDID.

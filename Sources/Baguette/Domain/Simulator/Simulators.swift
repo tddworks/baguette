@@ -26,6 +26,11 @@ protocol Simulators: AnyObject, Sendable {
     /// Each call returns a fresh handle; the underlying translator
     /// is a process-wide singleton, so allocations are cheap.
     func accessibility(for simulator: Simulator) -> any Accessibility
+
+    /// Produce a `LogStream` for the simulator. Each call returns
+    /// a fresh handle; multiple parallel subscribers are supported
+    /// (each spawns its own `/usr/bin/log stream` child).
+    func logs(for simulator: Simulator) -> any LogStream
 }
 
 extension Simulators {

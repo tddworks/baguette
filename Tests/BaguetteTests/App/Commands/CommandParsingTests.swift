@@ -19,7 +19,7 @@ struct CommandParsingTests {
             "list", "boot", "shutdown", "input", "stream",
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
-            "chrome", "screenshot", "describe-ui", "serve",
+            "chrome", "screenshot", "describe-ui", "logs", "serve",
         ])
     }
 
@@ -219,6 +219,32 @@ struct CommandParsingTests {
         ])
         #expect(cmd.x == 120 && cmd.y == 400)
         #expect(cmd.output == "/tmp/tree.json")
+    }
+
+    // MARK: - logs
+
+    @Test func `logs requires --udid and defaults level + style`() throws {
+        let cmd = try LogsCommand.parse(["--udid", "ABC"])
+        #expect(cmd.options.udid == "ABC")
+        #expect(cmd.level == "info")
+        #expect(cmd.style == "default")
+        #expect(cmd.predicate == nil)
+        #expect(cmd.bundleId == nil)
+        #expect(LogsCommand.configuration.commandName == "logs")
+    }
+
+    @Test func `logs accepts --level --style --predicate --bundle-id`() throws {
+        let cmd = try LogsCommand.parse([
+            "--udid", "ABC",
+            "--level", "debug",
+            "--style", "json",
+            "--predicate", #"subsystem == "com.apple.UIKit""#,
+            "--bundle-id", "com.example.app",
+        ])
+        #expect(cmd.level == "debug")
+        #expect(cmd.style == "json")
+        #expect(cmd.predicate == #"subsystem == "com.apple.UIKit""#)
+        #expect(cmd.bundleId == "com.example.app")
     }
 
     // MARK: - serve

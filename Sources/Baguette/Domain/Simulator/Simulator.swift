@@ -97,6 +97,11 @@ struct Simulator: Sendable {
         host.accessibility(for: self)
     }
 
+    /// Subscribe to this simulator's unified-log feed.
+    func logs() -> any LogStream {
+        host.logs(for: self)
+    }
+
     /// Resolve the bezel layout + composite image for this simulator.
     /// Mirrors `tap.execute(on: input)` — chrome lookup is a separate
     /// concern from the runtime, so the aggregate is taken as a
