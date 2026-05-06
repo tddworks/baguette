@@ -23,6 +23,7 @@
   let simInput = null;
   let mouseSource = null;
   let pinchOverlay = null;
+  let logPanel = null;
 
   let activeUdid = null;
   let activeName = null;
@@ -186,6 +187,15 @@
     });
     gallery.clear();
     renderGallery();
+
+    // Live unified-log panel — opens its own WS to /simulators/<udid>/logs.
+    // Independent of the stream socket so logs survive even when the
+    // user pauses the frame stream, and vice-versa.
+    const logHost = document.getElementById('simLogPanel');
+    if (logHost && window.LogPanel) {
+      logHost.innerHTML = '';
+      logPanel = new window.LogPanel(logHost, { udid, level: 'info' });
+    }
   }
 
   function stopStream() {
@@ -195,6 +205,7 @@
     if (session) { session.stop(); session = null; }
     if (mouseSource) { mouseSource.detach(); mouseSource = null; }
     if (pinchOverlay) { pinchOverlay.clear(); pinchOverlay = null; }
+    if (logPanel) { logPanel.detach(); logPanel = null; }
     simInput = null;
     frame = null;
     surface = null;
