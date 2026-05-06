@@ -26,10 +26,23 @@ via one WebSocket per stream.
 
 **Naming abstractions**: every `@Mockable protocol` in this codebase is
 a **domain noun for the role it plays** — `Input`, `Screen`,
-`Accessibility`, `LogStream`, `DeviceHost`, `Subprocess`, `Chromes`. The
-words **"Port" / "Repository" / "Service" / "Manager" never appear**.
-If you reach for `XxxPort`, the abstraction isn't named yet — keep
-going until the noun describes what the thing *is* in the domain.
+`Accessibility`, `LogStream`, `DeviceHost`, `Subprocess`, `Chromes`,
+`Simulators`. The pattern-label suffixes **"Port" / "Service" /
+"Manager" never appear**. If you reach for `XxxPort`, the abstraction
+isn't named yet — keep going until the noun describes what the thing
+*is* in the domain.
+
+**Repository is allowed — but only for aggregate CRUD, and only
+named as the collection noun.** A protocol that is genuinely a DDD
+collection-like interface for an aggregate root (load / save / delete
+by identity) takes the **plural of the aggregate** — `Simulators`,
+`Chromes`, `Books`, `Orders` — not `BookRepository` / `OrderRepo`. The
+suffix `Repository` is still banned; the *role* (aggregate persistence)
+is the legitimate case the plural-noun convention already covers.
+If your protocol isn't aggregate persistence (it's an adapter, an
+event source, a process boundary, …), the repository carve-out
+doesn't apply — pick a role-noun like `Subprocess` / `LogStream`
+instead.
 
 Read [`CLAUDE.md`](../../../CLAUDE.md) — the "TDD is non-negotiable" gate,
 the naming rule, and the orchestrator-vs-collaborator split for adapters
@@ -73,7 +86,7 @@ design before coding**. Briefly produce:
 
 1. **Wire shape** — the JSON envelope on `baguette serve` WS / `baguette input` stdin. Field names, optional vs required, default values.
 2. **CLI surface** — subcommand + flag names. Match existing patterns (`--udid`, `--width`, `--height`).
-3. **Domain types** — value types (struct/enum) and which `@Mockable` abstraction is added/changed. Rich domain: behaviour lives on the value, not in a service (`DeviceButton.press`, `KeyboardKey.press` are the templates). **Name new abstractions for their domain role** — `Subprocess`, `DeviceHost`, `Accessibility`. **Never `XxxPort` / `XxxRepository` / `XxxService` / `XxxManager`.** If the noun isn't obvious, the abstraction probably shouldn't exist yet.
+3. **Domain types** — value types (struct/enum) and which `@Mockable` abstraction is added/changed. Rich domain: behaviour lives on the value, not in a service (`DeviceButton.press`, `KeyboardKey.press` are the templates). **Name new abstractions for their domain role** — `Subprocess`, `DeviceHost`, `Accessibility`. **Never `XxxPort` / `XxxService` / `XxxManager`, and never the suffix `XxxRepository`.** If the abstraction *is* aggregate CRUD (load / save / delete by identity for an aggregate root), name it as the **plural collection noun** — `Simulators`, `Chromes`, `Books`. If the noun isn't obvious, the abstraction probably shouldn't exist yet.
 4. **Adapter changes** — how the production class (`IndigoHIDInput`, `AXPTranslatorAccessibility`, `SimDeviceLogStream`, …) handles it. Which private-API symbol, which arg shape. Flag iOS-26-specific gotchas explicitly (signature drift between idb/AXe and Xcode 26 has burned us before — see [`buttons.md`](../../../docs/features/buttons.md) for the canonical example).
 5. **I/O split (only when the adapter wraps 3rd-party I/O)** — read [CLAUDE.md's "Splitting an adapter that wraps 3rd-party I/O"](../../../CLAUDE.md#splitting-an-adapter-that-wraps-3rd-party-io) section and pick a pattern:
    - **One-shot fetch** (single private-API call → operate on the value): lift the post-fetch logic into a pure static factory in `Domain/` (`AXNode.walk(from:transform:)`, `AXFrameTransform`, `LineBuffer`). The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
@@ -353,12 +366,15 @@ next agent will mis-propose stale invocations.
   orchestrator + collaborator split for 3rd-party I/O — there the
   collaborator (`Subprocess`) earns its `MockSubprocess` because the
   state machine is real.
-- **Naming an abstraction `XxxPort` / `XxxRepository` / `XxxService`
-  / `XxxManager`.** These are pattern labels, not domain nouns. The
-  codebase uses role-named protocols (`Input`, `Screen`,
-  `Accessibility`, `LogStream`, `DeviceHost`, `Subprocess`). If the
-  noun isn't obvious, the abstraction probably shouldn't exist yet
-  — keep the logic inline or push it into a pure helper instead.
+- **Naming an abstraction `XxxPort` / `XxxService` / `XxxManager`,
+  or suffixing aggregate persistence with `XxxRepository`.** These
+  are pattern labels, not domain nouns. The codebase uses role-named
+  protocols (`Input`, `Screen`, `Accessibility`, `LogStream`,
+  `DeviceHost`, `Subprocess`). For aggregate CRUD specifically, use
+  the **plural collection noun** (`Simulators`, `Chromes`, `Books`)
+  — not `BookRepository`. If the noun isn't obvious, the abstraction
+  probably shouldn't exist yet — keep the logic inline or push it
+  into a pure helper instead.
 - **Cramming the irreducible private-API call AND the orchestration
   logic into one Infrastructure file.** That's the original sin
   that kept `AXPTranslatorAccessibility` and `SimDeviceLogStream` at
@@ -387,7 +403,7 @@ next agent will mis-propose stale invocations.
 - [ ] Wire JSON shape sketched (required vs optional fields)
 - [ ] CLI subcommand + flag names follow existing patterns
 - [ ] Domain types listed (value types + which `@Mockable` abstraction is added/changed)
-- [ ] New abstraction names are domain nouns (no `XxxPort / XxxRepository / XxxService / XxxManager`)
+- [ ] New abstraction names are domain nouns (no `XxxPort / XxxService / XxxManager`; aggregate CRUD uses the plural collection noun like `Books`, not `BookRepository`)
 - [ ] Adapter private-API symbol + arg signature verified against a known-good source
 - [ ] If the adapter wraps 3rd-party I/O, the orchestrator-vs-collaborator split is decided (one-shot factory vs `@Mockable` collaborator)
 - [ ] iOS-26 gotchas flagged (MainActor? new symbol? signature drift?)

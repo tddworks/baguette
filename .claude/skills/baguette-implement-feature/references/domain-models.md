@@ -9,7 +9,9 @@ the adapter stays a dumb wire emitter) and **wire DTOs with a
 one-line `execute(on:)`** (so dispatch logic stays tested at the
 value level). Every `@Mockable protocol` is named for its domain
 role (`Input`, `Screen`, `Subprocess`, `DeviceHost`) — never as
-`XxxPort` / `XxxRepository` / `XxxService` / `XxxManager`.
+`XxxPort` / `XxxService` / `XxxManager`. **Aggregate CRUD repositories
+are the one carve-out**: they take the **plural collection noun**
+(`Simulators`, `Chromes`, `Books`), not the suffix `XxxRepository`.
 
 ## Rich-value pattern
 
@@ -120,9 +122,24 @@ Watch the seams:
 The adapter boundary is a `@Mockable` protocol named for **what it
 does in the domain** — `Input`, `Screen`, `Accessibility`,
 `LogStream`, `DeviceHost`, `Subprocess`, `Chromes`. **Never
-`XxxPort` / `XxxRepository` / `XxxService` / `XxxManager`.** Methods
-return `Bool` synchronously where the wire is request/ack — there
-are no async actors in the input path. The existing example:
+`XxxPort` / `XxxService` / `XxxManager`, and never the suffix
+`XxxRepository`.** When the protocol genuinely *is* an aggregate
+repository (collection-like CRUD over an aggregate root), use the
+**plural collection noun** — `Simulators`, `Chromes`, `Books`,
+`Orders` — exactly as the existing aggregates already do:
+
+```swift
+@Mockable
+protocol Books: Sendable {
+    func find(id: BookID) -> Book?
+    func all() -> [Book]
+    func save(_ book: Book) throws
+    func delete(id: BookID) throws
+}
+```
+
+Methods return `Bool` synchronously where the wire is request/ack —
+there are no async actors in the input path. The existing example:
 
 ```swift
 @Mockable

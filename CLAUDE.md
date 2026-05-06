@@ -17,7 +17,9 @@ Only after step 4 may you write code under `Sources/`. Pure docs / CHANGELOG edi
 
 ### Naming the abstractions
 
-Every `@Mockable protocol` in this codebase is named **for the role it plays in the domain**, never for its architectural pattern. Look at the existing list — `Simulators`, `Simulator`, `Input`, `Screen`, `Stream`, `Accessibility`, `LogStream`, `DeviceHost`, `Chromes`. **The word "Port" never appears**, and you're not adding it. If you find yourself reaching for `XxxPort`, `XxxRepository`, `XxxService`, or `XxxManager`, the abstraction isn't named yet — keep going until the noun describes what the thing *is* in the domain. "A subprocess" is fine; "a log process port" is not.
+Every `@Mockable protocol` in this codebase is named **for the role it plays in the domain**, never for its architectural pattern. Look at the existing list — `Simulators`, `Simulator`, `Input`, `Screen`, `Stream`, `Accessibility`, `LogStream`, `DeviceHost`, `Chromes`. **The words "Port" / "Service" / "Manager" never appear**, and you're not adding them. If you find yourself reaching for `XxxPort` / `XxxService` / `XxxManager`, the abstraction isn't named yet — keep going until the noun describes what the thing *is* in the domain. "A subprocess" is fine; "a log process port" is not.
+
+**Repository is the one carve-out — but only for aggregate CRUD, and only spelled as the collection noun.** When the protocol genuinely *is* a DDD collection-like interface for an aggregate root (load / save / delete by identity), it takes the **plural of the aggregate** — `Simulators`, `Chromes`, `Books`, `Orders` — exactly as the existing aggregates already do. The suffix `XxxRepository` is still banned; the *role* (aggregate persistence) is the legitimate case the plural-noun convention already covers. If your protocol isn't aggregate persistence (it's an adapter, an event source, a process boundary, …), the carve-out doesn't apply — pick a role-noun like `Subprocess` / `LogStream` instead.
 
 ### Splitting an adapter that wraps 3rd-party I/O
 
