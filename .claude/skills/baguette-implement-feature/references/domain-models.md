@@ -1,15 +1,19 @@
 # Rich domain model patterns (baguette)
 
 baguette's domain layer is a small set of value types + `@Mockable`
-ports, organised by bounded context (`Domain/Input/`, `Domain/Screen/`,
-`Domain/Stream/`, `Domain/Chrome/`, `Domain/Simulator/`). The two
-recurring patterns: **rich values that own their behaviour** (so the
-adapter stays a dumb wire emitter) and **wire DTOs with a one-line
-`execute(on:)`** (so dispatch logic stays tested at the value level).
+abstractions, organised by bounded context (`Domain/Input/`,
+`Domain/Screen/`, `Domain/Stream/`, `Domain/Chrome/`,
+`Domain/Simulator/`, `Domain/Accessibility/`, `Domain/Logs/`). The
+two recurring patterns: **rich values that own their behaviour** (so
+the adapter stays a dumb wire emitter) and **wire DTOs with a
+one-line `execute(on:)`** (so dispatch logic stays tested at the
+value level). Every `@Mockable protocol` is named for its domain
+role (`Input`, `Screen`, `Subprocess`, `DeviceHost`) — never as
+`XxxPort` / `XxxRepository` / `XxxService` / `XxxManager`.
 
 ## Rich-value pattern
 
-The value owns BOTH its identity AND the behaviour against the port.
+The value owns BOTH its identity AND the behaviour against the abstraction it dispatches into.
 `DeviceButton` and `KeyboardKey` are the canonical examples:
 
 ```swift
@@ -111,11 +115,14 @@ Watch the seams:
 - `execute` does not contain dispatch logic. If you find yourself
   writing `if/else` inside it, the rule is missing on the rich value.
 
-## Port pattern (`@Mockable`)
+## Domain-named `@Mockable` abstractions
 
-The adapter boundary is a `@Mockable` protocol. Methods return `Bool`
-synchronously — there are no async actors in the input path. The
-existing port:
+The adapter boundary is a `@Mockable` protocol named for **what it
+does in the domain** — `Input`, `Screen`, `Accessibility`,
+`LogStream`, `DeviceHost`, `Subprocess`, `Chromes`. **Never
+`XxxPort` / `XxxRepository` / `XxxService` / `XxxManager`.** Methods
+return `Bool` synchronously where the wire is request/ack — there
+are no async actors in the input path. The existing example:
 
 ```swift
 @Mockable
@@ -279,7 +286,7 @@ If you can't answer any of them concretely, the type is a struct.
    itself as computed properties or extension methods.
 3. Add a `press` / `dispatch` / `apply` method (whichever verb fits)
    that takes `on input: any Input` and returns `Bool`. One line:
-   forward to the matching `Input` port method.
+   forward to the matching `Input` method.
 4. If it parses from the wire, add a sibling `<Name>: Gesture` that
    wraps it with `parse` + `execute`. Register on
    `GestureRegistry.standard`.
