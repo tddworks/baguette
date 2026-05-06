@@ -70,6 +70,10 @@ final class CoreSimulators: Simulators, @unchecked Sendable {
         IndigoHIDInput(udid: simulator.udid, host: self)
     }
 
+    func accessibility(for simulator: Simulator) -> any Accessibility {
+        AXPTranslatorAccessibility(udid: simulator.udid, host: self)
+    }
+
     // MARK: - resolution
 
     /// Look up the underlying `SimDevice` ObjC object for a UDID.
@@ -140,10 +144,18 @@ final class CoreSimulators: Simulators, @unchecked Sendable {
         let runtimeName = (device.value(forKey: "runtime") as? NSObject).flatMap { rt -> String? in
             (rt.value(forKey: "name") as? String) ?? (rt.value(forKey: "versionString") as? String)
         } ?? ""
+        // `deviceType.name` is the stable bundle filename — survives
+        // `simctl clone` / rename, where `device.name` does not. Falls
+        // back to the user-given `name` (via the initializer's `??`)
+        // so non-clones and any oddball device with no `deviceType`
+        // resolve to the same string they did before.
+        let deviceTypeName = (device.value(forKey: "deviceType") as? NSObject)
+            .flatMap { $0.value(forKey: "name") as? String }
         return Simulator(
             udid: udid, name: name,
             state: state(from: raw),
             runtime: runtimeName,
+            deviceTypeName: deviceTypeName,
             host: self
         )
     }

@@ -36,6 +36,13 @@ struct Simulator: Sendable {
     /// string when the host didn't populate it (e.g. domain-only
     /// tests that don't care).
     let runtime: String
+    /// CoreSimulator device-type name — e.g. `"iPhone 17 Pro Max"` —
+    /// the stable filename of the `.simdevicetype` bundle that owns
+    /// this device's chrome. The user-given `name` drifts on `simctl
+    /// clone` / rename, so chrome lookup keys off this instead.
+    /// Defaults to `name` for callers that don't know the device-type
+    /// (domain-only tests, legacy fixtures).
+    let deviceTypeName: String
     let host: any Simulators
 
     init(
@@ -43,12 +50,14 @@ struct Simulator: Sendable {
         name: String,
         state: State,
         runtime: String = "",
+        deviceTypeName: String? = nil,
         host: any Simulators
     ) {
         self.udid = udid
         self.name = name
         self.state = state
         self.runtime = runtime
+        self.deviceTypeName = deviceTypeName ?? name
         self.host = host
     }
 
@@ -83,13 +92,18 @@ struct Simulator: Sendable {
         host.input(for: self)
     }
 
+    /// Read the simulator's on-screen UI tree (labels, frames, traits).
+    func accessibility() -> any Accessibility {
+        host.accessibility(for: self)
+    }
+
     /// Resolve the bezel layout + composite image for this simulator.
     /// Mirrors `tap.execute(on: input)` — chrome lookup is a separate
     /// concern from the runtime, so the aggregate is taken as a
     /// parameter rather than living on the `host`. Returns `nil` for
     /// devices without a matching DeviceKit chrome (e.g. Apple TV).
     func chrome(in chromes: any Chromes) -> DeviceChromeAssets? {
-        chromes.assets(forDeviceName: name)
+        chromes.assets(forDeviceName: deviceTypeName)
     }
 }
 

@@ -136,6 +136,51 @@ struct SimulatorTests {
         verify(chromes).assets(forDeviceName: .value("iPhone 17 Pro")).called(1)
     }
 
+    // Cloned simulators carry a user-given `name` (e.g. "iPhone 17 pro
+    // max clone 1") that no longer matches a `.simdevicetype` bundle.
+    // The chrome bundle lives at the device-type name, so chrome
+    // lookup must key off `deviceTypeName`, not the display name.
+    @Test func `chrome looks up assets by device-type name when it differs from display name`() {
+        let host = MockSimulators()
+        let chromes = MockChromes()
+        let assets = DeviceChromeAssets(
+            chrome: DeviceChrome(
+                identifier: "phone11",
+                screenInsets: Insets(top: 0, left: 0, bottom: 0, right: 0),
+                outerCornerRadius: 0, buttons: [],
+                compositeImageName: "X"
+            ),
+            composite: ChromeImage(data: Data(), size: Size(width: 1, height: 1))
+        )
+        given(chromes).assets(forDeviceName: .value("iPhone 17 Pro Max")).willReturn(assets)
+        let s = Simulator(
+            udid: "u1",
+            name: "iPhone 17 pro max clone 1",
+            state: .booted,
+            deviceTypeName: "iPhone 17 Pro Max",
+            host: host
+        )
+
+        let result = s.chrome(in: chromes)
+
+        #expect(result?.chrome.identifier == "phone11")
+        verify(chromes).assets(forDeviceName: .value("iPhone 17 Pro Max")).called(1)
+    }
+
+    // Backwards-compat: when no explicit `deviceTypeName` is given,
+    // fall back to the display `name` so existing call sites keep
+    // working unchanged.
+    @Test func `chrome falls back to display name when deviceTypeName is omitted`() {
+        let host = MockSimulators()
+        let chromes = MockChromes()
+        given(chromes).assets(forDeviceName: .value("iPhone 17 Pro")).willReturn(nil)
+        let s = Simulator(udid: "u1", name: "iPhone 17 Pro", state: .booted, host: host)
+
+        _ = s.chrome(in: chromes)
+
+        verify(chromes).assets(forDeviceName: .value("iPhone 17 Pro")).called(1)
+    }
+
     // MARK: - presentation
 
     @Test func `json shape matches the list subcommand contract`() {
