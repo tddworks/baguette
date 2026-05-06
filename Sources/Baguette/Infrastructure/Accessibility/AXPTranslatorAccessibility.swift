@@ -118,8 +118,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         let context = WalkContext(
             token: token,
             deadline: deadline,
-            rootFrame: rootFrame,
-            pointSize: pointSize
+            frameTransform: AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
         )
         return walk(element: rootElement, depth: 0, context: context)
     }
@@ -129,14 +128,13 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     private struct WalkContext {
         let token: String
         let deadline: Date
-        let rootFrame: CGRect
-        let pointSize: CGSize
+        let frameTransform: AXFrameTransform
     }
 
     private func walk(element: NSObject, depth: Int, context: WalkContext) -> AXNode {
         let role  = Self.stringValue(element, "accessibilityRole") ?? "AXUnknown"
         let macFrame = Self.frame(of: element)
-        let frame = transform(macFrame, in: context)
+        let frame = context.frameTransform.map(macFrame)
 
         let kids: [AXNode] = depth >= Self.maxDepth || Date() >= context.deadline
             ? []
@@ -172,28 +170,6 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             Self.stampElementTranslation(token: token, on: kid)
         }
         return kids
-    }
-
-    /// Project `mac` (host-window coords reported by AXPTranslator)
-    /// into device points, using the simulator's known logical
-    /// `pointSize` and the AX root's reported `rootFrame`. Uses
-    /// width-uniform scale + vertical centering — same projection
-    /// AXe / Silbercue use, which matches what Simulator.app
-    /// internally does for letterboxed device aspect ratios.
-    private func transform(_ mac: CGRect, in ctx: WalkContext) -> CGRect {
-        guard ctx.rootFrame.width > 0,
-              ctx.rootFrame.height > 0,
-              ctx.pointSize.width > 0,
-              ctx.pointSize.height > 0
-        else { return mac }
-        let scale = ctx.pointSize.width / ctx.rootFrame.width
-        let yOffset = (ctx.pointSize.height - ctx.rootFrame.height * scale) / 2
-        return CGRect(
-            x: (mac.origin.x - ctx.rootFrame.origin.x) * scale,
-            y: (mac.origin.y - ctx.rootFrame.origin.y) * scale + yOffset,
-            width: mac.size.width * scale,
-            height: mac.size.height * scale
-        )
     }
 
     // MARK: - shared framework + dispatcher (process-wide)
@@ -271,7 +247,11 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
     // MARK: - element accessors
 
-    private static func frame(of element: NSObject) -> CGRect {
+    /// Read `accessibilityFrame` (a CGRect-returning Objective-C
+    /// method) off the element. Internal so tests can drive it
+    /// against a fake `NSObject` that exposes the selector. Returns
+    /// `.zero` when the element doesn't respond to the selector.
+    static func frame(of element: NSObject) -> CGRect {
         let sel = NSSelectorFromString("accessibilityFrame")
         guard element.responds(to: sel),
               let imp = class_getMethodImplementation(type(of: element), sel) else {
@@ -281,22 +261,29 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         return unsafeBitCast(imp, to: Fn.self)(element, sel)
     }
 
-    private static func stringValue(_ obj: NSObject, _ key: String) -> String? {
+    /// Read a non-empty string-valued KVC property; returns `nil`
+    /// when the property is missing, returns a non-string, or an
+    /// empty string. Internal so unit tests can drive it.
+    static func stringValue(_ obj: NSObject, _ key: String) -> String? {
         guard let raw = obj.value(forKey: key) as? String, !raw.isEmpty else { return nil }
         return raw
     }
 
     /// Some `accessibilityValue` properties return NSNumber (sliders,
     /// progress views) — coerce to a stringified value so the JSON
-    /// stays a plain string column.
-    private static func stringValueOrNumber(_ obj: NSObject, _ key: String) -> String? {
+    /// stays a plain string column. Internal so unit tests can
+    /// exercise the string / number / nil branches.
+    static func stringValueOrNumber(_ obj: NSObject, _ key: String) -> String? {
         let raw = obj.value(forKey: key)
         if let s = raw as? String { return s.isEmpty ? nil : s }
         if let n = raw as? NSNumber { return n.stringValue }
         return nil
     }
 
-    private static func boolValue(_ obj: NSObject, _ key: String, default fallback: Bool) -> Bool {
+    /// Read a Bool-valued KVC property, falling back to `fallback`
+    /// when the key isn't present (or returns a non-NSNumber).
+    /// Internal so unit tests can drive both branches.
+    static func boolValue(_ obj: NSObject, _ key: String, default fallback: Bool) -> Bool {
         if let n = obj.value(forKey: key) as? NSNumber { return n.boolValue }
         return fallback
     }
@@ -324,7 +311,8 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// `deviceType.mainScreenSize` (pixels) / `mainScreenScale`.
     /// Falls back to a sensible iPhone-15-Pro size when the
     /// runtime doesn't expose the values (unlikely on iOS 26).
-    private static func devicePointSize(for device: NSObject) -> CGSize {
+    /// Internal so unit tests can drive it against a fake device.
+    static func devicePointSize(for device: NSObject) -> CGSize {
         let fallback = CGSize(width: 393, height: 852)
         guard let deviceType = device.value(forKey: "deviceType") as? NSObject else {
             return fallback
@@ -449,7 +437,12 @@ final class TokenDispatcher: NSObject, @unchecked Sendable {
     /// Fallback empty response. AXPTranslator will re-issue if the
     /// response is `NSNull` rather than an `AXPTranslatorResponse`,
     /// so prefer the framework's typed empty when available.
-    fileprivate static func emptyResponse() -> AnyObject {
+    /// Fallback response handed back when AXPTranslator invokes
+    /// our dispatcher's callback block with no registered device
+    /// for the token (or the XPC round-trip times out / errors).
+    /// Internal so unit tests can drive it directly without
+    /// installing the dispatcher onto a real translator.
+    static func emptyResponse() -> AnyObject {
         if let cls = NSClassFromString("AXPTranslatorResponse") {
             let sel = NSSelectorFromString("emptyResponse")
             if let metaCls = object_getClass(cls),

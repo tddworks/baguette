@@ -25,7 +25,7 @@ final class SimDeviceLogStream: LogStream, @unchecked Sendable {
     private let lock = NSLock()
     private var process: Process?
     private var pipe: Pipe?
-    private var lineBuffer = Data()
+    private var lineBuffer = LineBuffer()
     private var started = false
     private var stopped = false
     private var onLineCb: (@Sendable (String) -> Void)?
@@ -167,15 +167,7 @@ final class SimDeviceLogStream: LogStream, @unchecked Sendable {
             lock.unlock()
             return
         }
-        lineBuffer.append(bytes)
-        var lines: [String] = []
-        while let nl = lineBuffer.firstIndex(of: 0x0A) {
-            let lineData = lineBuffer.subdata(in: lineBuffer.startIndex..<nl)
-            lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
-            if let s = String(data: lineData, encoding: .utf8) {
-                lines.append(s)
-            }
-        }
+        let lines = lineBuffer.append(bytes)
         lock.unlock()
         for line in lines { cb(line) }
     }
