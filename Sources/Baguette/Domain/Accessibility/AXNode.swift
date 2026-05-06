@@ -89,6 +89,88 @@ struct AXNode: Equatable, Sendable {
         return p.x >= minX && p.x < maxX && p.y >= minY && p.y < maxY
     }
 
+    /// Build an `AXNode` tree from a root `AXPMacPlatformElement`-
+    /// shaped `NSObject`. Reads the standard accessibility-*
+    /// properties via KVC, the CGRect-returning
+    /// `accessibilityFrame` selector via a typed IMP cast, and
+    /// recurses through `accessibilityChildren`. Pure logic — no
+    /// CoreSimulator, no AXPTranslator, no XPC. The Infrastructure
+    /// adapter (`AXPTranslatorAccessibility`) does the irreducible
+    /// `dlopen` + `frontmostApplication` dance and hands the
+    /// resulting root element here.
+    ///
+    /// `transform` projects each node's mac-window frame into
+    /// device-point space (`AXFrameTransform`).
+    /// `depthCap` is a defensive bound (real iOS screens rarely
+    /// exceed 20–30 levels; the cap prevents pathological cycles
+    /// from spinning forever). `deadline` short-circuits child
+    /// traversal once the wall clock passes — used by the
+    /// orchestrator to honour an XPC-call deadline without
+    /// abandoning the partial tree we already have.
+    static func walk(
+        from element: NSObject,
+        transform: AXFrameTransform,
+        depthCap: Int = 60,
+        deadline: Date = .distantFuture
+    ) -> AXNode {
+        walkInternal(
+            element: element,
+            depth: 0,
+            transform: transform,
+            depthCap: depthCap,
+            deadline: deadline
+        )
+    }
+
+    private static func walkInternal(
+        element: NSObject,
+        depth: Int,
+        transform: AXFrameTransform,
+        depthCap: Int,
+        deadline: Date
+    ) -> AXNode {
+        let role = AXElementReader.string(element, "accessibilityRole") ?? "AXUnknown"
+        let macFrame = AXElementReader.frame(of: element)
+        let projected = transform.map(macFrame)
+
+        let children: [AXNode]
+        if depth >= depthCap || Date() >= deadline {
+            children = []
+        } else {
+            let kids = AXElementReader.children(of: element)
+            children = kids.map {
+                walkInternal(
+                    element: $0,
+                    depth: depth + 1,
+                    transform: transform,
+                    depthCap: depthCap,
+                    deadline: deadline
+                )
+            }
+        }
+
+        return AXNode(
+            role: role,
+            subrole:    AXElementReader.string(element, "accessibilitySubrole"),
+            label:      AXElementReader.string(element, "accessibilityLabel"),
+            value:      AXElementReader.stringOrNumber(element, "accessibilityValue"),
+            identifier: AXElementReader.string(element, "accessibilityIdentifier"),
+            title:      AXElementReader.string(element, "accessibilityTitle"),
+            help:       AXElementReader.string(element, "accessibilityHelp"),
+            frame: Rect(
+                origin: Point(x: Double(projected.origin.x), y: Double(projected.origin.y)),
+                size: Size(width: Double(projected.size.width), height: Double(projected.size.height))
+            ),
+            enabled: AXElementReader.bool(element, "accessibilityEnabled", default: true)
+                  && !AXElementReader.bool(element, "isAccessibilityDisabled", default: false),
+            focused: AXElementReader.bool(element, "isAccessibilityFocused", default: false)
+                  || AXElementReader.bool(element, "accessibilityFocused", default: false),
+            hidden:  AXElementReader.bool(element, "isAccessibilityHidden", default: false)
+                  || AXElementReader.bool(element, "accessibilityHidden", default: false),
+            children: children
+        )
+    }
+
     fileprivate var dictionary: [String: Any] {
         [
             "role":       role,

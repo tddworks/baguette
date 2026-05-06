@@ -111,64 +111,33 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             return nil
         }
         Self.stampElementTranslation(token: token, on: rootElement)
+        Self.stampSubtree(rootElement, token: token, depthCap: Self.maxDepth)
 
         let pointSize = Self.devicePointSize(for: device)
-        let rootFrame = Self.frame(of: rootElement)
-        let context = WalkContext(
-            token: token,
-            deadline: deadline,
-            frameTransform: AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
-        )
-        return walk(element: rootElement, depth: 0, context: context)
-    }
-
-    // MARK: - element → AXNode
-
-    private struct WalkContext {
-        let token: String
-        let deadline: Date
-        let frameTransform: AXFrameTransform
-    }
-
-    private func walk(element: NSObject, depth: Int, context: WalkContext) -> AXNode {
-        let role  = Self.stringValue(element, "accessibilityRole") ?? "AXUnknown"
-        let macFrame = Self.frame(of: element)
-        let frame = context.frameTransform.map(macFrame)
-
-        let kids: [AXNode] = depth >= Self.maxDepth || Date() >= context.deadline
-            ? []
-            : (childObjects(of: element, token: context.token).map {
-                walk(element: $0, depth: depth + 1, context: context)
-            })
-
-        return AXNode(
-            role: role,
-            subrole:    Self.stringValue(element, "accessibilitySubrole"),
-            label:      Self.stringValue(element, "accessibilityLabel"),
-            value:      Self.stringValueOrNumber(element, "accessibilityValue"),
-            identifier: Self.stringValue(element, "accessibilityIdentifier"),
-            title:      Self.stringValue(element, "accessibilityTitle"),
-            help:       Self.stringValue(element, "accessibilityHelp"),
-            frame: Rect(
-                origin: Point(x: Double(frame.origin.x), y: Double(frame.origin.y)),
-                size: Size(width: Double(frame.size.width), height: Double(frame.size.height))
-            ),
-            enabled: Self.boolValue(element, "accessibilityEnabled", default: true)
-                  || Self.boolValue(element, "isAccessibilityEnabled", default: false),
-            focused: Self.boolValue(element, "isAccessibilityFocused", default: false)
-                  || Self.boolValue(element, "accessibilityFocused", default: false),
-            hidden:  Self.boolValue(element, "isAccessibilityHidden", default: false)
-                  || Self.boolValue(element, "accessibilityHidden", default: false),
-            children: kids
+        let rootFrame = AXElementReader.frame(of: rootElement)
+        return AXNode.walk(
+            from: rootElement,
+            transform: AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize),
+            depthCap: Self.maxDepth,
+            deadline: deadline
         )
     }
 
-    private func childObjects(of element: NSObject, token: String) -> [NSObject] {
-        let kids = (element.value(forKey: "accessibilityChildren") as? [NSObject]) ?? []
+    /// Stamp every reachable child translation with `token` so
+    /// AXPTranslator's per-sub-XPC `bridgeDelegateToken` lookups
+    /// resolve to our dispatcher entry. The walk that builds
+    /// `AXNode`s is pure logic in Domain; this side-effecting
+    /// pre-walk has to live in the adapter because it's part of
+    /// the AXPTranslator handshake.
+    private static func stampSubtree(
+        _ element: NSObject, token: String, depthCap: Int, depth: Int = 0
+    ) {
+        guard depth < depthCap else { return }
+        let kids = AXElementReader.children(of: element)
         for kid in kids {
-            Self.stampElementTranslation(token: token, on: kid)
+            stampElementTranslation(token: token, on: kid)
+            stampSubtree(kid, token: token, depthCap: depthCap, depth: depth + 1)
         }
-        return kids
     }
 
     // MARK: - shared framework + dispatcher (process-wide)
@@ -246,46 +215,13 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
     // MARK: - element accessors
 
-    /// Read `accessibilityFrame` (a CGRect-returning Objective-C
-    /// method) off the element. Internal so tests can drive it
-    /// against a fake `NSObject` that exposes the selector. Returns
-    /// `.zero` when the element doesn't respond to the selector.
-    static func frame(of element: NSObject) -> CGRect {
-        let sel = NSSelectorFromString("accessibilityFrame")
-        guard element.responds(to: sel),
-              let imp = class_getMethodImplementation(type(of: element), sel) else {
-            return .zero
-        }
-        typealias Fn = @convention(c) (AnyObject, Selector) -> CGRect
-        return unsafeBitCast(imp, to: Fn.self)(element, sel)
-    }
-
-    /// Read a non-empty string-valued KVC property; returns `nil`
-    /// when the property is missing, returns a non-string, or an
-    /// empty string. Internal so unit tests can drive it.
-    static func stringValue(_ obj: NSObject, _ key: String) -> String? {
-        guard let raw = obj.value(forKey: key) as? String, !raw.isEmpty else { return nil }
-        return raw
-    }
-
-    /// Some `accessibilityValue` properties return NSNumber (sliders,
-    /// progress views) — coerce to a stringified value so the JSON
-    /// stays a plain string column. Internal so unit tests can
-    /// exercise the string / number / nil branches.
-    static func stringValueOrNumber(_ obj: NSObject, _ key: String) -> String? {
-        let raw = obj.value(forKey: key)
-        if let s = raw as? String { return s.isEmpty ? nil : s }
-        if let n = raw as? NSNumber { return n.stringValue }
-        return nil
-    }
-
-    /// Read a Bool-valued KVC property, falling back to `fallback`
-    /// when the key isn't present (or returns a non-NSNumber).
-    /// Internal so unit tests can drive both branches.
-    static func boolValue(_ obj: NSObject, _ key: String, default fallback: Bool) -> Bool {
-        if let n = obj.value(forKey: key) as? NSNumber { return n.boolValue }
-        return fallback
-    }
+    // The element-reading helpers (string / bool / frame /
+    // children) used to live here; they've been promoted to
+    // Domain/Accessibility/AXElementReader.swift so the
+    // AXNode.walk(...) pure factory can reuse them. The adapter
+    // now keeps only the pieces that genuinely require the
+    // AXPTranslator handshake (token stamping, dispatcher,
+    // dlopen).
 
     /// Stamp a token onto an `AXPTranslationObject` (the inner
     /// translation, NOT the outer macPlatformElement). The

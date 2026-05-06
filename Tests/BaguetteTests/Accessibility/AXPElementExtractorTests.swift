@@ -17,43 +17,43 @@ struct AXPElementExtractorTests {
 
     @Test func `stringValue returns the property when non-empty`() {
         let elem = FakeAXElement(strings: ["accessibilityRole": "AXButton"])
-        #expect(AXPTranslatorAccessibility.stringValue(elem, "accessibilityRole") == "AXButton")
+        #expect(AXElementReader.string(elem, "accessibilityRole") == "AXButton")
     }
 
     @Test func `stringValue returns nil for empty strings`() {
         let elem = FakeAXElement(strings: ["accessibilityLabel": ""])
-        #expect(AXPTranslatorAccessibility.stringValue(elem, "accessibilityLabel") == nil)
+        #expect(AXElementReader.string(elem, "accessibilityLabel") == nil)
     }
 
     @Test func `stringValue returns nil for missing keys`() {
         let elem = FakeAXElement()
-        #expect(AXPTranslatorAccessibility.stringValue(elem, "accessibilityRole") == nil)
+        #expect(AXElementReader.string(elem, "accessibilityRole") == nil)
     }
 
     @Test func `stringValue returns nil when the value is not a string`() {
         let elem = FakeAXElement(numbers: ["accessibilityRole": NSNumber(value: 42)])
-        #expect(AXPTranslatorAccessibility.stringValue(elem, "accessibilityRole") == nil)
+        #expect(AXElementReader.string(elem, "accessibilityRole") == nil)
     }
 
     // MARK: - stringValueOrNumber
 
     @Test func `stringValueOrNumber returns string properties verbatim`() {
         let elem = FakeAXElement(strings: ["accessibilityValue": "Wednesday"])
-        #expect(AXPTranslatorAccessibility.stringValueOrNumber(elem, "accessibilityValue") == "Wednesday")
+        #expect(AXElementReader.stringOrNumber(elem, "accessibilityValue") == "Wednesday")
     }
 
     @Test func `stringValueOrNumber stringifies NSNumber slider values`() {
         let elem = FakeAXElement(numbers: ["accessibilityValue": NSNumber(value: 0.75)])
-        #expect(AXPTranslatorAccessibility.stringValueOrNumber(elem, "accessibilityValue") == "0.75")
+        #expect(AXElementReader.stringOrNumber(elem, "accessibilityValue") == "0.75")
     }
 
     @Test func `stringValueOrNumber returns nil for empty strings`() {
         let elem = FakeAXElement(strings: ["accessibilityValue": ""])
-        #expect(AXPTranslatorAccessibility.stringValueOrNumber(elem, "accessibilityValue") == nil)
+        #expect(AXElementReader.stringOrNumber(elem, "accessibilityValue") == nil)
     }
 
     @Test func `stringValueOrNumber returns nil when the key is missing`() {
-        #expect(AXPTranslatorAccessibility.stringValueOrNumber(FakeAXElement(), "k") == nil)
+        #expect(AXElementReader.stringOrNumber(FakeAXElement(), "k") == nil)
     }
 
     // MARK: - boolValue
@@ -61,19 +61,19 @@ struct AXPElementExtractorTests {
     @Test func `boolValue returns the wrapped NSNumber's boolValue when present`() {
         let truthy = FakeAXElement(numbers: ["accessibilityEnabled": NSNumber(value: true)])
         let falsy  = FakeAXElement(numbers: ["accessibilityEnabled": NSNumber(value: false)])
-        #expect(AXPTranslatorAccessibility.boolValue(truthy, "accessibilityEnabled", default: false) == true)
-        #expect(AXPTranslatorAccessibility.boolValue(falsy,  "accessibilityEnabled", default: true)  == false)
+        #expect(AXElementReader.bool(truthy, "accessibilityEnabled", default: false) == true)
+        #expect(AXElementReader.bool(falsy,  "accessibilityEnabled", default: true)  == false)
     }
 
     @Test func `boolValue returns the fallback when the key is missing`() {
         let elem = FakeAXElement()
-        #expect(AXPTranslatorAccessibility.boolValue(elem, "absent", default: true) == true)
-        #expect(AXPTranslatorAccessibility.boolValue(elem, "absent", default: false) == false)
+        #expect(AXElementReader.bool(elem, "absent", default: true) == true)
+        #expect(AXElementReader.bool(elem, "absent", default: false) == false)
     }
 
     @Test func `boolValue returns the fallback when the value is not an NSNumber`() {
         let elem = FakeAXElement(strings: ["weird": "true"])
-        #expect(AXPTranslatorAccessibility.boolValue(elem, "weird", default: false) == false)
+        #expect(AXElementReader.bool(elem, "weird", default: false) == false)
     }
 
     // MARK: - devicePointSize
@@ -131,7 +131,7 @@ struct AXPElementExtractorTests {
 
     @Test func `frame returns zero when the element doesn't respond to accessibilityFrame`() {
         let elem = FakeAXElement()
-        #expect(AXPTranslatorAccessibility.frame(of: elem) == .zero)
+        #expect(AXElementReader.frame(of: elem) == .zero)
     }
 }
 
