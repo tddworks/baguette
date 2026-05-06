@@ -39,7 +39,7 @@ import CoreGraphics
 /// out-of-Simulator.app dispatcher pattern that we know of.
 final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     private let udid: String
-    private weak var host: CoreSimulators?
+    private weak var host: AnyObject?
 
     /// Cap on tree-walk recursion depth. Real iOS screens rarely
     /// exceed 20–30 levels; the cap prevents pathological cycles.
@@ -50,9 +50,14 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// hung simulator doesn't pin our caller.
     private static let xpcTimeoutSeconds: Double = 5.0
 
-    init(udid: String, host: CoreSimulators) {
+    init(udid: String, host: any DeviceHost) {
         self.udid = udid
-        self.host = host
+        self.host = host as AnyObject
+    }
+
+    private func resolveDevice() -> NSObject? {
+        guard let host = host as? any DeviceHost else { return nil }
+        return host.resolveDevice(udid: udid)
     }
 
     // MARK: - Accessibility
@@ -80,7 +85,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             logErr("[ax] framework / dispatcher not available")
             return nil
         }
-        guard let device = host?.resolveDevice(udid: udid) else {
+        guard let device = resolveDevice() else {
             logErr("[ax] device not found: \(udid)")
             return nil
         }

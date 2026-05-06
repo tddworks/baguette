@@ -10,7 +10,7 @@ import ObjectiveC
 /// lifetime; deinit releases the services.
 final class IndigoHIDInput: Input, @unchecked Sendable {
     private let udid: String
-    private weak var host: CoreSimulators?
+    private weak var host: AnyObject?
 
     private var client: AnyObject?
     private var warmed = false
@@ -53,9 +53,14 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private static let dirMove: UInt32 = 0
     private static let dirUp:   UInt32 = 2
 
-    init(udid: String, host: CoreSimulators) {
+    init(udid: String, host: any DeviceHost) {
         self.udid = udid
-        self.host = host
+        self.host = host as AnyObject
+    }
+
+    private func resolveDevice() -> NSObject? {
+        guard let host = host as? any DeviceHost else { return nil }
+        return host.resolveDevice(udid: udid)
     }
 
     deinit {
@@ -326,7 +331,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         if let client { return client }
 
         resolveFunctions()
-        guard let device = host?.resolveDevice(udid: udid) else { return nil }
+        guard let device = resolveDevice() else { return nil }
         guard let cls = NSClassFromString("_TtC12SimulatorKit24SimDeviceLegacyHIDClient") else {
             logErr("SimDeviceLegacyHIDClient class not found")
             return nil

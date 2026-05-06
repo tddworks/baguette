@@ -6,7 +6,7 @@ import ObjectiveC
 ///
 /// Constructed once per CLI invocation with an optional custom device set
 /// path; the default Xcode set is used when `deviceSetPath` is `nil`.
-final class CoreSimulators: Simulators, @unchecked Sendable {
+final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     private let deviceSetPath: String?
 
     init(deviceSetPath: String? = nil) {

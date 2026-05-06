@@ -13,7 +13,7 @@ import ObjectiveC
 /// whichever currently has the largest live surface area each tick.
 final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private let udid: String
-    private weak var host: CoreSimulators?
+    private weak var host: AnyObject?
     private let queue = DispatchQueue(label: "baguette.screen", qos: .userInteractive)
 
     private var ioClient: NSObject?
@@ -21,15 +21,20 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private var callbackUUIDs: [ObjectIdentifier: NSUUID] = [:]
     private var onFrame: (@Sendable (IOSurface) -> Void)?
 
-    init(udid: String, host: CoreSimulators) {
+    init(udid: String, host: any DeviceHost) {
         self.udid = udid
-        self.host = host
+        self.host = host as AnyObject
+    }
+
+    private func resolveDevice() -> NSObject? {
+        guard let host = host as? any DeviceHost else { return nil }
+        return host.resolveDevice(udid: udid)
     }
 
     func start(onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         self.onFrame = onFrame
 
-        guard let device = host?.resolveDevice(udid: udid) else {
+        guard let device = resolveDevice() else {
             throw SimulatorError.notFound(udid: udid)
         }
         guard let io = device.perform(NSSelectorFromString("io"))?

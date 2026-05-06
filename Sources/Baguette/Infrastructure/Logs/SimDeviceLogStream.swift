@@ -20,7 +20,7 @@ import Foundation
 /// rejects a second `start` — re-issue a fresh `LogStream`.
 final class SimDeviceLogStream: LogStream, @unchecked Sendable {
     private let udid: String
-    private weak var host: CoreSimulators?
+    private weak var host: AnyObject?
 
     private let lock = NSLock()
     private var process: Process?
@@ -31,9 +31,16 @@ final class SimDeviceLogStream: LogStream, @unchecked Sendable {
     private var onLineCb: (@Sendable (String) -> Void)?
     private var onTermCb: (@Sendable (Error?) -> Void)?
 
-    init(udid: String, host: CoreSimulators) {
+    init(udid: String, host: any DeviceHost) {
         self.udid = udid
-        self.host = host
+        self.host = host as AnyObject
+    }
+
+    /// Resolve the device through the injected port, if it's still
+    /// alive. Returns `nil` once the host has been deallocated.
+    private func resolveDevice() -> NSObject? {
+        guard let host = host as? any DeviceHost else { return nil }
+        return host.resolveDevice(udid: udid)
     }
 
     deinit {
@@ -56,7 +63,7 @@ final class SimDeviceLogStream: LogStream, @unchecked Sendable {
             lock.unlock()
             throw LogStreamError.alreadyStarted
         }
-        guard let device = host?.resolveDevice(udid: udid) else {
+        guard let device = resolveDevice() else {
             lock.unlock()
             throw LogStreamError.simulatorNotBooted(udid: udid)
         }
