@@ -162,7 +162,7 @@ struct AXNode: Equatable, Sendable {
                 size: Size(width: Double(projected.size.width), height: Double(projected.size.height))
             ),
             enabled: AXElementReader.bool(element, "accessibilityEnabled", default: true)
-                  && !AXElementReader.bool(element, "isAccessibilityDisabled", default: false),
+                  || AXElementReader.bool(element, "isAccessibilityEnabled", default: false),
             focused: AXElementReader.bool(element, "isAccessibilityFocused", default: false)
                   || AXElementReader.bool(element, "accessibilityFocused", default: false),
             hidden:  AXElementReader.bool(element, "isAccessibilityHidden", default: false)
