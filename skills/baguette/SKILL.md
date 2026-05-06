@@ -155,6 +155,14 @@ Wired (use freely):
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C
   `KeyboardEvent.code`; modifiers are `shift | control | option | command`.
+- `describe-ui` — dump the on-screen accessibility tree as JSON
+  (per-node `role`, `label`, `value`, `identifier`, `frame` in
+  device points, recursive `children`). CLI:
+  `baguette describe-ui --udid <X>` (full tree) or
+  `baguette describe-ui --udid <X> --x <px> --y <px>` (hit-test).
+  Frames are in the same units as `tap` / `swipe` wire fields, so
+  reading `frame.x + frame.width/2`, `frame.y + frame.height/2`
+  back into a `tap` envelope just works.
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji

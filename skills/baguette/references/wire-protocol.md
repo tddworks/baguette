@@ -166,7 +166,23 @@ text channel that carries gestures also accepts stream-control verbs:
 {"type":"set_scale","scale":1}           // 1=full, 2=half, 3=third
 {"type":"force_idr"}                     // request a keyframe now
 {"type":"snapshot"}                      // request one snapshot frame
+{"type":"describe_ui"}                   // dump the AX tree (frontmost app)
+{"type":"describe_ui","x":172,"y":880}   // hit-test the topmost AX node at a point
 ```
+
+`describe_ui` replies on the same socket with one text frame:
+
+```json
+{ "type": "describe_ui_result", "ok": true, "tree": { /* AXNode */ } }
+{ "type": "describe_ui_result", "ok": false, "error": "no accessibility data" }
+```
+
+Each `AXNode` carries `role`, `subrole`, `label`, `value`,
+`identifier`, `title`, `help`, `frame` (in **device points**, same
+units as `tap` / `swipe`), `enabled` / `focused` / `hidden`, and a
+recursive `children` array. Use it as the structured-context
+counterpart to `screenshot.jpg` — pair the screenshot with the
+tree, or skip the image and act on the labels and frames directly.
 
 These do not exist for `baguette input` (no stream there).
 
