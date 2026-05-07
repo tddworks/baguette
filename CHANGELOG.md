@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.67] - 2026-05-07
+
 ### Added
 - **Live unified-log stream (`logs`).** New `baguette logs --udid <UDID> [--level …] [--style …] [--predicate …] [--bundle-id …]` CLI subcommand and dedicated `WS /simulators/:udid/logs?level=&style=&predicate=&bundleId=` socket stream the booted simulator's `os_log` output line-by-line, in real time. CLI writes one log line per stdout line and SIGINT (Ctrl-C) tears down cleanly; WS emits `{"type":"log","line":"<entry>"}` text frames bracketed by `log_started` / `log_stopped`. `--bundle-id` is a shorthand that translates to `process == "<id>"` and ANDs with an explicit `--predicate` when both are given. Adapter shells out to `xcrun simctl spawn <udid> log stream …` rather than calling `SimDevice.spawnWith…` directly — the direct path is published in CoreSimulator and *almost* works, but on iOS 26 the spawned `log` binary fails its `mbr_check_membership_ext("admin", …)` check unless the caller is Apple-signed (which `simctl` is and we aren't). simctl is guaranteed installed alongside our device set, so the indirection is cheap. Slimmer level set than the macOS host `log` binary: `default | info | debug` only — `notice / error / fault` are explicitly rejected at the wire because the iOS-runtime `log stream` doesn't accept them. See [`docs/features/logs.md`](docs/features/logs.md).
 - **Accessibility tree extraction (`describe-ui`).** New `baguette describe-ui --udid <UDID> [--x <px> --y <px>]` CLI subcommand and `{"type":"describe_ui"}` WebSocket message dump the booted simulator's on-screen UI tree as JSON: per-node `role`, `label`, `value`, `identifier`, `frame` (in **device points**, ready to feed back into a `tap` envelope), plus `enabled` / `focused` / `hidden` traits and recursive `children`. Hit-test path returns the topmost AX element under a coordinate. Powered by the private `AccessibilityPlatformTranslation` framework's `AXPTranslator` — out of Simulator.app the tricky bit is wiring a `bridgeTokenDelegate` ourselves so the translator can route XPC requests to the right `SimDevice.sendAccessibilityRequestAsync:`; without that delegate every `frontmostApplication…` call returns `nil`. Cribbed the dispatcher pattern from `cameroncooke/AXe` and `Silbercue/SilbercueSwift`'s `AXPBridge.swift`. See [`docs/features/accessibility.md`](docs/features/accessibility.md).
@@ -108,7 +112,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.66...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.67...HEAD
+[0.1.67]: https://github.com/tddworks/baguette/compare/v0.1.66...v0.1.67
 [0.1.66]: https://github.com/tddworks/baguette/compare/v0.1.65...v0.1.66
 [0.1.65]: https://github.com/tddworks/baguette/compare/v0.1.64...v0.1.65
 [0.1.64]: https://github.com/tddworks/baguette/compare/v0.1.63...v0.1.64
