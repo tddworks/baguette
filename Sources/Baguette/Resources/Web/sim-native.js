@@ -192,19 +192,33 @@
   // Lazy-mounts the AXInspector once a surface + session are ready.
   // Re-runs on `remountFrame()` because the screen DOM and the
   // session both change underneath it.
+  //
+  // Focus-mode UX:
+  //   - The inspector has no inline UI host. Enable/disable is
+  //     driven by the `nativeAxToggle` toolbar button.
+  //   - Selection details surface in the `nativeAxHost` floating
+  //     panel, which is hidden until the user clicks an element.
   function mountAxInspector() {
     if (axInspector) {
       try { axInspector.detach(); } catch (_) { /* ignore */ }
       axInspector = null;
     }
-    const host = document.getElementById('nativeAxHost');
-    if (!host || !window.AXInspector || !surface) return;
-    host.innerHTML = '';
+    if (!window.AXInspector || !surface) return;
+    const panel = document.getElementById('nativeAxHost');
     axInspector = new window.AXInspector({
-      host,
+      // No `host` — toolbar drives enable/disable, panel surfaces selection.
       screenArea: surface.screenArea,
       send: (payload) => session && session.send(payload),
       getDeviceSize: () => frame.screenSize(),
+      onSelect: (node) => renderAxPanel(panel, node),
+      onEnableChange: (enabled) => {
+        const btn = document.getElementById('nativeAxToggle');
+        if (btn) btn.classList.toggle('active', enabled);
+        if (!enabled && panel) {
+          panel.removeAttribute('data-open');
+          panel.innerHTML = '';
+        }
+      },
     });
   }
 
@@ -335,6 +349,43 @@
       remountFrame();
     };
     window.__nativeToggleLogs = () => toggleLogs();
+    window.__nativeToggleAx = () => {
+      if (!axInspector) return;
+      if (axInspector.isEnabled()) axInspector.disable();
+      else axInspector.enable();
+    };
+  }
+
+  // Surface a selected AX node in the floating `#nativeAxHost`
+  // panel. Wraps the inspector's static selection renderer with a
+  // header (title + close) so the panel can be dismissed without
+  // disabling the inspector itself.
+  function renderAxPanel(panel, node) {
+    if (!panel) return;
+    if (!node) {
+      panel.removeAttribute('data-open');
+      panel.innerHTML = '';
+      return;
+    }
+    panel.setAttribute('data-open', 'true');
+    panel.innerHTML =
+      '<div class="ax-host-head">' +
+        '<span>Element</span>' +
+        '<button class="ax-host-close" data-role="ax-close" aria-label="Dismiss">×</button>' +
+      '</div>' +
+      '<div data-role="ax-body"></div>';
+    panel.querySelector('[data-role="ax-close"]').addEventListener('click', () => {
+      panel.removeAttribute('data-open');
+      panel.innerHTML = '';
+    });
+    window.AXInspector.renderSelectionInto(
+      panel.querySelector('[data-role="ax-body"]'),
+      node,
+      {
+        send: (payload) => session && session.send(payload),
+        getDeviceSize: () => frame.screenSize(),
+      }
+    );
   }
 
   // Log sheet: lazy-mount on first open, leave the LogPanel attached

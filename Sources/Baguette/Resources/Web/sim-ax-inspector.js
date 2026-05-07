@@ -3,7 +3,9 @@
 // wires one instance per active stream.
 //
 // Behaviour:
-//   - A toggle in the sidebar enables/disables the overlay.
+//   - The overlay activates when the caller calls `enable()` (sidebar
+//     mode renders an inline toggle in `host`; focus mode drives this
+//     from a toolbar button).
 //   - When enabled, the AX tree is fetched once and re-fetched on
 //     every fresh hover (mouseenter on the screen) and on click,
 //     so the user sees a fresh snapshot per inspection without
@@ -11,8 +13,10 @@
 //   - Hover hit-tests the cached tree client-side (Domain `AXNode`
 //     ships frames in the same device-point space as gestures), and
 //     paints a translucent box + tooltip over the hovered node.
-//   - Clicking locks the selection and reveals an action row with
-//     Copy-id and Tap-by-frame buttons.
+//   - Clicking locks the selection. The inspector renders the
+//     selection into `host` (if provided) and fires `onSelect(node)`
+//     so callers without an inline host (focus mode) can show it
+//     elsewhere — e.g. a slide-up sheet.
 //
 // While enabled, the overlay swallows mouse events so taps don't
 // bleed into the gesture pipeline. While disabled, the overlay is
@@ -58,21 +62,98 @@
     })[c]);
   }
 
+  // Render the selection details + action row into an arbitrary host
+  // element. Exposed as a static so both the sidebar mode (in-card)
+  // and the focus mode (in-sheet) can reuse the same markup.
+  //
+  // `ctx`: { send, getDeviceSize }
+  //   - send:          (payload) => void  — dispatch a JSON envelope on the WS
+  //   - getDeviceSize: () => { w, h }     — device-point dims for `tap`
+  //
+  // The button row is laid out as:
+  //   [ Copy id ] [ Copy JSON ]
+  //   [        Tap (cx, cy)        ]
+  // The 2-up + full-width pattern keeps every button readable in a
+  // narrow ~220px sidebar without text wrapping; Tap is the primary
+  // action so it gets the prominent full-width slot.
+  function renderSelectionInto(host, node, ctx) {
+    if (!host) return;
+    if (!node) {
+      host.style.display = 'none';
+      host.innerHTML = '';
+      return;
+    }
+    const cx = node.frame.x + node.frame.width  / 2;
+    const cy = node.frame.y + node.frame.height / 2;
+    const row = (k, v) => v == null || v === '' ? ''
+      : '<div><span style="color:var(--text-muted);display:inline-block;width:60px">' +
+        k + '</span>' + escapeHTML(v) + '</div>';
+
+    host.style.display = '';
+    host.innerHTML =
+      '<div style="font-size:11px;line-height:1.45;' +
+        'font-family:ui-monospace,SFMono-Regular,Menlo,monospace">' +
+        row('role',  node.role) +
+        row('label', node.label) +
+        row('id',    node.identifier) +
+        row('value', node.value) +
+        '<div><span style="color:var(--text-muted);display:inline-block;width:60px">frame</span>' +
+          node.frame.x.toFixed(0) + ',' + node.frame.y.toFixed(0) + ' ' +
+          node.frame.width.toFixed(0) + '×' + node.frame.height.toFixed(0) +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">' +
+        '<button class="btn btn-sm" data-act="copy-id"' +
+          (node.identifier ? '' : ' disabled') +
+          ' style="white-space:nowrap">Copy id</button>' +
+        '<button class="btn btn-sm" data-act="copy-json"' +
+          ' style="white-space:nowrap">Copy JSON</button>' +
+      '</div>' +
+      '<button class="btn btn-sm btn-primary" data-act="tap"' +
+        ' style="width:100%;margin-top:6px;white-space:nowrap">' +
+        'Tap (' + cx.toFixed(0) + ', ' + cy.toFixed(0) + ')' +
+      '</button>';
+
+    const copyId = host.querySelector('[data-act="copy-id"]');
+    if (copyId && node.identifier) {
+      copyId.addEventListener('click', () => {
+        navigator.clipboard?.writeText(node.identifier);
+      });
+    }
+    host.querySelector('[data-act="copy-json"]')
+      .addEventListener('click', () => {
+        navigator.clipboard?.writeText(JSON.stringify(node, null, 2));
+      });
+    host.querySelector('[data-act="tap"]')
+      .addEventListener('click', () => {
+        // Wire shape matches GestureRegistry's `tap`: device-point
+        // coordinates plus the device-point screen size.
+        const sz = (ctx.getDeviceSize && ctx.getDeviceSize()) || { w: 0, h: 0 };
+        ctx.send({
+          type: 'tap',
+          x: cx, y: cy, width: sz.w, height: sz.h,
+        });
+      });
+  }
+
   // --- AXInspector --------------------------------------------------
 
   class AXInspector {
     constructor(opts) {
-      this.host          = opts.host;          // sidebar card body
-      this.screenArea    = opts.screenArea;    // overlay parent (already position:absolute)
-      this.send          = opts.send;          // (payload) => void  — JSON over stream WS
-      this.getDeviceSize = opts.getDeviceSize; // () => { w, h }     — device-point dims
+      this.host           = opts.host || null;       // optional sidebar mount
+      this.screenArea     = opts.screenArea;         // overlay parent (already position:absolute)
+      this.send           = opts.send;               // (payload) => void  — JSON over stream WS
+      this.getDeviceSize  = opts.getDeviceSize;      // () => { w, h }     — device-point dims
+      this.onSelect       = opts.onSelect       || null; // (node | null) => void
+      this.onStatus       = opts.onStatus       || null; // (text)         => void
+      this.onEnableChange = opts.onEnableChange || null; // (enabled: bool) => void
 
       this.tree = null;
       this.hover = null;
       this.selected = null;
       this.enabled = false;
 
-      this._buildSidebar();
+      if (this.host) this._buildSidebar();
       this._buildOverlay();
     }
 
@@ -95,16 +176,17 @@
     enable() {
       if (this.enabled) return;
       this.enabled = true;
-      this.toggleEl.checked = true;
+      if (this.toggleEl) this.toggleEl.checked = true;
       this.overlay.style.display = '';
       this.overlay.style.pointerEvents = 'auto';
       this._refresh();
+      if (this.onEnableChange) this.onEnableChange(true);
     }
 
     disable() {
       if (!this.enabled) return;
       this.enabled = false;
-      this.toggleEl.checked = false;
+      if (this.toggleEl) this.toggleEl.checked = false;
       this.overlay.style.pointerEvents = 'none';
       this.overlay.style.display = 'none';
       this.tree = null;
@@ -113,7 +195,11 @@
       this._setStatus('');
       this._renderInfo();
       this._draw();
+      if (this.onSelect) this.onSelect(null);
+      if (this.onEnableChange) this.onEnableChange(false);
     }
+
+    isEnabled() { return this.enabled; }
 
     detach() {
       try { this.disable(); } catch { /* ignore */ }
@@ -136,8 +222,7 @@
           '<span>Inspect (hover)</span>' +
           '<span data-role="status" style="margin-left:auto;color:var(--text-muted);font-size:10px"></span>' +
         '</label>' +
-        '<div data-role="info" style="margin-top:8px;font-size:11px;line-height:1.45;' +
-          'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;display:none"></div>';
+        '<div data-role="info" style="margin-top:8px;display:none"></div>';
       this.toggleEl = this.host.querySelector('[data-role="toggle"]');
       this.statusEl = this.host.querySelector('[data-role="status"]');
       this.infoEl   = this.host.querySelector('[data-role="info"]');
@@ -147,7 +232,9 @@
     }
 
     _setStatus(text) {
-      if (this.statusEl) this.statusEl.textContent = text || '';
+      const t = text || '';
+      if (this.statusEl) this.statusEl.textContent = t;
+      if (this.onStatus) this.onStatus(t);
     }
 
     // --- internal: overlay canvas + mouse handlers --------------
@@ -223,6 +310,16 @@
       this._renderInfo();
       this._draw();
       this._refresh();
+      if (this.onSelect) this.onSelect(this.selected);
+    }
+
+    _renderInfo() {
+      if (this.infoEl) {
+        renderSelectionInto(this.infoEl, this.selected, {
+          send: this.send,
+          getDeviceSize: this.getDeviceSize,
+        });
+      }
     }
 
     _toDevicePoint(e) {
@@ -285,58 +382,8 @@
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + padX, y + h / 2);
     }
-
-    _renderInfo() {
-      const n = this.selected;
-      if (!n) {
-        this.infoEl.style.display = 'none';
-        this.infoEl.innerHTML = '';
-        return;
-      }
-      const cx = n.frame.x + n.frame.width  / 2;
-      const cy = n.frame.y + n.frame.height / 2;
-      const row = (k, v) => v == null || v === '' ? ''
-        : '<div><span style="color:var(--text-muted);display:inline-block;width:64px">' +
-          k + '</span>' + escapeHTML(v) + '</div>';
-      this.infoEl.style.display = '';
-      this.infoEl.innerHTML =
-        row('role',  n.role) +
-        row('label', n.label) +
-        row('id',    n.identifier) +
-        row('value', n.value) +
-        '<div><span style="color:var(--text-muted);display:inline-block;width:64px">frame</span>' +
-          n.frame.x.toFixed(0) + ',' + n.frame.y.toFixed(0) + ' ' +
-          n.frame.width.toFixed(0) + '×' + n.frame.height.toFixed(0) +
-        '</div>' +
-        '<div style="display:flex;gap:6px;margin-top:8px">' +
-          (n.identifier
-            ? '<button class="btn btn-sm" data-act="copy-id">Copy id</button>'
-            : '') +
-          '<button class="btn btn-sm" data-act="copy-json">Copy JSON</button>' +
-          '<button class="btn btn-sm btn-primary" data-act="tap">Tap (' +
-            cx.toFixed(0) + ',' + cy.toFixed(0) + ')</button>' +
-        '</div>';
-
-      const copyId = this.infoEl.querySelector('[data-act="copy-id"]');
-      if (copyId) copyId.addEventListener('click', () => {
-        if (n.identifier) navigator.clipboard?.writeText(n.identifier);
-      });
-      this.infoEl.querySelector('[data-act="copy-json"]')
-        .addEventListener('click', () => {
-          navigator.clipboard?.writeText(JSON.stringify(n, null, 2));
-        });
-      this.infoEl.querySelector('[data-act="tap"]')
-        .addEventListener('click', () => {
-          // Wire shape matches GestureRegistry's `tap`: device-point
-          // coordinates plus the device-point screen size.
-          const sz = this.getDeviceSize() || { w: 0, h: 0 };
-          this.send({
-            type: 'tap',
-            x: cx, y: cy, width: sz.w, height: sz.h,
-          });
-        });
-    }
   }
 
+  AXInspector.renderSelectionInto = renderSelectionInto;
   window.AXInspector = AXInspector;
 })();

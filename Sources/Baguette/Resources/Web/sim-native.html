@@ -342,15 +342,16 @@
 
   /* Accessibility-inspector floating panel. Sits top-right of the
      device column, glass-styled to match the toolbar. Hidden until
-     the user enables the toggle inside it (the inspector's toggle
-     UI is rendered into this same host). */
+     the user clicks an element while the inspector is enabled (the
+     toolbar's `nativeAxToggle` drives enable/disable; the panel only
+     surfaces a selection — never the toggle itself). */
   #simNativeView .ax-host {
     position: absolute;
     top: 84px;
     right: 24px;
     z-index: 40;
     width: 240px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: var(--nv-bar-bg);
     border: 1px solid var(--nv-bar-border);
     border-radius: 12px;
@@ -359,15 +360,36 @@
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     color: var(--nv-text);
     font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    display: none;
+  }
+  #simNativeView .ax-host[data-open="true"] { display: block; }
+  #simNativeView .ax-host .ax-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .ax-host .ax-host-close {
+    width: 22px; height: 20px; line-height: 1;
+    color: var(--nv-text-muted);
+    background: transparent; border: 0; cursor: pointer;
+    border-radius: 5px; font: 700 14px ui-monospace, monospace;
+  }
+  #simNativeView .ax-host .ax-host-close:hover {
+    background: var(--nv-bar-border);
   }
   #simNativeView .ax-host .btn {
     appearance: none; border: 1px solid var(--nv-bar-border);
     background: transparent; color: inherit;
-    border-radius: 6px; padding: 3px 8px;
-    font: inherit; cursor: pointer;
+    border-radius: 6px; padding: 4px 8px;
+    font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    cursor: pointer;
   }
+  #simNativeView .ax-host .btn:hover { background: var(--nv-bar-border); }
+  #simNativeView .ax-host .btn:disabled { opacity: 0.5; cursor: default; }
   #simNativeView .ax-host .btn-primary {
     background: var(--nv-text); color: var(--nv-bar-bg);
+    border-color: transparent;
   }
 
   /* Preview ribbon — only when opened via file:// */
@@ -418,6 +440,26 @@
           <line x1="3" y1="9"  x2="6"  y2="9"/>
           <line x1="3" y1="13" x2="6"  y2="13"/>
           <line x1="18" y1="9" x2="21" y2="9"/>
+        </svg>
+      </button>
+
+      <!-- Accessibility-inspector toggle. When active, a translucent
+           overlay tracks the AX node under the cursor; clicking an
+           element opens the AX sheet (slides up from the bottom)
+           with selection details and Tap / Copy actions. -->
+      <button class="ico-btn" id="nativeAxToggle"
+              title="Toggle accessibility inspector"
+              aria-label="Toggle accessibility inspector"
+              onclick="window.__nativeToggleAx && window.__nativeToggleAx()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- crosshair-on-target glyph: outer ring + inner dot + axes -->
+          <circle cx="12" cy="12" r="7.5"/>
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
+          <line x1="12" y1="2.5" x2="12" y2="6"/>
+          <line x1="12" y1="18"  x2="12" y2="21.5"/>
+          <line x1="2.5" y1="12" x2="6"  y2="12"/>
+          <line x1="18"  y1="12" x2="21.5" y2="12"/>
         </svg>
       </button>
 
