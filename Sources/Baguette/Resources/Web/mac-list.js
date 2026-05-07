@@ -46,7 +46,7 @@
       .mac-error { color: var(--danger); }
       .mac-dot { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 99px; background: #94a3b8; vertical-align: 1px; }
       .mac-dot.active { background: var(--success); }
-      .mac-screenshot { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border); }
+      .mac-screenshot { display: block; width: 100%; max-width: 1400px; height: auto; margin: 0 auto; border-radius: 8px; border: 1px solid var(--border); background: #f1f5f9; min-height: 200px; }
       .mac-hints { padding: 12px 20px; color: var(--text-muted); font: 11px monospace; background: #f8fafc; border-top: 1px solid var(--border); white-space: pre-wrap; }
     `;
     document.head.appendChild(style);

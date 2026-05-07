@@ -244,8 +244,11 @@ struct Server: Sendable {
             return errorJSON("unknown bundleID: \(bundleID)", status: .notFound)
         }
         do {
-            let bytes = try await ScreenSnapshot.capture(
-                screen: app.screen(),
+            // `SCScreenshotManager` instead of `Screen.start` — see
+            // MacScreenshotter for why (SCStream is for live updates,
+            // not idle one-shots).
+            let bytes = try await MacScreenshotter.capture(
+                pid: app.pid,
                 quality: quality,
                 scale: max(1, scale)
             )

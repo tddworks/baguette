@@ -29,8 +29,11 @@ struct MacScreenshotCommand: AsyncParsableCommand {
             log("App \(target.bundleId) not running")
             throw ExitCode.failure
         }
-        let bytes = try await ScreenSnapshot.capture(
-            screen: app.screen(),
+        // `SCScreenshotManager` instead of the streaming Screen
+        // protocol — SCStream only delivers when the window changes,
+        // so an idle target's snapshot would always 2-second timeout.
+        let bytes = try await MacScreenshotter.capture(
+            pid: app.pid,
             quality: quality,
             scale: max(1, scale)
         )

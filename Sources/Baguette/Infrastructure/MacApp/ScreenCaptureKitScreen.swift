@@ -63,9 +63,14 @@ final class ScreenCaptureKitScreen: Screen, @unchecked Sendable {
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true
         )
-        guard let window = content.windows.first(where: {
-            $0.owningApplication?.processID == pid
-        }) else {
+        // Pick the largest window owned by the target PID. AppKit
+        // creates auxiliary "Window" proxies (~66×20) during
+        // mouse-drags that show up first in the z-ordered list;
+        // sorting by area picks the document window every time.
+        guard let window = content.windows
+            .filter({ $0.owningApplication?.processID == pid })
+            .max(by: { ($0.frame.width * $0.frame.height) < ($1.frame.width * $1.frame.height) })
+        else {
             throw MacAppError.notFound(bundleID: "pid:\(pid)")
         }
 
