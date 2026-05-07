@@ -24,6 +24,7 @@ struct ServeCommand: AsyncParsableCommand {
     func run() async throws {
         let server = Server(
             simulators: CoreSimulators(deviceSetPath: deviceSet),
+            macApps: RunningMacApps(),
             chromes: LiveChromes(
                 store: FileSystemChromeStore(),
                 rasterizer: CoreGraphicsPDFRasterizer()

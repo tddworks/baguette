@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>macOS Apps — Baguette</title>
+<style>
+  :root {
+    --bg:        #f8fafc;
+    --panel:     #ffffff;
+    --text:      #334155;
+    --text-muted:#94a3b8;
+    --border:    #e2e8f0;
+    --accent:    #2563eb;
+    --success:   #0f766e;
+    --danger:    #b91c1c;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+               font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, sans-serif; }
+  body { min-height: 100vh; }
+</style>
+</head>
+<body>
+<!--
+  macOS native-app surface. List view at `/mac` enumerates running
+  apps; deep link `/mac/<bundleID>` opens a screenshot view with
+  the wire URL of the WS stream printed for `curl` / `wscat` users.
+
+  Stage 3 ships the list + screenshot view; full live streaming
+  in the browser (canvas + gestures) is Stage 4 polish — until
+  then power users hit `WS /mac/<bundleID>/stream` directly with
+  the existing wire envelopes (identical to the simulator path).
+-->
+<script src="/mac-list.js"></script>
+</body>
+</html>

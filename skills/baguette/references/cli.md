@@ -275,6 +275,78 @@ Agents typically don't need this — `baguette input` is the programmatic
 path. Mention it once if a human asks how to interact with the sim
 themselves while you work.
 
+## Native macOS apps — `mac` subcommand tree
+
+Sibling target tree for driving any running macOS app. Same wire
+protocol as the iOS path; bundle ID instead of UDID.
+
+```bash
+baguette mac list                          # one JSON object per running app per line
+baguette mac list --json                   # {"active":[...], "inactive":[...]}
+baguette mac screenshot --bundle-id <ID>   # one-shot JPEG of the app's frontmost window
+baguette mac describe-ui --bundle-id <ID>  # full AX tree
+baguette mac describe-ui --bundle-id <ID> --x <pt> --y <pt>   # hit-test
+baguette mac input --bundle-id <ID>        # stdin newline-delimited gestures, mirrors `baguette input`
+baguette mac logs --bundle-id <ID>         # stream `log stream` entries filtered to that app
+baguette mac logs --bundle-id <ID> --level debug --style json
+baguette mac logs --bundle-id <ID> --predicate 'subsystem == "com.apple.appleevents"'
+```
+
+`baguette mac input` auto-activates the target app at session start
+via `NSRunningApplication.activate(options: .activateIgnoringOtherApps)`
+plus a 200 ms settle delay — no manual `osascript activate` chaining.
+
+### Coordinate convention — window-relative points
+
+Wire `(x, y, width, height)` is in points relative to the **top-left
+of the target app's frontmost window content rect**. The adapter
+resolves the screen-global window origin per gesture so the user
+dragging the window between calls stays correct.
+
+To get `width` / `height`: read the AXWindow root's `frame.width` /
+`frame.height` from `mac describe-ui`.
+
+### TCC requirements
+
+| Capability                       | System Settings → Privacy & Security pane | Without it…                                       |
+|----------------------------------|------------------------------------------|---------------------------------------------------|
+| `mac screenshot` / WS stream     | Screen Recording                         | `SCShareableContent` returns no windows; HTTP 500 |
+| `mac describe-ui` / `mac input`  | Accessibility                            | `MacAppError.tccDenied` thrown; gestures dropped  |
+
+Run the `macos-codesign` skill once to keep grants persistent across
+unsigned-binary rebuilds during development.
+
+### Capabilities matrix vs the iOS path
+
+| Gesture / verb               | iOS sim | macOS app | Notes                                            |
+|------------------------------|:-------:|:---------:|--------------------------------------------------|
+| `tap`                        |   ✓     |    ✓     |                                                  |
+| `swipe`                      |   ✓     |    ✓     | mac drag-select: pass `duration ≥ 0.5`           |
+| `scroll`                     |   ✓     |    ✓     |                                                  |
+| `key` (incl. modifiers)      |   ✓     |    ✓     |                                                  |
+| `type` (US ASCII)            |   ✓     |    ✓     |                                                  |
+| `button`                     |   ✓     |    ✗     | Hardware buttons are iOS-specific                |
+| `touch1` / `touch2` / `pinch` / `pan` / `twoFingerPath` | ✓ | ✗ | Multi-touch via CGEvent isn't reliable           |
+| `describe-ui`                |   ✓     |    ✓     | macOS frames are window-relative; iOS device-relative |
+| `logs`                       |   ✓     |    ✓     | macOS path is a thin `log stream` wrapper                                      |
+
+### Failure modes specific to mac
+
+- **Unknown bundle ID** — CLI exits non-zero with `App <bundleID> not running`. Open the app with `open -a <name>` first.
+- **No on-screen window** — `describe-ui` returns "no accessibility data". Some menubar agents have no AX-visible windows.
+- **Screenshot timeout** — fixed in current builds: one-shot screenshots now use `SCScreenshotManager.captureImage(...)` instead of `SCStream`, so an idle window (no content change) returns in <200 ms instead of timing out.
+- **Wrong window captured** — fixed: AppKit creates auxiliary "Window" proxies (~66×20 pt) during mouse-drag operations; the screenshot path picks the largest window by area so the document window wins.
+
+### Smoke harness
+
+```bash
+make smoke-mac                               # 28 tests against TextEdit, ~30 s
+./scripts/smoke-mac.sh --no-input            # skip Accessibility-grant tier
+./scripts/smoke-mac.sh --no-serve            # skip HTTP/WS tier
+```
+
+Exit code = number of failures, so CI can gate on it.
+
 ## Bezel rasterisation — `chrome composite`
 
 ```bash

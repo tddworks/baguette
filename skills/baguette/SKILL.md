@@ -1,37 +1,50 @@
 ---
 name: baguette
 description: |
-  Drive iOS simulators programmatically via the `baguette` CLI — taps, swipes,
-  multi-finger gestures, hardware buttons, frame capture, all without opening
-  Xcode. Use this skill when:
-  (1) The agent needs to interact with a booted iOS simulator from a script
-      (tap a coordinate, swipe between points, send Home / Lock / Volume /
-      Action / Power, type ASCII text via the keyboard)
+  Drive iOS simulators AND native macOS applications programmatically via the
+  `baguette` CLI — taps, swipes, multi-finger gestures, hardware buttons,
+  keyboard, frame capture, accessibility tree dump. Use this skill when:
+  (1) The agent needs to interact with a booted iOS simulator OR a running
+      macOS app from a script (tap a coordinate, swipe between points,
+      send Home / Lock / Volume / Action / Power on iOS, type ASCII text)
   (2) Building a smoke test, demo recording, or UI flow that drives a
-      simulator end-to-end
-  (3) Pairing iOS development with Claude Code, where the agent needs to
-      verify on-screen state after a code change
+      simulator OR a native Mac app end-to-end
+  (3) Pairing iOS / macOS development with Claude Code, where the agent
+      needs to verify on-screen state after a code change
   (4) User asks "tap the simulator from a script", "automate iPhone gestures",
-      "control iOS sim programmatically", "drive simulator without Xcode"
+      "drive a Mac app from CLI", "screenshot TextEdit", "type into Notes
+      programmatically", "control iOS sim", "drive simulator without Xcode"
   (5) User mentions `baguette`, `baguette input`, `baguette tap`,
-      `baguette serve`, or `baguette stream` by name
-  (6) An iOS smoke-test / fixture / SwiftUI verification needs to actually
-      *touch* the running app, not just inspect static code
+      `baguette serve`, `baguette stream`, `baguette mac` (any subcommand)
+      by name
+  (6) An iOS or macOS smoke-test / fixture / SwiftUI verification needs to
+      actually *touch* the running app, not just inspect static code
   Avoid using this skill for plain "open the iOS Simulator" / "install Xcode"
   questions — those are about Xcode itself, not about driving a sim.
 ---
 
-# baguette — programmatic iOS simulator control
+# baguette — programmatic iOS simulator AND native-macOS app control
 
-`baguette` is a macOS CLI that drives iOS simulators directly via Apple's
-private `SimulatorHID` (the same path Xcode uses internally). It works on
-**iOS 26.4 + Xcode 26 + Apple Silicon** and is faster + more reliable than
-`idb` / `AXe` / `simctl io` for input.
+`baguette` is a macOS CLI with two parallel target trees:
 
-This skill is for **agents that need to interact with a running simulator**
-(taps, swipes, screenshots, gesture sequences). Humans wanting a "play the
-simulator in a browser" UI should be pointed at `baguette serve` and
-`http://localhost:8421/simulators/<udid>` — but agents drive the CLI.
+- **iOS simulators** (`baguette tap / swipe / press / screenshot / …`) —
+  drive booted simulators directly via Apple's private `SimulatorHID`,
+  the same path Xcode uses internally. Works on iOS 26.4 + Xcode 26 +
+  Apple Silicon and is faster + more reliable than `idb` / `AXe` /
+  `simctl io` for input.
+
+- **Native macOS apps** (`baguette mac list / screenshot / describe-ui /
+  input`) — drive ANY running macOS app via public APIs (ScreenCaptureKit,
+  AXUIElement, CGEvent). Targets are addressed by **bundle ID** instead
+  of UDID; everything else (wire protocol, gesture envelopes, screenshot
+  output) is identical to the iOS path.
+
+This skill is for **agents that need to interact with a running app**
+(taps, swipes, screenshots, gesture sequences). Humans wanting a "play
+the simulator / Mac app in a browser" UI should be pointed at
+`baguette serve` (`http://localhost:8421/simulators/<udid>` for iOS,
+`http://localhost:8421/mac/<bundleID>` for macOS) — but agents drive
+the CLI.
 
 ## The agent's happy path
 
@@ -143,34 +156,164 @@ send `{"type":"snapshot"}` on that channel — the server emits a
 keyframe immediately. Use this only when the WS is already live; for
 fresh captures `baguette screenshot` is one HTTP-free command.
 
+## Driving native macOS apps (`baguette mac …`)
+
+Same wire protocol, same gesture envelopes, same agent ergonomics —
+but the target is a running macOS app addressed by **bundle ID**
+(e.g. `com.apple.TextEdit`, `com.apple.finder`) instead of a simulator
+UDID. Reuse this anywhere you'd reach for `osascript`, `cliclick`,
+or AppleScript GUI scripting.
+
+### Happy path (mirrors iOS one-for-one)
+
+```bash
+# 1. Find a running app.
+baguette mac list                           # one JSON object per line
+baguette mac list --json                    # {"active":[...], "inactive":[...]}
+
+# 2. Capture a window snapshot.
+baguette mac screenshot --bundle-id com.apple.TextEdit --output /tmp/te.jpg
+
+# 3. Read the accessibility tree (frames in WINDOW-relative points).
+baguette mac describe-ui --bundle-id com.apple.TextEdit
+baguette mac describe-ui --bundle-id com.apple.TextEdit --x 50 --y 50    # hit-test
+
+# 4. Drive it via stdin (same JSON envelopes as `baguette input`).
+{ echo '{"type":"type","text":"hello from baguette"}'
+  echo '{"type":"key","code":"Enter"}'
+  echo '{"type":"tap","x":50,"y":50,"width":783,"height":914}'
+} | baguette mac input --bundle-id com.apple.TextEdit
+```
+
+`baguette mac input` auto-activates the target app at session start
+(via `NSRunningApplication.activate`), so you don't need
+`osascript -e 'tell application X to activate'` chaining like with
+raw `cliclick`.
+
+### Coordinate convention — window-relative points
+
+Wire `(x, y, width, height)` is in **window-relative points** with
+the top-left of the target app's frontmost window content rect at
+`(0, 0)`. This matches what `mac screenshot` shows you (the JPEG is
+cropped to that same window), so frames returned by `mac describe-ui`
+feed straight into `tap` envelopes without coordinate juggling. The
+adapter resolves the window's screen-global origin per gesture so
+the user dragging the window between calls stays correct.
+
+To get the right `width` / `height`: read them from the AXWindow's
+`frame` field — `baguette mac describe-ui` returns frame size for
+the root `AXWindow` node.
+
+### TCC — read this before you ship
+
+The macOS path needs two grants in System Settings → Privacy &
+Security:
+
+| Capability                 | Pane            | Without it…                                       |
+|---------------------------|------------------|---------------------------------------------------|
+| `mac screenshot` / stream  | Screen Recording | `SCShareableContent.current` returns no windows |
+| `mac describe-ui` / `mac input` | Accessibility | `MacAppError.tccDenied` thrown / events silently dropped |
+
+The first call after a rebuild may prompt; subsequent unsigned
+rebuilds may revoke the grant silently. The repo's
+`macos-codesign` skill keeps grants persistent across rebuilds for
+maintainer work.
+
+### What works vs. what's rejected on the macOS path
+
+Wired (works against any AppKit-based app):
+- `tap`, `swipe`, `scroll`, `key`, `type` — every keyboard +
+  pointer gesture from the iOS surface.
+- The full `describe-ui` shape (role / label / value / frame /
+  children), with frames in window-relative points.
+
+Plus `mac logs` — thin wrapper over host `/usr/bin/log stream`
+filtered to the target app's process. SIGINT-clean.
+
+**Rejected** with `{"ok":false}` (logged but not posted) — these
+don't apply to macOS apps:
+- `button` — hardware buttons (home / power / volume / action) are
+  iOS-specific.
+- `touch1`, `touch2`, `twoFingerPath`, `pinch`, `pan` — multi-touch
+  via `CGEvent` isn't reliable on macOS. Map to `swipe` /
+  `scroll` for the most common cases.
+
+### Drag-select gotcha (real-world tested)
+
+`swipe`'s default duration is tuned for iOS perceptual speed
+(0.25 s, 30 samples). That's borderline too fast for macOS
+drag-to-select. Pass `"duration": 0.5` (or higher) for reliable
+drag-select. Also: start the swipe INSIDE the text region, not at
+`x=0` (that's outside the textarea content).
+
+```json
+{"type":"swipe","startX":50,"startY":50,"endX":300,"endY":50,
+ "width":1078,"height":679,"duration":0.5}
+```
+
+### Serve mode for macOS
+
+`baguette serve` exposes the same surface for macOS apps at the
+sibling URL tree:
+
+```
+GET /mac.json                          → {"active":[...], "inactive":[...]}
+GET /mac                               → list page
+GET /mac/<bundleID>                    → focus view (polling-screenshot)
+GET /mac/<bundleID>/screen.jpg         → one-shot JPEG of frontmost window
+GET /mac/<bundleID>/describe-ui[?x=&y=] → AX tree (full or hit-test)
+WS  /mac/<bundleID>/stream?format=mjpeg|avcc → live frames + gestures + describe_ui
+```
+
+The WS dialect is identical to the iOS one — same `{"type":"tap"}`,
+`{"type":"describe_ui"}`, `{"type":"snapshot"}` envelopes.
+
+### Smoke harness
+
+`scripts/smoke-mac.sh` (or `make smoke-mac`) drives the full mac
+surface end-to-end against TextEdit and asserts on observable
+outcomes — 28 tests in three tiers (read-only / input / serve).
+Run it after any change to `Sources/Baguette/Infrastructure/MacApp/`
+or the `MacRootCommand` tree.
+
 ## What's wired vs what isn't
 
-Wired (use freely):
+Wired (use freely on iOS sims; macOS path is a subset — see above):
 - `tap`, `swipe`, `touch1-{down,move,up}`, `touch2-{down,move,up}`,
   `pinch`, `pan`, `scroll`
 - `button`: `home`, `lock`, `power`, `volume-up`, `volume-down`,
   `action`. Optional `--duration` / `"duration"` for long-press
   semantics (action button "Hold for Ring", power → Siri / SOS, …).
+  **iOS only** — rejected on the mac path.
 - `key` (single keystroke) and `type` (US-ASCII string). CLI:
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C
   `KeyboardEvent.code`; modifiers are `shift | control | option | command`.
+  Same shape on `baguette mac input`.
 - `describe-ui` — dump the on-screen accessibility tree as JSON
   (per-node `role`, `label`, `value`, `identifier`, `frame` in
   device points, recursive `children`). CLI:
   `baguette describe-ui --udid <X>` (full tree) or
   `baguette describe-ui --udid <X> --x <px> --y <px>` (hit-test).
+  macOS analogue: `baguette mac describe-ui --bundle-id <id> [--x --y]`.
   Frames are in the same units as `tap` / `swipe` wire fields, so
   reading `frame.x + frame.width/2`, `frame.y + frame.height/2`
   back into a `tap` envelope just works.
-- `logs` — stream the booted simulator's unified log line-by-line
-  to stdout. CLI: `baguette logs --udid <X> [--level info|debug|default]
-  [--style default|compact|json|ndjson|syslog] [--predicate ...]
-  [--bundle-id <id>]`. SIGINT (Ctrl-C) tears down cleanly. WS
-  variant on `WS /simulators/<X>/logs?level=&style=&predicate=&bundleId=`
-  emits `{"type":"log","line":"..."}` text frames per entry.
-  Levels: only `default | info | debug` (iOS-runtime narrow — host
-  `notice / error / fault` are rejected at the wire).
+- `logs` — stream unified-log entries line-by-line to stdout.
+  - **iOS sim**: `baguette logs --udid <X> [--level info|debug|default]
+    [--style default|compact|json|ndjson|syslog] [--predicate ...]
+    [--bundle-id <id>]`. SIGINT (Ctrl-C) tears down cleanly. WS
+    variant on `WS /simulators/<X>/logs?level=&style=&predicate=&bundleId=`
+    emits `{"type":"log","line":"..."}` text frames per entry.
+  - **macOS app**: `baguette mac logs --bundle-id <id> [--level …]
+    [--style …] [--predicate …]`. Thin wrapper over host
+    `/usr/bin/log stream --predicate 'process == "<name>"'` — the
+    bundle-id is resolved to the executable name via
+    `NSRunningApplication.executableURL` so the agent doesn't have
+    to look it up. User `--predicate` ANDs with the bundle filter.
+  - Level filtering is `default | info | debug` on both paths
+    (`error / fault` require a predicate like
+    `--predicate 'messageType == "error"'`).
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji

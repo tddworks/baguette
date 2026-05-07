@@ -33,17 +33,20 @@ import NIOCore
 /// `/simulators/:udid` resource tree (UDIDs don't end in `.js`).
 struct Server: Sendable {
     let simulators: any Simulators
+    let macApps: any MacApps
     let chromes: any Chromes
     let host: String
     let port: Int
 
     init(
         simulators: any Simulators,
+        macApps: any MacApps,
         chromes: any Chromes,
         host: String = "127.0.0.1",
         port: Int = 8421
     ) {
         self.simulators = simulators
+        self.macApps = macApps
         self.chromes = chromes
         self.host = host
         self.port = port
@@ -179,6 +182,39 @@ struct Server: Sendable {
         // the client tears down the spawned `log` child.
         registerLogsRoute(on: router)
 
+        // ─── macOS app target tree ────────────────────────────────
+        // Mirrors `/simulators/...` but keys off bundle ID. Two
+        // separate URL trees keep the routing dumb (no target-type
+        // switch in handlers — the path itself says which one).
+        router.get("/mac") { _, _ in Self.staticAsset("mac.html") }
+        router.get("/mac.json") { [macApps] _, _ in Self.macListJSON(macApps) }
+        router.get("/mac/:bundleID") { _, _ in Self.staticAsset("mac.html") }
+        router.get("/mac/:bundleID/screen.jpg") { [macApps] r, _ in
+            await Self.macScreenshotJPEG(
+                bundleID: Self.bundleIDParam(r),
+                quality: r.uri.queryParameters.get("quality").flatMap(Double.init) ?? 0.85,
+                scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
+                macApps: macApps
+            )
+        }
+        router.get("/mac/:bundleID/describe-ui") { [macApps] r, _ in
+            Self.macDescribeUIJSON(
+                bundleID: Self.bundleIDParam(r),
+                xy: Self.queryHitTest(r),
+                macApps: macApps
+            )
+        }
+        router.ws("/mac/:bundleID/stream") { [macApps] inbound, outbound, context in
+            await Self.macStreamWS(
+                bundleID: Self.bundleIDParam(context.request),
+                format: context.request.uri.queryParameters.get("format")
+                    .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+                macApps: macApps,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
+
         // Static UI siblings — JS / HTML / CSS files in Resources/Web/
         // accessed by name. Path component is the bare filename.
         router.get("/:file") { r, _ in
@@ -186,6 +222,179 @@ struct Server: Sendable {
                 .removingPercentEncoding ?? ""
             return Self.staticAsset(name)
         }
+    }
+
+    // MARK: - mac handlers
+
+    private static func macListJSON(_ macApps: any MacApps) -> Response {
+        Response(
+            status: .ok,
+            headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+            body: .init(byteBuffer: ByteBuffer(string: macApps.listJSON))
+        )
+    }
+
+    private static func macScreenshotJPEG(
+        bundleID: String,
+        quality: Double,
+        scale: Int,
+        macApps: any MacApps
+    ) async -> Response {
+        guard !bundleID.isEmpty, let app = macApps.find(bundleID: bundleID) else {
+            return errorJSON("unknown bundleID: \(bundleID)", status: .notFound)
+        }
+        do {
+            // `SCScreenshotManager` instead of `Screen.start` — see
+            // MacScreenshotter for why (SCStream is for live updates,
+            // not idle one-shots).
+            let bytes = try await MacScreenshotter.capture(
+                pid: app.pid,
+                quality: quality,
+                scale: max(1, scale)
+            )
+            return Response(
+                status: .ok,
+                headers: [.contentType: "image/jpeg", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(data: bytes))
+            )
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func macDescribeUIJSON(
+        bundleID: String,
+        xy: (x: Double, y: Double)?,
+        macApps: any MacApps
+    ) -> Response {
+        guard !bundleID.isEmpty, let app = macApps.find(bundleID: bundleID) else {
+            return errorJSON("unknown bundleID: \(bundleID)", status: .notFound)
+        }
+        let ax = app.accessibility()
+        do {
+            let result: AXNode?
+            if let xy {
+                result = try ax.describeAt(point: Point(x: xy.x, y: xy.y))
+            } else {
+                result = try ax.describeAll()
+            }
+            guard let tree = result else {
+                return errorJSON("no accessibility data", status: .notFound)
+            }
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(string: tree.json))
+            )
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    /// macOS WS stream — same envelope shape as the simulator path:
+    /// encoded frames downstream as binary, JSON text frames upstream
+    /// for stream config (set_bitrate / set_fps / set_scale /
+    /// force_idr / snapshot), describe-ui, and gestures.
+    private static func macStreamWS(
+        bundleID: String,
+        format: StreamFormat,
+        macApps: any MacApps,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        guard !bundleID.isEmpty, let app = macApps.find(bundleID: bundleID) else {
+            try? await outbound.write(.text(#"{"ok":false,"error":"unknown bundleID"}"#))
+            return
+        }
+
+        let sink = WebSocketFrameSink(outbound: outbound, format: format)
+        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
+        let screen = app.screen()
+        let dispatcher = GestureDispatcher(input: app.input())
+
+        do {
+            try stream.start(on: screen)
+        } catch {
+            try? await outbound.write(.text(
+                #"{"ok":false,"error":"\#(String(describing: error))"}"#
+            ))
+            return
+        }
+        defer {
+            stream.stop()
+            screen.stop()
+        }
+
+        do {
+            for try await frame in inbound {
+                guard frame.opcode == .text else { continue }
+                let line = String(buffer: frame.data)
+                if await handleMacDescribeUI(
+                    line: line, app: app, outbound: outbound
+                ) {
+                    continue
+                }
+                handleInbound(
+                    line: line,
+                    stream: stream,
+                    dispatcher: dispatcher
+                )
+            }
+        } catch {
+            // socket closed; defer cleans up
+        }
+    }
+
+    private static func handleMacDescribeUI(
+        line: String,
+        app: MacApp,
+        outbound: WebSocketOutboundWriter
+    ) async -> Bool {
+        guard let data = line.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (dict["type"] as? String) == "describe_ui" else {
+            return false
+        }
+        let ax = app.accessibility()
+        let result: AXNode?
+        do {
+            if let xv = (dict["x"] as? Double) ?? (dict["x"] as? Int).map(Double.init),
+               let yv = (dict["y"] as? Double) ?? (dict["y"] as? Int).map(Double.init) {
+                result = try ax.describeAt(point: Point(x: xv, y: yv))
+            } else {
+                result = try ax.describeAll()
+            }
+        } catch {
+            try? await outbound.write(.text(
+                #"{"type":"describe_ui_result","ok":false,"error":"\#(String(describing: error))"}"#
+            ))
+            return true
+        }
+        if let tree = result {
+            try? await outbound.write(.text(
+                #"{"type":"describe_ui_result","ok":true,"tree":\#(tree.json)}"#
+            ))
+        } else {
+            try? await outbound.write(.text(
+                #"{"type":"describe_ui_result","ok":false,"error":"no accessibility data"}"#
+            ))
+        }
+        return true
+    }
+
+    /// Pull `:bundleID` out of a `/mac/<bundleID>/<verb>` request.
+    /// Mirrors `udidParam` but for the mac URL tree.
+    private static func bundleIDParam(_ request: Request) -> String {
+        let parts = request.uri.path.split(separator: "/")
+        // /mac/<bundleID>            → ["mac", "<bundleID>"]            (count == 2)
+        // /mac/<bundleID>/<verb>     → ["mac", "<bundleID>", "<verb>"] (count >= 3)
+        if parts.count == 2 {
+            return String(parts[1]).removingPercentEncoding ?? ""
+        }
+        if parts.count >= 3 {
+            return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
+        }
+        return ""
     }
 
     // MARK: - handlers
@@ -682,6 +891,18 @@ struct Server: Sendable {
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
     }
 
+
+    /// Decode `?x=…&y=…` as a hit-test pair. Both must be present
+    /// (and parse as Double) for a hit-test; otherwise `nil` and
+    /// the caller falls through to a full-tree dump.
+    private static func queryHitTest(_ request: Request) -> (x: Double, y: Double)? {
+        let q = request.uri.queryParameters
+        guard let xs = q.get("x"), let ys = q.get("y"),
+              let x = Double(xs), let y = Double(ys) else {
+            return nil
+        }
+        return (x, y)
+    }
 
     private static func redirect(to path: String) -> Response {
         Response(
