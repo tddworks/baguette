@@ -1,8 +1,16 @@
-# Wire protocol — `baguette input` / WebSocket
+# Wire protocol — `baguette input` / `baguette mac input` / WebSocket
 
-Newline-delimited JSON. One gesture per line. `baguette input` writes
-`{"ok":true}` or `{"ok":false,"error":"…"}` per line on stdout. The
-WebSocket at `/simulators/<udid>/stream` accepts the same dialect.
+Newline-delimited JSON. One gesture per line. `baguette input` /
+`baguette mac input` writes `{"ok":true}` or `{"ok":false,"error":"…"}`
+per line on stdout. The WebSockets at `/simulators/<udid>/stream` and
+`/mac/<bundleID>/stream` accept the **same dialect**, so a single
+`{"type":"tap","x":…}` envelope works against both targets.
+
+Tree differences are explained in the "Wire protocol on macOS" section
+near the bottom — the short version: gestures that only make sense on
+iOS hardware (`button`, `touch1`, `touch2`, `pinch`, `pan`,
+`twoFingerPath`) are rejected on the mac path with `{"ok":false}`, and
+coordinates are window-relative on macOS instead of device-relative.
 
 ## The coordinate convention (do not skip)
 
@@ -207,6 +215,73 @@ socket runs until the simulator dies or the client closes. Levels:
 rejects `notice / error / fault` (host macOS supports them; the
 simulator's slimmer interface does not). For higher-severity-only
 filtering, use `predicate=messageType == "error"`.
+
+## Wire protocol on macOS — `baguette mac input` / `WS /mac/<bundleID>/stream`
+
+Same envelopes — different coordinate space and different reject set.
+
+### Coordinate space — window-relative, not device-relative
+
+`x, y, startX, startY, endX, endY, x1, y1, x2, y2, cx, cy` are in
+points **relative to the target app's frontmost window content rect**
+(top-left = `(0, 0)`). `width` / `height` come from the AXWindow
+root's `frame` field (read with `baguette mac describe-ui`).
+
+The adapter resolves the window's screen-global origin via AX once
+per gesture and adds it to the wire point before posting the
+`CGEvent`, so the user dragging the window mid-session stays correct.
+
+```bash
+# Get target dimensions.
+W=$(baguette mac describe-ui --bundle-id com.apple.TextEdit \
+    | jq '.frame.width | floor')
+H=$(baguette mac describe-ui --bundle-id com.apple.TextEdit \
+    | jq '.frame.height | floor')
+
+# Tap window centre.
+echo "{\"type\":\"tap\",\"x\":$((W/2)),\"y\":$((H/2)),\"width\":$W,\"height\":$H}" \
+  | baguette mac input --bundle-id com.apple.TextEdit
+```
+
+### Rejected verbs (return `{"ok":false}` with a `[mac-input] rejecting:` log line)
+
+These don't apply to macOS apps and the adapter explicitly refuses
+them rather than silently mis-dispatching:
+
+| Verb              | Why rejected                                          |
+|-------------------|-------------------------------------------------------|
+| `button`          | Hardware buttons (`home`, `power`, `volume-*`, `action`) are iOS-only |
+| `touch1`          | Multi-touch via `CGEvent` isn't reliable on macOS     |
+| `touch2`          | Same                                                  |
+| `pinch`           | Implemented as `twoFingerPath` internally → rejected  |
+| `pan`             | Same                                                  |
+| `twoFingerPath`   | The underlying primitive                              |
+
+`tap`, `swipe`, `scroll`, `key`, `type` work identically to the iOS path.
+
+### Drag-select tuning (real-world tested)
+
+`swipe`'s default duration of 0.25 s is borderline too fast for
+macOS drag-to-select. Pass `"duration": 0.5` (or higher) for
+reliable text-selection drags, and start the swipe **inside** the
+text region:
+
+```json
+{"type":"swipe","startX":50,"startY":50,"endX":300,"endY":50,
+ "width":1078,"height":679,"duration":0.5}
+```
+
+### TCC
+
+`baguette mac input` requires the binary to be in System Settings →
+Privacy & Security → **Accessibility**. First run logs:
+
+```
+[mac-input] AXIsProcessTrusted=true (events post to other apps require Accessibility grant ...)
+```
+
+If `AXIsProcessTrusted=false`, every gesture silently no-ops. Grant
+in Privacy & Security and re-run.
 
 ## Debugging a "tap missed"
 
