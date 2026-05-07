@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import CoreGraphics
 
 /// Production `MacApps` — backed by `NSWorkspace.runningApplications`.
 ///
@@ -13,7 +14,26 @@ import AppKit
 /// frameworks (ScreenCaptureKit, AXUIElement, CGEvent) carry no
 /// per-aggregate shared state worth caching.
 final class RunningMacApps: MacApps, @unchecked Sendable {
-    init() {}
+    init() {
+        _ = Self.bootstrapWindowServer
+    }
+
+    /// One-shot WindowServer bootstrap. ScreenCaptureKit's first call
+    /// asserts `CGS_REQUIRE_INIT` (`CGInitialization.c:44`) when the
+    /// hosting process hasn't established a CGS connection — typical
+    /// for plain Foundation-only Swift CLIs. We trigger the connection
+    /// by calling `CGSessionCopyCurrentDictionary()` (ApplicationServices,
+    /// no actor isolation, no AppKit drag-in) plus a probe of
+    /// `CGMainDisplayID`. Either is enough on its own; calling both
+    /// hedges against future SDK shuffles.
+    ///
+    /// Wrapped in a `static let` so the work runs at most once across
+    /// the entire process even when several `RunningMacApps()`
+    /// instances are constructed.
+    private static let bootstrapWindowServer: Void = {
+        _ = CGSessionCopyCurrentDictionary()
+        _ = CGMainDisplayID()
+    }()
 
     var all: [MacApp] {
         NSWorkspace.shared.runningApplications.compactMap { running -> MacApp? in

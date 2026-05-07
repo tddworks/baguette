@@ -135,7 +135,7 @@
         <div style="padding: 20px;">
           <img id="macScreenshot" class="mac-screenshot" alt="screenshot of ${escapeHTML(bundleID)}" />
         </div>
-        <div class="mac-hints">CLI:    baguette mac screenshot --bundle-id ${escapeHTML(bundleID)} --out ./shot.jpg
+        <div class="mac-hints">CLI:    baguette mac screenshot --bundle-id ${escapeHTML(bundleID)} --output ./shot.jpg
         baguette mac describe-ui --bundle-id ${escapeHTML(bundleID)}
         baguette mac input --bundle-id ${escapeHTML(bundleID)}    # stdin JSON gestures
 HTTP:   GET /mac/${enc}/screen.jpg[?quality=N&scale=N]

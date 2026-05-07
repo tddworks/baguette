@@ -30,7 +30,26 @@ final class CGEventInput: Input, @unchecked Sendable {
 
     init(pid: pid_t) {
         self.pid = pid
+        Self.probeAXTrustOnce
     }
+
+    /// One-shot diagnostic: log whether the process is currently
+    /// trusted for AX / event posting. Silent failure of
+    /// `CGEventPost` / `postToPid` is almost always TCC denial; this
+    /// log line gives users an immediate hint at what's wrong.
+    /// Shared `CGEventSource` for every event we create. `cliclick`,
+    /// `xdotool`-style helpers, and Apple's own scripting bridge all
+    /// post events with an explicit `kCGEventSourceStateHIDSystemState`
+    /// source — events created with a `nil` source can be silently
+    /// filtered by some apps' event-monitoring chains.
+    private nonisolated(unsafe) static let eventSource: CGEventSource? =
+        CGEventSource(stateID: .hidSystemState)
+
+    private static let probeAXTrustOnce: Void = {
+        let trusted = AXIsProcessTrusted()
+        log("[mac-input] AXIsProcessTrusted=\(trusted) " +
+            "(events post to other apps require Accessibility grant in System Settings → Privacy & Security)")
+    }()
 
     // MARK: - mouse gestures
 
@@ -43,7 +62,7 @@ final class CGEventInput: Input, @unchecked Sendable {
         let hold = duration > 0 ? duration : 0.05
 
         guard let down = CGEvent(
-            mouseEventSource: nil, mouseType: .leftMouseDown,
+            mouseEventSource: Self.eventSource, mouseType: .leftMouseDown,
             mouseCursorPosition: screenPoint, mouseButton: .left
         ) else {
             log("[mac-input] tap: CGEvent leftMouseDown failed")
@@ -52,7 +71,7 @@ final class CGEventInput: Input, @unchecked Sendable {
         down.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: hold)
         guard let up = CGEvent(
-            mouseEventSource: nil, mouseType: .leftMouseUp,
+            mouseEventSource: Self.eventSource, mouseType: .leftMouseUp,
             mouseCursorPosition: screenPoint, mouseButton: .left
         ) else {
             log("[mac-input] tap: CGEvent leftMouseUp failed")
@@ -77,7 +96,7 @@ final class CGEventInput: Input, @unchecked Sendable {
         let stepDelay = total / Double(samples)
 
         guard let down = CGEvent(
-            mouseEventSource: nil, mouseType: .leftMouseDown,
+            mouseEventSource: Self.eventSource, mouseType: .leftMouseDown,
             mouseCursorPosition: screenStart, mouseButton: .left
         ) else { return false }
         down.post(tap: .cghidEventTap)
@@ -89,7 +108,7 @@ final class CGEventInput: Input, @unchecked Sendable {
                 y: screenStart.y + (screenEnd.y - screenStart.y) * t
             )
             if let drag = CGEvent(
-                mouseEventSource: nil, mouseType: .leftMouseDragged,
+                mouseEventSource: Self.eventSource, mouseType: .leftMouseDragged,
                 mouseCursorPosition: p, mouseButton: .left
             ) {
                 drag.post(tap: .cghidEventTap)
@@ -98,7 +117,7 @@ final class CGEventInput: Input, @unchecked Sendable {
         }
 
         guard let up = CGEvent(
-            mouseEventSource: nil, mouseType: .leftMouseUp,
+            mouseEventSource: Self.eventSource, mouseType: .leftMouseUp,
             mouseCursorPosition: screenEnd, mouseButton: .left
         ) else { return false }
         up.post(tap: .cghidEventTap)
@@ -133,13 +152,13 @@ final class CGEventInput: Input, @unchecked Sendable {
         let flags = CGEventFlags(rawValue: KeyModifier.combinedFlag(of: modifiers))
 
         guard let down = CGEvent(
-            keyboardEventSource: nil, virtualKey: code, keyDown: true
+            keyboardEventSource: Self.eventSource, virtualKey: code, keyDown: true
         ) else { return false }
         down.flags = flags
         down.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: hold)
         guard let up = CGEvent(
-            keyboardEventSource: nil, virtualKey: code, keyDown: false
+            keyboardEventSource: Self.eventSource, virtualKey: code, keyDown: false
         ) else { return false }
         up.flags = flags
         up.post(tap: .cghidEventTap)
