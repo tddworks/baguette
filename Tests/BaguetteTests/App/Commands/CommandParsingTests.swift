@@ -20,7 +20,82 @@ struct CommandParsingTests {
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
+            "mac",
         ])
+    }
+
+    // MARK: - mac subcommand group
+
+    @Test func `mac root lists every subcommand`() {
+        let cfg = MacRootCommand.configuration
+        #expect(cfg.commandName == "mac")
+        let names = cfg.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["list", "screenshot", "describe-ui", "input"])
+    }
+
+    @Test func `mac input requires --bundle-id`() throws {
+        let cmd = try MacInputCommand.parse(["--bundle-id", "com.apple.TextEdit"])
+        #expect(cmd.target.bundleId == "com.apple.TextEdit")
+    }
+
+    @Test func `mac input rejects argv without --bundle-id`() {
+        #expect(throws: (any Error).self) {
+            try MacInputCommand.parse([])
+        }
+    }
+
+    @Test func `mac list parses --json flag`() throws {
+        let cmd = try MacListCommand.parse(["--json"])
+        #expect(cmd.json == true)
+    }
+
+    @Test func `mac list defaults json to false`() throws {
+        let cmd = try MacListCommand.parse([])
+        #expect(cmd.json == false)
+    }
+
+    @Test func `mac screenshot requires --bundle-id`() throws {
+        let cmd = try MacScreenshotCommand.parse([
+            "--bundle-id", "com.apple.TextEdit",
+        ])
+        #expect(cmd.target.bundleId == "com.apple.TextEdit")
+        #expect(cmd.quality == 0.85)
+        #expect(cmd.scale == 1)
+    }
+
+    @Test func `mac screenshot rejects argv without --bundle-id`() {
+        #expect(throws: (any Error).self) {
+            try MacScreenshotCommand.parse([])
+        }
+    }
+
+    @Test func `mac screenshot accepts --quality and --scale`() throws {
+        let cmd = try MacScreenshotCommand.parse([
+            "--bundle-id", "com.apple.TextEdit",
+            "--quality", "0.5",
+            "--scale", "2",
+        ])
+        #expect(cmd.quality == 0.5)
+        #expect(cmd.scale == 2)
+    }
+
+    @Test func `mac describe-ui requires --bundle-id`() throws {
+        let cmd = try MacDescribeUICommand.parse([
+            "--bundle-id", "com.apple.TextEdit",
+        ])
+        #expect(cmd.target.bundleId == "com.apple.TextEdit")
+        #expect(cmd.x == nil)
+        #expect(cmd.y == nil)
+    }
+
+    @Test func `mac describe-ui accepts --x and --y for hit-test`() throws {
+        let cmd = try MacDescribeUICommand.parse([
+            "--bundle-id", "com.apple.TextEdit",
+            "--x", "100",
+            "--y", "200",
+        ])
+        #expect(cmd.x == 100)
+        #expect(cmd.y == 200)
     }
 
     @Test func `baguette root exposes version`() {

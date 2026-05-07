@@ -50,6 +50,14 @@ let package = Package(
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("ImageIO"),
                 .linkedFramework("VideoToolbox"),
+                // macOS-target support — `RunningMacApps` (NSWorkspace),
+                // `ScreenCaptureKitScreen` (SCStream), and
+                // `AXUIElementAccessibility` (ApplicationServices /
+                // AXUIElement). All are public APIs, no runtime dlopen
+                // dance required.
+                .linkedFramework("AppKit"),
+                .linkedFramework("ApplicationServices"),
+                .linkedFramework("ScreenCaptureKit"),
             ]
         ),
         .testTarget(

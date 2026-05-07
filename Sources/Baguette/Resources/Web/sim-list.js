@@ -314,6 +314,7 @@
             <option value="all" ${state.family === 'all' ? 'selected' : ''}>All Devices</option>
           </select>
           <select class="asc-sim-select" id="ascSimRuntime">${runtimeOptions()}</select>
+          <a class="asc-sim-button" href="/mac" style="text-decoration:none">macOS Apps →</a>
           <button class="asc-sim-button" id="ascSimRefresh">Refresh</button>
         </div>
         ${body}
