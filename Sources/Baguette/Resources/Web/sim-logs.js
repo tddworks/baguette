@@ -134,9 +134,15 @@
       this.els = buildShell(host, opts);
       this.els.level.value = this.level;
 
+      this._renderScheduled = false;
+      this._renderTick = () => {
+        this._renderScheduled = false;
+        this._render();
+      };
+
       this.els.filter.addEventListener('input', () => {
         this.filter = this.els.filter.value.trim().toLowerCase();
-        this._render();
+        this._scheduleRender();
       });
       this.els.level.addEventListener('change', () => {
         this.level = this.els.level.value;
@@ -144,7 +150,7 @@
       });
       this.els.clear.addEventListener('click', () => {
         this.lines = [];
-        this._render();
+        this._scheduleRender();
       });
 
       this._connect();
@@ -156,6 +162,18 @@
         this.ws = null;
       }
       if (this.host) this.host.innerHTML = '';
+    }
+
+    // Coalesce N message-driven renders per frame into one. Without
+    // this, a flood of `log` envelopes (CoreDuet-style chatter at
+    // hundreds of lines/sec) triggers a full innerHTML rebuild +
+    // regex pass over up to MAX_LINES rows on every WS frame, which
+    // pegs the main thread and stalls the rest of the page (stream
+    // canvas, gestures).
+    _scheduleRender() {
+      if (this._renderScheduled) return;
+      this._renderScheduled = true;
+      requestAnimationFrame(this._renderTick);
     }
 
     // --- ws lifecycle ---
@@ -210,7 +228,7 @@
         if (this.lines.length > MAX_LINES) {
           this.lines.splice(0, this.lines.length - MAX_LINES);
         }
-        this._render();
+        this._scheduleRender();
       }
     }
 
