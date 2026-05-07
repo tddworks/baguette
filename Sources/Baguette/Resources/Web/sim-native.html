@@ -340,6 +340,36 @@
     flex: 1; min-height: 0; max-height: none !important;
   }
 
+  /* Accessibility-inspector floating panel. Sits top-right of the
+     device column, glass-styled to match the toolbar. Hidden until
+     the user enables the toggle inside it (the inspector's toggle
+     UI is rendered into this same host). */
+  #simNativeView .ax-host {
+    position: absolute;
+    top: 84px;
+    right: 24px;
+    z-index: 40;
+    width: 240px;
+    padding: 10px 12px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .ax-host .btn {
+    appearance: none; border: 1px solid var(--nv-bar-border);
+    background: transparent; color: inherit;
+    border-radius: 6px; padding: 3px 8px;
+    font: inherit; cursor: pointer;
+  }
+  #simNativeView .ax-host .btn-primary {
+    background: var(--nv-text); color: var(--nv-bar-bg);
+  }
+
   /* Preview ribbon — only when opened via file:// */
   #simNativeView .preview-banner {
     display: none; position: fixed; top: 10px; right: 10px; z-index: 999;
@@ -433,6 +463,11 @@
 
     <div id="nativeDeviceFrame"></div>
   </div>
+
+  <!-- Accessibility-inspector host. sim-native.js mounts an
+       AXInspector into this element after the surface is ready;
+       the inspector renders its own toggle + selection info here. -->
+  <div id="nativeAxHost" class="ax-host"></div>
 
   <button class="theme-toggle" id="nativeThemeToggle" title="Toggle theme"
           aria-label="Toggle light or dark theme"

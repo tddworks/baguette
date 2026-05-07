@@ -24,6 +24,7 @@
   let mouseSource = null;
   let pinchOverlay = null;
   let logPanel = null;
+  let axInspector = null;   // AXInspector — accessibility-tree overlay
 
   let activeUdid = null;
   let activeName = null;
@@ -162,6 +163,15 @@
     });
     log(`Stream: ${format.toUpperCase()}${format === 'avcc' ? ' (hw-decoded)' : ''}`);
 
+    // Text-frame router. The stream WS carries binary video frames
+    // and JSON envelopes (describe_ui_result, server pushes). The
+    // accessibility inspector consumes describe_ui_result; anything
+    // it doesn't claim falls through to the decoder's error logger.
+    const onStreamText = (env) => {
+      if (axInspector && axInspector.handleEnvelope(env)) return true;
+      return false;
+    };
+
     session = new window.StreamSession({
       udid, format, version: 'v2',
       canvas: surface.canvas,
@@ -171,6 +181,7 @@
         if (el) el.textContent = fps + ' fps';
       },
       onLog: log,
+      onText: onStreamText,
     });
     session.start();
 
@@ -196,12 +207,28 @@
       logHost.innerHTML = '';
       logPanel = new window.LogPanel(logHost, { udid, level: 'info' });
     }
+
+    // Accessibility inspector — toggle in sidebar, overlay over the
+    // screen. Shares the stream WS for `describe_ui` round-trips; on
+    // every fresh hover (mouseenter) it fetches a new tree, so the
+    // user always inspects current state without paying for polling.
+    const axHost = document.getElementById('simAxInspector');
+    if (axHost && window.AXInspector) {
+      axHost.innerHTML = '';
+      axInspector = new window.AXInspector({
+        host: axHost,
+        screenArea: surface.screenArea,
+        send: (payload) => session && session.send(payload),
+        getDeviceSize: () => frame.screenSize(),
+      });
+    }
   }
 
   function stopStream() {
     if (recordingState.recorder) {
       try { recordingState.recorder.cancel(); } catch { /* ignore */ }
     }
+    if (axInspector) { axInspector.detach(); axInspector = null; }
     if (session) { session.stop(); session = null; }
     if (mouseSource) { mouseSource.detach(); mouseSource = null; }
     if (pinchOverlay) { pinchOverlay.clear(); pinchOverlay = null; }

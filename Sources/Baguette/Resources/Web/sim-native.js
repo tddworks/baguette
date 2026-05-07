@@ -39,6 +39,7 @@
   let pinchOverlay = null;
   let keyboardCapture = null;
   let logPanel = null;
+  let axInspector = null;
   let lastPaintedSize = { w: 0, h: 0 };
   let layout = null;
   let deviceName = '';
@@ -164,6 +165,13 @@
   // server's makeStream(...) is keyed at session open.
   function startSession(format) {
     if (session) { try { session.stop(); } catch (_) {} session = null; }
+    // Same text-frame router as sim-stream.js: hand JSON envelopes
+    // to the inspector first; anything it doesn't claim falls
+    // through to the decoder's error logger.
+    const onStreamText = (env) => {
+      if (axInspector && axInspector.handleEnvelope(env)) return true;
+      return false;
+    };
     session = new window.StreamSession({
       udid, format, version: 'v2',
       canvas: surface.canvas,
@@ -173,10 +181,31 @@
         if (el) el.textContent = fps + ' fps';
       },
       onLog: (msg) => console.log('[native]', msg),
+      onText: onStreamText,
     });
     session.start();
     reflectFormat(format);
     wireInput(udid, frame.screenSize());
+    mountAxInspector();
+  }
+
+  // Lazy-mounts the AXInspector once a surface + session are ready.
+  // Re-runs on `remountFrame()` because the screen DOM and the
+  // session both change underneath it.
+  function mountAxInspector() {
+    if (axInspector) {
+      try { axInspector.detach(); } catch (_) { /* ignore */ }
+      axInspector = null;
+    }
+    const host = document.getElementById('nativeAxHost');
+    if (!host || !window.AXInspector || !surface) return;
+    host.innerHTML = '';
+    axInspector = new window.AXInspector({
+      host,
+      screenArea: surface.screenArea,
+      send: (payload) => session && session.send(payload),
+      getDeviceSize: () => frame.screenSize(),
+    });
   }
 
   function reflectFormat(format) {
@@ -369,6 +398,7 @@
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (mouseSource) mouseSource.detach(); } catch (_) { /* ignore */ }
       try { if (keyboardCapture) keyboardCapture.stop(); } catch (_) { /* ignore */ }
+      try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
     });
   }
 

@@ -31,7 +31,7 @@
   }
 
   StreamSession.prototype.start = function () {
-    const { udid, format, version, canvas, onSize, onFps, onLog } = this.opts;
+    const { udid, format, version, canvas, onSize, onFps, onLog, onText } = this.opts;
     const ctx = canvas.getContext('2d');
     const log = onLog || (() => {});
 
@@ -63,7 +63,18 @@
     });
 
     socket.onopen    = () => log('WS connected');
-    socket.onmessage = (e) => this.decoder.feed(e);
+    // Text frames piggyback alongside binary video on the same WS
+    // (describe_ui_result, server-pushed errors, …). Give callers
+    // first crack at parsed JSON; if their hook returns truthy the
+    // decoder doesn't get the frame. Binary always falls through.
+    socket.onmessage = (e) => {
+      if (onText && !(e.data instanceof ArrayBuffer)) {
+        let env = null;
+        try { env = JSON.parse(e.data); } catch { /* not JSON; let decoder log */ }
+        if (env && onText(env) === true) return;
+      }
+      this.decoder.feed(e);
+    };
     socket.onclose   = () => { log('WS disconnected'); this.alive = false; this.ws = null; };
     socket.onerror   = () => log('WS error', true);
 
