@@ -519,8 +519,15 @@ struct Server: Sendable {
     ///
     /// Wire envelopes (server → client text frames):
     ///   {"type":"log_started"}
-    ///   {"type":"log","line":"<emitted line>"}
+    ///   {"type":"log","lines":["<line>", "<line>", …]}
     ///   {"type":"log_stopped","reason":"<text>"}
+    ///
+    /// Lines are coalesced through `LogBatcher` (size cap + 50 ms
+    /// window): per-line WS frames pegged the browser's main thread
+    /// at CoreDuet-chatter rates because the per-frame parse +
+    /// dispatch + render cost dwarfs the bytes themselves. One
+    /// frame per ~50 ms drops that to ~20 frames/sec and decouples
+    /// log volume from UI responsiveness.
     ///
     /// Client → server: a single `{"type":"stop"}` text frame
     /// terminates early. Otherwise the server waits for the child
@@ -577,9 +584,47 @@ struct Server: Sendable {
 
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
-                for await line in lineQueue.stream {
-                    let envelope = #"{"type":"log","line":"\#(jsonEscape(line))"}"#
-                    if (try? await outbound.write(.text(envelope))) == nil { break }
+                // Multiplex lines and a 50ms ticker into one stream so a
+                // single consumer can own the batcher without locking.
+                enum Event { case line(String); case tick; case end }
+                let events = AsyncStream<Event>(bufferingPolicy: .bufferingNewest(4096)) { cont in
+                    let lineTask = Task {
+                        for await line in lineQueue.stream {
+                            cont.yield(.line(line))
+                        }
+                        cont.yield(.end)
+                        cont.finish()
+                    }
+                    let tickTask = Task {
+                        while !Task.isCancelled {
+                            try? await Task.sleep(nanoseconds: 50_000_000)
+                            if Task.isCancelled { break }
+                            cont.yield(.tick)
+                        }
+                    }
+                    cont.onTermination = { _ in
+                        lineTask.cancel()
+                        tickTask.cancel()
+                    }
+                }
+
+                var batcher = LogBatcher(maxLines: 200, windowMs: 50)
+                consumer: for await event in events {
+                    let batch: [String]?
+                    switch event {
+                    case .line(let line): batch = batcher.ingest(line, now: Date())
+                    case .tick:           batch = batcher.tick(now: Date())
+                    case .end:
+                        if let final = batcher.flush() {
+                            _ = try? await outbound.write(.text(envelope(forBatch: final)))
+                        }
+                        break consumer
+                    }
+                    if let batch {
+                        if (try? await outbound.write(.text(envelope(forBatch: batch)))) == nil {
+                            break consumer
+                        }
+                    }
                 }
             }
             group.addTask {
@@ -724,6 +769,23 @@ private func jsonEscape(_ s: String) -> String {
         }
     }
     return out
+}
+
+/// Build the `{"type":"log","lines":[…]}` envelope for one drained
+/// `LogBatcher` batch. Hand-rolled rather than going through
+/// `JSONSerialization` because the hot path runs at most ~20×/sec
+/// per logs WS and each entry is already a UTF-8 string we can
+/// escape in place.
+private func envelope(forBatch lines: [String]) -> String {
+    var s = #"{"type":"log","lines":["#
+    for (i, line) in lines.enumerated() {
+        if i > 0 { s.append(",") }
+        s.append("\"")
+        s.append(jsonEscape(line))
+        s.append("\"")
+    }
+    s.append("]}")
+    return s
 }
 
 private func contentType(for filename: String) -> String {

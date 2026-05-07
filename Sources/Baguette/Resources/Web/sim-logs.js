@@ -21,6 +21,18 @@
 // the server has no use for it (it's a client-side display
 // concern). One LogPanel per host element. `detach()` closes the
 // WS and clears the host.
+//
+// Performance shape:
+//   - Server batches lines into one `{"type":"log","lines":[…]}`
+//     envelope per ~50 ms (see Server.logsWS / LogBatcher), so the
+//     WS-message rate is bounded regardless of log volume.
+//   - Renders are append-only: each batch grows the DOM by N rows
+//     via a DocumentFragment, never re-paints rows that are already
+//     mounted. Filter/clear/level changes do a one-shot full rebuild.
+//   - Trim: when the row count exceeds MAX_LINES we drop from the
+//     front of the list (DOM + memory) to bound both.
+//   - Hidden hosts skip rendering entirely; on reveal we do one
+//     full rebuild to catch up.
 
 (function () {
   'use strict';
@@ -64,13 +76,18 @@
     );
   }
 
+  const ROW_STYLE =
+    'padding:2px 0;border-bottom:1px solid var(--border-light,rgba(0,0,0,0.05));' +
+    'white-space:pre-wrap;word-break:break-word';
+
+  function makeRow(line) {
+    const div = document.createElement('div');
+    div.setAttribute('style', ROW_STYLE);
+    div.innerHTML = colourizeLine(line);
+    return div;
+  }
+
   function buildShell(host, opts) {
-    // Two stacked children inside the caller's container:
-    //   1. A compact controls strip (filter input + level select + clear).
-    //   2. A scrolling monospace list.
-    // The controls strip carries no padding overrides — it inherits
-    // the surrounding card's tokens, so it matches the rest of the
-    // sidebar / sheet visually.
     const inputStyle =
       'padding:2px 6px;font-size:11px;font-family:inherit;' +
       'background:transparent;border:1px solid var(--border,#e5e7eb);' +
@@ -119,6 +136,11 @@
       + params.toString();
   }
 
+  // Treat the list as auto-scrolling when the user is within this
+  // many pixels of the bottom; otherwise leave their scroll position
+  // alone so they can read history while new lines arrive.
+  const STICK_THRESHOLD_PX = 24;
+
   class LogPanel {
     constructor(host, opts) {
       opts = opts || {};
@@ -131,6 +153,13 @@
       this.filter = '';
       this.ws = null;
 
+      // Pending lines (received from WS but not yet on screen).
+      // Drained on every render tick.
+      this._pending = [];
+      // Set when filter/clear/level changes invalidate the existing
+      // DOM rows — next render does a full rebuild instead of append.
+      this._dirty = true;
+
       this.els = buildShell(host, opts);
       this.els.level.value = this.level;
 
@@ -142,6 +171,7 @@
 
       this.els.filter.addEventListener('input', () => {
         this.filter = this.els.filter.value.trim().toLowerCase();
+        this._dirty = true;
         this._scheduleRender();
       });
       this.els.level.addEventListener('change', () => {
@@ -150,13 +180,35 @@
       });
       this.els.clear.addEventListener('click', () => {
         this.lines = [];
+        this._pending = [];
+        this._dirty = true;
         this._scheduleRender();
       });
+
+      // Pause rendering when the host isn't visible (e.g. collapsed
+      // sidebar, off-screen sheet). Lines still accumulate in
+      // `this.lines` up to MAX_LINES; on reveal we do one full
+      // rebuild to catch the user up.
+      this._visible = true;
+      if (typeof IntersectionObserver === 'function') {
+        this._io = new IntersectionObserver((entries) => {
+          for (const e of entries) {
+            const wasVisible = this._visible;
+            this._visible = e.isIntersecting;
+            if (this._visible && !wasVisible) {
+              this._dirty = true;
+              this._scheduleRender();
+            }
+          }
+        });
+        this._io.observe(host);
+      }
 
       this._connect();
     }
 
     detach() {
+      if (this._io) { try { this._io.disconnect(); } catch (_) { /* ignore */ } this._io = null; }
       if (this.ws) {
         try { this.ws.close(); } catch (_) { /* ignore */ }
         this.ws = null;
@@ -164,12 +216,7 @@
       if (this.host) this.host.innerHTML = '';
     }
 
-    // Coalesce N message-driven renders per frame into one. Without
-    // this, a flood of `log` envelopes (CoreDuet-style chatter at
-    // hundreds of lines/sec) triggers a full innerHTML rebuild +
-    // regex pass over up to MAX_LINES rows on every WS frame, which
-    // pegs the main thread and stalls the rest of the page (stream
-    // canvas, gestures).
+    // Coalesce many incoming batches into one render per frame.
     _scheduleRender() {
       if (this._renderScheduled) return;
       this._renderScheduled = true;
@@ -205,6 +252,8 @@
         this.ws = null;
       }
       this.lines = [];
+      this._pending = [];
+      this._dirty = true;
       this._renderPlaceholder('Reconnecting at ' + this.level + '…');
       this._connect();
     }
@@ -224,9 +273,23 @@
         return;
       }
       if (env.type === 'log') {
-        this.lines.push(env.line || '');
+        // Server sends batches as `lines: [...]`; tolerate the older
+        // single-line shape too in case mismatched server/client.
+        const incoming = Array.isArray(env.lines)
+          ? env.lines
+          : (typeof env.line === 'string' ? [env.line] : []);
+        if (incoming.length === 0) return;
+        for (const l of incoming) {
+          this.lines.push(l);
+          this._pending.push(l);
+        }
+        // Trim from the front if over the row cap. If we drop more
+        // than we'd append this frame, the cheaper path is a full
+        // rebuild — flag dirty.
         if (this.lines.length > MAX_LINES) {
-          this.lines.splice(0, this.lines.length - MAX_LINES);
+          const drop = this.lines.length - MAX_LINES;
+          this.lines.splice(0, drop);
+          this._dirty = true;
         }
         this._scheduleRender();
       }
@@ -237,6 +300,8 @@
     _renderPlaceholder(text) {
       this.els.list.innerHTML =
         '<div style="color:var(--text-muted)">' + escapeHTML(text) + '</div>';
+      this._dirty = true;        // any subsequent log render must rebuild
+      this._pending = [];
     }
 
     _matchesFilter(line) {
@@ -244,22 +309,70 @@
     }
 
     _render() {
-      const visible = this.filter
-        ? this.lines.filter((l) => this._matchesFilter(l))
-        : this.lines;
-      if (visible.length === 0) {
-        this._renderPlaceholder(this.filter ? 'no matches' : 'waiting for log entries…');
+      if (!this._visible) {
+        // Drop the pending queue — when we become visible again the
+        // next render does a full rebuild from `this.lines`.
+        this._pending = [];
+        this._dirty = true;
         return;
       }
-      // Single innerHTML write per render — much cheaper than
-      // per-line appendChild when the buffer churns at hundreds of
-      // lines/second.
-      this.els.list.innerHTML = visible.map((l) =>
-        '<div style="padding:2px 0;border-bottom:1px solid var(--border-light,rgba(0,0,0,0.05));white-space:pre-wrap;word-break:break-word">' +
-          colourizeLine(l) +
-        '</div>'
-      ).join('');
-      this.els.list.scrollTop = this.els.list.scrollHeight;
+
+      const list = this.els.list;
+      const stick =
+        list.scrollTop + list.clientHeight >= list.scrollHeight - STICK_THRESHOLD_PX;
+
+      if (this._dirty) {
+        // Full rebuild path: filter changed, clear, reveal, or
+        // big trim. Build once into a fragment, swap in.
+        const frag = document.createDocumentFragment();
+        let count = 0;
+        for (const l of this.lines) {
+          if (this._matchesFilter(l)) {
+            frag.appendChild(makeRow(l));
+            count++;
+          }
+        }
+        list.innerHTML = '';
+        if (count === 0) {
+          list.innerHTML =
+            '<div style="color:var(--text-muted)">' +
+            escapeHTML(this.filter ? 'no matches' : 'waiting for log entries…') +
+            '</div>';
+        } else {
+          list.appendChild(frag);
+        }
+        this._dirty = false;
+        this._pending = [];
+      } else if (this._pending.length > 0) {
+        // Append-only path: only the new lines from this frame go
+        // through colourizeLine, regardless of buffer depth.
+        const frag = document.createDocumentFragment();
+        let appended = 0;
+        for (const l of this._pending) {
+          if (this._matchesFilter(l)) {
+            frag.appendChild(makeRow(l));
+            appended++;
+          }
+        }
+        this._pending = [];
+        if (appended > 0) {
+          // If the placeholder ("waiting for log entries…") is
+          // currently the only child, drop it before appending real
+          // rows.
+          if (list.children.length === 1 &&
+              list.children[0].getAttribute('style') !== ROW_STYLE) {
+            list.innerHTML = '';
+          }
+          list.appendChild(frag);
+          // Trim the rendered DOM to MAX_LINES too, so a long-running
+          // session doesn't grow the layer tree without bound.
+          while (list.children.length > MAX_LINES) {
+            list.removeChild(list.firstChild);
+          }
+        }
+      }
+
+      if (stick) list.scrollTop = list.scrollHeight;
     }
   }
 
