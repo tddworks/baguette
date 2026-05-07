@@ -10,6 +10,12 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- **Accessibility inspector overlay in the browser UI.** Hovering the live stream now highlights the AX node under the cursor with a translucent box + role/label tooltip; clicking locks the selection and exposes **Copy id** / **Copy JSON** / **Tap (cx, cy)** actions. Two surfaces share one inspector module: a sidebar checkbox card on `/simulators` (sidebar mode) and a toolbar icon next to the bezel-actionable toggle on `/simulators/<UDID>` (focus mode), with selection details surfacing in a glass-styled floating panel anchored top-right of the device column. Hit-testing runs client-side against a cached AX tree (mirroring `AXNode.hitTest` on the Swift side, so the browser overlay and the `describe-ui --x --y` CLI always pick the same element). The cache is refreshed on every fresh hover (mouseenter on the screen) and every click — no polling timer; idle pages cost nothing. Reuses the existing `/simulators/:udid/stream` WebSocket (sends `{"type":"describe_ui"}`, receives `{"type":"describe_ui_result","ok":true,"tree":…}`); no new endpoints, no extra connections. The "Tap" button forwards the centre of the locked frame as a canonical `{"type":"tap","x":…,"y":…,"width":…,"height":…}` envelope, so the inspector composes with every gesture path. See [`docs/features/ax-inspector.md`](docs/features/ax-inspector.md).
+
+### Changed
+- **Logs panel no longer stalls the page under CoreDuet-chatter floods.** Server-side `LogBatcher` (`Domain/Logs/LogBatcher.swift`) coalesces emitted lines into bounded batches that flush either at a 200-line size cap or after a 50 ms time window, replacing the per-line `{"type":"log","line":"…"}` text frames with one `{"type":"log","lines":["…","…"]}` envelope per ~20 frames/sec; clients still tolerate the old single-line shape during rolling upgrades. The browser-side `LogPanel` (`Resources/Web/sim-logs.js`) now renders incrementally — only newly arrived lines pay the regex-colourize cost on a `DocumentFragment`-driven append, instead of `innerHTML`-rebuilding the whole 1500-row buffer per frame; filter / clear / level / reveal trigger a one-shot full rebuild. An `IntersectionObserver` pauses rendering entirely when the panel is hidden (collapsed sidebar, off-screen sheet) and does one rebuild on reveal. WS frame rate is now bounded at ~20/sec regardless of log volume, and per-frame DOM cost is O(new lines) instead of O(buffer). See [`docs/features/logs.md`](docs/features/logs.md).
+
 ---
 
 ## [0.1.67] - 2026-05-07

@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baguette — bon appétit.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..900,0..100;1,9..144,300..900,0..100&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F4EBD6;
+    --cream-2:#EDE0C2;
+    --crust:#C9822E;
+    --crust-deep:#8B2E1F;
+    --espresso:#2A1810;
+    --espresso-soft:#4A3225;
+    --muted:#6B4F3B;
+    --rule:#D4BC93;
+    --gold:#A87a2C;
+    --paper:#FAF3DF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--espresso);-webkit-font-smoothing:antialiased}
+  body{
+    font-family:"Fraunces",ui-serif,Georgia,serif;
+    font-optical-sizing:auto;
+    font-variation-settings:"opsz" 16,"SOFT" 50;
+    line-height:1.55;
+    overflow-x:hidden;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #F8EFD6 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 20%, #EFDFB8 0%, transparent 55%),
+      var(--cream);
+  }
+  /* paper grain */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.09  0 0 0 0 0.06  0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode:multiply;opacity:.6;
+  }
+
+  ::selection{background:var(--crust);color:var(--paper)}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px;position:relative;z-index:2}
+
+  /* ---------- top bar ---------- */
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:28px 32px;max-width:1180px;margin:0 auto;
+    position:relative;z-index:3;
+  }
+  .mark{
+    display:flex;align-items:baseline;gap:12px;
+    font-family:"Fraunces";font-weight:600;
+    font-variation-settings:"opsz" 144,"SOFT" 100;
+    font-size:22px;letter-spacing:-.02em;
+  }
+  .mark .est{
+    font-family:"JetBrains Mono",monospace;font-weight:500;font-size:10px;
+    letter-spacing:.2em;color:var(--muted);text-transform:uppercase;
+    border-left:1px solid var(--rule);padding-left:12px;
+  }
+  nav.menu{display:flex;gap:34px;align-items:center}
+  nav.menu a{
+    font-family:"JetBrains Mono",monospace;font-size:11px;
+    text-transform:uppercase;letter-spacing:.18em;color:var(--espresso-soft);
+    text-decoration:none;position:relative;padding-bottom:4px;
+  }
+  nav.menu a::after{
+    content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;
+    background:var(--crust);transition:right .35s cubic-bezier(.2,.7,.1,1);
+  }
+  nav.menu a:hover{color:var(--espresso)}
+  nav.menu a:hover::after{right:0}
+  nav.menu .gh{
+    background:var(--espresso);color:var(--paper);padding:9px 16px;border-radius:999px;
+    letter-spacing:.16em;font-size:10.5px;
+  }
+  nav.menu .gh:hover{background:var(--crust-deep)}
+  nav.menu .gh::after{display:none}
+
+  /* ---------- hero ---------- */
+  .hero{padding:60px 0 96px;position:relative}
+  .hero .label{
+    display:inline-flex;align-items:center;gap:14px;
+    font-family:"JetBrains Mono",monospace;font-size:11px;
+    letter-spacing:.32em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:36px;opacity:0;animation:fade .9s .1s forwards;
+  }
+  .hero .label::before,.hero .label::after{
+    content:"";width:48px;height:1px;background:var(--rule);
+  }
+  .hero h1{
+    font-family:"Fraunces";font-weight:300;
+    font-variation-settings:"opsz" 144,"SOFT" 30;
+    font-size:clamp(96px,15vw,220px);
+    line-height:.86;letter-spacing:-.045em;color:var(--espresso);
+    opacity:0;animation:rise 1.1s .15s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .hero h1 .dot{color:var(--crust)}
+  .hero .tagline{
+    font-style:italic;font-weight:400;
+    font-size:clamp(28px,3.5vw,44px);
+    color:var(--espresso-soft);
+    margin-top:14px;letter-spacing:-.01em;
+    font-variation-settings:"opsz" 60,"SOFT" 100;
+    opacity:0;animation:rise 1.1s .35s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .hero .pitch{
+    margin-top:42px;max-width:620px;
+    font-size:20px;line-height:1.55;color:var(--espresso-soft);
+    font-variation-settings:"opsz" 24,"SOFT" 50;
+    opacity:0;animation:rise 1.1s .55s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .hero .pitch b{color:var(--espresso);font-weight:600}
+  .cta{
+    display:flex;gap:16px;margin-top:44px;align-items:center;
+    opacity:0;animation:rise 1.1s .75s cubic-bezier(.2,.7,.1,1) forwards;
+  }
+  .btn{
+    font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.18em;
+    text-transform:uppercase;text-decoration:none;
+    padding:16px 26px;border-radius:999px;display:inline-flex;align-items:center;gap:10px;
+    transition:transform .25s ease, background .25s ease, color .25s ease;
+  }
+  .btn.primary{background:var(--espresso);color:var(--paper)}
+  .btn.primary:hover{background:var(--crust-deep);transform:translateY(-2px)}
+  .btn.ghost{background:transparent;color:var(--espresso);border:1px solid var(--espresso)}
+  .btn.ghost:hover{background:var(--espresso);color:var(--paper);transform:translateY(-2px)}
+  .btn .arr{transition:transform .25s ease}
+  .btn:hover .arr{transform:translateX(4px)}
+
+  /* hero ornament */
+  .ornament{
+    position:absolute;right:-40px;top:90px;width:360px;height:360px;
+    opacity:0;animation:fade 1.5s .8s forwards;pointer-events:none;
+  }
+  .ornament svg{width:100%;height:100%}
+
+  /* ticker */
+  .ticker{
+    border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    margin-top:80px;padding:18px 0;overflow:hidden;
+    background:linear-gradient(180deg,var(--paper),transparent);
+  }
+  .ticker .row{
+    display:flex;gap:60px;animation:slide 36s linear infinite;
+    font-family:"JetBrains Mono",monospace;font-size:11px;
+    letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+    white-space:nowrap;
+  }
+  .ticker span{display:inline-flex;align-items:center;gap:60px}
+  .ticker .dot{width:5px;height:5px;border-radius:50%;background:var(--crust);display:inline-block}
+  @keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* ---------- section base ---------- */
+  section{padding:120px 0;position:relative}
+  .section-head{
+    display:grid;grid-template-columns:140px 1fr;gap:40px;align-items:baseline;
+    margin-bottom:64px;
+  }
+  .section-head .num{
+    font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.24em;
+    color:var(--muted);text-transform:uppercase;border-top:1px solid var(--espresso);
+    padding-top:12px;
+  }
+  .section-head h2{
+    font-family:"Fraunces";font-weight:300;
+    font-variation-settings:"opsz" 144,"SOFT" 50;
+    font-size:clamp(44px,6vw,84px);line-height:1;letter-spacing:-.03em;
+  }
+  .section-head h2 em{
+    font-style:italic;color:var(--crust);font-weight:400;
+    font-variation-settings:"opsz" 144,"SOFT" 100;
+  }
+  .section-head .lede{
+    grid-column:2;margin-top:18px;max-width:620px;
+    font-size:18px;color:var(--espresso-soft);line-height:1.6;
+    font-variation-settings:"opsz" 22,"SOFT" 70;
+  }
+
+  /* ---------- menu / features ---------- */
+  .menu-grid{
+    display:grid;grid-template-columns:repeat(12,1fr);gap:1px;
+    background:var(--rule);border:1px solid var(--rule);
+  }
+  .dish{
+    background:var(--paper);padding:42px 36px;position:relative;
+    transition:background .3s ease;
+  }
+  .dish:hover{background:var(--cream-2)}
+  .dish.span-7{grid-column:span 7}
+  .dish.span-5{grid-column:span 5}
+  .dish.span-6{grid-column:span 6}
+  .dish.span-12{grid-column:span 12}
+  .dish .price{
+    position:absolute;top:36px;right:36px;
+    font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.18em;
+    color:var(--muted);text-transform:uppercase;
+  }
+  .dish .name{
+    font-family:"Fraunces";font-weight:400;
+    font-variation-settings:"opsz" 144,"SOFT" 60;
+    font-size:38px;line-height:1.05;letter-spacing:-.02em;
+    margin-bottom:16px;max-width:420px;
+  }
+  .dish .name em{font-style:italic;color:var(--crust)}
+  .dish .desc{
+    color:var(--espresso-soft);font-size:16px;line-height:1.65;
+    max-width:520px;
+    font-variation-settings:"opsz" 18,"SOFT" 60;
+  }
+  .dish .ingredients{
+    margin-top:28px;display:flex;flex-wrap:wrap;gap:8px 16px;
+  }
+  .dish .ingredients span{
+    font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);
+  }
+  .dish .ingredients span::before{content:"·";margin-right:8px;color:var(--crust)}
+  .dish .ingredients span:first-child::before{display:none}
+  .dish.special::before{
+    content:"Today's Special";position:absolute;top:-13px;left:36px;
+    background:var(--crust-deep);color:var(--paper);
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.22em;
+    padding:7px 12px;text-transform:uppercase;
+  }
+
+  /* device farm visual */
+  .farm-vis{
+    margin-top:32px;border:1px solid var(--rule);background:var(--cream);
+    aspect-ratio:16/8;display:grid;grid-template-columns:2fr 1fr;gap:1px;
+    background:var(--rule);overflow:hidden;
+  }
+  .farm-vis .focus{
+    background:linear-gradient(135deg,#1a0d08,#3a1f12);
+    position:relative;display:flex;align-items:center;justify-content:center;
+  }
+  .farm-vis .focus::after{
+    content:"";position:absolute;inset:18%;border-radius:24px;
+    background:
+      radial-gradient(circle at 30% 20%, #C9822E22, transparent 50%),
+      linear-gradient(180deg,#0d0805,#1a0d08);
+    border:1px solid #00000040;box-shadow:0 0 0 6px #00000022;
+  }
+  .farm-vis .focus .label{
+    position:absolute;top:14px;left:18px;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;
+    color:#C9822E;text-transform:uppercase;z-index:2;
+  }
+  .farm-vis .grid{
+    background:var(--cream);display:grid;grid-template-columns:1fr 1fr;gap:1px;
+    background:var(--rule);
+  }
+  .farm-vis .tile{
+    background:linear-gradient(160deg,#2A1810,#4A3225);
+    position:relative;
+  }
+  .farm-vis .tile::after{
+    content:"";position:absolute;inset:14%;border-radius:8px;
+    background:linear-gradient(180deg,#0d0805,#1a0d08);
+    border:1px solid #00000040;
+  }
+  .farm-vis .tile.live::before{
+    content:"●";position:absolute;top:8px;right:10px;color:#9BCB6B;font-size:10px;
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  /* ---------- recipe / iOS 26 story ---------- */
+  .recipe{
+    display:grid;grid-template-columns:1fr 1.1fr;gap:80px;align-items:start;
+  }
+  .recipe .quote{
+    font-family:"Fraunces";font-weight:300;font-style:italic;
+    font-variation-settings:"opsz" 144,"SOFT" 100;
+    font-size:clamp(32px,3.4vw,46px);line-height:1.15;letter-spacing:-.02em;
+    color:var(--espresso);
+    border-left:2px solid var(--crust);padding-left:32px;
+  }
+  .recipe .quote span{color:var(--crust)}
+  .recipe .body{font-size:17px;line-height:1.75;color:var(--espresso-soft);
+    font-variation-settings:"opsz" 20,"SOFT" 60;
+  }
+  .recipe .body p+p{margin-top:18px}
+  .recipe .body code{
+    font-family:"JetBrains Mono",monospace;font-size:14px;
+    background:var(--paper);border:1px solid var(--rule);padding:2px 7px;
+    color:var(--crust-deep);
+  }
+
+  /* ---------- quickstart ---------- */
+  .steps{display:flex;flex-direction:column;gap:1px;background:var(--rule);
+    border:1px solid var(--rule);
+  }
+  .step{
+    background:var(--paper);padding:36px 40px;
+    display:grid;grid-template-columns:80px 1fr 1.4fr;gap:40px;align-items:center;
+    transition:background .25s ease;
+  }
+  .step:hover{background:var(--cream-2)}
+  .step .n{
+    font-family:"Fraunces";font-style:italic;font-weight:300;
+    font-variation-settings:"opsz" 144,"SOFT" 100;
+    font-size:64px;line-height:1;color:var(--crust);
+  }
+  .step .what{
+    font-family:"Fraunces";font-size:22px;font-weight:500;letter-spacing:-.01em;
+    font-variation-settings:"opsz" 36,"SOFT" 60;
+  }
+  .step .what small{
+    display:block;font-family:"JetBrains Mono",monospace;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--muted);font-weight:400;margin-top:6px;
+  }
+  .step pre{
+    font-family:"JetBrains Mono",monospace;font-size:13.5px;
+    background:var(--espresso);color:var(--paper);
+    padding:18px 22px;border-radius:6px;overflow-x:auto;
+    box-shadow:0 12px 28px -16px rgba(42,24,16,.5);
+  }
+  .step pre .c{color:var(--crust)}
+  .step pre .m{color:#9BCB6B}
+
+  /* ---------- footer ---------- */
+  footer{
+    border-top:1px solid var(--rule);margin-top:80px;padding:60px 0 40px;
+    background:linear-gradient(180deg,transparent,var(--paper));
+  }
+  footer .row{
+    display:flex;justify-content:space-between;align-items:flex-end;gap:40px;
+    flex-wrap:wrap;
+  }
+  footer .colophon{
+    font-family:"Fraunces";font-style:italic;font-weight:300;
+    font-variation-settings:"opsz" 144,"SOFT" 100;
+    font-size:34px;letter-spacing:-.02em;color:var(--espresso);
+    max-width:520px;line-height:1.15;
+  }
+  footer .meta{
+    font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.18em;
+    color:var(--muted);text-transform:uppercase;text-align:right;
+  }
+  footer .meta a{color:var(--espresso);text-decoration:none;border-bottom:1px solid var(--rule)}
+  footer .meta a:hover{color:var(--crust-deep)}
+  footer .legal{
+    margin-top:48px;padding-top:24px;border-top:1px solid var(--rule);
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  }
+
+  /* ---------- animations ---------- */
+  @keyframes fade{to{opacity:1}}
+  @keyframes rise{
+    from{opacity:0;transform:translateY(28px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:880px){
+    header.top{padding:20px}
+    nav.menu{gap:18px}
+    nav.menu a:not(.gh){display:none}
+    .ornament{display:none}
+    .section-head{grid-template-columns:1fr;gap:18px}
+    .section-head .lede{grid-column:1}
+    .menu-grid{grid-template-columns:1fr}
+    .dish.span-5,.dish.span-6,.dish.span-7,.dish.span-12{grid-column:1/-1}
+    .recipe{grid-template-columns:1fr;gap:32px}
+    .step{grid-template-columns:50px 1fr;gap:18px}
+    .step pre{grid-column:1/-1;margin-top:8px}
+    .farm-vis{grid-template-columns:1fr;aspect-ratio:auto;height:520px}
+    .farm-vis .grid{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="mark">
+    Baguette<span style="color:var(--crust)">.</span>
+    <span class="est">Maison · Est. MMXXVI</span>
+  </div>
+  <nav class="menu">
+    <a href="#menu">Menu</a>
+    <a href="#farm">Farm</a>
+    <a href="#recipe">The Recipe</a>
+    <a href="#quickstart">Quickstart</a>
+    <a class="gh" href="https://github.com/tddworks/baguette">GitHub ↗</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- HERO -->
+  <section class="hero" style="padding-top:40px">
+    <div class="label">La Carte ·  Headless iOS 26</div>
+    <h1>Baguette<span class="dot">.</span></h1>
+    <div class="tagline">Bon appétit.</div>
+    <p class="pitch">
+      A single Swift CLI that <b>boots iOS simulators headlessly</b>,
+      streams their screens at <b>60 fps</b>, and injects taps,
+      swipes &amp; multi-finger gestures through <b>SimulatorKit's
+      private HID path</b>. Comes with a self-contained web UI and
+      a multi-device farm dashboard.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/tddworks/baguette">
+        Take it home <span class="arr">→</span>
+      </a>
+      <a class="btn ghost" href="#quickstart">
+        See the recipe <span class="arr">→</span>
+      </a>
+    </div>
+
+    <!-- ornamental wheat / baguette -->
+    <div class="ornament" aria-hidden="true">
+      <svg viewBox="0 0 360 360" fill="none">
+        <defs>
+          <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0" stop-color="#C9822E"/>
+            <stop offset="1" stop-color="#8B2E1F"/>
+          </linearGradient>
+        </defs>
+        <g transform="rotate(-22 180 180)" stroke="url(#g1)" stroke-width="1.4" fill="none" opacity=".55">
+          <ellipse cx="180" cy="180" rx="150" ry="44"/>
+          <path d="M55 180 q40 -22 80 0 M105 180 q40 -22 80 0 M155 180 q40 -22 80 0 M205 180 q40 -22 80 0"/>
+          <path d="M55 180 q40 22 80 0 M105 180 q40 22 80 0 M155 180 q40 22 80 0 M205 180 q40 22 80 0"/>
+          <line x1="80" y1="158" x2="80" y2="202"/>
+          <line x1="130" y1="156" x2="130" y2="204"/>
+          <line x1="180" y1="155" x2="180" y2="205"/>
+          <line x1="230" y1="156" x2="230" y2="204"/>
+          <line x1="280" y1="158" x2="280" y2="202"/>
+        </g>
+        <circle cx="312" cy="56" r="3" fill="#C9822E"/>
+        <circle cx="48" cy="320" r="2" fill="#8B2E1F"/>
+      </svg>
+    </div>
+
+    <!-- ticker -->
+    <div class="ticker" style="margin-left:-32px;margin-right:-32px;padding-left:32px;padding-right:32px">
+      <div class="row">
+        <span><b>Swift 6.1</b><span class="dot"></span> Apple Silicon only<span class="dot"></span> Xcode 26<span class="dot"></span> 60 fps streams<span class="dot"></span> 9-arg HID recipe<span class="dot"></span> 110+ tests<span class="dot"></span> Apache 2.0<span class="dot"></span> brew install tddworks/tap/baguette</span>
+        <span><b>Swift 6.1</b><span class="dot"></span> Apple Silicon only<span class="dot"></span> Xcode 26<span class="dot"></span> 60 fps streams<span class="dot"></span> 9-arg HID recipe<span class="dot"></span> 110+ tests<span class="dot"></span> Apache 2.0<span class="dot"></span> brew install tddworks/tap/baguette</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MENU / FEATURES -->
+  <section id="menu">
+    <div class="section-head">
+      <div class="num">№ 01 — La Carte</div>
+      <h2>What's <em>on the menu</em>.</h2>
+      <p class="lede">
+        Four house specialities, each prepared from the same cold larder of
+        Domain types and warm ovens of private framework calls.
+      </p>
+    </div>
+
+    <div class="menu-grid">
+      <article class="dish span-7">
+        <div class="price">№ 01</div>
+        <h3 class="name">Frame <em>Streaming</em></h3>
+        <p class="desc">
+          MJPEG or H.264 / AVCC, served over stdout or WebSocket.
+          Runtime-tunable bitrate, fps and scale. AVCC carries a JPEG
+          seed so the canvas paints before the first IDR lands.
+        </p>
+        <div class="ingredients">
+          <span>VideoToolbox</span><span>IOSurface</span><span>60 fps</span><span>WS · stdout</span>
+        </div>
+      </article>
+
+      <article class="dish span-5">
+        <div class="price">№ 02</div>
+        <h3 class="name">Host <em>HID</em> input</h3>
+        <p class="desc">
+          Taps, swipes, scroll, multi-finger. The whole pipe runs through
+          SimulatorKit's 9-arg <code style="font-family:JetBrains Mono;font-size:11.5px;color:var(--crust-deep)">IndigoHIDMessageForMouseNSEvent</code>
+          — the only path iOS 26 still honours.
+        </p>
+        <div class="ingredients">
+          <span>No dylib</span><span>No DYLD</span><span>iOS 26</span>
+        </div>
+      </article>
+
+      <article class="dish span-5">
+        <div class="price">№ 03</div>
+        <h3 class="name">Standalone <em>Web UI</em></h3>
+        <p class="desc">
+          <code style="font-family:JetBrains Mono;font-size:11.5px;color:var(--crust-deep)">baguette serve</code>
+          opens a list page, per-device stream pages, and DeviceKit-sourced
+          bezels for every simulator family.
+        </p>
+        <div class="ingredients">
+          <span>Hummingbird</span><span>Vanilla JS</span><span>No bundler</span>
+        </div>
+      </article>
+
+      <article class="dish special span-7">
+        <div class="price">№ 04</div>
+        <h3 class="name">The <em>Device Farm</em></h3>
+        <p class="desc">
+          Every booted simulator side-by-side. Grid, Wall, or List view.
+          Click a tile to focus — same canvas re-parents into a full-quality
+          pane while the thumbnail stays cheap.
+        </p>
+        <div class="ingredients">
+          <span>Multi-device</span><span>Click-to-focus</span><span>9-slice bezels</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- DEVICE FARM SPOTLIGHT -->
+  <section id="farm" style="padding-top:40px">
+    <div class="section-head">
+      <div class="num">№ 02 — Plat Principal</div>
+      <h2>One canvas, <em>two places</em>.</h2>
+      <p class="lede">
+        The farm thumbnails stream at low bitrate. Click any tile and its
+        own <code style="font-family:JetBrains Mono;font-size:14px;color:var(--crust-deep)">&lt;canvas&gt;</code>
+        re-parents into a focused pane on the right — full-rate frames,
+        gesture input, hardware buttons. No mirror element. No re-encode.
+      </p>
+    </div>
+
+    <div class="farm-vis" aria-hidden="true">
+      <div class="focus">
+        <span class="label">● Focused · iPhone 17 Pro Max</span>
+      </div>
+      <div class="grid">
+        <div class="tile live"></div>
+        <div class="tile live"></div>
+        <div class="tile"></div>
+        <div class="tile live"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RECIPE / iOS 26 STORY -->
+  <section id="recipe">
+    <div class="section-head">
+      <div class="num">№ 03 — La Recette</div>
+      <h2>Why it works on <em>iOS 26</em>.</h2>
+    </div>
+
+    <div class="recipe">
+      <div class="quote">
+        “The whole trick is one calling convention. <span>Nine arguments,
+        not five.</span> Everything else is plumbing.”
+      </div>
+      <div class="body">
+        <p>
+          iOS 26 changed <code>SimulatorHID</code>'s wire format. Public
+          tools like <code>idb</code> and <code>AXe</code> still call
+          <code>IndigoHIDMessageForMouseNSEvent</code> with the old
+          5-argument signature; those messages now route to a
+          pointer-service target that silently drops or crashes
+          <code>backboardd</code>.
+        </p>
+        <p>
+          Baguette uses the <b style="color:var(--espresso)">9-argument
+          signature from Xcode 26's preview-kit</b>, which routes through
+          digitizer target <code>0x32</code> — the target iOS 26 still
+          honours. No dylib injection, no
+          <code>DYLD_INSERT_LIBRARIES</code>, no per-app priming.
+        </p>
+        <p>
+          The recipe is heavily commented in
+          <code>Infrastructure/Input/IndigoHIDInput.swift</code>, with the
+          architecture documented in <code>docs/ARCHITECTURE.md</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICKSTART -->
+  <section id="quickstart">
+    <div class="section-head">
+      <div class="num">№ 04 — À la carte</div>
+      <h2>Quickstart, <em>en trois temps</em>.</h2>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="n">i.</div>
+        <div class="what">Install <small>Apple Silicon · Xcode 26</small></div>
+        <pre><span class="c">$</span> brew install tddworks/tap/baguette</pre>
+      </div>
+      <div class="step">
+        <div class="n">ii.</div>
+        <div class="what">Serve <small>web UI on localhost:8421</small></div>
+        <pre><span class="c">$</span> baguette serve
+<span class="m">[baguette]</span> listening on http://127.0.0.1:8421</pre>
+      </div>
+      <div class="step">
+        <div class="n">iii.</div>
+        <div class="what">Open the farm <small>every booted simulator, one page</small></div>
+        <pre><span class="c">$</span> open http://localhost:8421/farm</pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <div class="colophon">
+        Set with <em>Fraunces</em> &amp; <em>JetBrains Mono</em>. Baked
+        on Apple Silicon. Best served warm, ideally with a&nbsp;simulator.
+      </div>
+      <div class="meta">
+        v0.x · Apache 2.0<br>
+        <a href="https://github.com/tddworks/baguette">github.com/tddworks/baguette</a><br>
+        <a href="https://github.com/tddworks/baguette/issues">file an issue ↗</a>
+      </div>
+    </div>
+    <div class="legal">
+      <span>© MMXXVI · TDDWorks · Maison Baguette</span>
+      <span>Made with <span style="color:var(--crust-deep)">♥</span> for the iOS sim toolchain</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
