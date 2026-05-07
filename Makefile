@@ -12,4 +12,18 @@ clean:
 smoke-mac: Baguette
 	./scripts/smoke-mac.sh
 
-.PHONY: Baguette clean smoke-mac
+# Install the locally built binary as `baguette` on PATH. Defaults to
+# Apple-Silicon Homebrew's prefix (/opt/homebrew/bin) since that's
+# where `brew install tddworks/tap/baguette` would normally land —
+# installing here shadows the brewed version with this branch's
+# build. Override with `PREFIX=…` for /usr/local or ~/bin.
+PREFIX ?= /opt/homebrew
+
+install: Baguette
+	install -m 755 ./Baguette "$(PREFIX)/bin/baguette"
+	@echo "→ installed $(PREFIX)/bin/baguette (run 'baguette --version' to verify)"
+
+uninstall:
+	rm -f "$(PREFIX)/bin/baguette"
+
+.PHONY: Baguette clean smoke-mac install uninstall
