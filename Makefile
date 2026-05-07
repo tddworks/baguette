@@ -17,13 +17,22 @@ smoke-mac: Baguette
 # where `brew install tddworks/tap/baguette` would normally land —
 # installing here shadows the brewed version with this branch's
 # build. Override with `PREFIX=…` for /usr/local or ~/bin.
+#
+# Two pieces ship together: the binary itself, and the SPM-generated
+# `Baguette_Baguette.bundle` that holds Resources/Web/. WebRoot.swift's
+# fallback chain looks for the bundle as a sidecar next to the
+# executable, so both must land in the same dir.
 PREFIX ?= /opt/homebrew
+BUNDLE := Baguette_Baguette.bundle
 
 install: Baguette
 	install -m 755 ./Baguette "$(PREFIX)/bin/baguette"
-	@echo "→ installed $(PREFIX)/bin/baguette (run 'baguette --version' to verify)"
+	rm -rf "$(PREFIX)/bin/$(BUNDLE)"
+	cp -R ".build/release/$(BUNDLE)" "$(PREFIX)/bin/$(BUNDLE)"
+	@echo "→ installed $(PREFIX)/bin/baguette + $(BUNDLE) (run 'baguette --version' to verify)"
 
 uninstall:
 	rm -f "$(PREFIX)/bin/baguette"
+	rm -rf "$(PREFIX)/bin/$(BUNDLE)"
 
 .PHONY: Baguette clean smoke-mac install uninstall
