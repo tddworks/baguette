@@ -61,6 +61,12 @@ final class CGEventInput: Input, @unchecked Sendable {
         let screenPoint = CGPoint(x: point.x + origin.x, y: point.y + origin.y)
         let hold = duration > 0 ? duration : 0.05
 
+        // Mouse events need the actual cursor at the click location
+        // (apps' hit-testing reads it). Without the warp, posting a
+        // click at (10, 50) while the user's cursor is at (700, 700)
+        // produces an event the app silently ignores.
+        CGWarpMouseCursorPosition(screenPoint)
+
         guard let down = CGEvent(
             mouseEventSource: Self.eventSource, mouseType: .leftMouseDown,
             mouseCursorPosition: screenPoint, mouseButton: .left
@@ -95,11 +101,22 @@ final class CGEventInput: Input, @unchecked Sendable {
         let total = duration > 0 ? duration : 0.25
         let stepDelay = total / Double(samples)
 
+        // Warp ONCE so the initial mouseDown lands on the right
+        // character; subsequent `mouseDragged` events carry their own
+        // `mouseCursorPosition` and the OS moves the cursor along
+        // with them. Warping inside the drag loop races with the
+        // dragged events and causes TextEdit to lose the drag
+        // session.
+        CGWarpMouseCursorPosition(screenStart)
         guard let down = CGEvent(
             mouseEventSource: Self.eventSource, mouseType: .leftMouseDown,
             mouseCursorPosition: screenStart, mouseButton: .left
         ) else { return false }
         down.post(tap: .cghidEventTap)
+        // Apps need a beat to enter drag-select mode after a mouseDown
+        // before they'll honour subsequent mouseDragged events as a
+        // drag (rather than coalescing them with the down).
+        Thread.sleep(forTimeInterval: 0.05)
 
         for i in 1..<samples {
             let t = Double(i) / Double(samples - 1)
@@ -125,11 +142,25 @@ final class CGEventInput: Input, @unchecked Sendable {
     }
 
     func scroll(deltaX: Double, deltaY: Double) -> Bool {
+        // Park the cursor over the target window's centre so the
+        // scroll event lands inside it. CGEvent scroll routes via
+        // the WindowServer to the window under the cursor; without
+        // this warp a scroll could end up applying to whatever
+        // window the user happens to be hovering.
+        if let origin = windowOrigin(),
+           let windowSize = focusedWindowSize() {
+            CGWarpMouseCursorPosition(CGPoint(
+                x: origin.x + windowSize.width / 2,
+                y: origin.y + windowSize.height / 2
+            ))
+        }
+
         // CGEvent scroll is in pixel units (line-style would be
-        // integer wheel ticks); pass through whatever the wire
-        // gave us.
+        // integer wheel ticks); pass through whatever the wire gave
+        // us. WheelCount = 2 so vertical (wheel1) and horizontal
+        // (wheel2) deltas both ride one event.
         guard let event = CGEvent(
-            scrollWheelEvent2Source: nil,
+            scrollWheelEvent2Source: Self.eventSource,
             units: .pixel,
             wheelCount: 2,
             wheel1: Int32(deltaY), wheel2: Int32(deltaX), wheel3: 0
@@ -212,6 +243,28 @@ final class CGEventInput: Input, @unchecked Sendable {
             return windowOrigin(of: first)
         }
         return nil
+    }
+
+    /// Size of the target app's frontmost window (content rect),
+    /// or `nil` when no window is reachable. Used by `scroll` to
+    /// park the cursor at the window centre before posting.
+    private func focusedWindowSize() -> CGSize? {
+        let app = AXUIElementCreateApplication(pid)
+        var focused: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            app, kAXFocusedWindowAttribute as CFString, &focused
+        ) == .success, let focused else {
+            return nil
+        }
+        var sizeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            focused as! AXUIElement, kAXSizeAttribute as CFString, &sizeValue
+        ) == .success, let sizeValue else {
+            return nil
+        }
+        var size = CGSize.zero
+        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+        return size
     }
 
     private func windowOrigin(of window: AXUIElement) -> CGPoint? {
