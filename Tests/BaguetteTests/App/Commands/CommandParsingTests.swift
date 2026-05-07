@@ -30,7 +30,31 @@ struct CommandParsingTests {
         let cfg = MacRootCommand.configuration
         #expect(cfg.commandName == "mac")
         let names = cfg.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["list", "screenshot", "describe-ui", "input"])
+        #expect(Set(names) == ["list", "screenshot", "describe-ui", "input", "logs"])
+    }
+
+    @Test func `mac logs requires --bundle-id and defaults level + style`() throws {
+        let cmd = try MacLogsCommand.parse(["--bundle-id", "com.apple.TextEdit"])
+        #expect(cmd.target.bundleId == "com.apple.TextEdit")
+        #expect(cmd.level == "info")
+        #expect(cmd.style == "default")
+        #expect(cmd.predicate == nil)
+    }
+
+    @Test func `mac logs accepts --level --style --predicate`() throws {
+        let cmd = try MacLogsCommand.parse([
+            "--bundle-id", "com.apple.TextEdit",
+            "--level", "debug",
+            "--style", "json",
+            "--predicate", "subsystem == \"com.apple.TextEdit\"",
+        ])
+        #expect(cmd.level == "debug")
+        #expect(cmd.style == "json")
+        #expect(cmd.predicate == "subsystem == \"com.apple.TextEdit\"")
+    }
+
+    @Test func `mac logs rejects argv without --bundle-id`() {
+        #expect(throws: (any Error).self) { try MacLogsCommand.parse([]) }
     }
 
     @Test func `mac input requires --bundle-id`() throws {

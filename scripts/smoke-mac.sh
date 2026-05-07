@@ -360,6 +360,31 @@ else
     fail "parse-error path: $BAD"
 fi
 
+section "T2.11 — mac logs streams entries for the target app"
+# Start `mac logs` in the background, trigger TextEdit activity, then
+# kill and check that at least one log line was captured.
+rm -f /tmp/smoke-mac-logs.out
+"$BAGUETTE" mac logs --bundle-id $BG --level info > /tmp/smoke-mac-logs.out 2>&1 &
+LOGS_PID=$!
+sleep 0.5
+# Trigger activity that should appear in the unified log.
+osascript -e 'tell application "TextEdit" to activate' >/dev/null 2>&1 || true
+input_session '{"type":"type","text":"x"}
+'
+sleep 1.5
+kill -INT "$LOGS_PID" 2>/dev/null
+wait "$LOGS_PID" 2>/dev/null || true
+# Expect at least the predicate header from `log stream` plus one
+# real log line, OR explicit TextEdit-process output.
+if grep -q 'process == "TextEdit"' /tmp/smoke-mac-logs.out \
+   && [[ "$(wc -l < /tmp/smoke-mac-logs.out)" -gt 2 ]]; then
+    LINES=$(wc -l < /tmp/smoke-mac-logs.out)
+    pass "mac logs streamed $LINES lines including the bundle predicate header"
+else
+    fail "mac logs didn't stream — see /tmp/smoke-mac-logs.out"
+    head -5 /tmp/smoke-mac-logs.out
+fi
+
 reset_textedit
 
 fi  # end Tier 2

@@ -13,6 +13,7 @@ struct MacRootCommand: ParsableCommand {
             MacScreenshotCommand.self,
             MacDescribeUICommand.self,
             MacInputCommand.self,
+            MacLogsCommand.self,
         ]
     )
 }

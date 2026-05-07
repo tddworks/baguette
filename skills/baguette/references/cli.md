@@ -287,6 +287,9 @@ baguette mac screenshot --bundle-id <ID>   # one-shot JPEG of the app's frontmos
 baguette mac describe-ui --bundle-id <ID>  # full AX tree
 baguette mac describe-ui --bundle-id <ID> --x <pt> --y <pt>   # hit-test
 baguette mac input --bundle-id <ID>        # stdin newline-delimited gestures, mirrors `baguette input`
+baguette mac logs --bundle-id <ID>         # stream `log stream` entries filtered to that app
+baguette mac logs --bundle-id <ID> --level debug --style json
+baguette mac logs --bundle-id <ID> --predicate 'subsystem == "com.apple.appleevents"'
 ```
 
 `baguette mac input` auto-activates the target app at session start
@@ -325,7 +328,7 @@ unsigned-binary rebuilds during development.
 | `button`                     |   ✓     |    ✗     | Hardware buttons are iOS-specific                |
 | `touch1` / `touch2` / `pinch` / `pan` / `twoFingerPath` | ✓ | ✗ | Multi-touch via CGEvent isn't reliable           |
 | `describe-ui`                |   ✓     |    ✓     | macOS frames are window-relative; iOS device-relative |
-| `logs`                       |   ✓     |    ✗     | Use macOS-host `log stream --predicate 'process == "<name>"'` directly |
+| `logs`                       |   ✓     |    ✓     | macOS path is a thin `log stream` wrapper                                      |
 
 ### Failure modes specific to mac
 

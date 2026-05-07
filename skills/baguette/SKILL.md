@@ -227,6 +227,9 @@ Wired (works against any AppKit-based app):
 - The full `describe-ui` shape (role / label / value / frame /
   children), with frames in window-relative points.
 
+Plus `mac logs` — thin wrapper over host `/usr/bin/log stream`
+filtered to the target app's process. SIGINT-clean.
+
 **Rejected** with `{"ok":false}` (logged but not posted) — these
 don't apply to macOS apps:
 - `button` — hardware buttons (home / power / volume / action) are
@@ -296,16 +299,21 @@ Wired (use freely on iOS sims; macOS path is a subset — see above):
   Frames are in the same units as `tap` / `swipe` wire fields, so
   reading `frame.x + frame.width/2`, `frame.y + frame.height/2`
   back into a `tap` envelope just works.
-- `logs` — stream the booted simulator's unified log line-by-line
-  to stdout. CLI: `baguette logs --udid <X> [--level info|debug|default]
-  [--style default|compact|json|ndjson|syslog] [--predicate ...]
-  [--bundle-id <id>]`. SIGINT (Ctrl-C) tears down cleanly. WS
-  variant on `WS /simulators/<X>/logs?level=&style=&predicate=&bundleId=`
-  emits `{"type":"log","line":"..."}` text frames per entry.
-  Levels: only `default | info | debug` (iOS-runtime narrow — host
-  `notice / error / fault` are rejected at the wire).
-  **iOS only** — `mac` doesn't need a separate `logs` command;
-  use macOS-host `log stream --predicate 'process == "..."'`.
+- `logs` — stream unified-log entries line-by-line to stdout.
+  - **iOS sim**: `baguette logs --udid <X> [--level info|debug|default]
+    [--style default|compact|json|ndjson|syslog] [--predicate ...]
+    [--bundle-id <id>]`. SIGINT (Ctrl-C) tears down cleanly. WS
+    variant on `WS /simulators/<X>/logs?level=&style=&predicate=&bundleId=`
+    emits `{"type":"log","line":"..."}` text frames per entry.
+  - **macOS app**: `baguette mac logs --bundle-id <id> [--level …]
+    [--style …] [--predicate …]`. Thin wrapper over host
+    `/usr/bin/log stream --predicate 'process == "<name>"'` — the
+    bundle-id is resolved to the executable name via
+    `NSRunningApplication.executableURL` so the agent doesn't have
+    to look it up. User `--predicate` ANDs with the bundle filter.
+  - Level filtering is `default | info | debug` on both paths
+    (`error / fault` require a predicate like
+    `--predicate 'messageType == "error"'`).
 
 NOT wired (skill should NOT propose these):
 - **Non-ASCII text** through `type` — IME / Pinyin / accented / emoji

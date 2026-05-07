@@ -74,12 +74,34 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 
 ## Install
 
+### From source (this fork — includes the macOS app target tree)
+
+```bash
+git clone -b feat/macos-app-support https://github.com/sunfmin/baguette.git
+cd baguette
+make install                      # → /opt/homebrew/bin/baguette + Baguette_Baguette.bundle
+```
+
+Override the prefix with `make install PREFIX=$HOME/.local` etc. Run
+`make uninstall` to remove. `swift test` runs the 417-test unit suite;
+`make smoke-mac` runs the 28-test end-to-end macOS smoke against
+TextEdit.
+
+### From upstream (iOS-only, no `mac` subcommand yet)
+
 ```bash
 brew install tddworks/tap/baguette
 ```
 
 Apple Silicon only. Requires Xcode 26 — `baguette` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
+
+> **Heads up**: the upstream tap is on `tddworks/homebrew-tap`. The
+> macOS-app target tree (`baguette mac …`) is not yet in upstream;
+> until it's merged, install from source as shown above to get
+> `mac list / screenshot / describe-ui / input` and the `/mac/...`
+> serve routes. After upstream merge this section collapses back to
+> a single `brew install` line.
 
 ## Quickstart
 
