@@ -168,15 +168,29 @@ make smoke-mac          # full suite (16 tests, ~30s)
 ./scripts/smoke-mac.sh --no-serve    # skip serve routes
 ```
 
-Tiers:
+Tiers (28 tests total):
 
-- **Tier 1** (no TCC) — `mac list` only.
-- **Tier 2** (Screen Recording + Accessibility) — screenshot,
-  describe-ui, every input gesture (type, key, tap, swipe-to-select,
-  scroll), plus the rejected-gesture paths.
-- **Tier 3** (Tier-2 grants + free port) — `serve` mode HTTP/WS
-  routes (`/mac.json`, `/mac/<id>/describe-ui`, `/mac/<id>/screen.jpg`,
-  `/mac`, `/mac-list.js`).
+- **Tier 1** (Screen Recording grant) — `mac list` (plain + `--json`),
+  `mac screenshot` (file + stdout + `--scale`), `mac describe-ui`
+  (full + hit-test + `--output`), and the unknown-bundle error path.
+- **Tier 2** (also Accessibility grant) — every input gesture
+  exercised end-to-end against TextEdit: `type` (mixed case + digits +
+  shifted punctuation), `key` (arrow keys, Enter, Backspace, modifier
+  combos), `tap` (cursor positioning, multi-line nav), `swipe`
+  (drag-select + replace), `scroll`, plus every rejected gesture
+  (`button`, `touch1`, `touch2`, `pinch`, `pan`), unknown-bundle on
+  `mac input`, and malformed JSON / missing-fields parse errors.
+- **Tier 3** — `serve` mode HTTP routes (`/mac.json`,
+  `/mac/<id>` deep link, `/mac/<id>/describe-ui` full + hit-test
+  query, `/mac/<id>/screen.jpg`, static `/mac-list.js`), HTTP 404 on
+  unknown bundle, and the WebSocket stream (`WS /mac/<id>/stream`):
+  binary-frame delivery via `{"type":"snapshot"}`, `describe_ui`
+  round-trip, gesture dispatch through the WS, error envelope on
+  unknown bundle.
+
+Requires `python3 -m pip install --user --break-system-packages
+websockets` for the WS tests (Tier 3 T3.8 / T3.9). The script falls
+back gracefully when `--no-serve` is passed.
 
 The script returns a non-zero exit code equal to the number of failed
 tests, so CI can gate on it. It's deliberately not part of `swift

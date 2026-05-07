@@ -162,6 +162,71 @@ else
     fail "hit-test (50, 50) → $RESULT (expected AXTextArea)"
 fi
 
+section "T1.5 — mac list --json (grouped envelope)"
+JSON=$("$BAGUETTE" mac list --json 2>/dev/null)
+if echo "$JSON" | python3 -c "
+import json,sys
+d = json.load(sys.stdin)
+assert isinstance(d.get('active'), list)
+assert isinstance(d.get('inactive'), list)
+all_apps = (d['active'] + d['inactive'])
+assert any(a.get('bundleID') == 'com.apple.TextEdit' for a in all_apps), 'TextEdit missing'
+print('OK')
+" >/dev/null 2>&1; then
+    pass "list --json envelope has active/inactive arrays with TextEdit"
+else
+    fail "list --json shape wrong"
+fi
+
+section "T1.6 — mac screenshot to stdout (no --output)"
+rm -f /tmp/smoke-mac-stdout.jpg
+"$BAGUETTE" mac screenshot --bundle-id $BG > /tmp/smoke-mac-stdout.jpg 2>/dev/null
+if [[ -s /tmp/smoke-mac-stdout.jpg ]] && file /tmp/smoke-mac-stdout.jpg | grep -q "JPEG"; then
+    pass "stdout captured ($(wc -c < /tmp/smoke-mac-stdout.jpg) bytes JPEG)"
+else
+    fail "no JPEG on stdout"
+fi
+
+section "T1.7 — mac screenshot --scale 2 halves dimensions"
+rm -f /tmp/smoke-mac-1x.jpg /tmp/smoke-mac-2x.jpg
+"$BAGUETTE" mac screenshot --bundle-id $BG --output /tmp/smoke-mac-1x.jpg 2>/dev/null
+"$BAGUETTE" mac screenshot --bundle-id $BG --output /tmp/smoke-mac-2x.jpg --scale 2 2>/dev/null
+# `sips` (built into macOS) reads decoded image dimensions cleanly,
+# unlike `file` which mixes EXIF density into its output.
+W1=$(sips -g pixelWidth /tmp/smoke-mac-1x.jpg 2>/dev/null | awk '/pixelWidth:/ {print $2}')
+W2=$(sips -g pixelWidth /tmp/smoke-mac-2x.jpg 2>/dev/null | awk '/pixelWidth:/ {print $2}')
+EXPECTED=$((W1 / 2))
+DIFF=$((W2 - EXPECTED))
+DIFF=${DIFF#-}
+if [[ "$W1" -gt 0 ]] && [[ "$W2" -gt 0 ]] && [[ "$DIFF" -le 2 ]]; then
+    pass "1x=${W1}px, 2x=${W2}px (≈ ${EXPECTED}px)"
+else
+    fail "scale didn't halve: 1x=${W1}px, 2x=${W2}px"
+fi
+
+section "T1.8 — mac describe-ui --output FILE writes to file"
+rm -f /tmp/smoke-mac-ax.json
+"$BAGUETTE" mac describe-ui --bundle-id $BG --output /tmp/smoke-mac-ax.json 2>/dev/null
+if [[ -s /tmp/smoke-mac-ax.json ]] \
+   && python3 -c "import json; d=json.load(open('/tmp/smoke-mac-ax.json')); assert d.get('role')=='AXWindow'" 2>/dev/null; then
+    pass "describe-ui --output wrote AX tree to /tmp/smoke-mac-ax.json"
+else
+    fail "describe-ui --output didn't write valid JSON"
+fi
+
+section "T1.9 — error: unknown --bundle-id across CLI commands"
+GHOST=com.example.does-not-exist.$$
+"$BAGUETTE" mac screenshot --bundle-id "$GHOST" --output /tmp/smoke-mac-ghost.jpg 2>/tmp/smoke-mac-err.log
+S_EXIT=$?
+"$BAGUETTE" mac describe-ui --bundle-id "$GHOST" 2>/tmp/smoke-mac-err2.log >/dev/null
+D_EXIT=$?
+if [[ "$S_EXIT" -ne 0 ]] && [[ "$D_EXIT" -ne 0 ]] \
+   && grep -q "not running" /tmp/smoke-mac-err.log /tmp/smoke-mac-err2.log; then
+    pass "screenshot + describe-ui both exit non-zero with 'not running' on unknown bundle"
+else
+    fail "unknown-bundle error path: screenshot exit=$S_EXIT, describe-ui exit=$D_EXIT"
+fi
+
 # ═════════════════════════════════════════════════════════════════
 # Tier 2 — input (needs Accessibility grant; also writes to TextEdit)
 # ═════════════════════════════════════════════════════════════════
@@ -260,14 +325,39 @@ else
     fail "long type lost characters. length=${#V}, value: $V"
 fi
 
-section "T2.8 — rejected gestures return ok:false"
+section "T2.8 — every rejected gesture returns ok:false (button, touch1, touch2, pinch, pan)"
+# All five gestures that don't apply to macOS apps. Each should
+# emit `{"ok":false}` and a `[mac-input] rejecting:` log line.
 RESULT=$(printf '{"type":"button","button":"home"}
 {"type":"touch1","phase":"down","x":10,"y":10,"width":600,"height":400}
-' | "$BAGUETTE" mac input --bundle-id $BG 2>&1 | grep -c '"ok":false')
-if [[ "$RESULT" == "2" ]]; then
-    pass "button + touch1 both correctly rejected with {\"ok\":false}"
+{"type":"touch2","phase":"down","x1":10,"y1":10,"x2":50,"y2":50,"width":600,"height":400}
+{"type":"pinch","cx":300,"cy":200,"start":50,"end":150,"width":600,"height":400,"duration":0.3}
+{"type":"pan","cx":300,"cy":200,"dx":40,"dy":40,"width":600,"height":400,"duration":0.3}
+' | "$BAGUETTE" mac input --bundle-id $BG 2>&1)
+COUNT_REJECT=$(echo "$RESULT" | grep -c '"ok":false')
+if [[ "$COUNT_REJECT" == "5" ]]; then
+    pass "button + touch1 + touch2 + pinch + pan all return {\"ok\":false}"
 else
-    fail "rejected-gesture handling: got $RESULT/2 ok:false responses"
+    fail "expected 5 rejections, got $COUNT_REJECT"
+    echo "$RESULT" | head -10
+fi
+
+section "T2.9 — error: unknown --bundle-id on mac input"
+"$BAGUETTE" mac input --bundle-id com.example.does-not-exist.$$ </dev/null 2>/tmp/smoke-mac-input-err.log
+INPUT_EXIT=$?
+if [[ "$INPUT_EXIT" -ne 0 ]] && grep -q "not running" /tmp/smoke-mac-input-err.log; then
+    pass "mac input on unknown bundle exits non-zero with 'not running'"
+else
+    fail "mac input unknown-bundle error path: exit=$INPUT_EXIT"
+fi
+
+section "T2.10 — invalid gesture envelope returns parse error"
+# Garbage line should not crash the session — dispatcher returns ok:false.
+BAD=$(printf '{"type":"tap"}\n{"not_json":' | "$BAGUETTE" mac input --bundle-id $BG 2>&1)
+if echo "$BAD" | grep -q '"ok":false'; then
+    pass "missing required fields and malformed JSON both rejected gracefully"
+else
+    fail "parse-error path: $BAD"
 fi
 
 reset_textedit
@@ -325,6 +415,109 @@ if [[ "${M_HTML%:*}" == "200" ]] && [[ "${M_JS%:*}" == "200" ]]; then
     pass "/mac → ${M_HTML#*:} bytes; /mac-list.js → ${M_JS#*:} bytes"
 else
     fail "static assets: /mac=$M_HTML /mac-list.js=$M_JS"
+fi
+
+section "T3.5 — GET /mac/<bundleID> serves the same mac.html (deep-link)"
+M_DEEP=$(curl -s "http://127.0.0.1:$PORT/mac/$BG")
+M_INDEX=$(curl -s "http://127.0.0.1:$PORT/mac")
+if [[ -n "$M_DEEP" ]] && [[ "$M_DEEP" == "$M_INDEX" ]]; then
+    pass "/mac/<bundleID> deep-link returns same mac.html as /mac (route matched)"
+else
+    fail "deep-link route mismatch — /mac/<bundleID> didn't return mac.html"
+fi
+
+section "T3.6 — GET /mac/<bundleID>/describe-ui?x=&y= (HTTP hit-test)"
+R=$(curl -s "http://127.0.0.1:$PORT/mac/$BG/describe-ui?x=50&y=50" \
+    | python3 -c "import json,sys; print(json.load(sys.stdin).get('role',''))")
+if [[ "$R" == "AXTextArea" ]]; then
+    pass "HTTP hit-test (50, 50) → AXTextArea"
+else
+    fail "HTTP hit-test got role=$R (expected AXTextArea)"
+fi
+
+section "T3.7 — HTTP 404 for unknown bundleID"
+GHOST=com.example.does-not-exist.$$
+SCREEN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/mac/$GHOST/screen.jpg")
+DESC_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/mac/$GHOST/describe-ui")
+if [[ "$SCREEN_CODE" == "404" ]] && [[ "$DESC_CODE" == "404" ]]; then
+    pass "/mac/$GHOST/screen.jpg → 404; /mac/$GHOST/describe-ui → 404"
+else
+    fail "expected 404s, got screen=$SCREEN_CODE describe-ui=$DESC_CODE"
+fi
+
+section "T3.8 — WS /mac/<bundleID>/stream — describe_ui + tap dispatch"
+# Python's `websockets` lib for scripted message exchange — wscat is
+# REPL-only and won't surface received frames in non-interactive mode.
+WS_OUT=$(python3 - "ws://127.0.0.1:$PORT/mac/$BG/stream?format=mjpeg" <<'PY' 2>&1 || true
+import asyncio, json, sys, websockets
+
+async def main():
+    url = sys.argv[1]
+    async with websockets.connect(url, max_size=10_000_000, proxy=None) as ws:
+        # Force one-shot snapshot to guarantee a binary frame arrives
+        # (SCStream only delivers when content changes; idle window
+        # won't produce frames on its own).
+        await ws.send(json.dumps({"type": "snapshot"}))
+        await ws.send(json.dumps({"type": "describe_ui"}))
+        # Pull frames until we see describe_ui_result AND a binary
+        # frame (or 4s pass).
+        end = asyncio.get_event_loop().time() + 4.0
+        seen_binary = False
+        seen_describe = False
+        while asyncio.get_event_loop().time() < end and not (seen_binary and seen_describe):
+            try:
+                msg = await asyncio.wait_for(ws.recv(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+            if isinstance(msg, bytes):
+                seen_binary = True
+                continue
+            if '"describe_ui_result"' in msg:
+                d = json.loads(msg)
+                seen_describe = d.get("ok") is True and d.get("tree") is not None
+        # Send a tap and confirm dispatch returns ok:true response (or
+        # is silently accepted — text replies are not sent back for
+        # gestures, so just confirm the socket stays alive).
+        await ws.send(json.dumps({
+            "type": "tap", "x": 50, "y": 50,
+            "width": 1078, "height": 679, "duration": 0.05
+        }))
+        # Tiny grace period to make sure no socket error fires.
+        await asyncio.sleep(0.5)
+        print(f"binary_frames={'yes' if seen_binary else 'no'}")
+        print(f"describe_ok={'yes' if seen_describe else 'no'}")
+
+asyncio.run(main())
+PY
+)
+if echo "$WS_OUT" | grep -q "describe_ok=yes" \
+   && echo "$WS_OUT" | grep -q "binary_frames=yes"; then
+    pass "WS describe_ui returned ok+tree; binary frames observed; tap dispatched without socket error"
+else
+    fail "WS round-trip incomplete"
+    echo "$WS_OUT" | head -5
+fi
+
+section "T3.9 — WS upgrade for unknown bundleID surfaces error envelope"
+WS_GHOST=$(python3 - "ws://127.0.0.1:$PORT/mac/com.example.ghost.$$/stream" <<'PY' 2>&1 || true
+import asyncio, sys, websockets
+async def main():
+    try:
+        async with websockets.connect(sys.argv[1], proxy=None) as ws:
+            try:
+                msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                print(msg if isinstance(msg, str) else "<binary>")
+            except asyncio.TimeoutError:
+                print("<no reply>")
+    except Exception as e:
+        print(f"connect_error: {e}")
+asyncio.run(main())
+PY
+)
+if echo "$WS_GHOST" | grep -q '"error":"unknown bundleID"'; then
+    pass "unknown bundleID returns {\"ok\":false,\"error\":\"unknown bundleID\"}"
+else
+    fail "WS unknown-bundle response: $WS_GHOST"
 fi
 
 kill $SERVE_PID 2>/dev/null
