@@ -155,6 +155,75 @@ Five steps, mirroring `docs/features/buttons.md`:
 5. **Doc + CHANGELOG** — table row in this file plus a CHANGELOG
    entry under `## [Unreleased]`.
 
+## Smoke test
+
+`scripts/smoke-mac.sh` exercises the entire surface end-to-end against
+TextEdit and asserts on observable outcomes (textarea value, JPEG
+bytes, AX role, HTTP status). Run after every change to the macOS
+adapters:
+
+```sh
+make smoke-mac          # full suite (16 tests, ~30s)
+./scripts/smoke-mac.sh --no-input    # skip input if Accessibility isn't granted
+./scripts/smoke-mac.sh --no-serve    # skip serve routes
+```
+
+Tiers:
+
+- **Tier 1** (no TCC) — `mac list` only.
+- **Tier 2** (Screen Recording + Accessibility) — screenshot,
+  describe-ui, every input gesture (type, key, tap, swipe-to-select,
+  scroll), plus the rejected-gesture paths.
+- **Tier 3** (Tier-2 grants + free port) — `serve` mode HTTP/WS
+  routes (`/mac.json`, `/mac/<id>/describe-ui`, `/mac/<id>/screen.jpg`,
+  `/mac`, `/mac-list.js`).
+
+The script returns a non-zero exit code equal to the number of failed
+tests, so CI can gate on it. It's deliberately not part of `swift
+test` because the unit suite stays hermetic — see "Why these bugs
+escaped the unit tests" below.
+
+## Why these bugs escaped the unit tests
+
+The first version of this surface had four bugs that only the smoke
+test caught:
+
+1. **`CGS_REQUIRE_INIT` crash** on first `SCStream` use.
+2. **Mouse clicks silently ignored** because we never warped the
+   cursor to the click location.
+3. **Drag-select dropping mid-drag** because we warped the cursor on
+   every `mouseDragged` step.
+4. **`postToPid` for keyboard bypassed selection-replacement** —
+   typing after a drag-select APPENDED instead of REPLACED.
+
+None of these are detectable by `swift test`, by design:
+
+- **Unit tests substitute `MockInput` / `MockScreen` / `MockAccessibility`.**
+  They verify that `KeyboardKey.from(wireCode: "KeyA")?.macKeyCode == 0`,
+  but they can't observe whether `CGEventCreateKeyboardEvent(0)` →
+  `CGEventPost(.cghidEventTap, …)` ends up landing as an "A" character
+  in TextEdit. The OS round-trip is the irreducible boundary.
+- **The Infrastructure adapters are integration-only.** Per
+  CLAUDE.md's adapter-split rules, `CGEventInput`,
+  `ScreenCaptureKitScreen`, and `RunningMacApps` are excluded from
+  unit coverage — they're the thin OS-call wrappers, with no
+  conversational state machine to mock.
+- **TCC, focus routing, and cursor-position hit-testing are
+  emergent.** They're system-wide behaviours that only manifest
+  with a real running app, real WindowServer, real TCC grants. No
+  amount of in-process mocking would have surfaced them.
+
+The unit suite caught everything it was capable of catching (parser
+shape, JSON projection, AX-walker recursion, HID→Carbon mapping,
+command-line wiring, server route construction). The smoke test
+covers the layer below — what happens when those values cross the
+OS boundary.
+
+**Both layers are necessary.** Unit tests are fast and hermetic for
+the inner-loop work; the smoke test is the gate for "does this
+actually drive a Mac app." Skipping either leaves a real category
+of bug uncovered.
+
 ## Known limits
 
 - **TCC denials surface as silent no-ops on Input/Screen Recording**
