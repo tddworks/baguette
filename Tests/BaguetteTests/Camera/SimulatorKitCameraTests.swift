@@ -174,6 +174,64 @@ struct SimulatorKitCameraTests {
         #expect(Bool(true), "stop completes without crash or hang")
     }
 
+    /// Verify that the `onFrame` closure wired up by `injectVideo`
+    /// pushes each decoded surface through the pusher collaborator.
+    @Test func `onFrame closure pushes surface to pusher`() async throws {
+        let host = MockDeviceHost()
+        let fakeDevice = FakeCameraSimDevice()
+        given(host).resolveDevice(udid: .value("FRAME")).willReturn(fakeDevice)
+
+        let pusher = MockSurfacePusher()
+        given(pusher).push(.any, to: .any).willReturn()
+
+        let decoder = MockVideoDecoder()
+        var capturedOnFrame: (@Sendable (IOSurface) throws -> Void)?
+        given(decoder).decodeLoop(url: .any, onFrame: .any).willProduce { _, onFrame in
+            capturedOnFrame = onFrame
+        }
+
+        let camera = SimulatorKitCamera(
+            udid: "FRAME", host: host, pusher: pusher, decoder: decoder
+        )
+
+        try camera.injectVideo(url: URL(fileURLWithPath: "/tmp/test.mp4"))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let testSurface = try SimulatorKitCamera.createIOSurface(
+            from: createTestImage(width: 4, height: 4)
+        )
+        try capturedOnFrame?(testSurface)
+
+        verify(pusher).push(.any, to: .any).called(1)
+        camera.stop()
+    }
+
+    /// Verify that a non-cancellation error from the decoder triggers
+    /// the camera's error handler which calls `stop()`.
+    @Test func `decoder error triggers stop`() async throws {
+        let host = MockDeviceHost()
+        let fakeDevice = FakeCameraSimDevice()
+        given(host).resolveDevice(udid: .value("ERR")).willReturn(fakeDevice)
+
+        let pusher = MockSurfacePusher()
+        given(pusher).push(.any, to: .any).willReturn()
+
+        let decoder = MockVideoDecoder()
+        given(decoder).decodeLoop(url: .any, onFrame: .any).willThrow(
+            CameraError.videoDecodingFailed
+        )
+
+        let camera = SimulatorKitCamera(
+            udid: "ERR", host: host, pusher: pusher, decoder: decoder
+        )
+
+        try camera.injectVideo(url: URL(fileURLWithPath: "/tmp/test.mp4"))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        verify(decoder).decodeLoop(url: .any, onFrame: .any).called(1)
+        camera.stop()
+    }
+
     // MARK: - helpers
 
     /// Create a minimal test `CGImage` with the given dimensions.
