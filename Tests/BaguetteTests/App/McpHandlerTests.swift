@@ -8,8 +8,7 @@ struct McpHandlerTests {
     // MARK: - Protocol
 
     @Test func `responds to initialize with server info and tools capability`() async {
-        let sim = MockSimulator()
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#)
 
@@ -21,8 +20,7 @@ struct McpHandlerTests {
     }
 
     @Test func `returns nil for notifications`() async {
-        let sim = MockSimulator()
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
 
@@ -30,8 +28,7 @@ struct McpHandlerTests {
     }
 
     @Test func `returns error for unknown method`() async {
-        let sim = MockSimulator()
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: #"{"jsonrpc":"2.0","id":2,"method":"unknown/thing","params":{}}"#)
 
@@ -41,8 +38,7 @@ struct McpHandlerTests {
     }
 
     @Test func `lists all seven tools`() async {
-        let sim = MockSimulator()
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: #"{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}"#)
 
@@ -159,10 +155,7 @@ struct McpHandlerTests {
     // MARK: - Tool: unknown
 
     @Test func `unknown tool returns error`() async {
-        let sim = MockSimulator()
-        let input = MockInput()
-        given(sim).input().willReturn(input)
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: #"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"frobnicate","arguments":{}}}"#)
 
@@ -174,8 +167,7 @@ struct McpHandlerTests {
     // MARK: - Malformed input
 
     @Test func `returns nil for invalid JSON`() async {
-        let sim = MockSimulator()
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: "not json")
 
@@ -183,8 +175,7 @@ struct McpHandlerTests {
     }
 
     @Test func `returns nil for missing method`() async {
-        let sim = MockSimulator()
-        let handler = McpHandler(simulator: sim)
+        let handler = McpHandler(simulator: MockSimulator())
 
         let response = await handler.handle(line: #"{"jsonrpc":"2.0","id":1}"#)
 

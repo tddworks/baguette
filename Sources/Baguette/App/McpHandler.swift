@@ -10,11 +10,9 @@ import Foundation
 /// structured tool definitions and JSON-RPC framing.
 final class McpHandler: @unchecked Sendable {
     private let simulator: any Simulator
-    private let gestureDispatcher: GestureDispatcher
 
     init(simulator: any Simulator) {
         self.simulator = simulator
-        self.gestureDispatcher = GestureDispatcher(input: simulator.input())
     }
 
     func handle(line: String) async -> String? {
