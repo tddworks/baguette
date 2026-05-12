@@ -115,12 +115,36 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
         let pointSize = Self.devicePointSize(for: device)
         let rootFrame = AXElementReader.frame(of: rootElement)
-        return AXNode.walk(
+        var tree = AXNode.walk(
             from: rootElement,
             transform: AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize),
             depthCap: Self.maxDepth,
             deadline: deadline
         )
+
+        // When the native tree is sparse (e.g. Safari showing only its
+        // toolbar with no web content), try the WebKit Remote Debugging
+        // Protocol to extract DOM elements via JavaScript and graft
+        // them onto the tree as additional children.
+        if tree.children.count < 10,
+           tree.role == "AXApplication",
+           tree.label?.lowercased().contains("safari") == true || tree.label?.lowercased().contains("webkit") == true {
+            let screenH = Double(pointSize.height)
+            if let webNodes = WebContentReader.readWebContent(simulatorUDID: udid, screenHeight: screenH), !webNodes.isEmpty {
+                log("[ax] merged \(webNodes.count) web content nodes into tree")
+                tree = AXNode(
+                    role: tree.role, subrole: tree.subrole,
+                    label: tree.label, value: tree.value,
+                    identifier: tree.identifier, title: tree.title,
+                    help: tree.help, frame: tree.frame,
+                    enabled: tree.enabled, focused: tree.focused,
+                    hidden: tree.hidden,
+                    children: tree.children + webNodes
+                )
+            }
+        }
+
+        return tree
     }
 
     /// Stamp every reachable child translation with `token` so
