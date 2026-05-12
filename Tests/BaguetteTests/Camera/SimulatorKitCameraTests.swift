@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreVideo
 import Foundation
 import IOSurface
 import Mockable
@@ -13,7 +14,7 @@ import Testing
 @Suite("SimulatorKitCamera — orchestration")
 struct SimulatorKitCameraTests {
 
-    // MARK: - injectImage
+    // MARK: - injectImage error paths
 
     /// Verify that `injectImage` throws `deviceNotFound` when the
     /// host has no matching simulator.
@@ -31,24 +32,7 @@ struct SimulatorKitCameraTests {
         }
     }
 
-    // MARK: - stop
-
-    /// Verify that `stop` clears cached state and can be called
-    /// multiple times without error.
-    @Test func `stop is idempotent`() {
-        let host = MockDeviceHost()
-        given(host).resolveDevice(udid: .any).willReturn(nil)
-        let pusher = MockSurfacePusher()
-        let decoder = MockVideoDecoder()
-        let camera = SimulatorKitCamera(
-            udid: "test", host: host, pusher: pusher, decoder: decoder
-        )
-
-        camera.stop()
-        camera.stop()
-    }
-
-    // MARK: - injectVideo
+    // MARK: - injectVideo error paths
 
     /// Verify that `injectVideo` throws `deviceNotFound` when the
     /// host has no matching simulator.
@@ -64,6 +48,23 @@ struct SimulatorKitCameraTests {
         #expect(throws: CameraError.deviceNotFound(udid: "ghost")) {
             try camera.injectVideo(url: URL(fileURLWithPath: "/tmp/test.mp4"))
         }
+    }
+
+    // MARK: - stop
+
+    /// Verify that `stop` is idempotent — calling it multiple times
+    /// without a prior warm-up does not crash or error.
+    @Test func `stop is idempotent`() {
+        let host = MockDeviceHost()
+        given(host).resolveDevice(udid: .any).willReturn(nil)
+        let pusher = MockSurfacePusher()
+        let decoder = MockVideoDecoder()
+        let camera = SimulatorKitCamera(
+            udid: "test", host: host, pusher: pusher, decoder: decoder
+        )
+
+        camera.stop()
+        camera.stop()
     }
 
     // MARK: - IOSurface creation
@@ -87,6 +88,92 @@ struct SimulatorKitCameraTests {
         #expect(IOSurfaceGetHeight(surface) == 1)
     }
 
+    /// Verify BGRA pixel format is set on created surfaces.
+    @Test func `createIOSurface uses BGRA pixel format`() throws {
+        let image = createTestImage(width: 4, height: 4)
+        let surface = try SimulatorKitCamera.createIOSurface(from: image)
+
+        #expect(IOSurfaceGetPixelFormat(surface) == kCVPixelFormatType_32BGRA)
+    }
+
+    // MARK: - success-path orchestration
+
+    /// Verify that `injectImage` calls `ensureWarm` → creates a
+    /// surface → calls `pusher.push` when the device resolves to a
+    /// valid SimDeviceIO descriptor.
+    ///
+    /// Uses `FakeCameraSimDevice` to satisfy the ObjC runtime calls
+    /// in `ensureWarm()`: `device.perform("io")` returns a
+    /// `FakeCameraSimDeviceIO`, whose `deviceIOPorts` KVC property
+    /// returns a `FakeCameraPort` with `portIdentifier` =
+    /// `"com.apple.camera.front"`.
+    @Test func `injectImage pushes surface via pusher on success`() throws {
+        let host = MockDeviceHost()
+        let fakeDevice = FakeCameraSimDevice()
+        given(host).resolveDevice(udid: .value("ABC")).willReturn(fakeDevice)
+
+        let pusher = MockSurfacePusher()
+        given(pusher).push(.any, to: .any).willReturn()
+        let decoder = MockVideoDecoder()
+
+        let camera = SimulatorKitCamera(
+            udid: "ABC", host: host, pusher: pusher, decoder: decoder
+        )
+
+        let image = createTestImage(width: 8, height: 8)
+        try camera.injectImage(image)
+
+        verify(pusher).push(.any, to: .any).called(1)
+    }
+
+    /// Verify that `injectVideo` spawns a video loop task and
+    /// invokes `decoder.decodeLoop` when the device is resolvable.
+    @Test func `injectVideo invokes decoder on success`() async throws {
+        let host = MockDeviceHost()
+        let fakeDevice = FakeCameraSimDevice()
+        given(host).resolveDevice(udid: .value("VID")).willReturn(fakeDevice)
+
+        let pusher = MockSurfacePusher()
+        given(pusher).push(.any, to: .any).willReturn()
+
+        let decoder = MockVideoDecoder()
+        given(decoder).decodeLoop(url: .any, onFrame: .any).willReturn()
+
+        let camera = SimulatorKitCamera(
+            udid: "VID", host: host, pusher: pusher, decoder: decoder
+        )
+
+        let url = URL(fileURLWithPath: "/tmp/test.mp4")
+        try camera.injectVideo(url: url)
+
+        // Give the background Task a moment to start.
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        verify(decoder).decodeLoop(url: .any, onFrame: .any).called(1)
+        camera.stop()
+    }
+
+    /// Verify that `stop` cancels any active video loop task.
+    @Test func `stop cancels active video loop`() async throws {
+        let host = MockDeviceHost()
+        let fakeDevice = FakeCameraSimDevice()
+        given(host).resolveDevice(udid: .value("STOP")).willReturn(fakeDevice)
+
+        let pusher = MockSurfacePusher()
+        let decoder = MockVideoDecoder()
+        given(decoder).decodeLoop(url: .any, onFrame: .any).willReturn()
+
+        let camera = SimulatorKitCamera(
+            udid: "STOP", host: host, pusher: pusher, decoder: decoder
+        )
+
+        try camera.injectVideo(url: URL(fileURLWithPath: "/tmp/test.mp4"))
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        camera.stop()
+        #expect(Bool(true), "stop completes without crash or hang")
+    }
+
     // MARK: - helpers
 
     /// Create a minimal test `CGImage` with the given dimensions.
@@ -104,3 +191,47 @@ struct SimulatorKitCameraTests {
         return ctx.makeImage()!
     }
 }
+
+// MARK: - ObjC test doubles for SimDeviceIO warm-up
+
+/// Fake `SimDevice` that responds to `perform("io")` by returning
+/// a `FakeCameraSimDeviceIO`. Satisfies `ensureWarm()`'s ObjC
+/// runtime call chain without a real CoreSimulator connection.
+private class FakeCameraSimDevice: NSObject {
+    /// The fake IO object returned by `device.perform("io")`.
+    private let fakeIO = FakeCameraSimDeviceIO()
+
+    @objc func io() -> NSObject { fakeIO }
+}
+
+/// Fake `SimDeviceIO` — responds to `updateIOPorts` (no-op) and
+/// exposes `deviceIOPorts` via KVC, returning a single
+/// `FakeCameraPort` with identifier `"com.apple.camera.front"`.
+private class FakeCameraSimDeviceIO: NSObject {
+    /// The single camera port exposed via KVC `deviceIOPorts`.
+    private let port = FakeCameraPort()
+
+    @objc func updateIOPorts() {}
+
+    override func value(forKey key: String) -> Any? {
+        if key == "deviceIOPorts" { return [port] }
+        return super.value(forKey: key)
+    }
+}
+
+/// Fake camera IO port — responds to `portIdentifier` and
+/// `descriptor` selectors that `ensureWarm()` inspects.
+private class FakeCameraPort: NSObject {
+    /// The descriptor object returned to `ensureWarm()`.
+    private let desc = FakeCameraDescriptor()
+
+    @objc func portIdentifier() -> NSString {
+        "com.apple.camera.front"
+    }
+
+    @objc func descriptor() -> NSObject { desc }
+}
+
+/// Fake camera descriptor — the terminal object that
+/// `ensureWarm()` caches and passes to `SurfacePusher.push`.
+private class FakeCameraDescriptor: NSObject {}

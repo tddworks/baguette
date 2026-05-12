@@ -68,8 +68,7 @@ final class AVFoundationVideoDecoder: VideoDecoder, @unchecked Sendable {
                 CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
                 defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
 
-                if let surfaceRef = CVPixelBufferGetIOSurface(imageBuffer) {
-                    let surface = unsafeBitCast(surfaceRef, to: IOSurface.self)
+                if let surface = CVPixelBufferGetIOSurface(imageBuffer)?.takeUnretainedValue() {
                     try onFrame(surface)
                 }
 
