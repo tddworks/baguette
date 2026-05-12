@@ -1,59 +1,118 @@
-import AVFoundation
 import CoreGraphics
 import CoreVideo
 import Foundation
 import IOSurface
 import ObjectiveC
 
-/// Production `Camera` — injects image frames into a simulator's
-/// camera surface via SimulatorKit's `SimDeviceIO` descriptors.
-///
-/// The simulator exposes camera ports alongside framebuffer ports on
-/// its `SimDeviceIO` object. We find the `com.apple.camera.front`
-/// (or `com.apple.camera.back`) descriptor and push `IOSurface`
-/// frames into it, which the guest's `AVCaptureDevice` picks up as
-/// live camera input.
-///
-/// Approach: resolve the device's IO object, find camera descriptors,
-/// and use the `pushSurface:` / `pushPixelBuffer:` selector on the
-/// descriptor to inject frames. This mirrors how Xcode's own
-/// simulated camera feature works internally.
-final class SimulatorKitCamera: Camera, @unchecked Sendable {
-    private let udid: String
-    private let host: any DeviceHost
-    private let lock = NSLock()
-    private let queue = DispatchQueue(label: "baguette.camera", qos: .userInteractive)
+/// Wrapper that makes a non-`Sendable` value safe to capture in
+/// `@Sendable` closures. The caller is responsible for ensuring
+/// the wrapped value is thread-safe in practice.
+private struct UncheckedSendableBox<T>: @unchecked Sendable {
+    /// The wrapped value.
+    let value: T
+    /// Wrap `value` for `@Sendable` capture.
+    init(_ value: T) { self.value = value }
+}
 
+/// Production `Camera` — orchestrates image and video injection into
+/// a simulator's camera surface via SimulatorKit's `SimDeviceIO`
+/// descriptors.
+///
+/// Orchestration (device resolution, descriptor discovery, video loop
+/// lifecycle) lives here. Irreducible ObjC selector calls are
+/// delegated to `SurfacePusher`; AVFoundation decoding is delegated
+/// to `VideoDecoder`. This split lets tests drive the orchestrator
+/// with `MockSurfacePusher` / `MockVideoDecoder` without a live
+/// simulator.
+final class SimulatorKitCamera: Camera, @unchecked Sendable {
+    /// Simulator UDID this camera targets.
+    private let udid: String
+    /// Device host for resolving the live `SimDevice` object.
+    private let host: any DeviceHost
+    /// Collaborator that pushes `IOSurface` frames to the descriptor.
+    private let pusher: any SurfacePusher
+    /// Collaborator that decodes video files into `IOSurface` frames.
+    private let decoder: any VideoDecoder
+    /// Guards all mutable state (`ioClient`, `cameraDescriptor`,
+    /// `videoLoopTask`, `warmed`) for thread safety.
+    private let lock = NSLock()
+
+    /// Cached `SimDeviceIO` object for this simulator.
     private var ioClient: NSObject?
+    /// Cached camera port descriptor discovered during warm-up.
     private var cameraDescriptor: NSObject?
+    /// Background task running the video decode-and-push loop.
     private var videoLoopTask: Task<Void, Never>?
+    /// True once the camera descriptor has been resolved.
     private var warmed = false
 
-    init(udid: String, host: any DeviceHost) {
+    /// Create a camera injection pipeline for the given simulator.
+    ///
+    /// - Parameters:
+    ///   - udid: Simulator UDID to target.
+    ///   - host: Device host for resolving the live `SimDevice` object.
+    ///   - pusher: Collaborator that pushes `IOSurface` frames via ObjC selectors.
+    ///   - decoder: Collaborator that decodes video files into `IOSurface` frames.
+    init(
+        udid: String,
+        host: any DeviceHost,
+        pusher: any SurfacePusher = SimulatorKitSurfacePusher(),
+        decoder: any VideoDecoder = AVFoundationVideoDecoder()
+    ) {
         self.udid = udid
         self.host = host
+        self.pusher = pusher
+        self.decoder = decoder
     }
 
+    /// Look up the underlying `SimDevice` `NSObject` for this UDID.
     private func resolveDevice() -> NSObject? {
         host.resolveDevice(udid: udid)
     }
 
     // MARK: - Camera protocol
 
+    /// Push a single still frame into the simulator's camera feed.
+    /// Converts the image to a BGRA `IOSurface` and dispatches it
+    /// to the camera descriptor synchronously.
     func injectImage(_ image: CGImage) throws {
         let desc = try ensureWarm()
-        let surface = try createIOSurface(from: image)
-        try pushSurface(surface, to: desc)
+        let surface = try Self.createIOSurface(from: image)
+        try pusher.push(surface, to: desc)
     }
 
+    /// Start looping video frames from `url` into the camera feed.
+    /// Cancels any previously active video loop. Errors during
+    /// decoding are logged; the loop retries from the beginning of
+    /// the file until cancelled via `stop()`.
     func injectVideo(url: URL) throws {
         let desc = try ensureWarm()
+        let pusher = self.pusher
+
+        // NSObject is not Sendable but the descriptor is thread-safe
+        // in practice (SimulatorKit serialises calls internally).
+        let descriptorRef = UncheckedSendableBox(desc)
+
+        lock.lock()
         videoLoopTask?.cancel()
-        videoLoopTask = Task { [weak self] in
-            await self?.videoLoop(url: url, descriptor: desc)
+        videoLoopTask = Task { [weak self, decoder] in
+            do {
+                try await decoder.decodeLoop(url: url) { surface in
+                    try pusher.push(surface, to: descriptorRef.value)
+                }
+            } catch is CancellationError {
+                // Normal shutdown via stop().
+            } catch {
+                log("[camera] video loop error: \(error)")
+                self?.stop()
+            }
         }
+        lock.unlock()
     }
 
+    /// Tear down the camera pipeline, cancel any active video loop,
+    /// and release cached SimulatorKit handles. Safe to call
+    /// multiple times — subsequent calls are no-ops.
     func stop() {
         lock.lock()
         defer { lock.unlock() }
@@ -64,9 +123,11 @@ final class SimulatorKitCamera: Camera, @unchecked Sendable {
         warmed = false
     }
 
-    // MARK: - IO surface creation
+    // MARK: - IOSurface creation
 
-    private func createIOSurface(from image: CGImage) throws -> IOSurface {
+    /// Convert a `CGImage` to a BGRA `IOSurface` suitable for
+    /// injection into a SimulatorKit camera descriptor.
+    static func createIOSurface(from image: CGImage) throws -> IOSurface {
         let w = image.width
         let h = image.height
         let bytesPerPixel = 4
@@ -102,77 +163,11 @@ final class SimulatorKitCamera: Camera, @unchecked Sendable {
         return surface
     }
 
-    // MARK: - frame push
-
-    private func pushSurface(_ surface: IOSurface, to desc: NSObject) throws {
-        // Try pushIOSurface: first (available on newer SimulatorKit)
-        let pushSurfaceSel = NSSelectorFromString("pushIOSurface:")
-        if desc.responds(to: pushSurfaceSel) {
-            desc.perform(pushSurfaceSel, with: surface)
-            return
-        }
-
-        // Fallback: sendIOSurface: (older SimulatorKit variants)
-        let sendSurfaceSel = NSSelectorFromString("sendIOSurface:")
-        if desc.responds(to: sendSurfaceSel) {
-            desc.perform(sendSurfaceSel, with: surface)
-            return
-        }
-
-        // Fallback: class_getMethodImplementation for typed dispatch
-        let setSel = NSSelectorFromString("setFramebufferSurface:")
-        if desc.responds(to: setSel) {
-            desc.perform(setSel, with: surface)
-            return
-        }
-
-        throw CameraError.injectionFailed(
-            reason: "no push/send IOSurface selector found on camera descriptor"
-        )
-    }
-
-    // MARK: - video loop
-
-    private func videoLoop(url: URL, descriptor: NSObject) async {
-        let asset = AVURLAsset(url: url)
-        guard let tracks = try? await asset.loadTracks(withMediaType: .video),
-              let track = tracks.first else { return }
-
-        let nominalFPS = (try? await track.load(.nominalFrameRate)) ?? 30.0
-        let frameInterval: UInt64 = nominalFPS > 0
-            ? UInt64(1_000_000_000.0 / Double(nominalFPS))
-            : 33_333_333  // ~30 fps fallback
-
-        while !Task.isCancelled {
-            guard let reader = try? AVAssetReader(asset: asset) else { return }
-            let outputSettings: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            ]
-            let output = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
-            reader.add(output)
-            guard reader.startReading() else { return }
-
-            while !Task.isCancelled, reader.status == .reading {
-                guard let sampleBuffer = output.copyNextSampleBuffer(),
-                      let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
-                else { continue }
-
-                CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
-                if let surface = CVPixelBufferGetIOSurface(imageBuffer) {
-                    let ioSurface = unsafeBitCast(surface, to: IOSurface.self)
-                    try? pushSurface(ioSurface, to: descriptor)
-                }
-                CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly)
-
-                try? await Task.sleep(nanoseconds: frameInterval)
-            }
-
-            reader.cancelReading()
-        }
-    }
-
     // MARK: - warm-up
 
+    /// Lazily resolve the simulator's camera descriptor. Thread-safe
+    /// via `lock` — multiple callers share the same cached descriptor
+    /// once warmed.
     @discardableResult
     private func ensureWarm() throws -> NSObject {
         lock.lock()

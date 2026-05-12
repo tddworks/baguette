@@ -468,6 +468,14 @@ struct Server: Sendable {
         }
     }
 
+    /// Maximum accepted body size for the camera injection endpoint
+    /// (10 MB). Prevents unbounded memory allocation from oversized
+    /// or malicious uploads.
+    private static let maxCameraBodyBytes = 10 * 1024 * 1024
+
+    /// Handle `POST /simulators/:udid/camera` — decode the request
+    /// body as a JPEG or PNG image and push it into the simulator's
+    /// camera feed.
     private static func cameraInject(
         udid: String,
         simulators: any Simulators,
@@ -482,6 +490,9 @@ struct Server: Sendable {
         do {
             var collected = ByteBuffer()
             for try await var chunk in body {
+                if collected.readableBytes + chunk.readableBytes > maxCameraBodyBytes {
+                    return errorJSON("image too large (max 10 MB)", status: .badRequest)
+                }
                 collected.writeBuffer(&chunk)
             }
             guard let data = collected.readData(length: collected.readableBytes),
