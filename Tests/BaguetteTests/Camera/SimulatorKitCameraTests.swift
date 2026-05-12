@@ -207,7 +207,10 @@ struct SimulatorKitCameraTests {
     }
 
     /// Verify that a non-cancellation error from the decoder triggers
-    /// the camera's error handler which calls `stop()`.
+    /// the camera's error handler which calls `stop()` automatically.
+    /// After the auto-stop the camera is no longer warmed, so a
+    /// subsequent `injectImage` must re-resolve the device — we assert
+    /// `resolveDevice` is called twice to confirm the reset happened.
     @Test func `decoder error triggers stop`() async throws {
         let host = MockDeviceHost()
         let fakeDevice = FakeCameraSimDevice()
@@ -229,7 +232,15 @@ struct SimulatorKitCameraTests {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         verify(decoder).decodeLoop(url: .any, onFrame: .any).called(1)
-        camera.stop()
+
+        // If stop() was auto-called, the camera is no longer warmed.
+        // A new injectImage will re-resolve the device via ensureWarm().
+        let image = createTestImage(width: 4, height: 4)
+        try camera.injectImage(image)
+
+        // resolveDevice called twice: once for injectVideo, once for
+        // injectImage after the error handler reset the camera.
+        verify(host).resolveDevice(udid: .value("ERR")).called(2)
     }
 
     // MARK: - helpers
