@@ -1,6 +1,8 @@
+import CoreGraphics
 import Foundation
 import HTTPTypes
 import Hummingbird
+import ImageIO
 import HummingbirdWebSocket
 import NIOCore
 @_spi(WSInternal) import WSCore
@@ -199,6 +201,17 @@ struct Server: Sendable {
                 quality: r.uri.queryParameters.get("quality").flatMap(Double.init) ?? 0.85,
                 scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
                 simulators: simulators
+            )
+        }
+
+        // Camera injection — POST an image body to push one frame into
+        // the simulator's camera feed. Accepts JPEG or PNG.
+        router.post("/simulators/:udid/camera") { [simulators] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            return await Self.cameraInject(
+                udid: Self.udidParam(r),
+                simulators: simulators,
+                body: r.body
             )
         }
 
@@ -450,6 +463,43 @@ struct Server: Sendable {
                 headers: [.contentType: "image/jpeg", .cacheControl: "no-cache"],
                 body: .init(byteBuffer: ByteBuffer(data: bytes))
             )
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func cameraInject(
+        udid: String,
+        simulators: any Simulators,
+        body: RequestBody
+    ) async -> Response {
+        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        }
+        guard sim.canAcceptInput else {
+            return errorJSON("simulator not booted", status: .conflict)
+        }
+        do {
+            var collected = ByteBuffer()
+            for try await var chunk in body {
+                collected.writeBuffer(&chunk)
+            }
+            guard let data = collected.readData(length: collected.readableBytes),
+                  let provider = CGDataProvider(data: data as CFData),
+                  let image = CGImage(
+                      jpegDataProviderSource: provider,
+                      decode: nil, shouldInterpolate: true,
+                      intent: .defaultIntent
+                  ) ?? CGImage(
+                      pngDataProviderSource: provider,
+                      decode: nil, shouldInterpolate: true,
+                      intent: .defaultIntent
+                  )
+            else {
+                return errorJSON("invalid image (expected JPEG or PNG)", status: .badRequest)
+            }
+            try sim.camera().injectImage(image)
+            return jsonOK
         } catch {
             return errorJSON(String(describing: error), status: .internalServerError)
         }

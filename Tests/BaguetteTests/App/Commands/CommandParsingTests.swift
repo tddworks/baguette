@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation", "diag-digitizer-trackpad",
+            "orientation", "camera", "diag-digitizer-trackpad",
         ])
     }
 
@@ -315,6 +315,32 @@ struct CommandParsingTests {
         #expect(cmd.style == "json")
         #expect(cmd.predicate == #"subsystem == "com.apple.UIKit""#)
         #expect(cmd.bundleId == "com.example.app")
+    }
+
+    // MARK: - camera
+
+    @Test func `camera parses --input and defaults`() throws {
+        let cmd = try CameraCommand.parse(["--udid", "ABC", "--input", "/tmp/photo.jpg"])
+        #expect(cmd.options.udid == "ABC")
+        #expect(cmd.input == "/tmp/photo.jpg")
+        #expect(cmd.loop == false)
+        #expect(cmd.duration == 0)
+        #expect(CameraCommand.configuration.commandName == "camera")
+    }
+
+    @Test func `camera parses --loop and --duration`() throws {
+        let cmd = try CameraCommand.parse([
+            "--udid", "ABC", "--input", "/tmp/video.mp4",
+            "--loop", "--duration", "10",
+        ])
+        #expect(cmd.loop == true)
+        #expect(cmd.duration == 10)
+    }
+
+    @Test func `camera rejects argv without --input`() {
+        #expect(throws: (any Error).self) {
+            try CameraCommand.parse(["--udid", "ABC"])
+        }
     }
 
     // MARK: - serve

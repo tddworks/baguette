@@ -95,4 +95,8 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     func orientation() -> any Orientation {
         PurpleEventOrientation(udid: udid, host: host)
     }
+
+    func camera() -> any Camera {
+        SimulatorKitCamera(udid: udid, host: host)
+    }
 }

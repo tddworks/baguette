@@ -50,6 +50,11 @@ protocol Simulator: Sendable {
     /// returns a fresh handle; the underlying GSEvent dispatch is
     /// stateless.
     func orientation() -> any Orientation
+
+    /// Inject image or video frames into this simulator's camera
+    /// input. Each call returns a fresh pipeline; only one active
+    /// camera stream per simulator is supported.
+    func camera() -> any Camera
 }
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can

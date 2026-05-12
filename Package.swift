@@ -50,6 +50,7 @@ let package = Package(
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("ImageIO"),
                 .linkedFramework("VideoToolbox"),
+                .linkedFramework("AVFoundation"),
             ]
         ),
         .testTarget(
