@@ -21,6 +21,8 @@ enum WebContentReader {
         simulatorUDID udid: String,
         screenHeight: Double = 874
     ) -> [AXNode]? {
+        kickstartWebInspector(udid: udid)
+
         let socketPaths = findAllSockets()
         if socketPaths.isEmpty {
             logErr("[web] no webinspectord sockets found")
@@ -33,6 +35,21 @@ enum WebContentReader {
         }
         logErr("[web] no inspectable Safari page on any socket")
         return nil
+    }
+
+    nonisolated(unsafe) private static var inspectorKickstarted = false
+
+    private static func kickstartWebInspector(udid: String) {
+        guard !inspectorKickstarted else { return }
+        inspectorKickstarted = true
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        proc.arguments = ["simctl", "spawn", udid, "launchctl", "kickstart", "system/com.apple.webinspectord"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        try? proc.run()
+        proc.waitUntilExit()
+        Thread.sleep(forTimeInterval: 1.0)
     }
 
     private static func trySocket(path: String, screenHeight: Double) -> [AXNode]? {
