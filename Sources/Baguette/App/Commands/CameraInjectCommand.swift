@@ -24,14 +24,23 @@ struct CameraInjectCommand: AsyncParsableCommand {
 
     @OptionGroup var options: DeviceOption
 
-    @Option(name: .shortAndLong, help: "Path to image (JPEG, PNG) or video (MP4, MOV) file")
+    @Option(name: .shortAndLong, help: "Path to image (JPEG, PNG) or video (MP4, MOV, M4V, AVI) file")
     var input: String
 
-    @Flag(name: .long, help: "Loop continuously (Ctrl+C to stop)")
+    @Flag(name: .long, help: "Loop video from the beginning when it ends (images always stream until Ctrl+C)")
     var loop = false
 
     /// File extensions recognised as video (decoded via AVAssetReader).
     private static let videoExts: Set<String> = ["mp4", "mov", "m4v", "avi"]
+
+    /// Thread-safe cancellation flag shared between the SIGINT handler
+    /// and the frame-writing loops. Using a reference type avoids the
+    /// Swift 6 exclusivity issues with mutating a local `var Bool`
+    /// from an escaping `DispatchSource` closure while also passing
+    /// it as `inout` to an async function.
+    private final class CancelFlag: @unchecked Sendable {
+        var cancelled = false
+    }
 
     /// Entry point — installs the VirtualCamera dylib, arms the
     /// simulator, then streams frames from the input file to the
@@ -58,27 +67,27 @@ struct CameraInjectCommand: AsyncParsableCommand {
         log("Arming virtual camera on simulator...")
         let injection = SimctlSimulatorInjection()
         try await injection.arm(dylibPath: dylibPath, on: simulator)
+        defer { Task { try? await injection.disarm(on: simulator) } }
 
         let sinkPath = "/tmp/SimCam.bgra"
         let sink = try SharedMemoryFrameSink(path: sinkPath)
         log("Writing frames to \(sinkPath)")
 
-        var running = true
+        let cancel = CancelFlag()
         let signalSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         signal(SIGINT, SIG_IGN)
-        signalSource.setEventHandler { running = false }
+        signalSource.setEventHandler { cancel.cancelled = true }
         signalSource.resume()
 
         let flags = CameraFlags()
         let ext = inputURL.pathExtension.lowercased()
 
         if Self.videoExts.contains(ext) {
-            try await injectVideo(url: inputURL, sink: sink, flags: flags, running: &running)
+            try await injectVideo(url: inputURL, sink: sink, flags: flags, cancel: cancel)
         } else {
-            try await injectImage(url: inputURL, sink: sink, flags: flags, running: &running)
+            try await injectImage(url: inputURL, sink: sink, flags: flags, cancel: cancel)
         }
 
-        try? await injection.disarm(on: simulator)
         log("Camera injection stopped")
     }
 
@@ -86,12 +95,12 @@ struct CameraInjectCommand: AsyncParsableCommand {
 
     /// Decode a still image via ImageIO, render it to a tightly-packed
     /// BGRA buffer, then push the same frame at ~30 fps until the user
-    /// presses Ctrl+C (or until 2 frames if `loop` is false).
+    /// presses Ctrl+C.
     private func injectImage(
         url: URL,
         sink: SharedMemoryFrameSink,
         flags: CameraFlags,
-        running: inout Bool
+        cancel: CancelFlag
     ) async throws {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -115,13 +124,13 @@ struct CameraInjectCommand: AsyncParsableCommand {
             }
         }
 
-        log("Injecting \(url.lastPathComponent) (\(imgW)×\(imgH), loop=\(loop))...")
+        log("Injecting \(url.lastPathComponent) (\(imgW)×\(imgH))...")
         log("Press Ctrl+C to stop")
 
         var seq: UInt32 = 0
         let w = UInt32(imgW)
         let h = UInt32(imgH)
-        while running {
+        while !cancel.cancelled {
             let frame = try CameraFrame(
                 sequence: seq,
                 timestampMs: UInt32(truncatingIfNeeded: UInt64(Date().timeIntervalSince1970 * 1000)),
@@ -129,7 +138,6 @@ struct CameraInjectCommand: AsyncParsableCommand {
             )
             try sink.write(frame, flags: flags)
             seq &+= 1
-            if !loop && seq >= 2 { break }
             if seq % 30 == 0 { log("Frame \(seq) (\(w)×\(h))") }
             try await Task.sleep(nanoseconds: 33_333_333)
         }
@@ -146,7 +154,7 @@ struct CameraInjectCommand: AsyncParsableCommand {
         url: URL,
         sink: SharedMemoryFrameSink,
         flags: CameraFlags,
-        running: inout Bool
+        cancel: CancelFlag
     ) async throws {
         var seq: UInt32 = 0
 
@@ -179,7 +187,7 @@ struct CameraInjectCommand: AsyncParsableCommand {
             reader.add(output)
             reader.startReading()
 
-            while reader.status == .reading && running {
+            while reader.status == .reading && !cancel.cancelled {
                 guard let sampleBuffer = output.copyNextSampleBuffer(),
                       let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
                     continue
@@ -206,9 +214,14 @@ struct CameraInjectCommand: AsyncParsableCommand {
                 try await Task.sleep(nanoseconds: frameDuration)
             }
 
+            if reader.status == .failed {
+                log("Video reader failed: \(reader.error?.localizedDescription ?? "unknown error")")
+                throw ExitCode.failure
+            }
+
             if !loop { break }
-            if running { log("Looping video...") }
-        } while running
+            if !cancel.cancelled { log("Looping video...") }
+        } while !cancel.cancelled
     }
 
     // MARK: - Helpers
