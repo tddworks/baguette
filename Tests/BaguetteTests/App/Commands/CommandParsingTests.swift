@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation", "diag-digitizer-trackpad",
+            "camera-inject", "orientation", "diag-digitizer-trackpad",
         ])
     }
 

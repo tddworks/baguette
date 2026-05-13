@@ -25,6 +25,7 @@ struct Baguette: AsyncParsableCommand {
             DescribeUICommand.self,
             LogsCommand.self,
             ServeCommand.self,
+            CameraInjectCommand.self,
             OrientationCommand.self,
             DiagDigitizerTrackpadCommand.self,
         ]
