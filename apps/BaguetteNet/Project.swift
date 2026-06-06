@@ -20,7 +20,8 @@ let bundlePrefix = "com.tddworks.baguette.net"
 let appGroup = "group.com.tddworks.baguette.net"
 
 let commonSettings: SettingsDictionary = [
-    "DEVELOPMENT_TEAM": "", // ← set your 10-char Team ID to build/run
+    "DEVELOPMENT_TEAM": "274JTDMFP2",
+    "CODE_SIGN_IDENTITY": "Apple Development",
     "CODE_SIGN_STYLE": "Automatic",
     "SWIFT_VERSION": "6.0",
     "MARKETING_VERSION": "0.1.0",

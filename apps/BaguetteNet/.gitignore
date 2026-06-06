@@ -1,0 +1,6 @@
+# Tuist-generated — regenerate with `tuist generate`
+*.xcodeproj/
+*.xcworkspace/
+Derived/
+.build/
+*.xcuserstate
