@@ -1,8 +1,12 @@
 #include "shared.xcconfig"
 
-// Distribution. AppNexus uses "Apple Distribution" (App Store), but BaguetteNet
-// ships its system extension outside the App Store, so it signs with the
-// Developer ID Application cert that team Y5856NSDZU actually holds.
-// (Switch to "Apple Distribution" if this ever goes to the Mac App Store.)
-CODE_SIGN_IDENTITY = Developer ID Application
-CODE_SIGN_IDENTITY[sdk=macosx*] = Developer ID Application
+// Automatic signing builds (incl. archives) with the Apple Development identity;
+// the Developer ID distribution identity + profile are applied later at
+// archive-export time (Organizer → Distribute App → Developer ID, which
+// re-signs with the Developer ID Application cert team Y5856NSDZU holds).
+//
+// Do NOT pin CODE_SIGN_IDENTITY = "Developer ID Application" here: with
+// CODE_SIGN_STYLE = Automatic it conflicts ("automatically signed for
+// development, but a conflicting code signing identity ... manually specified").
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_IDENTITY[sdk=macosx*] = Apple Development

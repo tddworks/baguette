@@ -38,10 +38,11 @@ let project = Project(
             .debug(name: .debug, xcconfig: "XCConfig/debug.xcconfig"),
             .release(name: .release, xcconfig: "XCConfig/release.xcconfig"),
         ],
-        // .none stops Tuist injecting `CODE_SIGN_IDENTITY = "-"` (Sign to Run
-        // Locally) at the target level, which would otherwise override the
-        // xcconfig and force ad-hoc signing on the entitled targets.
-        defaultSettings: .none
+        // Keep Tuist's recommended defaults, but drop its CODE_SIGN_IDENTITY
+        // (which it sets to "-" / Sign to Run Locally for macOS targets). That
+        // default would override the xcconfig and force ad-hoc signing on the
+        // entitled targets; excluding it lets the xcconfig identity win.
+        defaultSettings: .recommended(excluding: ["CODE_SIGN_IDENTITY"])
     ),
     targets: [
         // ── Shared pure domain (the testable core) ─────────────────
