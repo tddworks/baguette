@@ -79,7 +79,19 @@ let project = Project(
                 // Embeds the system extension into
                 // Contents/Library/SystemExtensions of the app.
                 .target(name: "BaguetteNetExtension"),
-            ]
+            ],
+            settings: .settings(configurations: [
+                .debug(name: .debug),
+                .release(
+                    name: .release,
+                    settings: [
+                        "CODE_SIGN_ENTITLEMENTS": "App/BaguetteNet-release.entitlements",
+                        "CODE_SIGN_IDENTITY": "Developer ID Application",
+                        "CODE_SIGN_STYLE": "Manual",
+                        "PROVISIONING_PROFILE_SPECIFIER": "BaguetteNet Developer ID",
+                    ]
+                ),
+            ])
         ),
 
         // ── Content-filter system extension ────────────────────────
@@ -110,7 +122,19 @@ let project = Project(
             entitlements: "Extension/BaguetteNetExtension.entitlements",
             dependencies: [
                 .target(name: "BaguetteNetKit"),
-            ]
+            ],
+            settings: .settings(configurations: [
+                .debug(name: .debug),
+                .release(
+                    name: .release,
+                    settings: [
+                        "CODE_SIGN_ENTITLEMENTS": "Extension/BaguetteNetExtension-release.entitlements",
+                        "CODE_SIGN_IDENTITY": "Developer ID Application",
+                        "CODE_SIGN_STYLE": "Manual",
+                        "PROVISIONING_PROFILE_SPECIFIER": "BaguetteNetExtension Developer ID",
+                    ]
+                ),
+            ])
         ),
 
         // ── Unit tests for the pure throttle math ──────────────────
@@ -126,5 +150,9 @@ let project = Project(
                 .target(name: "BaguetteNetKit"),
             ]
         ),
+    ],
+    additionalFiles: [
+        "App/BaguetteNet-release.entitlements",
+        "Extension/BaguetteNetExtension-release.entitlements",
     ]
 )

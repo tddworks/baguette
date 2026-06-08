@@ -1,12 +1,5 @@
 #include "shared.xcconfig"
 
-// Automatic signing builds (incl. archives) with the Apple Development identity;
-// the Developer ID distribution identity + profile are applied later at
-// archive-export time (Organizer → Distribute App → Developer ID, which
-// re-signs with the Developer ID Application cert team Y5856NSDZU holds).
-//
-// Do NOT pin CODE_SIGN_IDENTITY = "Developer ID Application" here: with
-// CODE_SIGN_STYLE = Automatic it conflicts ("automatically signed for
-// development, but a conflicting code signing identity ... manually specified").
-CODE_SIGN_IDENTITY = Apple Development
-CODE_SIGN_IDENTITY[sdk=macosx*] = Apple Development
+// Per-target Release settings in Project.swift select the Developer ID
+// identity and matching Mac Team Direct provisioning profile. They must be
+// target-specific because the app and system extension use different profiles.
