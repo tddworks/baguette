@@ -89,7 +89,23 @@ let project = Project(
             product: .systemExtension,
             bundleId: "\(bundlePrefix).extension",
             deploymentTargets: .macOS("14.0"),
-            infoPlist: "Extension/Info.plist",
+            // .extendingDefault so Tuist auto-generates the standard CFBundle*
+            // keys (CFBundleIdentifier, CFBundleExecutable, version, …). A raw
+            // Info.plist file is passed through verbatim and would ship without
+            // CFBundleIdentifier, which breaks archive export ("Bundle
+            // identifier is missing").
+            infoPlist: .extendingDefault(with: [
+                "CFBundleDisplayName": "BaguetteNetExtension",
+                "CFBundlePackageType": "SYSX",
+                "NetworkExtension": [
+                    // App-group mach service the host app talks to the provider
+                    // over; must be team-id-prefixed.
+                    "NEMachServiceName": "$(TeamIdentifierPrefix)group.com.tddworks.baguette.net",
+                    "NEProviderClasses": [
+                        "com.apple.networkextension.filter-data": "$(PRODUCT_MODULE_NAME).FilterDataProvider",
+                    ],
+                ],
+            ]),
             sources: ["Extension/Sources/**"],
             entitlements: "Extension/BaguetteNetExtension.entitlements",
             dependencies: [
