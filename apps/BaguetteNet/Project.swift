@@ -109,6 +109,8 @@ let project = Project(
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "BaguetteNetExtension",
                 "CFBundlePackageType": "SYSX",
+                "NSSystemExtensionUsageDescription":
+                    "Baguette Net uses a network extension to throttle Simulator app traffic.",
                 "NetworkExtension": [
                     // App-group mach service the host app talks to the provider
                     // over; must be team-id-prefixed.
