@@ -112,9 +112,8 @@ let project = Project(
                 "NSSystemExtensionUsageDescription":
                     "Baguette Net uses a network extension to throttle Simulator app traffic.",
                 "NetworkExtension": [
-                    // App-group mach service the host app talks to the provider
-                    // over; must be team-id-prefixed.
-                    "NEMachServiceName": "$(TeamIdentifierPrefix)group.com.tddworks.baguette.net",
+                    // The Mach service must begin with an app group granted to the extension.
+                    "NEMachServiceName": .string(appGroup),
                     "NEProviderClasses": [
                         "com.apple.networkextension.filter-data": "$(PRODUCT_MODULE_NAME).FilterDataProvider",
                     ],
