@@ -7,3 +7,6 @@
 
 DEVELOPMENT_TEAM = Y5856NSDZU
 CODE_SIGN_STYLE = Automatic
+
+// Required for notarization / Developer ID distribution (and harmless for dev).
+ENABLE_HARDENED_RUNTIME = YES
