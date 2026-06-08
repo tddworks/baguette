@@ -123,18 +123,25 @@ let project = Project(
             dependencies: [
                 .target(name: "BaguetteNetKit"),
             ],
-            settings: .settings(configurations: [
-                .debug(name: .debug),
-                .release(
-                    name: .release,
-                    settings: [
-                        "CODE_SIGN_ENTITLEMENTS": "Extension/BaguetteNetExtension-release.entitlements",
-                        "CODE_SIGN_IDENTITY": "Developer ID Application",
-                        "CODE_SIGN_STYLE": "Manual",
-                        "PROVISIONING_PROFILE_SPECIFIER": "BaguetteNetExtension Developer ID",
-                    ]
-                ),
-            ])
+            settings: .settings(
+                base: [
+                    // SystemExtensions discovers a NetworkExtension by requiring
+                    // its bundle filename to equal its bundle identifier.
+                    "PRODUCT_NAME": "\(bundlePrefix).extension",
+                ],
+                configurations: [
+                    .debug(name: .debug),
+                    .release(
+                        name: .release,
+                        settings: [
+                            "CODE_SIGN_ENTITLEMENTS": "Extension/BaguetteNetExtension-release.entitlements",
+                            "CODE_SIGN_IDENTITY": "Developer ID Application",
+                            "CODE_SIGN_STYLE": "Manual",
+                            "PROVISIONING_PROFILE_SPECIFIER": "BaguetteNetExtension Developer ID",
+                        ]
+                    ),
+                ]
+            )
         ),
 
         // ── Unit tests for the pure throttle math ──────────────────
