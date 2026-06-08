@@ -37,7 +37,11 @@ let project = Project(
         configurations: [
             .debug(name: .debug, xcconfig: "XCConfig/debug.xcconfig"),
             .release(name: .release, xcconfig: "XCConfig/release.xcconfig"),
-        ]
+        ],
+        // .none stops Tuist injecting `CODE_SIGN_IDENTITY = "-"` (Sign to Run
+        // Locally) at the target level, which would otherwise override the
+        // xcconfig and force ad-hoc signing on the entitled targets.
+        defaultSettings: .none
     ),
     targets: [
         // ── Shared pure domain (the testable core) ─────────────────
