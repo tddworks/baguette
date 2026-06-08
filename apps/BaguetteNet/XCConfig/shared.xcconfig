@@ -1,0 +1,9 @@
+// Shared signing config for all BaguetteNet targets.
+// Mirrors the working AppNexus setup (Products/AppNexus/Resources/XCConfig).
+//
+// Team Y5856NSDZU owns the com.tddworks.baguette.net + .extension App IDs
+// (with the networking.networkextension + system-extension.install
+// capabilities). The reusable "Apple Development" cert signs against it.
+
+DEVELOPMENT_TEAM = Y5856NSDZU
+CODE_SIGN_STYLE = Automatic

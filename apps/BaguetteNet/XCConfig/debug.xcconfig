@@ -1,0 +1,6 @@
+#include "shared.xcconfig"
+
+// Local development / running. macOS-SDK-qualified so it overrides Xcode's
+// default "Sign to Run Locally" (-) for macOS products.
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_IDENTITY[sdk=macosx*] = Apple Development

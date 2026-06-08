@@ -19,10 +19,11 @@ import ProjectDescription
 let bundlePrefix = "com.tddworks.baguette.net"
 let appGroup = "group.com.tddworks.baguette.net"
 
+// Non-signing settings stay inline; signing (team + per-config identity) lives
+// in XCConfig/{shared,debug,release}.xcconfig, mirroring the working AppNexus
+// setup (Products/AppNexus/Resources/XCConfig). Team Y5856NSDZU owns the App
+// IDs + capabilities; the reusable "Apple Development" cert signs against it.
 let commonSettings: SettingsDictionary = [
-    "DEVELOPMENT_TEAM": "274JTDMFP2",
-    "CODE_SIGN_IDENTITY": "Apple Development",
-    "CODE_SIGN_STYLE": "Automatic",
     "SWIFT_VERSION": "6.0",
     "MARKETING_VERSION": "0.1.0",
     "CURRENT_PROJECT_VERSION": "1",
@@ -31,7 +32,13 @@ let commonSettings: SettingsDictionary = [
 let project = Project(
     name: "BaguetteNet",
     organizationName: "tddworks",
-    settings: .settings(base: commonSettings),
+    settings: .settings(
+        base: commonSettings,
+        configurations: [
+            .debug(name: .debug, xcconfig: "XCConfig/debug.xcconfig"),
+            .release(name: .release, xcconfig: "XCConfig/release.xcconfig"),
+        ]
+    ),
     targets: [
         // ── Shared pure domain (the testable core) ─────────────────
         // A framework so the app, the extension, and the tests all link
