@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import ArgumentParser
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 @Suite("ChromeCommand")
 struct ChromeCommandTests {

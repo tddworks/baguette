@@ -15,6 +15,16 @@ import PackageDescription
 let package = Package(
     name: "Baguette",
     platforms: [.macOS(.v15)],
+    products: [
+        .library(
+            name: "BaguetteCore",
+            targets: ["BaguetteCore"]
+        ),
+        .executable(
+            name: "baguette",
+            targets: ["Baguette"]
+        ),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
         // `@Mockable` auto-generates `MockXxx` classes from `@Mockable`
@@ -25,15 +35,15 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0"),
     ],
     targets: [
-        .executableTarget(
-            name: "Baguette",
+        .target(
+            name: "BaguetteCore",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
             ],
-            path: "Sources/Baguette",
+            path: "Sources/BaguetteCore",
             resources: [
                 // Static HTML/CSS/JS for `baguette serve`. Each file is
                 // self-contained — open in a browser via file:// for a
@@ -57,10 +67,17 @@ let package = Package(
                 .linkedFramework("VideoToolbox"),
             ]
         ),
+        .executableTarget(
+            name: "Baguette",
+            dependencies: [
+                "BaguetteCore",
+            ],
+            path: "Sources/Baguette"
+        ),
         .testTarget(
             name: "BaguetteTests",
             dependencies: [
-                "Baguette",
+                "BaguetteCore",
                 .product(name: "Mockable", package: "Mockable"),
             ],
             path: "Tests/BaguetteTests",

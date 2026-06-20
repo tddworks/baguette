@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Handler-level coverage for the status-bar routes. As with the
 /// orientation route, we test the pure parse + dispatch helpers

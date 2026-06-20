@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Coverage for `StatusBarOverride.fromListOutput` — the pure parser
 /// that turns `xcrun simctl status_bar <udid> list` output back into a

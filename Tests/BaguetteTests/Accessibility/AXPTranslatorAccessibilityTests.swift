@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Unit tests for `AXPTranslatorAccessibility`'s host-resolution
 /// branches — the only paths we can exercise without a live

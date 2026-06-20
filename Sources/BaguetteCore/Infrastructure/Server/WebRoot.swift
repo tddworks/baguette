@@ -2,7 +2,7 @@ import Foundation
 
 /// Locator for the static web assets (`simulators.html` and friends)
 /// that `baguette serve` serves. Files live at
-/// `Sources/Baguette/Resources/Web/` and are bundled into the
+/// `Sources/BaguetteCore/Resources/Web/` and are bundled into the
 /// executable as SPM resources for release.
 ///
 /// Lookup order:
@@ -10,9 +10,9 @@ import Foundation
 ///      iteration on the HTML without rebuilding.
 ///   2. Source-tree path (dev) — when the running executable lives
 ///      inside the package's `.build/`, walk up to the package root
-///      and read directly from `Sources/Baguette/Resources/Web/`.
+///      and read directly from `Sources/BaguetteCore/Resources/Web/`.
 ///      Edits show on the next browser refresh; no rebuild.
-///   3. Sidecar `Baguette_Baguette.bundle` next to the executable —
+///   3. Sidecar `Baguette_BaguetteCore.bundle` next to the executable —
 ///      the SPM-generated resource bundle. We resolve it manually
 ///      via `dladdr` instead of `Bundle.module` because the latter
 ///      `fatalError`s when the bundle is missing (e.g. a Homebrew
@@ -74,7 +74,7 @@ struct WebRoot {
     }
 
     /// Walk up from the executable to find a sibling
-    /// `Sources/Baguette/Resources/Web/` — only matches when running
+    /// `Sources/BaguetteCore/Resources/Web/` — only matches when running
     /// out of `.build/`. Returns nil otherwise (release install).
     private static func sourceTreeRoot() -> URL? {
         var info = Dl_info()
@@ -82,7 +82,7 @@ struct WebRoot {
               let cstr = info.dli_fname else { return nil }
         var url = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
         for _ in 0..<6 {
-            let candidate = url.appendingPathComponent("Sources/Baguette/Resources/Web")
+            let candidate = url.appendingPathComponent("Sources/BaguetteCore/Resources/Web")
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDir),
                isDir.boolValue {
@@ -93,7 +93,7 @@ struct WebRoot {
         return nil
     }
 
-    /// Resolve a file inside the SPM-generated `Baguette_Baguette.bundle`
+    /// Resolve a file inside the SPM-generated resource bundle
     /// expected to sit next to the running executable. Returns nil when
     /// the bundle isn't there (e.g. a binary-only install that forgot
     /// to ship the bundle). Crucially, this avoids `Bundle.module`,
@@ -108,9 +108,12 @@ struct WebRoot {
         guard dladdr(#dsohandle, &info) != 0,
               let cstr = info.dli_fname else { return nil }
         let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
-        let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
-        guard FileManager.default.fileExists(atPath: bundleURL.path),
-              let bundle = Bundle(url: bundleURL) else { return nil }
+        let bundleNames = ["Baguette_BaguetteCore.bundle", "Baguette_Baguette.bundle"]
+        guard let bundle = bundleNames.lazy.compactMap({ name -> Bundle? in
+            let bundleURL = exeDir.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: bundleURL.path) else { return nil }
+            return Bundle(url: bundleURL)
+        }).first else { return nil }
         let parts = filename.split(separator: "/", omittingEmptySubsequences: true)
         let subdir: String = parts.count > 1
             ? "Web/" + parts.dropLast().joined(separator: "/")

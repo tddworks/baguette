@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// `DeviceHost` is the seam Infrastructure adapters
 /// (`IndigoHIDInput`, `AXPTranslatorAccessibility`,

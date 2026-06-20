@@ -2,7 +2,7 @@ import Testing
 import Hummingbird
 import HTTPTypes
 import NIOCore
-@testable import Baguette
+@testable import BaguetteCore
 
 @Suite("Server browser security")
 struct ServerSecurityTests {

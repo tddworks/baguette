@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Hit-test merge helpers: classify which frames the grid may skip
 /// (genuine content leaves, never childless containers) and graft

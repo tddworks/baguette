@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 /// `LineBuffer` accumulates byte chunks from a streaming pipe and
 /// pops out complete `\n`-terminated UTF-8 lines on each append.

@@ -1,6 +1,6 @@
 import Testing
 import CoreGraphics
-@testable import Baguette
+@testable import BaguetteCore
 
 /// `AXFrameTransform` projects mac-window-coordinate CGRects from
 /// AXPTranslator into device-point CGRects (the same units the

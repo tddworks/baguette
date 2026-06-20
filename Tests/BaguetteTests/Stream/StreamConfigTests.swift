@@ -1,5 +1,5 @@
 import Testing
-@testable import Baguette
+@testable import BaguetteCore
 
 @Suite("StreamConfig")
 struct StreamConfigTests {

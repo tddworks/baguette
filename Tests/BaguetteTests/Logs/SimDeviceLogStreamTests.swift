@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Unit tests for `SimDeviceLogStream`'s error-path branches.
 ///

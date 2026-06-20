@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 @Suite("SharedFrameLayout")
 struct SharedFrameLayoutTests {

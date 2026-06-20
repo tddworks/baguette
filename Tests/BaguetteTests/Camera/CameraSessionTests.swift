@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Behaviour spec for the CameraSession state machine. The session
 /// owns three collaborators (capture, sink, injection). Tests inject

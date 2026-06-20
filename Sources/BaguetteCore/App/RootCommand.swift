@@ -1,8 +1,9 @@
 import ArgumentParser
 
-@main
-struct Baguette: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
+public struct Baguette: AsyncParsableCommand {
+    public init() {}
+
+    public static let configuration = CommandConfiguration(
         commandName: "baguette",
         abstract: "Headless iOS simulator control",
         version: baguetteVersion,

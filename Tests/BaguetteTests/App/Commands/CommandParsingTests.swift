@@ -1,6 +1,6 @@
 import Testing
 import ArgumentParser
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Parses each subcommand from argv and asserts the @Option/@OptionGroup
 /// wiring + CommandConfiguration metadata. `run()` itself talks to

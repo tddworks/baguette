@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 /// End-to-end smoke against real DeviceKit assets. Skipped when the
 /// host machine doesn't have DeviceKit installed (e.g. CI without

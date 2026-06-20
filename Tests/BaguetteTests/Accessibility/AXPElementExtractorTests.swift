@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CoreGraphics
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Unit tests for the static element-reading helpers on
 /// `AXPTranslatorAccessibility`. These extract values out of the

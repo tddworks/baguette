@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import CryptoKit
-@testable import Baguette
+@testable import BaguetteCore
 
 @Suite("VirtualCameraInstallPlan")
 struct VirtualCameraInstallPlanTests {

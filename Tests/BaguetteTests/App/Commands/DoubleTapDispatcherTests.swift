@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// The single behaviour `baguette double-tap` adds on top of the existing
 /// `Touch1` phased gestures: at one coordinate, send `down → up → down → up`

@@ -24,7 +24,7 @@ enum VirtualCameraInstaller {
     ///   1. `$BAGUETTE_VIRTUALCAMERA_DYLIB` — explicit override.
     ///   2. Source-tree fallback — when running out of `.build/`,
     ///      walk up to find `VirtualCamera/VirtualCamera.dylib`.
-    ///   3. Sidecar `Baguette_Baguette.bundle` next to the executable.
+    ///   3. Sidecar `Baguette_BaguetteCore.bundle` next to the executable.
     ///   4. Sibling of the executable (`./VirtualCamera.dylib`) —
     ///      flat binary installs / Homebrew bottles that didn't ship
     ///      the resource bundle.
@@ -49,8 +49,11 @@ enum VirtualCameraInstaller {
               let cstr = info.dli_fname else { return nil }
         var url = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
         for _ in 0..<6 {
-            let candidate = url.appendingPathComponent("VirtualCamera/VirtualCamera.dylib")
-            if FileManager.default.fileExists(atPath: candidate.path) {
+            let candidates = [
+                url.appendingPathComponent("Sources/BaguetteCore/Resources/VirtualCamera/VirtualCamera.dylib"),
+                url.appendingPathComponent("VirtualCamera/VirtualCamera.dylib"),
+            ]
+            for candidate in candidates where FileManager.default.fileExists(atPath: candidate.path) {
                 return candidate
             }
             url = url.deletingLastPathComponent()
@@ -63,9 +66,12 @@ enum VirtualCameraInstaller {
         guard dladdr(#dsohandle, &info) != 0,
               let cstr = info.dli_fname else { return nil }
         let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
-        let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
-        guard FileManager.default.fileExists(atPath: bundleURL.path),
-              let bundle = Bundle(url: bundleURL) else { return nil }
+        let bundleNames = ["Baguette_BaguetteCore.bundle", "Baguette_Baguette.bundle"]
+        guard let bundle = bundleNames.lazy.compactMap({ name -> Bundle? in
+            let bundleURL = exeDir.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: bundleURL.path) else { return nil }
+            return Bundle(url: bundleURL)
+        }).first else { return nil }
         return bundle.url(
             forResource: "VirtualCamera",
             withExtension: "dylib",

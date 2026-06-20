@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 /// `AXHitTestGrid` is the pure point-generator that lets the AX
 /// adapter recover elements the frontmost-app walk can't reach:

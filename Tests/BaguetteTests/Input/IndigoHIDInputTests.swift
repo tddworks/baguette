@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import Mockable
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Unit tests for `IndigoHIDInput`'s host-resolution branch — the
 /// only branch we can exercise without a real booted simulator.

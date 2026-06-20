@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 /// Pin the device-name → chrome-bundle mapping that drives every
 /// rendered bezel.

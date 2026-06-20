@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Baguette
+@testable import BaguetteCore
 
 @Suite("CameraDevice")
 struct CameraDeviceTests {
