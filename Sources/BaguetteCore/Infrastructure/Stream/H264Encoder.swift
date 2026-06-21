@@ -17,11 +17,15 @@ final class H264Encoder: @unchecked Sendable {
         let kind: Kind
         /// Length-prefixed AVCC NAL bytes.
         let avcc: Data
+        /// Time spent inside VideoToolbox from frame submission to the
+        /// compression callback. Measured in the helper process.
+        let encodeLatencyMs: Double?
 
         enum Kind { case keyframe, delta }
     }
 
     private let lock = NSLock()
+    private let timingLock = NSLock()
     /// Set by the owner after init when the callback needs to capture
     /// `self`. Calls fire on VT's internal queue.
     var onEncoded: (@Sendable (Encoded) -> Void)?
@@ -33,6 +37,7 @@ final class H264Encoder: @unchecked Sendable {
     private var bitrate: Int
     private var emittedDescription = false
     private var frameCount: Int64 = 0
+    private var pendingEncodeStarts: [UInt64] = []
 
     init(fps: Int, bitrate: Int = 2_000_000, onEncoded: (@Sendable (Encoded) -> Void)? = nil) {
         self.fps = Int32(fps)
@@ -83,7 +88,10 @@ final class H264Encoder: @unchecked Sendable {
         frameCount += 1
         let pts = CMTime(value: frameCount, timescale: fps)
 
-        VTCompressionSessionEncodeFrame(
+        let encodeStartedAt = DispatchTime.now().uptimeNanoseconds
+        pushEncodeStart(encodeStartedAt)
+
+        let status = VTCompressionSessionEncodeFrame(
             session,
             imageBuffer: pixelBuffer,
             presentationTimeStamp: pts,
@@ -91,10 +99,15 @@ final class H264Encoder: @unchecked Sendable {
             frameProperties: frameProps,
             infoFlagsOut: nil
         ) { [weak self] status, _, sampleBuffer in
-            guard let self, status == noErr, let sb = sampleBuffer else { return }
-            if let encoded = self.extract(from: sb) {
+            guard let self else { return }
+            let latencyMs = self.popEncodeLatencyMs()
+            guard status == noErr, let sb = sampleBuffer else { return }
+            if let encoded = self.extract(from: sb, encodeLatencyMs: latencyMs) {
                 self.onEncoded?(encoded)
             }
+        }
+        if status != noErr {
+            _ = popEncodeStart()
         }
     }
 
@@ -153,7 +166,7 @@ final class H264Encoder: @unchecked Sendable {
         emittedDescription = false
     }
 
-    private func extract(from sample: CMSampleBuffer) -> Encoded? {
+    private func extract(from sample: CMSampleBuffer, encodeLatencyMs: Double?) -> Encoded? {
         let isKeyframe = !cmSampleNotSync(sample)
         guard let dataBuf = CMSampleBufferGetDataBuffer(sample) else { return nil }
 
@@ -177,8 +190,31 @@ final class H264Encoder: @unchecked Sendable {
         return Encoded(
             description: description,
             kind: isKeyframe ? .keyframe : .delta,
-            avcc: avcc
+            avcc: avcc,
+            encodeLatencyMs: encodeLatencyMs
         )
+    }
+
+    private func pushEncodeStart(_ value: UInt64) {
+        timingLock.lock()
+        pendingEncodeStarts.append(value)
+        if pendingEncodeStarts.count > Int(max(8, fps * 2)) {
+            pendingEncodeStarts.removeFirst(pendingEncodeStarts.count - Int(max(8, fps * 2)))
+        }
+        timingLock.unlock()
+    }
+
+    private func popEncodeStart() -> UInt64? {
+        timingLock.lock()
+        defer { timingLock.unlock() }
+        return pendingEncodeStarts.isEmpty ? nil : pendingEncodeStarts.removeFirst()
+    }
+
+    private func popEncodeLatencyMs() -> Double? {
+        guard let startedAt = popEncodeStart() else { return nil }
+        let endedAt = DispatchTime.now().uptimeNanoseconds
+        guard endedAt >= startedAt else { return nil }
+        return Double(endedAt - startedAt) / 1_000_000
     }
 
     private func cmSampleNotSync(_ sample: CMSampleBuffer) -> Bool {

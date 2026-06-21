@@ -114,9 +114,23 @@ final class AVCCStream: Stream, @unchecked Sendable {
         if let description = encoded.description {
             sink.write(AVCCEnvelope.description(avcc: description))
         }
+        if let metric = metricJSON(encodeLatencyMs: encoded.encodeLatencyMs) {
+            sink.write(AVCCEnvelope.metric(json: metric))
+        }
         switch encoded.kind {
         case .keyframe: sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))
         case .delta:    sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
         }
     }
+
+    private func metricJSON(encodeLatencyMs: Double?) -> Data? {
+        guard let encodeLatencyMs else { return nil }
+        let metric = AVCCStreamMetric(type: "stream_metric", encodeMs: encodeLatencyMs)
+        return try? JSONEncoder().encode(metric)
+    }
+}
+
+private struct AVCCStreamMetric: Encodable {
+    let type: String
+    let encodeMs: Double
 }
