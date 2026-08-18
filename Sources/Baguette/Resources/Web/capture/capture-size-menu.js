@@ -61,13 +61,15 @@
 }
 .cap-size-list button:hover { background: var(--nv-btn-hover, #f1f5f9); }
 .cap-size-list button[aria-checked="true"] {
-  background: var(--accent, #2563eb); color: #fff;
+  background: var(--accent, #2563eb); color: var(--cap-on-accent, #fff);
 }
 .cap-size-list .dim {
   margin-left: auto; font-size: 10px; font-variant-numeric: tabular-nums;
   color: var(--text-muted, #6b7280);
 }
-.cap-size-list button[aria-checked="true"] .dim { color: rgba(255,255,255,0.8); }
+.cap-size-list button[aria-checked="true"] .dim {
+  color: var(--cap-on-accent-dim, rgba(255,255,255,0.8));
+}
 .cap-size-row { display: flex; align-items: center; gap: 6px; }
 .cap-size-seg { display: flex; flex: 1; gap: 2px; padding: 2px; border-radius: 7px;
   background: var(--nv-btn, #f3f4f6); }

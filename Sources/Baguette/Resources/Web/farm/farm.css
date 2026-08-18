@@ -927,9 +927,10 @@ body.focus-resizing {
 /* ===== CAPTURE OUTPUT SIZE =====
    CaptureSizeMenu (capture/capture-size-menu.js) ships its own <style>,
    themed off `--nv-*` hooks with light-mode fallbacks. The farm runs a
-   dark mission-control palette, so bind those hooks to farm tokens here
-   and take over the two places the shared sheet hard-codes white on
-   `--accent` — white on phosphor lime is unreadable.
+   dark mission-control palette, so bind those hooks to farm tokens here.
+   `--cap-on-accent` is the sheet's hook for what sits ON the accent —
+   white by default, which on phosphor lime is unreadable, so the farm
+   binds it to the page background instead.
 
    The picker host is full-width and the popover is pinned to both its
    edges (`left:0;right:0`) rather than the sheet's `right:0` alone: the
@@ -963,6 +964,8 @@ body.focus-resizing {
   --nv-border:    var(--rule-2);
   --text-muted:   var(--muted);
   --accent:       var(--phosphor);
+  --cap-on-accent:     var(--bg);
+  --cap-on-accent-dim: rgba(10, 12, 16, 0.7);
   display: block; width: 100%;
 }
 .focus .cap-size-chip {
@@ -977,8 +980,6 @@ body.focus-resizing {
   font-family: var(--mono);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
 }
-.focus .cap-size-list button[aria-checked="true"] { color: var(--bg); }
-.focus .cap-size-list button[aria-checked="true"] .dim { color: rgba(10, 12, 16, 0.7); }
 .focus .cap-size-seg button[aria-checked="true"] {
   background: var(--panel-hi); color: var(--phosphor); box-shadow: none;
 }

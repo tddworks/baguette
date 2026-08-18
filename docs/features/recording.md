@@ -467,6 +467,52 @@ bezel and the screen clip entirely, and the size vocabulary applies
 unchanged: `square` on a 1200 × 1200 3D canvas is still a square, it
 is just a square with a rendered iPhone in it.
 
+### …but `contain` is the wrong fit there
+
+The 3D canvas is not a picture of a device the way the 2D canvas is —
+it is a **viewport onto a scene**, a device standing in the middle of
+empty margins. Letterboxing that whole viewport into a tall App Store
+canvas therefore shrinks the *device* into the emptiness instead of
+cropping the emptiness away, and a 6.9″ recording comes out as a small
+phone adrift in bands.
+
+A screenshot doesn't have this problem: it re-renders server-side at
+the exact size and the RealityKit camera frames to whatever it renders
+into. A recording has no such escape — `BrowserRecorder` composites
+the stage canvas frame by frame as it arrives — so the fit has to
+carry it:
+
+```js
+Sim3DPanel.recordingFit(settings, stageCanvas)  // → 'cover' | 'contain'
+```
+
+`cover` when the target is **narrower** than the stage: it eats the
+side margins and keeps full height. `contain` when the target is
+wider, because past that point there is no more device to show, only
+bars — and cropping into the device is worse than a bar beside it.
+From a 1600 × 1250 stage:
+
+| size | fit | kept from the stage |
+| --- | --- | --- |
+| `appstore-6.9` | cover | 577 × 1250 — full height, sides cropped |
+| `square` | cover | 1250 × 1250 |
+| `9:16` | cover | 703 × 1250 |
+| `16:9` | contain | letterboxed, the phone intact |
+
+Only recordings, and only in 3D. In 2D the source canvas already *is*
+the device, so the user's own fit choice stands.
+
+**What this costs.** At `appstore-6.9` the recording upscales a
+577 × 1250 region of the live stream to 1290 × 2796. The live 3D
+stream is bounded at 1600 px per side for encoder cost (see
+[`3d-rendering.md`](3d-rendering.md)), so that bound is the ceiling on
+a 3D recording's real detail. Reshaping the stream to the target
+aspect was tried and rejected: an App Store 6.9″ stream is 738 × 1600,
+which `object-fit: contain` then upscales across a much larger stage,
+so the live view went soft and its framing moved. Trading a visible
+regression in the thing the user is looking at for a sharper file is
+the wrong way round.
+
 ## Lifecycle on the page
 
 ### `sim-stream.js`

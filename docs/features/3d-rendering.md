@@ -492,6 +492,19 @@ Four details of the request are worth knowing:
   path produced it. Concurrent saves are ignored while one is in
   flight.
 
+**Both save buttons take this path.** The panel's own *Save Frame* and
+the focus-mode toolbar's *Screenshot* produce the same file when 3D is
+open — `downloadSnapshot` delegates to `Sim3DPanel.download` rather
+than compositing the stage canvas. It used to composite, which is why
+picking App Store 6.9″ in 3D once produced a postage-stamp phone
+adrift on white: `contain` scaled the empty stage, not the device in
+it. Framing a 3D shot is the camera's job, and only the renderer has a
+camera.
+
+**Recording is the one capture that can't take this path**, because a
+video has no one-shot re-render to delegate to. It crops the stage's
+margins instead — see [Recording the 3D stage](recording.md#recording-the-3d-stage).
+
 The saved file carries the size slug like every other capture (see
 [`capture-size.md`](capture-size.md)):
 `iphone-17-pro-max-3d-appstore-6.9-1290x2796.png`, with the dimensions
