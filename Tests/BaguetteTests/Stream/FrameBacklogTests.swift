@@ -16,8 +16,8 @@ struct FrameBacklogTests {
     private func delta(_ bytes: Int, marker: UInt8 = 0xAA) -> Data {
         frame(AVCCEnvelope.deltaTag, bytes: bytes, marker: marker)
     }
-    private func description(_ bytes: Int) -> Data {
-        frame(AVCCEnvelope.descriptionTag, bytes: bytes)
+    private func description(_ bytes: Int, marker: UInt8 = 0xAA) -> Data {
+        frame(AVCCEnvelope.descriptionTag, bytes: bytes, marker: marker)
     }
 
     @Test func `keeps every frame while under budget`() {
@@ -68,6 +68,32 @@ struct FrameBacklogTests {
         #expect(backlog.popFirst() == c)
         #expect(backlog.popFirst() == nil)
         #expect(backlog.isEmpty)
+    }
+
+    /// The encoder rebuilds its session on every resolution change, and
+    /// each rebuild emits a fresh description. Only the last one describes
+    /// the frames still in the backlog — the earlier ones describe frames
+    /// trimming has already taken, so they stop being worth protecting.
+    @Test func `supersedes an earlier description once the encoder emits a newer one`() {
+        var backlog = FrameBacklog(byteBudget: 100)
+        let stale = description(20, marker: 1)
+        let current = description(20, marker: 2)
+        backlog.append(stale)
+        backlog.append(current)
+        for _ in 0..<8 { backlog.append(delta(40)) }
+        #expect(backlog.byteCount <= 100)
+
+        var survivors: [Data] = []
+        while let frame = backlog.popFirst() { survivors.append(frame) }
+        #expect(survivors.contains(current))
+        // The stale one went with the frames it described.
+        #expect(!survivors.contains(stale))
+    }
+
+    @Test func `a rotating client cannot grow the backlog with descriptions alone`() {
+        var backlog = FrameBacklog(byteBudget: 100)
+        for _ in 0..<10_000 { backlog.append(description(40)) }
+        #expect(backlog.byteCount <= 100)
     }
 
     @Test func `a stalled consumer cannot grow the backlog without bound`() {

@@ -35,6 +35,14 @@
   let carplaySession = null;
   let carplayScreen = null;
   let carplayFrame = null;  // Baguette._CarPlayFrame mount (brand chrome)
+  // Bumped by every CarPlay start and by closing the pane. Starting a
+  // session awaits a brand-chrome load that takes as long as a fetch, and
+  // a format swap or a pane close lands during that await. Without a
+  // generation to check on the far side, the slower start would mount
+  // onto a canvas the newer one had already replaced and overwrite
+  // `carplaySession` without stopping it — leaving a live socket nothing
+  // tracks, streaming video at a detached canvas until the page unloads.
+  let carplayGeneration = 0;
   let watchSession = null;  // paired Apple Watch — its own device, its own stream
   let watchScreen = null;
   let screensRail = null;   // ScreensRail — which companion screens are shown
@@ -347,7 +355,7 @@
     //    the device's own screen instead and start the stream once
     //    the user boots it (or once the boot already underway lands).
     if (sim && isBooted(meta.state)) {
-      startSession(pickFormat());
+      startSession(currentFormat());
     } else {
       showPowerCard(sim ? meta.state : '');
     }
@@ -630,10 +638,14 @@
   }
 
   async function startCarPlaySession(format = currentFormat()) {
+    const generation = ++carplayGeneration;
     if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
     if (!window.StreamSession) return;
 
     const ports = await ensureCarPlayFrameMounted();
+    // A newer start (or a pane close) overtook us while the chrome
+    // loaded; it owns the canvas and the session now, so stand down.
+    if (generation !== carplayGeneration) return;
     if (!ports || !ports.canvas || !ports.screenArea) return;
 
     // Remount replaces the canvas; drop the old Screen so gestures
@@ -733,6 +745,8 @@
   }
 
   function stopCarPlaySession() {
+    // Closing the pane retires any start still waiting on its chrome.
+    carplayGeneration += 1;
     if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
     if (carplayScreen)  { try { carplayScreen.detach(); } catch (_) {} carplayScreen = null; }
   }
@@ -1004,7 +1018,7 @@
   // static screen may not composite anything for a while.
   function onBooted() {
     renderPowerCard('starting');
-    startSession(pickFormat());
+    startSession(currentFormat());
     resetToPortrait();
     firstFrameTimer = setTimeout(hidePowerCard, FIRST_FRAME_TIMEOUT_MS);
   }
@@ -1167,19 +1181,21 @@
         .replace(/-/g, '.');
   }
 
-  function pickFormat() {
-    const stored = localStorage.getItem('asc.simFormat');
-    if (stored === 'avcc' || stored === 'mjpeg') return stored;
-    return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
-        ? 'avcc' : 'mjpeg';
-  }
-
   // The format every surface in this page streams at — phone, CarPlay,
   // watch and the 3D panel alike. Companions used to be pinned to MJPEG
   // independently of the phone, which meant a session the user had set to
   // H.264 still carried uncapped full JPEGs on its companion sockets.
+  //
+  // The stored value is whitelisted rather than trusted: `localStorage`
+  // outlives the build that wrote it, so a format this build no longer
+  // speaks would otherwise reach the socket's `format` parameter and the
+  // `FrameDecoder` pick. Anything unrecognised falls back to what the
+  // hardware can actually decode.
   function currentFormat() {
-    return localStorage.getItem('asc.simFormat') || pickFormat();
+    const stored = localStorage.getItem('asc.simFormat');
+    if (stored === 'avcc' || stored === 'mjpeg') return stored;
+    return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
+        ? 'avcc' : 'mjpeg';
   }
 
   // Toolbar icon strip scrolls horizontally when the window is too narrow
@@ -1923,7 +1939,7 @@
       view.removeAttribute('data-render3d-inspector');
       if (btn) btn.classList.remove('active');
       if (render3DPanel) render3DPanel.stop();
-      startSession(localStorage.getItem('asc.simFormat') || pickFormat());
+      startSession(currentFormat());
     } else {
       if (session) {
         session.stop();

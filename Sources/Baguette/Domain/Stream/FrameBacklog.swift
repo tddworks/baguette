@@ -5,9 +5,9 @@ import Foundation
 ///
 /// A live stream values freshness over completeness: once the budget is
 /// reached the *oldest* frames go, because what the viewer wants on
-/// screen is the newest one. Two frames are never discarded — the avcC
-/// description, emitted once and without which a decoder can never
-/// start, and the frame that just arrived.
+/// screen is the newest one. Two frames are never discarded — the
+/// newest avcC description, without which a decoder can never start,
+/// and the frame that just arrived.
 ///
 /// Frames arrive here already stripped of their transport envelope, so
 /// an AVCC frame's first byte is its `AVCCEnvelope` tag. A JPEG starts
@@ -46,23 +46,37 @@ struct FrameBacklog {
     }
 
     /// Drop from the oldest end until the budget is met, stepping over
-    /// frames that have to survive. Stops when only the newest frame
-    /// (plus any retained ones) is left — a single frame larger than the
-    /// whole budget is still delivered rather than silently swallowed.
+    /// the one frame that has to survive. Stops when only the newest
+    /// frame (plus the retained description) is left — a single frame
+    /// larger than the whole budget is still delivered rather than
+    /// silently swallowed.
+    ///
+    /// Exactly *one* description is ever protected. The encoder rebuilds
+    /// its session on a resolution change and emits a fresh description
+    /// each time, so protecting every one of them would let a stalled
+    /// client hold an unbounded number of them — the budget would stop
+    /// being a bound. Only the newest describes the frames still in the
+    /// backlog anyway: the ones an earlier description covered are the
+    /// first thing trimming takes.
     private mutating func trim() {
+        guard byteCount > byteBudget else { return }
+        var retained = frames.lastIndex(where: Self.isDescription)
         var index = 0
         while byteCount > byteBudget, frames.count > 1, index < frames.count - 1 {
-            if Self.mustRetain(frames[index]) {
+            if index == retained {
                 index += 1
                 continue
             }
             byteCount -= frames[index].count
             frames.remove(at: index)
             droppedCount += 1
+            if let retainedIndex = retained, retainedIndex > index {
+                retained = retainedIndex - 1
+            }
         }
     }
 
-    private static func mustRetain(_ frame: Data) -> Bool {
+    private static func isDescription(_ frame: Data) -> Bool {
         frame.first == AVCCEnvelope.descriptionTag
     }
 }
