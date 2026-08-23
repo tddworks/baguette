@@ -493,7 +493,7 @@
     // Companion panes are the user's standing choice, not this
     // session's — but their sockets don't survive a phone-session
     // restart's teardown, so reopen whichever are showing.
-    if (openCompanions.has('external')) void startCarPlaySession('mjpeg');
+    if (openCompanions.has('external')) void startCarPlaySession(format);
     if (openCompanions.has('watch')) void startWatchSession();
     reflectFormat(format);
     // Restore the cached orientation across format-swap remounts,
@@ -540,10 +540,14 @@
     if (entry.id === 'external') {
       showCompanionColumn('nativeCarPlayColumn', true);
       openCompanions.add('external');
-      // CarPlay is mostly static; H.264 starves without an IDR cadence
-      // the guest doesn't produce. MJPEG paints the first JPEG seed and
-      // holds it — matches sim_carplay's reliable CarPlay path.
-      void startCarPlaySession('mjpeg');
+      // CarPlay follows the phone's format. It was pinned to MJPEG
+      // because a mostly-static CarPlay plane was thought to starve
+      // H.264 of the IDR cadence the guest never produces — but
+      // `AVCCStream` re-encodes its last surface on an idle pump for
+      // exactly that reason, so the plane stays live. Measured on an
+      // idle CarPlay screen: avcc delivers ~59 fps, while MJPEG (which
+      // has no idle pump) delivers one frame per twelve seconds.
+      void startCarPlaySession();
     } else if (entry.id === 'watch') {
       const label = document.getElementById('nativeWatchLabel');
       if (label) label.textContent = entry.label;
@@ -625,7 +629,7 @@
     }
   }
 
-  async function startCarPlaySession(format) {
+  async function startCarPlaySession(format = currentFormat()) {
     if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
     if (!window.StreamSession) return;
 
@@ -767,7 +771,7 @@
     ensureWatchInput(screenArea, canvas);
     clearCompanionFault('nativeWatchColumn');
     watchSession = new window.StreamSession({
-      udid: watchUdid, format: 'mjpeg', version: 'v2',
+      udid: watchUdid, format: currentFormat(), version: 'v2',
       display: 'phone',
       canvas,
       onSize: (w, h) => {
@@ -1168,6 +1172,14 @@
     if (stored === 'avcc' || stored === 'mjpeg') return stored;
     return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
         ? 'avcc' : 'mjpeg';
+  }
+
+  // The format every surface in this page streams at — phone, CarPlay,
+  // watch and the 3D panel alike. Companions used to be pinned to MJPEG
+  // independently of the phone, which meant a session the user had set to
+  // H.264 still carried uncapped full JPEGs on its companion sockets.
+  function currentFormat() {
+    return localStorage.getItem('asc.simFormat') || pickFormat();
   }
 
   // Toolbar icon strip scrolls horizontally when the window is too narrow
@@ -1605,7 +1617,7 @@
     };
     window.__nativeSetFormat = (next) => {
       if (next !== 'avcc' && next !== 'mjpeg') return;
-      const current = localStorage.getItem('asc.simFormat') || pickFormat();
+      const current = currentFormat();
       const view = document.getElementById('simNativeView');
       if (current === next && (session ||
           (view && view.getAttribute('data-render3d') === 'open'))) return;
@@ -1938,7 +1950,7 @@
         render3DPanel.setCaptureSettings(captureSettings());
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
-          format: localStorage.getItem('asc.simFormat') || pickFormat(),
+          format: currentFormat(),
           background: live3DBackground(),
           onFps: (fps) => {
             const status = document.getElementById('nativeStatus');

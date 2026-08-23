@@ -20,14 +20,18 @@ import NIOCore
 ///                                                       already expects
 ///                                                       this shape).
 ///
-/// Async writes are serialised per-client by chaining one Task onto
-/// the next so chunks arrive in order without blocking the encoder.
-/// Slow clients accumulate Tasks; the WebSocket close drains them.
+/// Async writes are serialised per-client: a single drain task owns
+/// the socket, so chunks arrive in order without blocking the encoder.
+/// A client that reads slower than the encoder produces cannot grow
+/// the server without bound — `FrameBacklog` discards the oldest
+/// frames once its byte budget is reached, because on a live stream the
+/// newest frame is the one worth delivering.
 final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     private let outbound: WebSocketOutboundWriter
     private let format: StreamFormat
     private let lock = NSLock()
-    private var lastWrite: Task<Void, Never>?
+    private var backlog = FrameBacklog()
+    private var draining = false
 
     // Per-format parser state, lock-protected. The encoder calls
     // `write` from its own queue; we keep the parser strictly
@@ -114,15 +118,39 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
 
     // MARK: - WS write serialisation
 
+    /// Hand the frame to the backlog, then make sure exactly one drain
+    /// task is running. Ordering is preserved because a single task owns
+    /// the socket; memory stays bounded because the backlog discards
+    /// rather than queues when the client falls behind.
     private func enqueue(_ data: Data) {
-        let bytes = ByteBuffer(bytes: data)
         lock.lock()
-        let prev = lastWrite
-        let outbound = self.outbound
-        lastWrite = Task {
-            await prev?.value
-            try? await outbound.write(.binary(bytes))
-        }
+        backlog.append(data)
+        let needsDrain = !draining
+        if needsDrain { draining = true }
         lock.unlock()
+        if needsDrain { startDraining() }
+    }
+
+    /// Write pending frames until the backlog runs dry, then stand down.
+    /// The next `enqueue` starts a fresh drain — so at most one task is
+    /// ever outstanding, however far behind the client falls.
+    private func startDraining() {
+        let outbound = self.outbound
+        Task { [weak self] in
+            while let next = self?.nextFrame() {
+                try? await outbound.write(.binary(ByteBuffer(bytes: next)))
+            }
+        }
+    }
+
+    /// Pop the next frame, standing the drain down when none is left.
+    /// Synchronous on purpose: `NSLock` is unavailable from an async
+    /// context, so the critical section stays out of the drain's `await`.
+    private func nextFrame() -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        let next = backlog.popFirst()
+        if next == nil { draining = false }
+        return next
     }
 }
