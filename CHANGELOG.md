@@ -10,6 +10,59 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+
+- **`serve` ran away to 9+ GB within minutes of streaming.** Reading
+  `framebufferSurface` is not a local property read: it forwards through
+  ROCKit to CoreSimulatorService as a *synchronous XPC round-trip*. Every
+  framebuffer notification scheduled its own `queue.async { captureLatest() }`,
+  so once that round-trip grew slower than the frame interval — two streams
+  plus CoreImage scaling and VideoToolbox encoding is enough — captures were
+  enqueued faster than they drained, and each queued duplicate paid another
+  round-trip and its own autorelease churn. The result was bimodal: flat for
+  a minute, then ~50 MB/s until the CoreSimulator connection broke. A heap
+  taken at the peak was 428,873 autorelease-pool pages (1.76 GB) alongside
+  24k live `xpc_uuid_t` and 17k `IOSurface`. `PendingCapture` now coalesces
+  notifications onto the one already-queued capture — every capture reads the
+  *latest* surface, so a duplicate would only refetch the same frame — and
+  `captureLatest` drains its own autorelease pool. Measured over 6 minutes of
+  streaming, walking and 12 stream restarts: peak 143 MB, versus 1489 MB
+  before. Note `ps rss` cannot see this — the pages are dirty and compressed
+  straight to swap, so RSS reads ~70 MB while the physical footprint is 9 GB.
+- **A slow WebSocket client grew the server without bound.** Each encoded
+  frame chained a new `Task` onto the last with no cap and no backpressure,
+  so any consumer deficit accumulated whole frames indefinitely — a fully
+  stalled MJPEG client added 586 MB in 60 seconds. `FrameBacklog` bounds the
+  pending frames by byte budget, discarding oldest-first while never
+  dropping the newest avcC description a decoder needs to start, nor the
+  newest frame. Only the *newest* description is protected: the encoder
+  rebuilds its session on every resolution change and emits a fresh one
+  each time, so protecting all of them would have let a stalled client
+  hold an unbounded number and the budget would have stopped being a
+  bound.
+- **A CarPlay pane could leave a live socket nothing tracked.** Starting a
+  CarPlay session awaits its brand-chrome load, and a format swap or a pane
+  close landing during that await started a second one. The slower start
+  then mounted onto a canvas the newer had already replaced and overwrote
+  `carplaySession` without stopping it — an untracked WebSocket streaming
+  video at a detached canvas until the page unloaded. Starts now carry a
+  generation and stand down when overtaken.
+
+### Changed
+
+- **Companion screens stream in the session's own format.** CarPlay and the
+  paired watch were pinned to MJPEG, so a session set to H.264 still carried
+  uncapped full JPEGs on its companion sockets. They now follow
+  `currentFormat()` like every other surface — one whitelisted accessor,
+  replacing the two divergent copies of the stored-format read that had let
+  a format the build no longer speaks reach the socket. The pin dated from a
+  concern
+  that a mostly-static CarPlay plane would starve H.264 of an IDR cadence the
+  guest never produces, but `AVCCStream` re-encodes its last surface on an
+  idle pump for exactly that reason — measured on an idle CarPlay screen,
+  avcc delivers ~59 fps where MJPEG (which has no idle pump) delivers one
+  frame per twelve seconds.
+
 ---
 
 ## [0.1.95] - 2026-08-21

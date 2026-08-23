@@ -23,6 +23,9 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private var callbackUUIDs: [ObjectIdentifier: NSUUID] = [:]
     private var onFrame: (@Sendable (IOSurface) -> Void)?
     private var idleTimer: DispatchSourceTimer?
+    /// Guards against queueing duplicate captures — see `scheduleCapture`.
+    /// Only ever touched on `queue`, which is serial.
+    private var pending = PendingCapture()
 
     init(udid: String, host: any DeviceHost, binding: DisplayBinding? = nil) {
         self.udid = udid
@@ -77,7 +80,7 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
             repeating: .nanoseconds(Int(ScreenIdleFloor.intervalNanoseconds))
         )
         timer.setEventHandler { [weak self] in
-            self?.captureLatest()
+            self?.scheduleCapture()
         }
         timer.resume()
         idleTimer = timer
@@ -99,7 +102,7 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         }
         // Surfaces often populate only after callbacks are registered —
         // pull once now and let the idle floor keep pulling.
-        queue.async { [weak self] in self?.captureLatest() }
+        queue.async { [weak self] in self?.scheduleCapture() }
     }
 
     private func findFramebufferDescriptors(io: NSObject) -> [NSObject] {
@@ -135,10 +138,10 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         callbackUUIDs[ObjectIdentifier(desc)] = uuid
 
         let frame: @convention(block) () -> Void = { [weak self] in
-            self?.queue.async { self?.captureLatest() }
+            self?.scheduleCapture()
         }
         let surfaces: @convention(block) () -> Void = { [weak self] in
-            self?.queue.async { self?.captureLatest() }
+            self?.scheduleCapture()
         }
         let props: @convention(block) () -> Void = {}
 
@@ -155,10 +158,42 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         )
     }
 
+    /// Queue a capture unless one is already waiting to run.
+    ///
+    /// Registered callbacks are delivered on `queue`, so this is serial with
+    /// the capture itself. Without the coalescer, a composite rate above the
+    /// capture rate enqueues duplicates without bound — each one paying a
+    /// synchronous XPC round-trip for `framebufferSurface` and its share of
+    /// autorelease churn — and the process runs away rather than degrading.
+    private func scheduleCapture() {
+        guard pending.request() else { return }
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.pending.begin()
+            self.captureLatest()
+        }
+    }
+
     /// Picks the descriptor for this screen's plane and forwards its
     /// IOSurface to `onFrame`. CarPlay bindings never fall back to the
     /// phone plane — missing external surfaces emit nothing.
+    /// Drains its own autorelease pool.
+    ///
+    /// `framebufferSurface` forwards through ROCKit to CoreSimulatorService,
+    /// and that round-trip leaves XPC replies, dispatch groups and the
+    /// IOSurface itself autoreleased. At frame rate, across several streams,
+    /// those temporaries are the bulk of the process's allocation — so the
+    /// pool is drained per capture rather than left to whatever pool the
+    /// enclosing work item happens to provide.
+    ///
+    /// The body is a separate method on purpose: `return` inside an
+    /// `autoreleasepool { }` closure returns from the *closure*, so inlining
+    /// the guards below would quietly change their control flow.
     private func captureLatest() {
+        autoreleasepool { performCapture() }
+    }
+
+    private func performCapture() {
         let surfSel = NSSelectorFromString("framebufferSurface")
         var surfaces: [(IOSurface, Size)] = []
         for desc in descriptors {
