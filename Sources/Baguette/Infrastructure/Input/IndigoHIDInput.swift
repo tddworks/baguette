@@ -122,16 +122,24 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     }
 
     deinit {
-        if warmed, let client {
-            if let remove = removePointerSvc, let msg = remove() {
-                send(message: msg, to: client)
-            }
-            // Leaving a digitizer behind for a display that has gone is
-            // how the next session inherits a target addressing nothing.
-            if plane.needsExternalDigitizer,
-               let remove = removeCarPlaySvc, let msg = remove() {
-                send(message: msg, to: client)
-            }
+        guard warmed, let client else { return }
+        let teardown = InputTeardown.forPlane(plane)
+        if teardown.releasesPointer,
+           let remove = removePointerSvc, let msg = remove() {
+            send(message: msg, to: client)
+        }
+        // The external digitizer stays registered — see `InputTeardown`.
+        // An earlier version removed it here, reasoning that a digitizer
+        // outliving its display leaves the next session a target
+        // addressing nothing. It has the ownership backwards: the host
+        // brought that display up and is still using it, so removing the
+        // service left a CarPlay window on screen that nothing could
+        // touch, and turned target 1 into the unregistered kind that
+        // kills the guest.
+        if teardown.releasesExternalDigitizer,
+           plane.needsExternalDigitizer,
+           let remove = removeCarPlaySvc, let msg = remove() {
+            send(message: msg, to: client)
         }
     }
 

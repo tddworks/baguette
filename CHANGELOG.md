@@ -23,6 +23,21 @@ For releases prior to this changelog, see the
 
 ### Fixed
 
+- **Ending a CarPlay input session left the display alive and dead to
+  touch.** `IndigoHIDInput.deinit` released the external plane's digitizer
+  along with the pointer service, reasoning that a digitizer outliving its
+  display leaves the next session a target addressing nothing. That has the
+  ownership backwards: the host brought that display up and is still using
+  it, and it outlives our process — `baguette input` is one gesture long.
+  Removing the service left the CarPlay window on screen with nothing behind
+  it, unresponsive to the host's own pointer as much as to ours, and turned
+  target `1` into exactly the unregistered kind that makes
+  `SimHIDVirtualServiceManager` throw and take `backboardd` with it. The
+  digitizer now stays registered; creating is idempotent, so re-warming a
+  plane the host already built one for costs nothing. `serve` was affected
+  too — a closed CarPlay pane killed the window's touch — but the CLI made
+  it fire on every invocation.
+
 - **`serve` ran away to 9+ GB within minutes of streaming.** Reading
   `framebufferSurface` is not a local property read: it forwards through
   ROCKit to CoreSimulatorService as a *synchronous XPC round-trip*. Every
