@@ -185,8 +185,13 @@ baguette input --udid <UDID> --display carplay < gestures.jsonl
 CarPlay fails closed — if the plane has no framebuffer behind it the
 command exits with `noMatchingPort(carPlay)` rather than silently
 showing the phone. An unrecognized value (`--display carply`) is a
-validation error, never a quiet fallback to phone. The watch needs no
-flag: it is its own udid, so the ordinary commands point at it.
+validation error, never a quiet fallback to phone, and so is an empty
+one: `--display "$PLANE"` with nothing in `$PLANE` stops the command
+rather than taking the phone behind your back. Omitting the flag is how
+you ask for the default. Both commands reject the value before they look
+for the device, so a broken command line reports itself rather than the
+udid. The watch needs no flag: it is its own udid, so the ordinary
+commands point at it.
 
 ## Driving the watch
 

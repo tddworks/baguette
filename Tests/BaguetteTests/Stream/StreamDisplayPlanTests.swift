@@ -165,6 +165,26 @@ struct StreamDisplayPlanFromCLITests {
         }
     }
 
+    /// `--display ""` is the shape an unset variable takes —
+    /// `--display "$PLANE"` with nothing in `$PLANE`. Reading it as phone
+    /// is the silent-wrong-plane the strict parser exists to prevent, and
+    /// it is the worst kind of silent: a CarPlay run against the phone
+    /// passes, for the wrong reason. Omitting the flag entirely is how you
+    /// ask for the default; passing it empty is a broken command line.
+    @Test func `an empty flag is rejected rather than read as phone`() {
+        #expect(throws: DisplayFlagError.unknown("")) {
+            try StreamDisplayPlan.from(cliFlag: "")
+        }
+    }
+
+    /// The forgiving half of the pair is unchanged: a URL is not a command
+    /// line, and `?display=` there still means phone.
+    @Test func `an empty query still means phone`() {
+        #expect(StreamDisplayPlan.from(query: "") == StreamDisplayPlan(
+            kind: .phone, enableCarPlay: false
+        ))
+    }
+
     /// The rejection is what the operator actually reads, so the wording is
     /// part of the contract: it has to name the planes that would have
     /// worked and echo the token that didn't, or a typo costs a round trip

@@ -18,8 +18,12 @@ For releases prior to this changelog, see the
   check. Both commands now take `--display phone|carplay` and bind through
   the same `StreamDisplayPlan` the stream uses — enabling the external
   display first, failing closed with `noMatchingPort(carPlay)` when no
-  framebuffer sits behind it. Unlike the WS query, an unknown flag value is
-  a validation error rather than a silent fallback to phone.
+  framebuffer sits behind it. Unlike the WS query, a flag value no plane
+  answers to is a validation error rather than a silent fallback to phone —
+  empty included, so `--display "$PLANE"` with nothing in `$PLANE` stops the
+  command instead of taking the phone behind the caller's back. Only an
+  absent flag means phone. Both commands reject the value before resolving
+  the device, so a broken command line reports itself rather than the udid.
 
 ### Fixed
 

@@ -35,7 +35,12 @@ struct StreamDisplayPlan: Equatable, Sendable {
         case .phone:
             return StreamDisplayPlan(kind: .phone, enableCarPlay: false)
         case .none:
-            if let raw = cliFlag, !raw.isEmpty {
+            // Present-but-unparseable is rejected whatever it holds,
+            // empty included: `--display "$PLANE"` with nothing in
+            // `$PLANE` would otherwise take the phone silently, which is
+            // the one outcome this parser exists to rule out. Only an
+            // absent flag means phone.
+            if let raw = cliFlag {
                 throw DisplayFlagError.unknown(raw)
             }
             return StreamDisplayPlan(kind: .phone, enableCarPlay: false)
