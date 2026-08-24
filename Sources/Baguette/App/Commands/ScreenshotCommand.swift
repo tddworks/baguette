@@ -51,11 +51,23 @@ struct ScreenshotCommand: AsyncParsableCommand {
     @Option(help: "Image format: \(CaptureFormat.list) (defaults to the --output extension, else jpg)")
     var format: String?
 
+    /// Which framebuffer plane to capture: `phone` (default) or
+    /// `carplay`. CarPlay enables the external display first and fails
+    /// closed when no framebuffer sits behind it.
+    @Option(help: "Target display plane: phone | carplay")
+    var display: String?
+
     /// Reject what the pipeline can't honour — and normalise the rest,
     /// so validation is exactly as forgiving as the parsers behind it.
     /// `CaptureSize.parse` is already case-insensitive; `--fit` and
     /// `--background` are trimmed and lowercased here so they are too.
     mutating func validate() throws {
+        do {
+            _ = try StreamDisplayPlan.from(cliFlag: display)
+        } catch let error as DisplayFlagError {
+            throw ValidationError(error.message)
+        }
+
         do {
             _ = try CaptureSize.parse(size)
         } catch let error as CaptureSizeError {
@@ -88,8 +100,20 @@ struct ScreenshotCommand: AsyncParsableCommand {
             log("Device \(options.udid) not found")
             throw ExitCode.failure
         }
+        // CarPlay plans enable the panel and fail closed on an unbound
+        // plane; phone plans take the legacy screen untouched.
+        let plan = try StreamDisplayPlan.from(cliFlag: display)
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            bound = try plan.bind(to: simulator)
+        } catch let error as FramebufferSelectionError {
+            // Otherwise this surfaces as its own enum dump, which names
+            // the failure but not the remedy.
+            log(error.message)
+            throw ExitCode.failure
+        }
         let bytes = try await ScreenSnapshot.capture(
-            screen: simulator.screen(),
+            screen: bound.screen,
             quality: quality,
             scale: max(1, scale),
             size: try CaptureSize.parse(size),

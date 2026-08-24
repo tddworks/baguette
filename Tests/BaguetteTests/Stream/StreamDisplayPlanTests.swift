@@ -132,6 +132,78 @@ struct StreamDisplayPlanBindTests {
     }
 }
 
+/// CLI flags are strict where the WS query is forgiving: a typo'd
+/// `--display carply` must fail the invocation, never silently capture
+/// or touch the phone plane instead.
+@Suite("StreamDisplayPlan.fromCLI")
+struct StreamDisplayPlanFromCLITests {
+
+    @Test func `absent flag yields phone without enabling CarPlay`() throws {
+        #expect(try StreamDisplayPlan.from(cliFlag: nil) == StreamDisplayPlan(
+            kind: .phone, enableCarPlay: false
+        ))
+    }
+
+    @Test func `phone flag yields phone without enabling CarPlay`() throws {
+        #expect(try StreamDisplayPlan.from(cliFlag: "phone") == StreamDisplayPlan(
+            kind: .phone, enableCarPlay: false
+        ))
+    }
+
+    @Test func `carplay flag yields carPlay and asks to enable the panel`() throws {
+        #expect(try StreamDisplayPlan.from(cliFlag: "carplay") == StreamDisplayPlan(
+            kind: .carPlay, enableCarPlay: true
+        ))
+        #expect(try StreamDisplayPlan.from(cliFlag: "CARPLAY") == StreamDisplayPlan(
+            kind: .carPlay, enableCarPlay: true
+        ))
+    }
+
+    @Test func `unknown flag is rejected, not downgraded to phone`() {
+        #expect(throws: DisplayFlagError.unknown("carply")) {
+            try StreamDisplayPlan.from(cliFlag: "carply")
+        }
+    }
+
+    /// `--display ""` is the shape an unset variable takes —
+    /// `--display "$PLANE"` with nothing in `$PLANE`. Reading it as phone
+    /// is the silent-wrong-plane the strict parser exists to prevent, and
+    /// it is the worst kind of silent: a CarPlay run against the phone
+    /// passes, for the wrong reason. Omitting the flag entirely is how you
+    /// ask for the default; passing it empty is a broken command line.
+    @Test func `an empty flag is rejected rather than read as phone`() {
+        #expect(throws: DisplayFlagError.unknown("")) {
+            try StreamDisplayPlan.from(cliFlag: "")
+        }
+    }
+
+    /// The forgiving half of the pair is unchanged: a URL is not a command
+    /// line, and `?display=` there still means phone.
+    @Test func `an empty query still means phone`() {
+        #expect(StreamDisplayPlan.from(query: "") == StreamDisplayPlan(
+            kind: .phone, enableCarPlay: false
+        ))
+    }
+
+    /// The rejection is what the operator actually reads, so the wording is
+    /// part of the contract: it has to name the planes that would have
+    /// worked and echo the token that didn't, or a typo costs a round trip
+    /// to the docs to spot.
+    @Test func `the rejection names both planes and echoes what was typed`() {
+        #expect(
+            DisplayFlagError.unknown("carply").message
+            == #"--display must be one of: phone, carplay (got "carply")"#
+        )
+    }
+
+    @Test func `the rejection echoes an empty-looking token verbatim`() {
+        #expect(
+            DisplayFlagError.unknown(" ").message
+            == #"--display must be one of: phone, carplay (got " ")"#
+        )
+    }
+}
+
 /// Domain error for host panel enablement failures — tests need a
 /// concrete Error; Infra will map AppleScript failures onto this later.
 enum CarPlayEnableError: Error, Equatable {

@@ -220,6 +220,7 @@ baguette <command> [options]
   screenshot --udid <UDID> [--output <path>] [--format png|jpg]
              [--quality 0.85] [--scale 1]
              [--size native] [--fit contain] [--background '#ffffff']
+             [--display phone|carplay]
                                              One frame (defaults to stdout;
                                              --format is inferred from the
                                              --output extension)
@@ -259,7 +260,8 @@ baguette <command> [options]
                                              scheme before its aliases
 
   # Long-lived gesture pipe
-  input --udid <UDID>                        Read newline-delimited JSON
+  input --udid <UDID> [--display phone|carplay]
+                                             Read newline-delimited JSON
                                              gestures from stdin
 
   # Web UI — single-device dashboard + multi-device farm + Camera card +

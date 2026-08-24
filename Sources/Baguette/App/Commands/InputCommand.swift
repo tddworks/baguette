@@ -9,13 +9,50 @@ struct InputCommand: AsyncParsableCommand {
 
     @OptionGroup var options: DeviceOption
 
+    /// Which plane gestures land on: `phone` (default) or `carplay`.
+    /// CarPlay builds its digitizer and fails closed when the plane
+    /// has no framebuffer behind it.
+    @Option(help: "Target display plane: phone | carplay")
+    var display: String?
+
+    /// Rejected here rather than in `run()` so a malformed flag is not
+    /// masked by the device lookup that used to precede it: `--display
+    /// carply` against an absent udid reported `Device ... not found`,
+    /// which is the wrong end of a command line that was itself wrong.
+    /// The value is wrong regardless of what is booted, and `screenshot`
+    /// already fails it at the same point.
+    mutating func validate() throws {
+        do {
+            _ = try StreamDisplayPlan.from(cliFlag: display)
+        } catch let error as DisplayFlagError {
+            throw ValidationError(error.message)
+        }
+    }
+
     func run() async {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
         guard let simulator = simulators.find(udid: options.udid) else {
             log("Device \(options.udid) not found")
             Foundation.exit(1)
         }
-        let input = simulator.input()
+        // Gestures go to the planned plane's Input; pasteboard is a
+        // device-level service and stays on the simulator itself.
+        let plan: StreamDisplayPlan
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            plan = try StreamDisplayPlan.from(cliFlag: display)
+            bound = try plan.bind(to: simulator)
+        } catch let error as DisplayFlagError {
+            log(error.message)
+            Foundation.exit(1)
+        } catch let error as FramebufferSelectionError {
+            log(error.message)
+            Foundation.exit(1)
+        } catch {
+            log("display bind failed: \(error)")
+            Foundation.exit(1)
+        }
+        let input = bound.input
         let pasteboard = simulator.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
         log("Input session started, reading from stdin")

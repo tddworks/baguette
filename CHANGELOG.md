@@ -10,6 +10,45 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **`screenshot` and `input` accept `--display carplay`.** The two
+  agent-facing surfaces could not reach the CarPlay plane at all: only the
+  serve WebSocket read `?display=carplay`, and that rides the browser-trust
+  check. Both commands now take `--display phone|carplay` and bind through
+  the same `StreamDisplayPlan` the stream uses — enabling the external
+  display first, and failing closed when no framebuffer sits behind the
+  plane rather than quietly capturing the phone under a CarPlay label.
+  That refusal now says what to do about it: until the CLI gained
+  `--display`, the error only ever reached a WebSocket handler and
+  surfaced as its own enum dump (`noMatchingPort(Baguette.DisplayKind.carPlay)`),
+  which names the failure but not the remedy. It now names the menu that
+  attaches a plane, and distinguishes nothing-attached from the
+  attached-but-unbacked state a detach-and-re-enable leaves, which needs a
+  cycle through Disabled instead. Unlike the WS query, a flag value no plane
+  answers to is a validation error rather than a silent fallback to phone —
+  empty included, so `--display "$PLANE"` with nothing in `$PLANE` stops the
+  command instead of taking the phone behind the caller's back. Only an
+  absent flag means phone. Both commands reject the value before resolving
+  the device, so a broken command line reports itself rather than the udid.
+
+### Fixed
+
+- **Ending a CarPlay input session left the display alive and dead to
+  touch.** `IndigoHIDInput.deinit` released the external plane's digitizer
+  along with the pointer service, reasoning that a digitizer outliving its
+  display leaves the next session a target addressing nothing. That has the
+  ownership backwards: the host brought that display up and is still using
+  it, and it outlives our process — `baguette input` is one gesture long.
+  Removing the service left the CarPlay window on screen with nothing behind
+  it, unresponsive to the host's own pointer as much as to ours, and turned
+  target `1` into exactly the unregistered kind that makes
+  `SimHIDVirtualServiceManager` throw and take `backboardd` with it. The
+  digitizer now stays registered; creating is idempotent, so re-warming a
+  plane the host already built one for costs nothing. `serve` was affected
+  too — a closed CarPlay pane killed the window's touch — but the CLI made
+  it fire on every invocation.
+
 ---
 
 ## [0.1.96] - 2026-08-24

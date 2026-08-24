@@ -900,4 +900,38 @@ struct CommandParsingTests {
         #expect(cmd.port == 9000)
         #expect(cmd.deviceSet == "/tmp/sims")
     }
+
+    // MARK: - --display, on both agent-facing surfaces
+
+    /// A malformed `--display` is wrong about the command line itself, so
+    /// both commands must reject it at validation — before either goes
+    /// looking for a device. `input` used to resolve the simulator first,
+    /// which meant an absent udid masked the typo and the operator was
+    /// told the wrong thing about which of the two was broken.
+
+    @Test func `screenshot binds --display and defaults it to nil`() throws {
+        #expect(try ScreenshotCommand.parse(["--udid", "U"]).display == nil)
+        #expect(try ScreenshotCommand.parse(
+            ["--udid", "U", "--display", "carplay"]
+        ).display == "carplay")
+    }
+
+    @Test func `input binds --display and defaults it to nil`() throws {
+        #expect(try InputCommand.parse(["--udid", "U"]).display == nil)
+        #expect(try InputCommand.parse(
+            ["--udid", "U", "--display", "carplay"]
+        ).display == "carplay")
+    }
+
+    @Test func `screenshot rejects a display value no plane answers to`() {
+        #expect(throws: (any Error).self) {
+            try ScreenshotCommand.parse(["--udid", "U", "--display", "carply"])
+        }
+    }
+
+    @Test func `input rejects a display value no plane answers to`() {
+        #expect(throws: (any Error).self) {
+            try InputCommand.parse(["--udid", "U", "--display", "carply"])
+        }
+    }
 }
