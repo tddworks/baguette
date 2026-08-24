@@ -15,6 +15,20 @@ struct InputCommand: AsyncParsableCommand {
     @Option(help: "Target display plane: phone | carplay")
     var display: String?
 
+    /// Rejected here rather than in `run()` so a malformed flag is not
+    /// masked by the device lookup that used to precede it: `--display
+    /// carply` against an absent udid reported `Device ... not found`,
+    /// which is the wrong end of a command line that was itself wrong.
+    /// The value is wrong regardless of what is booted, and `screenshot`
+    /// already fails it at the same point.
+    mutating func validate() throws {
+        do {
+            _ = try StreamDisplayPlan.from(cliFlag: display)
+        } catch let error as DisplayFlagError {
+            throw ValidationError(error.message)
+        }
+    }
+
     func run() async {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
         guard let simulator = simulators.find(udid: options.udid) else {

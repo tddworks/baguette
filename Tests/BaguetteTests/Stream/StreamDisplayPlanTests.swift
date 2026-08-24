@@ -164,6 +164,24 @@ struct StreamDisplayPlanFromCLITests {
             try StreamDisplayPlan.from(cliFlag: "carply")
         }
     }
+
+    /// The rejection is what the operator actually reads, so the wording is
+    /// part of the contract: it has to name the planes that would have
+    /// worked and echo the token that didn't, or a typo costs a round trip
+    /// to the docs to spot.
+    @Test func `the rejection names both planes and echoes what was typed`() {
+        #expect(
+            DisplayFlagError.unknown("carply").message
+            == #"--display must be one of: phone, carplay (got "carply")"#
+        )
+    }
+
+    @Test func `the rejection echoes an empty-looking token verbatim`() {
+        #expect(
+            DisplayFlagError.unknown(" ").message
+            == #"--display must be one of: phone, carplay (got " ")"#
+        )
+    }
 }
 
 /// Domain error for host panel enablement failures — tests need a
