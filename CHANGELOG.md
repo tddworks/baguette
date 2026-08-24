@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.96] - 2026-08-24
+
 ### Fixed
 
 - **`serve` ran away to 9+ GB within minutes of streaming.** Reading
@@ -1025,7 +1029,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.95...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.96...HEAD
+[0.1.96]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.96
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.95
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.94...v0.1.95
 [0.1.94]: https://github.com/tddworks/baguette/compare/v0.1.93...v0.1.94
