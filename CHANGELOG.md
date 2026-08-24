@@ -42,6 +42,12 @@ For releases prior to this changelog, see the
   too — a closed CarPlay pane killed the window's touch — but the CLI made
   it fire on every invocation.
 
+---
+
+## [0.1.96] - 2026-08-24
+
+### Fixed
+
 - **`serve` ran away to 9+ GB within minutes of streaming.** Reading
   `framebufferSurface` is not a local property read: it forwards through
   ROCKit to CoreSimulatorService as a *synchronous XPC round-trip*. Every
@@ -1055,7 +1061,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.95...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.96...HEAD
+[0.1.96]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.96
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.95
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.94...v0.1.95
 [0.1.94]: https://github.com/tddworks/baguette/compare/v0.1.93...v0.1.94
