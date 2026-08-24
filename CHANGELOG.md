@@ -17,8 +17,15 @@ For releases prior to this changelog, see the
   serve WebSocket read `?display=carplay`, and that rides the browser-trust
   check. Both commands now take `--display phone|carplay` and bind through
   the same `StreamDisplayPlan` the stream uses — enabling the external
-  display first, failing closed with `noMatchingPort(carPlay)` when no
-  framebuffer sits behind it. Unlike the WS query, a flag value no plane
+  display first, and failing closed when no framebuffer sits behind the
+  plane rather than quietly capturing the phone under a CarPlay label.
+  That refusal now says what to do about it: until the CLI gained
+  `--display`, the error only ever reached a WebSocket handler and
+  surfaced as its own enum dump (`noMatchingPort(Baguette.DisplayKind.carPlay)`),
+  which names the failure but not the remedy. It now names the menu that
+  attaches a plane, and distinguishes nothing-attached from the
+  attached-but-unbacked state a detach-and-re-enable leaves, which needs a
+  cycle through Disabled instead. Unlike the WS query, a flag value no plane
   answers to is a validation error rather than a silent fallback to phone —
   empty included, so `--display "$PLANE"` with nothing in `$PLANE` stops the
   command instead of taking the phone behind the caller's back. Only an

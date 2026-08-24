@@ -22,4 +22,28 @@ struct FramebufferPortSnapshot: Sendable, Equatable {
 enum FramebufferSelectionError: Error, Equatable {
     case noMatchingPort(DisplayKind)
     case screenIdUnavailable
+
+    /// What a caller reads when the plane will not bind.
+    ///
+    /// A missing CarPlay plane has two shapes and they need different
+    /// hands: nothing attached at all, and attached-but-unbacked — the
+    /// screen is listed under Connected Screens with no IOSurface behind
+    /// it, which is what a detach-and-re-enable leaves. The second is the
+    /// one that reaches here most often, and clicking CarPlay again does
+    /// not clear it; only cycling the panel through Disabled does.
+    var message: String {
+        switch self {
+        case .noMatchingPort(.carPlay):
+            return """
+                no CarPlay framebuffer is attached — enable it from \
+                Simulator's I/O ▸ External Displays ▸ CarPlay, or if the \
+                CarPlay window is already open, cycle that menu to \
+                Disabled and back to reattach a blank one
+                """
+        case .noMatchingPort(.phone):
+            return "no framebuffer for the device's own screen — it may still be booting"
+        case .screenIdUnavailable:
+            return "the display is attached but has no connected screen id yet — retry once it finishes coming up"
+        }
+    }
 }

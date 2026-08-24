@@ -103,7 +103,15 @@ struct ScreenshotCommand: AsyncParsableCommand {
         // CarPlay plans enable the panel and fail closed on an unbound
         // plane; phone plans take the legacy screen untouched.
         let plan = try StreamDisplayPlan.from(cliFlag: display)
-        let bound = try plan.bind(to: simulator)
+        let bound: (screen: any Screen, input: any Input)
+        do {
+            bound = try plan.bind(to: simulator)
+        } catch let error as FramebufferSelectionError {
+            // Otherwise this surfaces as its own enum dump, which names
+            // the failure but not the remedy.
+            log(error.message)
+            throw ExitCode.failure
+        }
         let bytes = try await ScreenSnapshot.capture(
             screen: bound.screen,
             quality: quality,

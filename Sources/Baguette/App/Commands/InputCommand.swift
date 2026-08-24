@@ -45,6 +45,9 @@ struct InputCommand: AsyncParsableCommand {
         } catch let error as DisplayFlagError {
             log(error.message)
             Foundation.exit(1)
+        } catch let error as FramebufferSelectionError {
+            log(error.message)
+            Foundation.exit(1)
         } catch {
             log("display bind failed: \(error)")
             Foundation.exit(1)
