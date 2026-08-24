@@ -10,6 +10,17 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+
+- **`screenshot` and `input` accept `--display carplay`.** The two
+  agent-facing surfaces could not reach the CarPlay plane at all: only the
+  serve WebSocket read `?display=carplay`, and that rides the browser-trust
+  check. Both commands now take `--display phone|carplay` and bind through
+  the same `StreamDisplayPlan` the stream uses — enabling the external
+  display first, failing closed with `noMatchingPort(carPlay)` when no
+  framebuffer sits behind it. Unlike the WS query, an unknown flag value is
+  a validation error rather than a silent fallback to phone.
+
 ### Fixed
 
 - **`serve` ran away to 9+ GB within minutes of streaming.** Reading

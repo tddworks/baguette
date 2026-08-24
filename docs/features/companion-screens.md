@@ -168,6 +168,26 @@ of the open panes) and the window width:
 Below 960px the row becomes a column, so height becomes the contended
 axis instead and the two share it 55 / 45 in the phone's favour.
 
+## Driving it from a terminal (agents)
+
+The browser panes are one consumer; the CLI is the other. Two commands
+take `--display phone|carplay` and bind through the same
+`StreamDisplayPlan` the stream uses:
+
+```sh
+# one frame from the CarPlay plane (enables the display first)
+baguette screenshot --udid <UDID> --display carplay -o carplay.png
+
+# gestures against the CarPlay digitizer, over the stdin pipe
+baguette input --udid <UDID> --display carplay < gestures.jsonl
+```
+
+CarPlay fails closed — if the plane has no framebuffer behind it the
+command exits with `noMatchingPort(carPlay)` rather than silently
+showing the phone. An unrecognized value (`--display carply`) is a
+validation error, never a quiet fallback to phone. The watch needs no
+flag: it is its own udid, so the ordinary commands point at it.
+
 ## Driving the watch
 
 A watch pane has no bezel chrome to hang overlay buttons off, so the two

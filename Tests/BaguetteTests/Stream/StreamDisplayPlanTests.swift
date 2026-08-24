@@ -132,6 +132,40 @@ struct StreamDisplayPlanBindTests {
     }
 }
 
+/// CLI flags are strict where the WS query is forgiving: a typo'd
+/// `--display carply` must fail the invocation, never silently capture
+/// or touch the phone plane instead.
+@Suite("StreamDisplayPlan.fromCLI")
+struct StreamDisplayPlanFromCLITests {
+
+    @Test func `absent flag yields phone without enabling CarPlay`() throws {
+        #expect(try StreamDisplayPlan.from(cliFlag: nil) == StreamDisplayPlan(
+            kind: .phone, enableCarPlay: false
+        ))
+    }
+
+    @Test func `phone flag yields phone without enabling CarPlay`() throws {
+        #expect(try StreamDisplayPlan.from(cliFlag: "phone") == StreamDisplayPlan(
+            kind: .phone, enableCarPlay: false
+        ))
+    }
+
+    @Test func `carplay flag yields carPlay and asks to enable the panel`() throws {
+        #expect(try StreamDisplayPlan.from(cliFlag: "carplay") == StreamDisplayPlan(
+            kind: .carPlay, enableCarPlay: true
+        ))
+        #expect(try StreamDisplayPlan.from(cliFlag: "CARPLAY") == StreamDisplayPlan(
+            kind: .carPlay, enableCarPlay: true
+        ))
+    }
+
+    @Test func `unknown flag is rejected, not downgraded to phone`() {
+        #expect(throws: DisplayFlagError.unknown("carply")) {
+            try StreamDisplayPlan.from(cliFlag: "carply")
+        }
+    }
+}
+
 /// Domain error for host panel enablement failures — tests need a
 /// concrete Error; Infra will map AppleScript failures onto this later.
 enum CarPlayEnableError: Error, Equatable {
