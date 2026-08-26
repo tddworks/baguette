@@ -37,6 +37,9 @@
          background: var(--panel); color: var(--text);
          font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
   .btn:hover { border-color: #cbd5e1; background: #f1f5f9; }
+  /* `.btn` sets its own colour and cursor, so disabled needs saying. */
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); background: var(--panel); }
   .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
   .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }

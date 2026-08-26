@@ -34,6 +34,10 @@
   // same shape without asking twice.
   const CAPTURE_STORAGE_KEY = 'asc.capture.stream';
 
+  // Shared with the focus view (sim-native.js) — one stream-format
+  // preference per origin, whichever surface set it.
+  const FORMAT_KEY = 'asc.simFormat';
+
   // Recording state. BrowserRecorder spins up a compose canvas only
   // while active; references are pulled from what's already on the
   // page (frameImg from the SDK bezel, screen geometry from
@@ -128,10 +132,34 @@
     return _templatePromise;
   }
 
+  // Same filtered pick the focus view makes — see stream-format.js.
   function pickFormat() {
-    const stored = localStorage.getItem('asc.simFormat');
-    if (stored === 'avcc' || stored === 'mjpeg') return stored;
-    return window.FrameDecoder.isHardwareAvailable() ? 'avcc' : 'mjpeg';
+    if (!window.StreamFormat) return 'mjpeg';
+    return window.StreamFormat
+        .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities()).id;
+  }
+
+  /** What this browser can play, as `StreamFormat` wants to be told it. */
+  function decodeCapabilities() {
+    return {
+      hardwareDecoder: !!(window.FrameDecoder
+          && window.FrameDecoder.isHardwareAvailable()),
+    };
+  }
+
+  /** Lights the running format; disables codecs with no decoder here. */
+  function reflectFormatPicker(format) {
+    const caps = decodeCapabilities();
+    document.querySelectorAll('#simFormatRow .simFmt').forEach((b) => {
+      b.classList.toggle('btn-primary', b.dataset.v === format);
+      const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
+      const playable = !fmt || fmt.isPlayable(caps);
+      b.disabled = !playable;
+      if (!playable) {
+        b.title = fmt.label + ' needs WebCodecs, which browsers only expose '
+            + 'on a secure origin. Open this page over HTTPS or on localhost.';
+      }
+    });
   }
 
   // --- Lifecycle ---
@@ -157,14 +185,6 @@
     });
     sim.mount(document.getElementById('simDeviceFrame'));
 
-    const format = pickFormat();
-    requestAnimationFrame(() => {
-      document.querySelectorAll('#simFormatRow .simFmt').forEach((b) => {
-        b.classList.toggle('btn-primary', b.dataset.v === format);
-      });
-    });
-    log(`Stream: ${format.toUpperCase()}${format === 'avcc' ? ' (hw-decoded)' : ''}`);
-
     // Text-frame router. The stream WS carries binary video frames
     // and JSON envelopes (describe_ui_result, paste_result, server
     // pushes). The accessibility inspector consumes
@@ -184,24 +204,47 @@
       return false;
     };
 
-    session = new window.StreamSession({
-      udid, format, version: 'v2',
-      canvas: sim.canvas,
-      onSize: (w, h) => {
-        const changed = w !== lastPaintedSize.w || h !== lastPaintedSize.h;
-        lastPaintedSize = { w, h };
-        // Ratio presets resolve against the source, so the hint moves
-        // when the stream scale does.
-        if (changed) renderCaptureSizeHint();
-      },
-      onFps:  (fps) => {
-        const el = document.getElementById('simStreamFps');
-        if (el) el.textContent = fps + ' fps';
-      },
-      onLog: log,
-      onText: onStreamText,
-    });
-    session.start();
+    // False when the decoder wouldn't construct; `session` stays null.
+    const openSession = (fmt) => {
+      session = new window.StreamSession({
+        udid, format: fmt, version: 'v2',
+        canvas: sim.canvas,
+        onSize: (w, h) => {
+          const changed = w !== lastPaintedSize.w || h !== lastPaintedSize.h;
+          lastPaintedSize = { w, h };
+          // Ratio presets resolve against the source, so the hint moves
+          // when the stream scale does.
+          if (changed) renderCaptureSizeHint();
+        },
+        onFps:  (fps) => {
+          const el = document.getElementById('simStreamFps');
+          if (el) el.textContent = fps + ' fps';
+        },
+        onLog: log,
+        onText: onStreamText,
+      });
+      try {
+        session.start();
+        return true;
+      } catch (err) {
+        log(`${fmt.toUpperCase()} stream failed to start: `
+            + `${(err && err.message) || err}`, true);
+        try { session.stop(); } catch { /* ignore */ }
+        session = null;
+        return false;
+      }
+    };
+
+    // A preference the decoder can't honour: drop it, retry on MJPEG (#71).
+    let format = pickFormat();
+    if (!openSession(format) && format !== 'mjpeg') {
+      localStorage.removeItem(FORMAT_KEY);
+      format = 'mjpeg';
+      openSession(format);
+    }
+    log(`Stream: ${format.toUpperCase()}${format === 'avcc' ? ' (hw-decoded)' : ''}`);
+    // After the attempt — `format` may have fallen back.
+    requestAnimationFrame(() => reflectFormatPicker(format));
 
     gallery = new window.CaptureGallery({
       udid, screen: sim.screen.def, frameImg: sim._bezel.frameImg,
@@ -415,10 +458,12 @@
 
   window._simSetFormat = (btn) => {
     if (!btn) return;
-    const fmt = btn.dataset.v;
-    if (fmt !== 'avcc' && fmt !== 'mjpeg') return;
-    if (localStorage.getItem('asc.simFormat') === fmt && btn.classList.contains('btn-primary')) return;
-    localStorage.setItem('asc.simFormat', fmt);
+    // Storing an undecodable format wedges the origin (#71).
+    const wanted = window.StreamFormat && window.StreamFormat.named(btn.dataset.v);
+    if (!wanted || !wanted.isPlayable(decodeCapabilities())) return;
+    const fmt = wanted.id;
+    if (localStorage.getItem(FORMAT_KEY) === fmt && btn.classList.contains('btn-primary')) return;
+    localStorage.setItem(FORMAT_KEY, fmt);
     document.querySelectorAll('#simFormatRow .simFmt').forEach((b) => b.classList.remove('btn-primary'));
     btn.classList.add('btn-primary');
     log(`Format → ${fmt.toUpperCase()}`);

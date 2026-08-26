@@ -348,7 +348,11 @@
     //    shared right-edge stack.
     mountScreensRail();
 
-    // 5. Open stream — but only if there's a guest to stream. A
+    // 5. Settle the codec picker — it's on screen even when no session
+    //    ever starts, so a shutdown device can't be left offering H.264.
+    reflectFormat(currentFormat());
+
+    // 6. Open stream — but only if there's a guest to stream. A
     //    shutdown device has no framebuffer, no HID, and no
     //    PurpleWorkspacePort; opening the socket would just paint
     //    black forever with no hint as to why. Show the power card on
@@ -413,6 +417,7 @@
   // only two states. The user can reset to auto by deleting the
   // localStorage key in DevTools if needed.
   const THEME_KEY = 'baguette.simTheme';
+  const FORMAT_KEY = 'asc.simFormat';
 
   function applyStoredTheme() {
     const stored = localStorage.getItem(THEME_KEY);
@@ -497,7 +502,21 @@
       onLog: (msg) => console.log('[native]', msg),
       onText: onStreamText,
     });
-    session.start();
+    // `boot()` runs this before wiring the toolbar and unload handler,
+    // so a throw here killed the whole page, not just the canvas (#71).
+    try {
+      session.start();
+    } catch (err) {
+      console.warn('[native] ' + format + ' stream failed to start:',
+          (err && err.message) || err);
+      try { session.stop(); } catch (_) { /* ignore */ }
+      session = null;
+      if (format !== 'mjpeg') {
+        localStorage.removeItem(FORMAT_KEY);
+        startSession('mjpeg');
+      }
+      return;
+    }
     // Companion panes are the user's standing choice, not this
     // session's — but their sockets don't survive a phone-session
     // restart's teardown, so reopen whichever are showing.
@@ -1125,9 +1144,20 @@
     box.style.height = (frame.height * scaleY) + 'px';
   }
 
+  // Which pill is lit, and which isn't offerable at all.
   function reflectFormat(format) {
+    const caps = decodeCapabilities();
     document.querySelectorAll('#nativeFormatPicker .fmt-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.v === format);
+      const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
+      const playable = !fmt || fmt.isPlayable(caps);
+      if (b.dataset.titleDefault == null) {
+        b.dataset.titleDefault = b.getAttribute('title') || '';
+      }
+      b.disabled = !playable;
+      b.title = playable ? b.dataset.titleDefault
+        : fmt.label + ' needs WebCodecs, which browsers only expose on a '
+          + 'secure origin. Open this page over HTTPS or on localhost.';
     });
   }
 
@@ -1186,16 +1216,20 @@
   // independently of the phone, which meant a session the user had set to
   // H.264 still carried uncapped full JPEGs on its companion sockets.
   //
-  // The stored value is whitelisted rather than trusted: `localStorage`
-  // outlives the build that wrote it, so a format this build no longer
-  // speaks would otherwise reach the socket's `format` parameter and the
-  // `FrameDecoder` pick. Anything unrecognised falls back to what the
-  // hardware can actually decode.
+  // `StreamFormat` filters the stored value against what this browser
+  // can decode, so nothing unplayable reaches the socket.
   function currentFormat() {
-    const stored = localStorage.getItem('asc.simFormat');
-    if (stored === 'avcc' || stored === 'mjpeg') return stored;
-    return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
-        ? 'avcc' : 'mjpeg';
+    if (!window.StreamFormat) return 'mjpeg';
+    return window.StreamFormat
+        .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities()).id;
+  }
+
+  /** What this browser can play, as `StreamFormat` wants to be told it. */
+  function decodeCapabilities() {
+    return {
+      hardwareDecoder: !!(window.FrameDecoder
+          && window.FrameDecoder.isHardwareAvailable()),
+    };
   }
 
   // Toolbar icon strip scrolls horizontally when the window is too narrow
@@ -1632,17 +1666,20 @@
       if (!window.closed) location.href = '/simulators';
     };
     window.__nativeSetFormat = (next) => {
-      if (next !== 'avcc' && next !== 'mjpeg') return;
+      // Storing an undecodable format wedges the origin (#71). The
+      // button is already disabled; this is the second lock.
+      const wanted = window.StreamFormat && window.StreamFormat.named(next);
+      if (!wanted || !wanted.isPlayable(decodeCapabilities())) return;
       const current = currentFormat();
       const view = document.getElementById('simNativeView');
-      if (current === next && (session ||
+      if (current === wanted.id && (session ||
           (view && view.getAttribute('data-render3d') === 'open'))) return;
-      localStorage.setItem('asc.simFormat', next);
-      reflectFormat(next);
+      localStorage.setItem(FORMAT_KEY, wanted.id);
+      reflectFormat(wanted.id);
       if (view && view.getAttribute('data-render3d') === 'open') {
-        if (render3DPanel) render3DPanel.setFormat(next);
+        if (render3DPanel) render3DPanel.setFormat(wanted.id);
       } else {
-        startSession(next);
+        startSession(wanted.id);
       }
     };
     window.__nativeToggleTheme = () => {

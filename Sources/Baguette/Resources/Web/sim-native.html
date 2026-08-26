@@ -894,6 +894,11 @@
     background: var(--nv-accent); color: var(--nv-accent-text);
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   }
+  /* A codec this browser has no decoder for. The `title` says why. */
+  #simNativeView .fmt-btn:disabled {
+    opacity: 0.35; cursor: not-allowed;
+  }
+  #simNativeView .fmt-btn:disabled:hover { color: var(--nv-fmt-btn-text); }
 
   /* Action buttons — Home / Screenshot / App-switcher. */
   #simNativeView .tb-actions {
