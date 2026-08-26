@@ -147,6 +147,21 @@
     };
   }
 
+  /** Lights the running format; disables codecs with no decoder here. */
+  function reflectFormatPicker(format) {
+    const caps = decodeCapabilities();
+    document.querySelectorAll('#simFormatRow .simFmt').forEach((b) => {
+      b.classList.toggle('btn-primary', b.dataset.v === format);
+      const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
+      const playable = !fmt || fmt.isPlayable(caps);
+      b.disabled = !playable;
+      if (!playable) {
+        b.title = fmt.label + ' needs WebCodecs, which browsers only expose '
+            + 'on a secure origin. Open this page over HTTPS or on localhost.';
+      }
+    });
+  }
+
   // --- Lifecycle ---
 
   async function startStream(udid, name) {
@@ -170,23 +185,6 @@
     });
     sim.mount(document.getElementById('simDeviceFrame'));
 
-    const format = pickFormat();
-    requestAnimationFrame(() => {
-      const caps = decodeCapabilities();
-      document.querySelectorAll('#simFormatRow .simFmt').forEach((b) => {
-        b.classList.toggle('btn-primary', b.dataset.v === format);
-        // Don't offer a codec this browser has no decoder for.
-        const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
-        const playable = !fmt || fmt.isPlayable(caps);
-        b.disabled = !playable;
-        if (!playable) {
-          b.title = fmt.label + ' needs WebCodecs, which browsers only expose '
-              + 'on a secure origin. Open this page over HTTPS or on localhost.';
-        }
-      });
-    });
-    log(`Stream: ${format.toUpperCase()}${format === 'avcc' ? ' (hw-decoded)' : ''}`);
-
     // Text-frame router. The stream WS carries binary video frames
     // and JSON envelopes (describe_ui_result, paste_result, server
     // pushes). The accessibility inspector consumes
@@ -206,32 +204,47 @@
       return false;
     };
 
-    session = new window.StreamSession({
-      udid, format, version: 'v2',
-      canvas: sim.canvas,
-      onSize: (w, h) => {
-        const changed = w !== lastPaintedSize.w || h !== lastPaintedSize.h;
-        lastPaintedSize = { w, h };
-        // Ratio presets resolve against the source, so the hint moves
-        // when the stream scale does.
-        if (changed) renderCaptureSizeHint();
-      },
-      onFps:  (fps) => {
-        const el = document.getElementById('simStreamFps');
-        if (el) el.textContent = fps + ' fps';
-      },
-      onLog: log,
-      onText: onStreamText,
-    });
-    // A decoder that won't build must not stop the sidebar mounting.
-    try {
-      session.start();
-    } catch (err) {
-      log(`Stream failed to start: ${(err && err.message) || err}`, true);
-      try { session.stop(); } catch { /* ignore */ }
-      session = null;
-      if (format !== 'mjpeg') localStorage.removeItem(FORMAT_KEY);
+    // False when the decoder wouldn't construct; `session` stays null.
+    const openSession = (fmt) => {
+      session = new window.StreamSession({
+        udid, format: fmt, version: 'v2',
+        canvas: sim.canvas,
+        onSize: (w, h) => {
+          const changed = w !== lastPaintedSize.w || h !== lastPaintedSize.h;
+          lastPaintedSize = { w, h };
+          // Ratio presets resolve against the source, so the hint moves
+          // when the stream scale does.
+          if (changed) renderCaptureSizeHint();
+        },
+        onFps:  (fps) => {
+          const el = document.getElementById('simStreamFps');
+          if (el) el.textContent = fps + ' fps';
+        },
+        onLog: log,
+        onText: onStreamText,
+      });
+      try {
+        session.start();
+        return true;
+      } catch (err) {
+        log(`${fmt.toUpperCase()} stream failed to start: `
+            + `${(err && err.message) || err}`, true);
+        try { session.stop(); } catch { /* ignore */ }
+        session = null;
+        return false;
+      }
+    };
+
+    // A preference the decoder can't honour: drop it, retry on MJPEG (#71).
+    let format = pickFormat();
+    if (!openSession(format) && format !== 'mjpeg') {
+      localStorage.removeItem(FORMAT_KEY);
+      format = 'mjpeg';
+      openSession(format);
     }
+    log(`Stream: ${format.toUpperCase()}${format === 'avcc' ? ' (hw-decoded)' : ''}`);
+    // After the attempt — `format` may have fallen back.
+    requestAnimationFrame(() => reflectFormatPicker(format));
 
     gallery = new window.CaptureGallery({
       udid, screen: sim.screen.def, frameImg: sim._bezel.frameImg,
