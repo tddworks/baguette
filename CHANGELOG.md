@@ -34,6 +34,17 @@ For releases prior to this changelog, see the
 
 ### Fixed
 
+- **Picking H.264 over a LAN address left the window black for good.**
+  WebCodecs is secure-context-only, so a page served over plain HTTP has
+  no `VideoDecoder` — but a stored format skipped the capability probe,
+  and nothing stopped H.264 being stored from a browser that couldn't
+  play it. Every later load then threw out of the page's boot before the
+  toolbar and unload handler were wired, blacking out phone and CarPlay
+  pane alike. `StreamFormat` now filters the stored preference against
+  what the browser can decode, the picker disables a codec it can't play,
+  and a decoder that won't construct falls back to MJPEG instead of
+  taking the page down. Fixes
+  [#71](https://github.com/tddworks/baguette/issues/71).
 - **Ending a CarPlay input session left the display alive and dead to
   touch.** `IndigoHIDInput.deinit` released the external plane's digitizer
   along with the pointer service, reasoning that a digitizer outliving its
