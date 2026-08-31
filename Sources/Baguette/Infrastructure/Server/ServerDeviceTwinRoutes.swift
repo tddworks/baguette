@@ -469,11 +469,30 @@ extension Server {
         // screen quad is re-pushed a few times a second so Interact
         // clicks stay pose-accurate while the phone moves.
         let gyro = TwinGyroState(zoom: 1)
+        // The gyro paces to the connect-time fps; `set_fps` retunes the
+        // encoder live but the pose cadence keeps this bound (the
+        // stream's own pacing still drops anything above its rate).
+        let paceFPS = defaultFPS
         let subscriberID = UUID().uuidString
         poses.subscribe(udid: udid, id: subscriberID) { sample in
-            guard let applied = gyro.pose(for: sample) else { return }
+            // "Sync when it's changed": each sample maps to an absolute
+            // stage pose (lying phone = lying model), applies only when
+            // it moved beyond the dead-band, paced to the stream's fps —
+            // a resting phone emits zero pose frames, matching the
+            // event-driven discipline of the rest of the pipeline.
+            let now = ProcessInfo.processInfo.systemUptime
+            let fps = paceFPS
+            guard let applied = gyro.pose(
+                for: sample, at: now, interval: 1.0 / Double(fps)
+            ) else { return }
             scene.update(pose: applied.attitude, zoom: applied.zoom)
-            screen.refresh()
+            // Mirror frames flowing? The re-posed scene rides the next
+            // one for free. Force a render only when the source has
+            // gone idle (a static phone screen stops ReplayKit frames,
+            // but the gyro must keep moving).
+            let sourceIdle = hub.lastPublish
+                .map { now - $0 > 1.5 / Double(fps) } ?? true
+            if sourceIdle { screen.refresh() }
             if applied.announce {
                 Task { try? await outbound.write(.text(#"{"type":"gyro","live":true}"#)) }
             }

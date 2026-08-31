@@ -1,11 +1,18 @@
 import Foundation
 
-/// The pose discipline between a phone's gyroscope and the 3D stage:
-/// the first sample auto-zeroes (the twin faces front from wherever
-/// the phone happens to be), applies are throttled to ~20/s, the
-/// projected screen quad re-pushes a few times a second, and re-zero
-/// captures the next sample as the new front. Pure state behind a
-/// lock; the clock is injected so tests drive time deterministically.
+/// The twin's gyro discipline, reduced to what the feature actually
+/// is: sync the pose WHEN IT CHANGED. Each sample maps through
+/// `Attitude.stagePose` — absolute against gravity, so a phone lying
+/// on the desk renders a model lying on the stage — and is applied
+/// only when it moved beyond the dead-band and the stream's frame
+/// period has passed. A resting phone produces zero scene work and
+/// therefore zero frames; there is no buffer, no free-running clock,
+/// and no smoothing filter (CoreMotion's fused 60 Hz attitude is
+/// already smooth).
+///
+/// The heading (yaw) is captured on the first sample and by
+/// `rezero()` — the ONE axis `.xArbitraryZVertical` leaves arbitrary.
+/// Pitch and roll are never calibrated away.
 final class TwinGyroState: @unchecked Sendable {
     struct Applied: Equatable {
         let attitude: Attitude
@@ -15,61 +22,62 @@ final class TwinGyroState: @unchecked Sendable {
     }
 
     private let lock = NSLock()
-    private let now: @Sendable () -> TimeInterval
-    private var reference: Attitude?
-    private var current: Attitude = .identity
+    private var heading: Double?
     private var zoom: Double
     private var lastApply: TimeInterval?
     private var lastQuad: TimeInterval?
+    private var lastAttitude: Attitude?
     private var announced = false
 
-    /// A jitter guard, not a pacer: samples arrive at 60 Hz and the
-    /// twin's stream renders at 60 fps, so every sample normally
-    /// applies. The guard (just under one sample period) only absorbs
-    /// delivery bursts.
-    private static let applyInterval: TimeInterval = 0.012
+    /// Poses closer than this (quaternion-dot tolerance, about a
+    /// quarter degree) are the same pose — sensor micro-noise never
+    /// renders. Compared against the last APPLIED pose so slow drift
+    /// still accumulates across the band and eventually shows.
+    private static let deadBand = 0.000002
     private static let quadInterval: TimeInterval = 0.25
-    /// Per-apply slerp fraction toward the latest target at ~60
-    /// applies/s — the glide that makes motion butter instead of
-    /// steps. PhoneTwin proved 0.18 at 60 fps; 0.25 is a touch
-    /// snappier to offset our extra encode/decode latency.
-    private static let smoothing = 0.25
 
-    init(
-        zoom: Double,
-        now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
-    ) {
+    init(zoom: Double) {
         self.zoom = zoom
-        self.now = now
     }
 
-    func pose(for sample: AttitudeSample) -> Applied? {
+    /// The pose to apply for this sample, or `nil` when nothing
+    /// changed or the stream's frame period (`interval`) hasn't
+    /// passed. Called on sample arrival — the samples are the clock.
+    func pose(
+        for sample: AttitudeSample,
+        at hostNow: TimeInterval,
+        interval: TimeInterval
+    ) -> Applied? {
         lock.lock()
         defer { lock.unlock() }
-        let time = now()
-        if let last = lastApply, time - last < Self.applyInterval {
-            return nil
-        }
-        lastApply = time
-        let reference = self.reference ?? sample.attitude
-        self.reference = reference
+        let heading = self.heading ?? sample.attitude.headingDegrees
+        self.heading = heading
 
-        // The sample moves the TARGET; the displayed pose glides toward
-        // it. `slerped` takes the shortest path through sign flips.
-        let target = sample.attitude.rezeroed(against: reference)
-        current = current.slerped(toward: target, fraction: Self.smoothing)
+        if let lastApply, hostNow - lastApply < interval { return nil }
+
+        let attitude = sample.attitude.stagePose(headingDegrees: heading)
+        let changed = lastAttitude.map {
+            !attitude.isApproximately($0, tolerance: Self.deadBand)
+        } ?? true
+        guard changed else { return nil }
+        lastApply = hostNow
+        lastAttitude = attitude
 
         let announce = !announced
         announced = true
-        let pushQuad = lastQuad.map { time - $0 >= Self.quadInterval } ?? true
-        if pushQuad { lastQuad = time }
-        return Applied(attitude: current, zoom: zoom, announce: announce, pushQuad: pushQuad)
+        let pushQuad = lastQuad.map { hostNow - $0 >= Self.quadInterval } ?? true
+        if pushQuad { lastQuad = hostNow }
+        return Applied(attitude: attitude, zoom: zoom, announce: announce, pushQuad: pushQuad)
     }
 
-    /// The next sample becomes the new front.
+    /// Capture the CURRENT heading as "facing the viewer". Pitch and
+    /// roll stay absolute — re-zeroing a lying phone still shows a
+    /// lying model, turned to face front.
     func rezero() {
         lock.lock()
-        reference = nil
+        heading = nil
+        lastAttitude = nil
+        lastApply = nil
         lock.unlock()
     }
 

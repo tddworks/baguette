@@ -94,3 +94,38 @@ extension AttitudeTests {
         #expect(abs(rotated.z - 2) < 0.0001)
     }
 }
+
+extension AttitudeTests {
+    private func flatYawed(_ degrees: Double) -> Attitude {
+        Attitude.rotation(degrees: degrees, x: 0, y: 0, z: 1)
+    }
+
+    private func uprightFacing(heading: Double) -> Attitude {
+        Attitude.rotation(degrees: heading, x: 0, y: 0, z: 1)
+            * Attitude.rotation(degrees: 90, x: 1, y: 0, z: 0)
+    }
+
+    @Test func `heading reads the rotation about gravity`() {
+        #expect(abs(flatYawed(30).headingDegrees - 30) < 0.001)
+        #expect(abs(uprightFacing(heading: 40).headingDegrees - 40) < 0.001)
+        #expect(abs(Attitude.identity.headingDegrees) < 0.001)
+    }
+
+    @Test func `an upright phone at the captured heading is the stage front`() {
+        let pose = uprightFacing(heading: 25).stagePose(headingDegrees: 25)
+        #expect(pose.isApproximately(.identity))
+    }
+
+    @Test func `a phone lying flat renders a model lying flat`() {
+        // Absolute against gravity: lying on the desk is lying on the
+        // stage, whatever heading was captured. -90 about the stage X
+        // tips the model onto its back, screen up.
+        let pose = flatYawed(50).stagePose(headingDegrees: 50)
+        #expect(pose.isApproximately(Attitude.rotation(degrees: -90, x: 1, y: 0, z: 0)))
+    }
+
+    @Test func `turning in place turns the model about the stage's up axis`() {
+        let pose = uprightFacing(heading: 25 + 30).stagePose(headingDegrees: 25)
+        #expect(pose.isApproximately(Attitude.rotation(degrees: 30, x: 0, y: 1, z: 0)))
+    }
+}

@@ -89,6 +89,47 @@ struct Attitude: Equatable, Sendable {
         )
     }
 
+    /// A rotation of `degrees` about the (normalized) axis.
+    static func rotation(degrees: Double, x: Double, y: Double, z: Double) -> Attitude {
+        let length = (x * x + y * y + z * z).squareRoot()
+        guard length > 0 else { return .identity }
+        let half = degrees * .pi / 360
+        let scale = sin(half) / length
+        return Attitude(x: x * scale, y: y * scale, z: z * scale, w: cos(half))
+    }
+
+    /// Rotation about gravity — CoreMotion's world z axis — in
+    /// degrees. The one axis `.xArbitraryZVertical` leaves arbitrary,
+    /// and therefore the ONLY thing re-zero is allowed to touch.
+    var headingDegrees: Double {
+        atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * 180 / .pi
+    }
+
+    /// Map a CoreMotion attitude into the 3D stage's frame, ABSOLUTE
+    /// against gravity: a phone lying on the desk renders a model
+    /// lying on the stage; upright renders upright. `heading` is the
+    /// yaw captured at connect / re-zero, defining which compass
+    /// direction faces the viewer — pitch and roll are never
+    /// calibrated away. `R·(q·q_up⁻¹)·R⁻¹`: relative to the upright
+    /// pose at the captured heading, conjugated from CoreMotion's
+    /// z-up world into the stage's y-up world. If a real device turns
+    /// the wrong way on some axis, the sign flips HERE and nowhere
+    /// else.
+    func stagePose(headingDegrees heading: Double) -> Attitude {
+        // Remove the captured heading IN THE WORLD FRAME first, so
+        // "toward the viewer" is a fixed world direction; then measure
+        // against the upright pose; then conjugate the whole rotation
+        // from CoreMotion's z-up world into the stage's y-up world.
+        // Ordering matters: heading removed on the wrong side tips a
+        // lying phone about a compass-dependent axis instead of the
+        // viewer's left-right axis.
+        let relative = Attitude.rotation(degrees: -heading, x: 0, y: 0, z: 1)
+            * self
+            * Attitude.rotation(degrees: -90, x: 1, y: 0, z: 0)
+        let basis = Attitude.rotation(degrees: -90, x: 1, y: 0, z: 0)
+        return basis * relative * basis.inverse
+    }
+
     /// Rotate a vector by this attitude — the quaternion sandwich
     /// `q v q⁻¹` in its expanded form. This is how the pose reaches
     /// both the RealityKit entity (as the same quaternion) and the

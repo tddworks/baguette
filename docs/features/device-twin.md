@@ -8,12 +8,16 @@ matching plus a user-pick fallback. The companion app + broadcast
 extension live under `Companion/DeviceTwin/` (Tuist) and stream from a
 real iPhone. The gyro twin is live: attitude flows from the broadcast
 extension over the motion socket into `TwinPoses`, and
-`TwinGyroState` drives the 3D stage's pose the way PhoneTwin proved
-out: the QUATERNION goes straight to the entity (never decomposed to
-euler — the axis order wouldn't match the scene's), the displayed pose
-slerps toward the latest target (0.35 per apply at 30/s) so motion is
-butter rather than steps, auto-zero on connect, quad re-pushes for
-Interact accuracy, browser Re-zero chip. Not started: the control pipe (Twin runner).
+`TwinGyroState` drives the 3D stage's pose by two rules and no
+machinery: the pose is ABSOLUTE against gravity (a phone lying on the
+desk renders a model lying on the stage — `Attitude.stagePose` is the
+one documented transform, and only the compass-arbitrary heading is
+calibrated at connect / Re-zero), and it syncs WHEN IT CHANGED — each
+60 Hz sample applies only past a quarter-degree dead-band, paced to
+the stream's fps, riding the next mirror frame when one is flowing and
+forcing a render only when the source is idle. A resting phone emits
+zero pose frames. No buffer, no free-running clock, no smoothing
+filter: CoreMotion's fused attitude is already smooth. Not started: the control pipe (Twin runner).
 
 A real, cable-free iPhone appears in baguette the way a simulator
 does: listed beside simulators, its live screen mirrored into the

@@ -4,91 +4,103 @@ import Testing
 
 @Suite("TwinGyroState")
 struct TwinGyroStateTests {
-    final class Clock: @unchecked Sendable {
-        var now: TimeInterval = 100
-    }
-
-    private func aboutZ(_ degrees: Double) -> AttitudeSample {
-        let half = degrees * .pi / 360
-        return AttitudeSample(
-            attitude: Attitude(x: 0, y: 0, z: sin(half), w: cos(half)), timestamp: 0
+    private func upright(heading: Double, t: Double) -> AttitudeSample {
+        AttitudeSample(
+            attitude: Attitude.rotation(degrees: heading, x: 0, y: 0, z: 1)
+                * Attitude.rotation(degrees: 90, x: 1, y: 0, z: 0),
+            timestamp: t
         )
     }
 
-    private func make() -> (TwinGyroState, Clock) {
-        let clock = Clock()
-        return (TwinGyroState(zoom: 1, now: { clock.now }), clock)
+    private func flat(yaw: Double, t: Double) -> AttitudeSample {
+        AttitudeSample(
+            attitude: Attitude.rotation(degrees: yaw, x: 0, y: 0, z: 1), timestamp: t
+        )
     }
 
-    @Test func `the first sample auto-zeroes and announces`() {
-        let (gyro, _) = make()
-        let applied = gyro.pose(for: aboutZ(40))
+    @Test func `the first sample announces and captures the heading only`() {
+        // Yaw-only calibration: a phone held upright at any compass
+        // heading faces the viewer; its pitch and roll stay absolute.
+        let gyro = TwinGyroState(zoom: 1)
+        let applied = gyro.pose(for: upright(heading: 40, t: 0), at: 100, interval: 1.0 / 60)
         #expect(applied?.announce == true)
         #expect(applied?.attitude.isApproximately(.identity) == true)
     }
 
-    @Test func `applies run at sample rate with only a jitter guard`() {
-        // The stream renders at 60 fps and samples arrive at 60 Hz —
-        // the guard only absorbs bursts, never paces below the render.
-        let (gyro, clock) = make()
-        _ = gyro.pose(for: aboutZ(0))
-        clock.now += 0.005
-        #expect(gyro.pose(for: aboutZ(5)) == nil)
-        clock.now += 0.012
-        #expect(gyro.pose(for: aboutZ(5)) != nil)
+    @Test func `a phone lying flat renders a lying model whatever the heading`() {
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 40, t: 0), at: 100, interval: 1.0 / 60)
+        let applied = gyro.pose(for: flat(yaw: 40, t: 0.1), at: 100.1, interval: 1.0 / 60)
+        #expect(applied?.attitude.isApproximately(
+            Attitude.rotation(degrees: -90, x: 1, y: 0, z: 0)
+        ) == true)
     }
 
-    @Test func `the pose glides toward the target instead of snapping`() {
-        // PhoneTwin's discipline: samples move a TARGET; the displayed
-        // pose slerps toward it a fraction per apply, so motion is
-        // butter at render rate rather than 30 Hz steps.
-        let (gyro, clock) = make()
-        _ = gyro.pose(for: aboutZ(0))
-        clock.now += 0.1
-        let applied = gyro.pose(for: aboutZ(40))
-        let expected = Attitude.identity.slerped(
-            toward: Attitude(x: 0, y: 0, z: sin(40 * .pi / 360), w: cos(40 * .pi / 360)),
-            fraction: 0.25
-        )
-        #expect(applied?.attitude.isApproximately(expected) == true)
+    @Test func `turning in place turns the model about the stage's up axis`() {
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 40, t: 0), at: 100, interval: 1.0 / 60)
+        let applied = gyro.pose(for: upright(heading: 70, t: 0.1), at: 100.1, interval: 1.0 / 60)
+        #expect(applied?.attitude.isApproximately(
+            Attitude.rotation(degrees: 30, x: 0, y: 1, z: 0)
+        ) == true)
     }
 
-    @Test func `the pose converges on a held target`() {
-        let (gyro, clock) = make()
-        _ = gyro.pose(for: aboutZ(0))
-        let target = aboutZ(40)
-        for _ in 0..<80 {
-            clock.now += 0.02
-            _ = gyro.pose(for: target)
+    @Test func `unchanged poses produce nothing at all`() {
+        // "Sync when it's changed": a resting phone means zero scene
+        // work and zero pose-driven frames.
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 40, t: 0), at: 100, interval: 1.0 / 60)
+        #expect(gyro.pose(for: upright(heading: 40.001, t: 0.1), at: 100.1, interval: 1.0 / 60) == nil)
+    }
+
+    @Test func `slow drift accumulates across the dead-band and eventually shows`() {
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 40, t: 0), at: 100, interval: 1.0 / 60)
+        var fired = false
+        for i in 1...200 {
+            let t = Double(i) * 0.05
+            if gyro.pose(
+                for: upright(heading: 40 + Double(i) * 0.01, t: t),
+                at: 100 + t, interval: 1.0 / 60
+            ) != nil {
+                fired = true
+                break
+            }
         }
-        clock.now += 0.02
-        #expect(gyro.pose(for: target)?.attitude
-            .isApproximately(target.attitude, tolerance: 0.0001) == true)
+        #expect(fired)
     }
 
-    @Test func `rezero captures the next sample as the new front`() {
-        let (gyro, clock) = make()
-        _ = gyro.pose(for: aboutZ(0))
-        clock.now += 0.1
+    @Test func `applies are paced to the stream's frame period`() {
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 0, t: 0), at: 100, interval: 1.0 / 30)
+        #expect(gyro.pose(for: upright(heading: 20, t: 0.016), at: 100.016, interval: 1.0 / 30) == nil)
+        #expect(gyro.pose(for: upright(heading: 20, t: 0.04), at: 100.04, interval: 1.0 / 30) != nil)
+    }
+
+    @Test func `rezero recaptures the heading but never the tilt`() {
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 0, t: 0), at: 100, interval: 1.0 / 60)
         gyro.rezero()
-        let applied = gyro.pose(for: aboutZ(60))
-        #expect(applied?.attitude.isApproximately(.identity) == true)
+        // A lying phone at a new heading right after re-zero: front-
+        // facing in yaw, still honestly lying down.
+        let applied = gyro.pose(for: flat(yaw: 77, t: 1), at: 101, interval: 1.0 / 60)
+        #expect(applied?.attitude.isApproximately(
+            Attitude.rotation(degrees: -90, x: 1, y: 0, z: 0)
+        ) == true)
     }
 
-    @Test func `quad pushes are rarer than applies`() {
-        let (gyro, clock) = make()
-        #expect(gyro.pose(for: aboutZ(0))?.pushQuad == true)
-        clock.now += 0.02
-        #expect(gyro.pose(for: aboutZ(5))?.pushQuad == false)
-        clock.now += 0.25
-        #expect(gyro.pose(for: aboutZ(10))?.pushQuad == true)
+    @Test func `quad pushes are throttled by the host clock`() {
+        let gyro = TwinGyroState(zoom: 1)
+        #expect(gyro.pose(for: upright(heading: 0, t: 0), at: 100, interval: 1.0 / 60)?.pushQuad == true)
+        #expect(gyro.pose(for: upright(heading: 10, t: 0.05), at: 100.05, interval: 1.0 / 60)?.pushQuad == false)
+        #expect(gyro.pose(for: upright(heading: 20, t: 0.35), at: 100.35, interval: 1.0 / 60)?.pushQuad == true)
     }
 
     @Test func `zoom updates ride along without disturbing the pose`() {
-        let (gyro, clock) = make()
-        _ = gyro.pose(for: aboutZ(0))
+        let gyro = TwinGyroState(zoom: 1)
+        _ = gyro.pose(for: upright(heading: 0, t: 0), at: 100, interval: 1.0 / 60)
         gyro.set(zoom: 1.6)
-        clock.now += 0.1
-        #expect(gyro.pose(for: aboutZ(0))?.zoom == 1.6)
+        let applied = gyro.pose(for: upright(heading: 30, t: 0.1), at: 100.1, interval: 1.0 / 60)
+        #expect(applied?.zoom == 1.6)
     }
 }

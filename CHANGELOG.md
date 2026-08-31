@@ -43,12 +43,11 @@ For releases prior to this changelog, see the
   twin turned physical: the broadcast extension streams
   `CMDeviceMotion` attitude over `WS /devices/companion/motion`
   (its own socket, so video bursts never delay a pose sample) and the
-  3D stage follows the phone in your hand — auto-zeroed on connect, the
-  quaternion applied directly (never euler-decomposed) with a 0.35
-  slerp glide at 30 applies/s, `screen_quad` re-pushed for Interact
-  accuracy, with a Gyro-live chip and Re-zero button on the stage.
-  Making `/devices` a resource root moved the
-  simulator-list widget assets from `/devices/` to `/sim-list/` —
+  3D stage follows the phone in your hand — the pose ABSOLUTE against gravity
+  (lay the phone down and the twin lies down; only the
+  compass-arbitrary heading is calibrated), synced when it changed —
+  dead-banded, paced to the stream's format-aware fps (AVCC 60,
+  MJPEG 30), riding mirror frames when they flow —
   the folder held simulator-list UI, and on the public surface
   "devices" now means physical hardware, matching Xcode's own
   Devices-vs-Simulators split.
