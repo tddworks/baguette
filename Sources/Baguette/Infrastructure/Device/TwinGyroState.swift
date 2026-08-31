@@ -1,73 +1,121 @@
 import Foundation
 
-/// The twin's gyro discipline, reduced to what the feature actually
-/// is: sync the pose WHEN IT CHANGED. Each sample maps through
-/// `Attitude.stagePose` — absolute against gravity, so a phone lying
-/// on the desk renders a model lying on the stage — and is applied
-/// only when it moved beyond the dead-band and the stream's frame
-/// period has passed. A resting phone produces zero scene work and
-/// therefore zero frames; there is no buffer, no free-running clock,
-/// and no smoothing filter (CoreMotion's fused 60 Hz attitude is
-/// already smooth).
+/// The twin's gyro discipline — the synthesis the feature settled on
+/// after trying simpler shapes:
 ///
-/// The heading (yaw) is captured on the first sample and by
-/// `rezero()` — the ONE axis `.xArbitraryZVertical` leaves arbitrary.
-/// Pitch and roll are never calibrated away.
+/// - **Absolute against gravity**: every sample maps through
+///   `Attitude.stagePose`, so a phone lying on the desk renders a
+///   model lying on the stage. Only the compass-arbitrary heading is
+///   calibrated (first sample / `rezero()`); pitch and roll never are.
+/// - **A metronome, not arrival-driven applies**: pose travels inside
+///   server-rendered VIDEO, and video is only smooth when its frames
+///   sample motion at REGULAR times. ReplayKit's mirror frames arrive
+///   irregularly (it emits on screen change), so the 3D socket ticks
+///   at the stream's fps and asks `pose(at:)` — the equivalent of the
+///   client-side render loop PhoneTwin gets for free.
+/// - **Snapshot interpolation with a monotonic clock**: ticks replay
+///   the timestamped trajectory `delay` behind the newest sample,
+///   slerping between the bracketing samples — even samples of the
+///   true motion, immune to Wi-Fi jitter up to the budget. The
+///   sender→host offset is the max ever seen, so a late arrival can
+///   never rebase playback backwards (the bug that once made
+///   interpolation feel broken).
+/// - **Emit only on change**: a tick whose pose sits inside the
+///   dead-band returns `nil` — a resting phone costs zero renders and
+///   zero frames.
 final class TwinGyroState: @unchecked Sendable {
     struct Applied: Equatable {
         let attitude: Attitude
         let zoom: Double
-        let announce: Bool
         let pushQuad: Bool
+    }
+
+    private struct Entry {
+        let sender: Double
+        let attitude: Attitude
     }
 
     private let lock = NSLock()
     private var heading: Double?
+    private var entries: [Entry] = []
     private var zoom: Double
-    private var lastApply: TimeInterval?
-    private var lastQuad: TimeInterval?
+    private var senderOffset: Double?
+    private var lastPlayback: Double?
     private var lastAttitude: Attitude?
-    private var announced = false
+    private var lastQuad: TimeInterval?
 
+    /// Playback runs this far behind the newest sample — three sample
+    /// periods of jitter absorbed before motion would ever stall.
+    private static let delay: TimeInterval = 0.05
+    private static let quadInterval: TimeInterval = 0.25
+    private static let capacity = 120
     /// Poses closer than this (quaternion-dot tolerance, about a
     /// quarter degree) are the same pose — sensor micro-noise never
-    /// renders. Compared against the last APPLIED pose so slow drift
-    /// still accumulates across the band and eventually shows.
+    /// renders.
     private static let deadBand = 0.000002
-    private static let quadInterval: TimeInterval = 0.25
 
     init(zoom: Double) {
         self.zoom = zoom
     }
 
-    /// The pose to apply for this sample, or `nil` when nothing
-    /// changed or the stream's frame period (`interval`) hasn't
-    /// passed. Called on sample arrival — the samples are the clock.
-    func pose(
-        for sample: AttitudeSample,
-        at hostNow: TimeInterval,
-        interval: TimeInterval
-    ) -> Applied? {
+    /// Feed one sample. Returns `true` exactly once — the first sample
+    /// ever — so the caller can announce the gyro going live.
+    func add(_ sample: AttitudeSample, arrivedAt host: TimeInterval) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        let first = entries.isEmpty && heading == nil
         let heading = self.heading ?? sample.attitude.headingDegrees
         self.heading = heading
+        entries.append(Entry(
+            sender: sample.timestamp,
+            attitude: sample.attitude.stagePose(headingDegrees: heading)
+        ))
+        let offset = sample.timestamp - host
+        senderOffset = max(senderOffset ?? offset, offset)
+        if entries.count > Self.capacity {
+            entries.removeFirst(entries.count - Self.capacity)
+        }
+        return first
+    }
 
-        if let lastApply, hostNow - lastApply < interval { return nil }
+    /// The pose the render clock should show at `hostNow`, or `nil`
+    /// when it hasn't moved past the dead-band — nothing to render.
+    func pose(at hostNow: TimeInterval) -> Applied? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let newest = entries.last, let senderOffset else { return nil }
 
-        let attitude = sample.attitude.stagePose(headingDegrees: heading)
+        var playback = hostNow + senderOffset - Self.delay
+        playback = min(max(playback, entries[0].sender), newest.sender)
+        if let lastPlayback { playback = max(playback, min(lastPlayback, newest.sender)) }
+        lastPlayback = playback
+
+        var attitude = newest.attitude
+        if entries.count > 1 {
+            var index = entries.count - 1
+            while index > 0 && entries[index - 1].sender > playback {
+                index -= 1
+            }
+            if index > 0 {
+                let a = entries[index - 1]
+                let b = entries[index]
+                let span = b.sender - a.sender
+                let fraction = span > 0 ? (playback - a.sender) / span : 1
+                attitude = a.attitude.slerped(toward: b.attitude, fraction: fraction)
+            } else {
+                attitude = entries[0].attitude
+            }
+        }
+
         let changed = lastAttitude.map {
             !attitude.isApproximately($0, tolerance: Self.deadBand)
         } ?? true
         guard changed else { return nil }
-        lastApply = hostNow
         lastAttitude = attitude
 
-        let announce = !announced
-        announced = true
         let pushQuad = lastQuad.map { hostNow - $0 >= Self.quadInterval } ?? true
         if pushQuad { lastQuad = hostNow }
-        return Applied(attitude: attitude, zoom: zoom, announce: announce, pushQuad: pushQuad)
+        return Applied(attitude: attitude, zoom: zoom, pushQuad: pushQuad)
     }
 
     /// Capture the CURRENT heading as "facing the viewer". Pitch and
@@ -76,8 +124,9 @@ final class TwinGyroState: @unchecked Sendable {
     func rezero() {
         lock.lock()
         heading = nil
+        entries.removeAll()
+        lastPlayback = nil
         lastAttitude = nil
-        lastApply = nil
         lock.unlock()
     }
 

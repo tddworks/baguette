@@ -499,33 +499,34 @@ extension Server {
         let paceFPS = defaultFPS
         let subscriberID = UUID().uuidString
         poses.subscribe(udid: udid, id: subscriberID) { sample in
-            // "Sync when it's changed": each sample maps to an absolute
-            // stage pose (lying phone = lying model), applies only when
-            // it moved beyond the dead-band, paced to the stream's fps —
-            // a resting phone emits zero pose frames, matching the
-            // event-driven discipline of the rest of the pipeline.
-            let now = ProcessInfo.processInfo.systemUptime
-            let fps = paceFPS
-            guard let applied = gyro.pose(
-                for: sample, at: now, interval: 1.0 / Double(fps)
-            ) else { return }
-            scene.update(pose: applied.attitude, zoom: applied.zoom)
-            // Mirror frames flowing? The re-posed scene rides the next
-            // one for free. Force a render only when the source has
-            // gone idle (a static phone screen stops ReplayKit frames,
-            // but the gyro must keep moving).
-            let sourceIdle = hub.lastPublish
-                .map { now - $0 > 1.5 / Double(fps) } ?? true
-            if sourceIdle { screen.refresh() }
-            if applied.announce {
+            // Samples only feed the trajectory buffer; the metronome
+            // below is what poses the scene, so ReplayKit's irregular
+            // arrivals never set the render cadence.
+            if gyro.add(sample, arrivedAt: ProcessInfo.processInfo.systemUptime) {
                 Task { try? await outbound.write(.text(#"{"type":"gyro","live":true}"#)) }
             }
-            if applied.pushQuad, let quad = scene.screenQuad,
-               let json = Self.screenQuadJSON(quad) {
-                Task { try? await outbound.write(.text(json)) }
+        }
+        // The metronome — the server-side equivalent of the 60 fps
+        // render loop a client-side twin gets for free. Video is only
+        // smooth when its frames sample motion at REGULAR times, so
+        // the tick runs at the stream's fps and replays the buffered
+        // trajectory (see `TwinGyroState`); a tick with nothing new
+        // costs nothing and a resting phone emits zero pose frames.
+        let ticker = Task {
+            while !Task.isCancelled {
+                if let applied = gyro.pose(at: ProcessInfo.processInfo.systemUptime) {
+                    scene.update(pose: applied.attitude, zoom: applied.zoom)
+                    screen.refresh()
+                    if applied.pushQuad, let quad = scene.screenQuad,
+                       let json = Self.screenQuadJSON(quad) {
+                        try? await outbound.write(.text(json))
+                    }
+                }
+                try? await Task.sleep(nanoseconds: UInt64(1_000_000_000 / paceFPS))
             }
         }
         defer {
+            ticker.cancel()
             poses.unsubscribe(udid: udid, id: subscriberID)
         }
 
