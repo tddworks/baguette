@@ -11,7 +11,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         let defaults = UserDefaults(suiteName: TwinWire.appGroup)
-        guard let endpoint = defaults?.string(forKey: TwinWire.endpointKey),
+        guard let endpoint = defaults?.string(forKey: TwinWire.endpointKey)
+                  .map(TwinWire.normalizedEndpoint),
               let url = URL(string: "ws://\(endpoint)/devices/companion/video") else {
             finishBroadcastWithError(NSError(
                 domain: "baguette.twin", code: 1,

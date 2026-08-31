@@ -15,6 +15,19 @@ public enum TwinWire {
     public static let endpointKey = "twin.endpoint"
     public static let deviceIdKey = "twin.deviceId"
 
+    /// Users paste addresses with schemes and slashes; the wire wants
+    /// bare `host:port`. Normalized in one place so the app's saved
+    /// value and the extension's URL never disagree.
+    public static func normalizedEndpoint(_ raw: String) -> String {
+        var endpoint = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["ws://", "wss://", "http://", "https://"]
+        where endpoint.lowercased().hasPrefix(prefix) {
+            endpoint = String(endpoint.dropFirst(prefix.count))
+        }
+        while endpoint.hasSuffix("/") { endpoint = String(endpoint.dropLast()) }
+        return endpoint
+    }
+
     public static func chunk(tag: UInt8, payload: Data) -> Data {
         let length = UInt32(payload.count + 1)
         var out = Data([

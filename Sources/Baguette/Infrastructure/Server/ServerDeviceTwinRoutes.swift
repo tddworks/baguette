@@ -79,6 +79,7 @@ extension Server {
     ) async {
         var session = TwinSession()
         var udid: String?
+        log("[device] companion video socket opened")
         do {
             // Messages, not frames: a video chunk may arrive fragmented
             // and must be reassembled before `AVCCEnvelope.unwrap` sees it.
