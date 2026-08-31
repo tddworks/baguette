@@ -37,6 +37,9 @@ final class MotionSender {
     }
 
     func start() {
+        // Build marker so Console.app settles "is the new sender
+        // running?" — cadence numbers alone cannot.
+        NSLog("BaguetteTwin motion sender v3: 100 Hz, windowed sends")
         guard manager.isDeviceMotionAvailable else {
             NSLog("BaguetteTwin motion unavailable on this device")
             return

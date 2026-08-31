@@ -11,7 +11,7 @@ public final class TwinTransport: @unchecked Sendable {
     private let lock = NSLock()
     private var chunkInFlight = false
     private var pendingChunk: Data?
-    private var textInFlight = false
+    private var textInFlightCount = 0
     private var pendingText: String?
     private var closed = false
 
@@ -30,26 +30,31 @@ public final class TwinTransport: @unchecked Sendable {
         }
     }
 
-    /// Latest-drop for high-rate text (motion samples): while one send
-    /// is in flight the newest pending line replaces any unsent one.
-    /// Queuing stale samples is what turns a brief stall into a burst
-    /// of late arrivals — and each sample carries its timestamp, so
-    /// dropped ones cost nothing to the replayed trajectory.
+    /// High-rate text (motion samples): a BOUNDED in-flight window.
+    /// Awaiting each send's completion serializes delivery at one
+    /// sample per RTT (~33 Hz on typical Wi-Fi — measured); an
+    /// unbounded queue turns a stall into a burst of stale arrivals.
+    /// So up to `textWindow` sends pipeline freely (TCP keeps them
+    /// ordered), and beyond that the newest pending line replaces any
+    /// unsent one — each sample carries its timestamp, so dropped
+    /// ones cost nothing to the replayed trajectory.
     public func send(coalescedText text: String) {
         lock.lock()
         if closed {
             lock.unlock()
             return
         }
-        if textInFlight {
+        if textInFlightCount >= Self.textWindow {
             pendingText = text
             lock.unlock()
             return
         }
-        textInFlight = true
+        textInFlightCount += 1
         lock.unlock()
         sendTextNow(text)
     }
+
+    private static let textWindow = 3
 
     private func sendTextNow(_ text: String) {
         task.send(.string(text)) { [weak self] error in
@@ -58,7 +63,7 @@ public final class TwinTransport: @unchecked Sendable {
             self.lock.lock()
             let next = self.closed ? nil : self.pendingText
             self.pendingText = nil
-            self.textInFlight = next != nil
+            if next == nil { self.textInFlightCount -= 1 }
             self.lock.unlock()
             if let next { self.sendTextNow(next) }
         }
