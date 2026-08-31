@@ -32,6 +32,9 @@ import NIOCore
 ///                                             device chrome (+ ?buttons=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
 ///   WS   /simulators/:udid/stream.3d.:format → live 3D AVCC/MJPEG frames
+///   GET  /devices.json                      → connected physical devices
+///   WS   /devices/companion/video           → companion app video ingest
+///   WS   /devices/:udid/stream?format=      → physical-device mirror frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
 /// Static UI siblings live at the *root* (e.g. `GET /sim-list.js`)
@@ -59,6 +62,13 @@ struct Server: Sendable {
     /// location routes need to reach them to drive the activity.
     let motionSessions: MotionSessions
 
+    /// Device-twin state: connected companions and their per-device
+    /// video ingest hubs. Reference types for the same reason as
+    /// `motionSessions` — membership and decoder sessions must
+    /// survive between socket connections.
+    let devices: LiveDevices
+    let twinScreens: TwinScreens
+
     init(
         simulators: any Simulators,
         chromes: any Chromes,
@@ -69,10 +79,14 @@ struct Server: Sendable {
         port: Int = 8421,
         allowedHosts: [String] = [],
         grants: PluginGrants = PluginGrants(),
-        motionSessions: MotionSessions = MotionSessions()
+        motionSessions: MotionSessions = MotionSessions(),
+        devices: LiveDevices = LiveDevices(),
+        twinScreens: TwinScreens = TwinScreens()
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
+        self.devices = devices
+        self.twinScreens = twinScreens
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -147,6 +161,11 @@ struct Server: Sendable {
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerDeepLinkRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerDeviceTwinRoutes(
+            on: router,
+            rejectUntrustedBrowser: rejectUntrustedBrowser,
+            trustedWebSocketUpgrade: trustedWebSocketUpgrade
+        )
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in

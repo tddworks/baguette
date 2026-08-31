@@ -35,6 +35,22 @@ enum AVCCEnvelope {
     static let deltaTag:       UInt8 = 0x03
     static let seedTag:        UInt8 = 0x04
 
+    /// Reverse of `wrap` — recover the tag and payload of one chunk.
+    /// Returns `nil` when the chunk is too short or its length prefix
+    /// disagrees with the bytes actually present, so a consumer never
+    /// trusts a truncated frame. Used by the device-twin ingest, which
+    /// receives chunks in this envelope from the companion app.
+    static func unwrap(_ chunk: Data) -> (tag: UInt8, payload: Data)? {
+        guard chunk.count >= 5 else { return nil }
+        let start = chunk.startIndex
+        let length = UInt32(chunk[start]) << 24
+            | UInt32(chunk[start + 1]) << 16
+            | UInt32(chunk[start + 2]) << 8
+            | UInt32(chunk[start + 3])
+        guard length == UInt32(chunk.count - 4) else { return nil }
+        return (chunk[start + 4], chunk.subdata(in: (start + 5)..<chunk.endIndex))
+    }
+
     static func description(avcc: Data) -> Data { wrap(tag: descriptionTag, payload: avcc) }
     static func keyframe(avcc: Data) -> Data    { wrap(tag: keyframeTag, payload: avcc) }
     static func delta(avcc: Data) -> Data       { wrap(tag: deltaTag, payload: avcc) }
