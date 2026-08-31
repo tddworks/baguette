@@ -66,6 +66,42 @@ struct LiveDeviceModelsTests {
             Issue.record("unexpected error: \(error)")
         }
     }
+
+    @Test func `matches a physical device by hardware id from an installed bundle`() throws {
+        // The device-twin path end to end at this layer: `deviceModels`
+        // written in a bundle's definition.json on disk, discovered,
+        // and matched by the companion's hardware identifier.
+        let scratch = try Self.makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let root = scratch.appending(path: "models")
+        try Self.installModel(
+            id: "iphone-13-pro-max", displayName: "iPhone 13 Pro Max",
+            deviceModels: ["iPhone14,3"], in: root
+        )
+
+        let models = try LiveDeviceModels(rootURLs: [root])
+
+        #expect(try models.match(hardware: "iPhone14,3")?.definition.id == "iphone-13-pro-max")
+        #expect(try models.match(hardware: "iPhone18,1") == nil)
+    }
+
+    @Test func `all lists installed bundles with higher roots shadowing by id`() throws {
+        // Powers the picker offered when no definition matches a
+        // phone's hardware.
+        let scratch = try Self.makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let overrideRoot = scratch.appending(path: "override")
+        let bundledRoot = scratch.appending(path: "bundled")
+        try Self.installModel(id: "phone", displayName: "Override", in: overrideRoot)
+        try Self.installModel(id: "phone", displayName: "Bundled", in: bundledRoot)
+        try Self.installModel(id: "tablet", displayName: "Tablet", in: bundledRoot)
+
+        let models = try LiveDeviceModels(rootURLs: [overrideRoot, bundledRoot])
+        let all = try models.all()
+
+        #expect(all.map(\.definition.id).sorted() == ["phone", "tablet"])
+        #expect(all.first { $0.definition.id == "phone" }?.definition.displayName == "Override")
+    }
 }
 
 private extension LiveDeviceModelsTests {
@@ -79,6 +115,7 @@ private extension LiveDeviceModelsTests {
     static func installModel(
         id: String,
         displayName: String,
+        deviceModels: [String] = [],
         in root: URL
     ) throws {
         let bundle = root.appending(path: id)
@@ -90,7 +127,8 @@ private extension LiveDeviceModelsTests {
           "displayName": "\(displayName)",
           "matches": {
             "simulatorDeviceTypes": [],
-            "deviceNames": ["iPhone 17 Pro"]
+            "deviceNames": ["iPhone 17 Pro"],
+            "deviceModels": [\(deviceModels.map { "\"\($0)\"" }.joined(separator: ","))]
           },
           "asset": {"file": "device.usdz"},
           "scene": {
