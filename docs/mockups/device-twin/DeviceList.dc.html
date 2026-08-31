@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; background: #f8fafc; color: #334155;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 13px; }
+    a { color: #2563eb; } a:hover { color: #1d4ed8; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #f8fafc; overflow: hidden">
+  <div style="margin: 20px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden">
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-bottom: 1px solid #e2e8f0">
+      <h1 style="margin: 0; color: #1f2937; font-size: 16px; font-weight: 700">Simulators</h1>
+      <div style="flex: 1"></div>
+      <input style="height: 32px; width: 210px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f9fafb; color: #334155; font: inherit; font-size: 13px" placeholder="Search devices" />
+      <select style="height: 32px; min-width: 112px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f9fafb; color: #334155; font: inherit; font-size: 13px"><option>iPhones</option></select>
+      <select style="height: 32px; min-width: 112px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f9fafb; color: #334155; font: inherit; font-size: 13px"><option>All runtimes</option></select>
+    </div>
+
+    <div style="padding: 14px 20px 8px; color: #1f2937; font-size: 12px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase">Running</div>
+    <table style="width: 100%; border-collapse: collapse; table-layout: fixed">
+      <thead><tr>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: left; text-transform: uppercase">Name</th>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: left; text-transform: uppercase">State</th>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: left; text-transform: uppercase">Runtime</th>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: right; text-transform: uppercase">Actions</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #475569; font-size: 14px; font-weight: 700; vertical-align: middle">iPhone 17 Pro</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle"><span style="display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 99px; background: #0f766e; vertical-align: 1px"></span>Booted</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle">iOS 26.1</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; text-align: right; white-space: nowrap; vertical-align: middle">
+            <span style="display: inline-flex; gap: 6px">
+              <a style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; text-decoration: none">Stream</a>
+              <a style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; text-decoration: none">Shutdown</a>
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 14px 20px 8px">
+      <span style="color: #1f2937; font-size: 12px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase">Devices</span>
+      <span style="display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border: 1px solid #dbeafe; border-radius: 99px; background: #eff6ff; color: #2563eb; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em">PHYSICAL</span>
+    </div>
+    <table style="width: 100%; border-collapse: collapse; table-layout: fixed">
+      <thead><tr>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: left; text-transform: uppercase">Name</th>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: left; text-transform: uppercase">State</th>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: left; text-transform: uppercase">Hardware</th>
+        <th style="height: 38px; padding: 0 20px; background: #f8fafc; color: #94a3b8; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-align: right; text-transform: uppercase">Actions</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #475569; font-size: 14px; font-weight: 700; vertical-align: middle">han&#39;s iPhone</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle"><span style="display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 99px; background: #2563eb; vertical-align: 1px"></span>Mirroring</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle">iPhone 13 Pro Max · iOS 26.1</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; text-align: right; white-space: nowrap; vertical-align: middle">
+            <span style="display: inline-flex; gap: 6px; align-items: center">
+              <span style="display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border: 1px solid #fde68a; border-radius: 99px; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700">View-only</span>
+              <a style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #2563eb; font-size: 12px; font-weight: 700; text-decoration: none">Open</a>
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="padding: 14px 20px 8px; color: #1f2937; font-size: 12px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase">Available</div>
+    <table style="width: 100%; border-collapse: collapse; table-layout: fixed">
+      <tbody>
+        <tr>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #475569; font-size: 14px; font-weight: 700; vertical-align: middle">iPhone 17 Pro Max</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle"><span style="display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 99px; background: #94a3b8; vertical-align: 1px"></span>Shutdown</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle">iOS 26.1</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; text-align: right; white-space: nowrap; vertical-align: middle">
+            <a style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; text-decoration: none">Boot</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #475569; font-size: 14px; font-weight: 700; vertical-align: middle">iPad Pro 13-inch (M4)</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle"><span style="display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 99px; background: #94a3b8; vertical-align: 1px"></span>Shutdown</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; color: #64748b; font-size: 14px; vertical-align: middle">iOS 26.1</td>
+          <td style="height: 58px; padding: 0 20px; border-top: 1px solid #edf2f7; text-align: right; white-space: nowrap; vertical-align: middle">
+            <a style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 700; text-decoration: none">Boot</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

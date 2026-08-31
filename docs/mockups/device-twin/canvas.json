@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "DeviceList.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Device list — DEVICES section" },
+    { "file": "Main.dc.html", "x": 1560, "y": 0, "w": 1440, "h": 900, "title": "Unified stream page (2D mirror)" },
+    { "file": "TwinStage.dc.html", "x": 3120, "y": 0, "w": 1440, "h": 900, "title": "3D twin stage (gyro live)" }
+  ],
+  "annotations": [
+    { "id": "note-list", "x": 0, "y": -150, "w": 420, "text": "Physical devices join the existing list between RUNNING and AVAILABLE.\nBlue dot = mirroring; amber View-only chip until the control runner lands.\nOpen goes to /devices/:udid — same page as simulators." },
+    { "id": "note-stream", "x": 1560, "y": -150, "w": 420, "text": "Same sim page, base path switched to /devices.\nSim-only toolbar controls (orientation, location, logs, buttons…) hidden;\ncapture + record stay. View-only badge explains the missing Interact." },
+    { "id": "note-twin", "x": 3120, "y": -150, "w": 440, "text": "Existing 3D stage, source switched to the device's decoded mirror.\nGyro chip: attitude from the companion drives the model pose; Re-zero\ncaptures the current pose as front. No exact USDZ for this hardware →\nthe user picks a model once (no silent substitution)." }
+  ],
+  "launch": { "view": "canvas" }
+}
