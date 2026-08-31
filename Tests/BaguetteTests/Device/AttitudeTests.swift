@@ -69,3 +69,24 @@ struct AttitudeTests {
         #expect(q.isApproximately(q.negated))
     }
 }
+
+extension AttitudeTests {
+    private func aboutAxis(_ degrees: Double, x: Double, y: Double, z: Double) -> Attitude {
+        let half = degrees * .pi / 360
+        return Attitude(x: x * sin(half), y: y * sin(half), z: z * sin(half), w: cos(half))
+    }
+
+    @Test func `single-axis rotations convert to euler degrees on their own axis`() {
+        let pitch = aboutAxis(30, x: 1, y: 0, z: 0).eulerDegrees
+        #expect(abs(pitch.x - 30) < 0.001 && abs(pitch.y) < 0.001 && abs(pitch.z) < 0.001)
+        let yaw = aboutAxis(45, x: 0, y: 1, z: 0).eulerDegrees
+        #expect(abs(yaw.y - 45) < 0.001 && abs(yaw.x) < 0.001 && abs(yaw.z) < 0.001)
+        let roll = aboutAxis(-60, x: 0, y: 0, z: 1).eulerDegrees
+        #expect(abs(roll.z + 60) < 0.001 && abs(roll.x) < 0.001 && abs(roll.y) < 0.001)
+    }
+
+    @Test func `the identity attitude is zero euler`() {
+        let euler = Attitude.identity.eulerDegrees
+        #expect(abs(euler.x) < 0.001 && abs(euler.y) < 0.001 && abs(euler.z) < 0.001)
+    }
+}

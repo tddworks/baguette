@@ -26,6 +26,42 @@ extension Server {
         let screens = self.twinScreens
         let models = self.models
         let chromes = self.chromes
+        let poses = self.twinPoses
+
+        // The companion's motion socket: hello, then attitude samples
+        // at sensor rate. Kept apart from the video socket on purpose —
+        // video bursts must never delay 16-byte pose samples.
+        router.ws(
+            "/devices/companion/motion",
+            shouldUpgrade: trustedWebSocketUpgrade
+        ) { inbound, outbound, _ in
+            var session = TwinSession()
+            var udid: String?
+            do {
+                for try await frame in inbound {
+                    guard frame.opcode == .text else { continue }
+                    switch session.receive(text: String(buffer: frame.data)) {
+                    case .registered(let hello):
+                        devices.register(hello: hello)
+                        udid = hello.udid
+                        try? await outbound.write(.text(#"{"ok":true}"#))
+                    case .attitude(let sample):
+                        if let udid { poses.update(udid: udid, sample: sample) }
+                    case .rejected(let reason):
+                        try? await outbound.write(.text(Self.twinErrorFrame(reason)))
+                    case .streamOpened, .frame:
+                        break
+                    }
+                }
+            } catch {
+                // socket closed; cleanup below
+            }
+            if let udid {
+                poses.clear(udid: udid)
+                devices.unregister(udid: udid)
+                log("[device] motion socket closed: \(udid)")
+            }
+        }
 
         // The unified page: same sim.html shell as `/simulators/:udid`;
         // the JS switches its base path from the URL.
@@ -153,7 +189,7 @@ extension Server {
             await Self.twinLive3DStreamWS(
                 udid: Self.udidParam(context.request), format: .mjpeg,
                 query: Self.twinQuery(context.request),
-                devices: devices, models: models, screens: screens,
+                devices: devices, models: models, screens: screens, poses: poses,
                 inbound: inbound, outbound: outbound
             )
         }
@@ -164,7 +200,7 @@ extension Server {
             await Self.twinLive3DStreamWS(
                 udid: Self.udidParam(context.request), format: .avcc,
                 query: Self.twinQuery(context.request),
-                devices: devices, models: models, screens: screens,
+                devices: devices, models: models, screens: screens, poses: poses,
                 inbound: inbound, outbound: outbound
             )
         }
@@ -336,6 +372,7 @@ extension Server {
         devices: LiveDevices,
         models: any DeviceModels,
         screens: TwinScreens,
+        poses: TwinPoses,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
@@ -399,12 +436,44 @@ extension Server {
             try? await outbound.write(.text(json))
         }
 
+        // The gyro: attitude samples drive the model pose. The first
+        // sample auto-zeroes (the twin faces front from wherever the
+        // phone happens to be); `{"type":"rezero"}` re-captures that
+        // reference. Applies are throttled to ~20/s and the projected
+        // screen quad is re-pushed a few times a second so Interact
+        // clicks stay pose-accurate while the phone moves.
+        let gyro = TwinGyroState(zoom: 1)
+        let subscriberID = UUID().uuidString
+        poses.subscribe(udid: udid, id: subscriberID) { sample in
+            guard let applied = gyro.rotation(for: sample) else { return }
+            scene.update(camera: Device3DCamera(rotation: applied.rotation, zoom: applied.zoom))
+            screen.refresh()
+            if applied.announce {
+                Task { try? await outbound.write(.text(#"{"type":"gyro","live":true}"#)) }
+            }
+            if applied.pushQuad, let quad = scene.screenQuad,
+               let json = Self.screenQuadJSON(quad) {
+                Task { try? await outbound.write(.text(json)) }
+            }
+        }
+        defer {
+            poses.unsubscribe(udid: udid, id: subscriberID)
+        }
+
         do {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
+                if line.contains("\"rezero\"") {
+                    gyro.rezero()
+                    continue
+                }
                 do {
                     if try Self.handleLive3DControl(line: line, scene: scene) {
+                        if let data = line.data(using: .utf8),
+                           let camera = try? Device3DCamera.parsing(json: data) {
+                            gyro.set(zoom: camera.zoom)
+                        }
                         screen.refresh()
                         if let quad = scene.screenQuad, let json = Self.screenQuadJSON(quad) {
                             try? await outbound.write(.text(json))

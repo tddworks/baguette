@@ -41,3 +41,16 @@ struct LiveDevicesTests {
         #expect(devices.all.map(\.udid) == ["U1", "U2"])
     }
 }
+
+extension LiveDevicesTests {
+    @Test func `a device stays listed while any of its sockets is connected`() {
+        let devices = LiveDevices()
+        let hello = TwinHello(udid: "U9", name: "iPhone", model: "iPhone14,3", capabilities: [])
+        devices.register(hello: hello)   // video socket
+        devices.register(hello: hello)   // motion socket
+        devices.unregister(udid: "U9")   // one closes
+        #expect(devices.find(udid: "U9") != nil)
+        devices.unregister(udid: "U9")   // both closed
+        #expect(devices.find(udid: "U9") == nil)
+    }
+}

@@ -94,6 +94,33 @@
     }
   };
 
+  /// The phone's gyroscope is driving the pose — say so, and offer
+  /// Re-zero (captures the current physical pose as "facing front").
+  Sim3DPanel.prototype.showGyroChip = function (live) {
+    if (!this.stage) return;
+    let chip = this.stage.querySelector('[data-role="gyro-chip"]');
+    if (!live) { if (chip) chip.remove(); return; }
+    if (chip) return;
+    chip = document.createElement('div');
+    chip.dataset.role = 'gyro-chip';
+    chip.style.cssText =
+        'position:absolute;top:12px;left:12px;display:flex;align-items:center;' +
+        'gap:8px;z-index:6;font:700 11.5px/1 -apple-system,Inter,sans-serif';
+    chip.innerHTML =
+        '<span style="display:inline-flex;align-items:center;gap:7px;height:28px;' +
+        'padding:0 12px;border:1px solid #bbf7d0;border-radius:99px;' +
+        'background:#f0fdf4;color:#15803d">' +
+        '<span style="width:7px;height:7px;border-radius:99px;background:#16a34a"></span>' +
+        'Gyro live</span>' +
+        '<button type="button" data-role="gyro-rezero" style="height:28px;' +
+        'padding:0 12px;border:1px solid #e2e8f0;border-radius:99px;' +
+        'background:#f8fafc;color:#475569;font:inherit;cursor:pointer">Re-zero</button>';
+    this.stage.appendChild(chip);
+    chip.querySelector('[data-role="gyro-rezero"]').addEventListener('click', () => {
+      if (this.session) this.session.send({ type: 'rezero' });
+    });
+  };
+
   Sim3DPanel.prototype.mountStage = function () {
     if (!this.stage) return;
     this.stage.innerHTML =
@@ -184,6 +211,10 @@
         if (generation !== this.generation) return false;
         if (envelope && envelope.type === 'screen_quad') {
           this.screenQuad = window.Baguette._ScreenQuad.fromCorners(envelope.corners);
+          return true;
+        }
+        if (envelope && envelope.type === 'gyro') {
+          this.showGyroChip(!!envelope.live);
           return true;
         }
         if (envelope && envelope.error) {

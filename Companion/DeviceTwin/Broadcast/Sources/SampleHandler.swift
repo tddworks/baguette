@@ -8,6 +8,7 @@ import TwinWire
 final class SampleHandler: RPBroadcastSampleHandler {
     private var transport: TwinTransport?
     private var sender: H264Sender?
+    private var motion: MotionSender?
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         let defaults = UserDefaults(suiteName: TwinWire.appGroup)
@@ -33,6 +34,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
         ))
         self.transport = transport
         self.sender = H264Sender(transport: transport)
+        // The gyro rides its own socket so video bursts never delay a
+        // pose sample; endpoint is the bare host:port saved by the app.
+        let bareEndpoint = TwinWire.normalizedEndpoint(
+            defaults?.string(forKey: TwinWire.endpointKey) ?? ""
+        )
+        self.motion = MotionSender(endpoint: bareEndpoint, deviceId: deviceId)
+        self.motion?.start()
     }
 
     private var sampleCount = 0
@@ -68,6 +76,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func broadcastFinished() {
         NSLog("BaguetteTwin broadcast finished after %d samples", sampleCount)
+        motion?.stop()
         sender?.finish()
         transport?.close()
     }

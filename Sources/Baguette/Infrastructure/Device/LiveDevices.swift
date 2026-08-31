@@ -8,21 +8,24 @@ import Foundation
 /// connects).
 final class LiveDevices: Devices, @unchecked Sendable {
     private let lock = NSLock()
-    private var ordered: [Device] = []
+    // Registration is COUNTED: the video and motion sockets each
+    // register the same udid, and the device stays listed until the
+    // last one closes.
+    private var ordered: [(device: Device, connections: Int)] = []
 
     var all: [Device] {
         lock.lock()
         defer { lock.unlock() }
-        return ordered
+        return ordered.map(\.device)
     }
 
     func register(hello: TwinHello) {
         let device = Device(hello: hello)
         lock.lock()
-        if let index = ordered.firstIndex(where: { $0.udid == device.udid }) {
-            ordered[index] = device
+        if let index = ordered.firstIndex(where: { $0.device.udid == device.udid }) {
+            ordered[index] = (device, ordered[index].connections + 1)
         } else {
-            ordered.append(device)
+            ordered.append((device, 1))
         }
         lock.unlock()
         log("[device] companion connected: \(device.name) (\(device.udid))")
@@ -30,7 +33,14 @@ final class LiveDevices: Devices, @unchecked Sendable {
 
     func unregister(udid: String) {
         lock.lock()
-        ordered.removeAll { $0.udid == udid }
+        if let index = ordered.firstIndex(where: { $0.device.udid == udid }) {
+            let remaining = ordered[index].connections - 1
+            if remaining <= 0 {
+                ordered.remove(at: index)
+            } else {
+                ordered[index].connections = remaining
+            }
+        }
         lock.unlock()
         log("[device] companion disconnected: \(udid)")
     }

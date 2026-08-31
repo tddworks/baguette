@@ -89,6 +89,21 @@ struct Attitude: Equatable, Sendable {
         )
     }
 
+    /// The attitude as Tait-Bryan angles in degrees, in the axis
+    /// vocabulary the 3D stage's `DeviceRotation` speaks: `x` tilts
+    /// (pitch), `y` turns (yaw), `z` rolls. This is the single
+    /// documented device-frame → model-frame transform; if a real
+    /// phone turns the wrong way on some axis, the sign flips here
+    /// and nowhere else.
+    var eulerDegrees: (x: Double, y: Double, z: Double) {
+        let sinPitch = max(-1, min(1, 2 * (w * y - z * x)))
+        return (
+            x: atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * 180 / .pi,
+            y: asin(sinPitch) * 180 / .pi,
+            z: atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * 180 / .pi
+        )
+    }
+
     /// Equality as an *attitude*: true when the two quaternions encode
     /// the same physical pose, including the `q` / `-q` pair.
     func isApproximately(_ other: Attitude, tolerance: Double = 1e-6) -> Bool {

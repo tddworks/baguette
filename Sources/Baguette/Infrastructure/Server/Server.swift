@@ -68,6 +68,7 @@ struct Server: Sendable {
     /// survive between socket connections.
     let devices: LiveDevices
     let twinScreens: TwinScreens
+    let twinPoses: TwinPoses
 
     init(
         simulators: any Simulators,
@@ -81,12 +82,14 @@ struct Server: Sendable {
         grants: PluginGrants = PluginGrants(),
         motionSessions: MotionSessions = MotionSessions(),
         devices: LiveDevices = LiveDevices(),
-        twinScreens: TwinScreens = TwinScreens()
+        twinScreens: TwinScreens = TwinScreens(),
+        twinPoses: TwinPoses = TwinPoses()
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
         self.devices = devices
         self.twinScreens = twinScreens
+        self.twinPoses = twinPoses
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer

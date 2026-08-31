@@ -64,6 +64,14 @@ public enum TwinWire {
         ])
     }
 
+    /// One gyroscope sample — CoreMotion's own `[x, y, z, w]` order,
+    /// exactly what the host's `TwinEnvelope` parses.
+    public static func attitude(
+        x: Double, y: Double, z: Double, w: Double, timestamp: TimeInterval
+    ) -> String {
+        jsonLine(["type": "attitude", "q": [x, y, z, w], "t": timestamp])
+    }
+
     public static func format(
         width: Int, height: Int, orientation: String, codec: String
     ) -> String {
