@@ -13,6 +13,7 @@ final class VTH264Decoder: H264Decoder, @unchecked Sendable {
     private var session: VTDecompressionSession?
     private var format: CMVideoFormatDescription?
     private var onFrame: (@Sendable (IOSurface) -> Void)?
+    private var reportedDecodeFailure = false
 
     func configure(description: Data, onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         guard let sets = AVCCParameterSets.parse(avcC: description) else {
@@ -113,10 +114,16 @@ final class VTH264Decoder: H264Decoder, @unchecked Sendable {
             sampleBuffer: sampleBuffer,
             flags: [._EnableAsynchronousDecompression],
             infoFlagsOut: nil
-        ) { status, _, imageBuffer, _, _ in
+        ) { [weak self] status, _, imageBuffer, _, _ in
             guard status == noErr,
                   let imageBuffer,
                   let surface = CVPixelBufferGetIOSurface(imageBuffer)?.takeUnretainedValue() else {
+                // One line, once — a decode failure at 30 fps must not
+                // flood the log, but a silent black mirror is worse.
+                if let self, !self.reportedDecodeFailure {
+                    self.reportedDecodeFailure = true
+                    log("[device] decode failed: status=\(status) surfaceBacked=\(imageBuffer != nil)")
+                }
                 return
             }
             deliver?(unsafeDowncast(surface, to: IOSurface.self))

@@ -51,6 +51,11 @@ extension Server {
         // as `/simulators/:udid/stream`: encoded frames downstream,
         // JSON control lines upstream. Gestures are rejected loudly
         // until the control pipe (the Twin runner) lands.
+        // `/devices/…` is a resource root like `/simulators/…` — the
+        // web-asset folder that used to sit at this URL is served from
+        // `/sim-list/` so the wildcard position stays free (Hummingbird
+        // fatals when two routes disagree on a param name at the same
+        // position).
         router.ws(
             "/devices/:udid/stream",
             shouldUpgrade: trustedWebSocketUpgrade

@@ -12,6 +12,29 @@ For releases prior to this changelog, see the
 
 ### Added
 
+- **Device twin: the host side of mirroring a physical iPhone.** A
+  companion app on the phone (not yet shipped) will stream H.264 screen
+  captures over `WS /devices/companion/video`; the server decodes them
+  once per device (`TwinScreen` + `VTH264Decoder`) and hands out
+  `Screen` views, so the existing `MJPEGStream` / `AVCCStream`
+  pipeline serves `WS /devices/:udid/stream?format=` with no changes —
+  the mirror is just another screen behind an existing role.
+  `GET /devices.json` lists connected companions. Gestures on a device
+  stream are rejected loudly (`device control is not wired yet`)
+  until the XCUITest control pipe lands. The `Attitude` value type
+  (CoreMotion `[x,y,z,w]` wire order, shortest-path slerp through
+  quaternion sign flips, re-zero calibration) is in place for the
+  gyroscope-driven twin phase. Named `Twin*` rather than `Companion*`
+  because "companion screens" already means CarPlay in this codebase.
+  The phone-side companion (app + ReplayKit broadcast extension +
+  shared `TwinWire` framing) is scaffolded as a Tuist project under
+  `Companion/DeviceTwin/`. Making `/devices` a resource root moved the
+  simulator-list widget assets from `/devices/` to `/sim-list/` —
+  the folder held simulator-list UI, and on the public surface
+  "devices" now means physical hardware, matching Xcode's own
+  Devices-vs-Simulators split.
+  See [`docs/features/device-twin.md`](docs/features/device-twin.md).
+
 - **`screenshot` and `input` accept `--display carplay`.** The two
   agent-facing surfaces could not reach the CarPlay plane at all: only the
   serve WebSocket read `?display=carplay`, and that rides the browser-trust

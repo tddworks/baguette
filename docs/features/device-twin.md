@@ -1,6 +1,12 @@
 # Device twin — a physical iPhone in baguette
 
-Status: **design / not implemented**.
+Status: **in progress**. The host-side mirror pipeline is implemented
+and unit-tested (see [Implemented so far](#implemented-so-far)), and
+verified end-to-end by a fake-companion smoke run (real H.264 through
+ingest → VideoToolbox decode → `Screen` → `AVCCStream`). The companion
+app + broadcast extension are scaffolded under `Companion/DeviceTwin/`
+(Tuist; builds for the iOS Simulator) but not yet exercised on a
+device. The attitude-driven twin and the control pipe are not started.
 
 A real, cable-free iPhone appears in baguette the way a simulator
 does: listed beside simulators, its live screen mirrored into the
@@ -149,27 +155,46 @@ their role:
   because ordering and handedness disagreements are the classic bug of
   this feature class (`VirtualMotionFactory.m` already paid for that
   lesson against a private `w,x,y,z` initialiser).
-- Envelope parsing for the companion's frames — pure, like every
-  parser in `Domain/`.
+- `TwinEnvelope` — the three text frames a companion sends
+  (`hello` / `attitude` / `format`), parsed with the same `Field`
+  extractors every gesture parser uses. Malformed lines throw; a
+  silent drop would leave the twin frozen with no explanation.
+- `TwinSession` — the ordered conversation one companion socket
+  holds: hello first, attitude only after hello, binary video only
+  after a `format` declaration. A **pure state machine** fed
+  text/binary and returning typed events — deliberately *not* a
+  `@Mockable` collaborator, because the WebSocket it rides is already
+  owned by `Server`; this is the one-shot-factory pattern, covered
+  directly.
 
-Conversational boundaries get one small `@Mockable` collaborator each,
-domain nouns as always: `Companion` (the phone-side sender session —
-attitude and video frames in, lifecycle out) and `Runner` (the
-on-device XCUITest process — gestures in, health out). Orchestrators
-depend on the nouns; tests drive `MockCompanion` / `MockRunner`
-deterministically.
+Exactly one conversational `@Mockable` collaborator exists, on the
+video path: `H264Decoder` — configure from the stream's avcC
+description, feed encoded chunks, receive decoded IOSurfaces. `Runner`
+(the on-device XCUITest process — gestures in, health out) joins it in
+the control phase. Orchestrators depend on the nouns; tests drive
+`MockH264Decoder` / `MockRunner` deterministically.
 
 ## Infrastructure
 
 `Infrastructure/Device/` holds the irreducible I/O, split per the
 adapter rules:
 
-- The companion listener — accepts the two WebSockets, associates them
-  with a `Device`. Socket accept/read/write is integration-only; frame
-  parsing and session state live in Domain.
-- H.264 ingest — VideoToolbox decode of the extension's stream into
-  IOSurfaces published through `Screen`. Decode-session calls are
-  integration-only; everything around them is unit-covered.
+- `LiveDevices` — the in-memory `Devices` implementation, membership
+  driven by companion sessions registering and unregistering.
+- The companion listener — accepts the two WebSockets, feeds
+  `TwinSession`, forwards its events. Socket accept/read/write is
+  integration-only; every protocol decision lives in the Domain state
+  machine.
+- `TwinScreen` — the ingest hub, one per connected device: feeds
+  chunks to `any H264Decoder` (description → configure, key/delta →
+  decode) and fans decoded surfaces out through `view() -> any Screen`,
+  one view per stream socket — decode once, no matter how many tabs
+  watch. Everything downstream binds through the existing
+  `Stream.start(on: any Screen)`, so `MJPEGStream`, `AVCCStream`,
+  recording, and the 3D `RenderedScreen` decorator consume the mirror
+  with no changes. The orchestration is unit-covered via
+  `MockH264Decoder`; `VTH264Decoder` (the irreducible
+  `VTDecompressionSession` calls) is the only integration-only file.
 - The runner client — an `Input` implementation that serializes
   dispatched gestures to the runner's HTTP endpoint. Mapping from
   `Input` verbs to runner requests is unit-covered against
@@ -178,42 +203,65 @@ adapter rules:
 ## Companion (phone-side)
 
 `Companion/DeviceTwin/` parallels `Injected/VirtualMotion` as a
-sub-project that ships to the device, with three targets:
+sub-project that ships to the device. It is a **Tuist** project —
+`tuist generate` in that directory produces the workspace, signing is
+left to Xcode's automatic management (pick a team once under Signing &
+Capabilities), and generated artifacts are git-ignored. Targets:
 
-- **App** — pairs with the host, streams
-  `CMDeviceMotion.attitude.quaternion` (reference frame
+- **`TwinWire`** (static framework, shared) — the envelope framing
+  (`hello` / `format` JSON lines, `[length][tag][payload]` chunks,
+  byte-identical to the host's `TwinEnvelope` / `AVCCEnvelope`) and
+  `TwinTransport`, the WebSocket with the latest-frame-drop send path.
+  Static so the extension pays no dylib cost against its memory
+  ceiling.
+- **`DeviceTwinCompanion`** (app) — pairing only: the Mac's
+  `host:port` saved into the shared App Group
+  (`group.com.tddworks.baguette.twin`) where the extension reads it,
+  plus the `RPSystemBroadcastPickerView` pinned to our extension. The
+  device id is `identifierForVendor` (a real UDID is not readable
+  from app code).
+- **`DeviceTwinBroadcast`** (broadcast upload extension) —
+  `SampleHandler` connects to `/devices/companion/video`, sends the
+  hello, and hands video buffers to `H264Sender`:
+  `VTCompressionSession` (realtime, 4 Mbit/s, keyframe every 60
+  frames, 30 fps throttle), avcC extracted from the first sample's
+  format description into a description chunk, then key/delta chunks
+  whose payloads are already AVCC length-prefixed. Orientation comes
+  from `RPVideoSampleOrientationKey` per buffer.
+
+Still to come in the sub-project:
+
+- **Motion streaming** (twin phase) — the app gains a
+  `CMDeviceMotion.attitude.quaternion` sender (reference frame
   `.xArbitraryZVertical`; no compass dependency, slow yaw drift
-  corrected by re-zero), and hosts an `RPSystemBroadcastPickerView`
-  button so starting the mirror is one tap in our own UI.
-- **Broadcast upload extension** — `RPBroadcastSampleHandler` under
-  the ~50 MB extension memory ceiling, which dictates all three of its
-  rules: encode immediately (hardware H.264), forward each
-  `CMSampleBuffer`'s orientation attachment in the envelope so the
-  host never guesses rotation, and on backpressure replace the pending
-  frame rather than queue — the mirror is a live view, not a
-  recording.
-- **Twin runner** — the XCUITest target. Launched over wireless
-  development pairing; serves the gesture endpoint; synthesizes
-  system-wide events through XCTest.
+  corrected by re-zero) once the host's motion socket exists.
+- **Twin runner** (control phase) — the XCUITest target. Launched over
+  wireless development pairing; serves the gesture endpoint;
+  synthesizes system-wide events through XCTest.
 
 ## Route surface
 
 Same resource-tree conventions as everywhere else — no `/api/` prefix,
-UDID in the path, format by extension — under a sibling root:
+UDID in the path — under a sibling root. Format rides `?format=`
+exactly as it does on `/simulators/:udid/stream`, not an extension:
 
 ```text
-GET  /devices                          list paired physical devices
-WS   /devices/:udid/stream.mjpeg       mirror stream (browser)
-WS   /devices/:udid/stream.avcc        mirror stream, H.264 passthrough
-WS   /devices/:udid/stream.3d.<fmt>    the twin: 3D stage + live attitude
+GET  /devices.json                     connected companions        (implemented)
+WS   /devices/companion/video          companion video ingest      (implemented)
+WS   /devices/:udid/stream?format=     mirror stream, mjpeg|avcc   (implemented)
+WS   /devices/companion/motion         attitude ingest             (twin phase)
+WS   /devices/:udid/stream.3d.<fmt>    3D stage + live attitude    (twin phase)
 ```
 
-The stream sockets are bidirectional exactly like the simulator's:
-encoded frames server→browser, JSON envelopes browser→server for
-gestures and stream control. On the `.3d` socket the server pushes the
-same `screen_quad` messages the simulator's 3D stream pushes, now
-after every attitude update, so interact-mode clicks stay pose-accurate
-while the phone moves.
+The stream socket is bidirectional exactly like the simulator's:
+encoded frames server→browser, JSON control lines browser→server
+(`set_fps` / `set_scale` / `set_bitrate` / `force_idr` / `snapshot`).
+Gestures on a device stream are rejected with
+`{"ok":false,"error":"device control is not wired yet"}` — loud, not
+dropped — until the Twin runner lands. On the `.3d` socket the server
+will push the same `screen_quad` messages the simulator's 3D stream
+pushes, after every attitude update, so interact-mode clicks stay
+pose-accurate while the phone moves.
 
 Attitude rides the companion's motion socket phone→host as:
 
@@ -226,17 +274,43 @@ orientation, codec) then binary AVCC — the shape baguette's stream
 envelopes already speak, so `.avcc` mirroring can pass encoded frames
 through without re-encoding.
 
+## Implemented so far
+
+The host-side mirror pipeline, all TDD-first
+(`Tests/BaguetteTests/Device/`):
+
+| Piece | File | What it owns |
+|-------|------|--------------|
+| `Attitude` | `Domain/Device/Attitude.swift` | wire parse, shortest-path slerp, re-zero |
+| `TwinEnvelope` | `Domain/Device/TwinEnvelope.swift` | hello / attitude / format parsing |
+| `TwinSession` | `Domain/Device/TwinSession.swift` | socket conversation ordering, pure state machine |
+| `AVCCParameterSets` | `Domain/Device/AVCCParameterSets.swift` | avcC blob → SPS/PPS byte parser |
+| `Device`, `Devices` | `Domain/Device/Device.swift` | the aggregate + `/devices.json` projection |
+| `H264Decoder` | `Domain/Device/H264Decoder.swift` | the one `@Mockable` collaborator |
+| `TwinScreen` | `Infrastructure/Device/TwinScreen.swift` | ingest hub: decode once, fan out `view()` screens |
+| `TwinScreens` | `Infrastructure/Device/TwinScreens.swift` | per-udid hub registry held by `Server` |
+| `LiveDevices` | `Infrastructure/Device/LiveDevices.swift` | in-memory aggregate |
+| `VTH264Decoder` | `Infrastructure/Device/VTH264Decoder.swift` | irreducible VideoToolbox calls, integration-only |
+| routes | `Infrastructure/Server/ServerDeviceTwinRoutes.swift` | the three implemented routes |
+
+Naming note: the types are `Twin*`, not `Companion*` — "companion
+screens" already means CarPlay/external displays in this codebase
+(`ServerCompanionScreenRoutes.swift`), and one word cannot serve two
+features. Prose still calls the phone-side app "the companion app".
+
 ## Testing approach
 
 Standard for the codebase — TDD, Chicago-school, ~100% of Domain:
 
-- `Attitude` (slerp, sign-flip continuity, re-zero, the frame
-  transform) and every envelope parser are pure value types: feed
-  samples, assert values.
-- `Devices` aggregate semantics via `MockCompanion`-backed state.
-- The ingest and control orchestrators are unit-tested against
-  `MockCompanion` / `MockRunner`; only the irreducible socket,
-  VideoToolbox, and HTTP call sites stay integration-only.
+- `Attitude`, `TwinEnvelope`, `TwinSession`, and `AVCCParameterSets`
+  are pure values and state machines: feed samples, assert values —
+  no mocks.
+- `Devices` aggregate semantics via `MockDevices` default-impl
+  properties; `LiveDevices` driven directly.
+- `TwinScreen` and `TwinScreens` are unit-tested against
+  `MockH264Decoder` (the control plane later adds `MockRunner`); only
+  the irreducible socket, VideoToolbox, and HTTP call sites stay
+  integration-only.
 - The companion app and runner are phone-side and integration-only,
   like `Injected/VirtualMotion` — the host-side contract they speak is
   what the unit suite pins.

@@ -531,3 +531,23 @@ If a tap visibly happens on the wrong spot:
    438×954 points (×3 = 1206×2622 pixels). Pixels overshoot by 3×.
 3. Did the app fully load? A tap during a launch animation hits whatever
    was underneath. `sleep 0.5` after navigation is cheap insurance.
+
+## Device-twin routes — host side only (preview)
+
+`baguette serve` also exposes a physical-device tree, mirroring the
+simulator conventions. **No companion app ships yet**, so these routes
+answer but nothing populates them — do not propose them for driving a
+device today:
+
+- `GET /devices.json` → `{"connected":[{"udid":…,"name":…,"model":…,"capabilities":[…]}]}`
+- `WS /devices/companion/video` — the phone-side ingest socket:
+  `{"type":"hello","udid":…,"name":…,"model":…,"capabilities":[…]}`,
+  then `{"type":"format","width":…,"height":…,"codec":"avcc"}`, then
+  binary AVCC-envelope chunks (same 4-byte-length + tag framing as the
+  sim AVCC stream).
+- `WS /devices/<UDID>/stream?format=mjpeg|avcc` — browser-facing
+  mirror; accepts `set_fps` / `set_scale` / `set_bitrate` /
+  `force_idr` / `snapshot`; gestures answer
+  `{"ok":false,"error":"device control is not wired yet"}`.
+
+See `docs/features/device-twin.md` for the full design.
