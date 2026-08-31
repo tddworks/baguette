@@ -25,10 +25,98 @@ extension Server {
         let devices = self.devices
         let screens = self.twinScreens
         let models = self.models
+        let chromes = self.chromes
 
         // The unified page: same sim.html shell as `/simulators/:udid`;
         // the JS switches its base path from the URL.
         router.get("/devices/:udid") { _, _ in Self.staticAsset("sim.html") }
+
+        // SDK bootstrap for a physical device. A phone has no DeviceKit
+        // chrome of its own on this Mac, so the bezel is BORROWED — the
+        // user picks a device name (`?chrome=iPhone 17 Pro Max`) and the
+        // definition's image URLs carry the pick in their path, keeping
+        // the bezel routes stateless. No pick → 404 with `needsChrome`
+        // so the page renders the picker instead of a dead end.
+        router.get("/devices/:udid/definition.json") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let udid = Self.udidParam(r)
+            guard let device = devices.find(udid: udid) else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "error": "no connected device \(udid)"], status: .notFound
+                )
+            }
+            guard let chromeName = r.uri.queryParameters.get("chrome").map({ String($0) }),
+                  !chromeName.isEmpty else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "needsChrome": true,
+                     "error": "pick a chrome with ?chrome=<device name>"],
+                    status: .notFound
+                )
+            }
+            guard let assets = chromes.assets(forDeviceName: chromeName) else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "needsChrome": true,
+                     "error": "no chrome named \(chromeName)"],
+                    status: .notFound
+                )
+            }
+            let encodedName = chromeName.addingPercentEncoding(
+                withAllowedCharacters: .urlPathAllowed) ?? chromeName
+            let definition = SimulatorDefinition.compose(
+                identity: SimulatorDefinition.Identity(
+                    udid: device.udid, name: device.name, model: device.model
+                ),
+                chrome: assets,
+                urlPrefix: "/devices/\(udid)/chrome/\(encodedName)"
+            )
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(string: definition.toJSON()))
+            )
+        }
+
+        // Borrowed-bezel images. The chrome name sits in the path
+        // (`/devices/:udid/chrome/:name/bezel.png`), so `udidParam`'s
+        // second-to-last rule doesn't apply — positions are explicit.
+        router.get("/devices/:udid/chrome/:name/bezel.png") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let parts = r.uri.path.split(separator: "/")
+            let name = parts.count >= 4
+                ? String(parts[3]).removingPercentEncoding ?? "" : ""
+            let withButtons = r.uri.queryParameters.get("buttons")
+                .map { $0.lowercased() != "false" } ?? true
+            guard let assets = chromes.assets(forDeviceName: name) else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "error": "no chrome named \(name)"], status: .notFound
+                )
+            }
+            let bytes = withButtons ? assets.composite.data : assets.bareComposite.data
+            return Response(
+                status: .ok,
+                headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
+                body: .init(byteBuffer: ByteBuffer(data: bytes))
+            )
+        }
+        router.get("/devices/:udid/chrome/:name/chrome-button/:file") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let parts = r.uri.path.split(separator: "/")
+            let name = parts.count >= 5
+                ? String(parts[3]).removingPercentEncoding ?? "" : ""
+            var button = String(parts.last ?? "").removingPercentEncoding ?? ""
+            if button.hasSuffix(".png") { button = String(button.dropLast(4)) }
+            guard let assets = chromes.assets(forDeviceName: name),
+                  let image = assets.buttonImages[button] else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "error": "no button \(button) for \(name)"], status: .notFound
+                )
+            }
+            return Response(
+                status: .ok,
+                headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
+                body: .init(byteBuffer: ByteBuffer(data: image.data))
+            )
+        }
 
         // Model resolution for the 3D twin. Matched (by hardware id,
         // e.g. "iPhone14,3") → the same shape the simulator route

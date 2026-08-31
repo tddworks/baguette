@@ -222,6 +222,25 @@ extension SimulatorDefinition {
         chrome assets: DeviceChromeAssets,
         urlPrefix: String
     ) -> SimulatorDefinition {
+        compose(
+            identity: Identity(
+                udid: simulator.udid,
+                name: simulator.name,
+                model: simulator.deviceTypeName
+            ),
+            chrome: assets,
+            urlPrefix: urlPrefix
+        )
+    }
+
+    /// Identity-first flavor for surfaces that aren't simulators — a
+    /// physical device borrows a user-picked chrome, and its identity
+    /// comes from the companion's hello rather than CoreSimulator.
+    static func compose(
+        identity: Identity,
+        chrome assets: DeviceChromeAssets,
+        urlPrefix: String
+    ) -> SimulatorDefinition {
         let chrome = assets.chrome
         // The SDK always renders the bare bezel + button overlays, so
         // every percentage reported here is against the BARE size
@@ -237,11 +256,7 @@ extension SimulatorDefinition {
         let screenRect = chrome.screenRect(in: bare)
 
         return SimulatorDefinition(
-            identity: Identity(
-                udid: simulator.udid,
-                name: simulator.name,
-                model: simulator.deviceTypeName
-            ),
+            identity: identity,
             screen: Screen(
                 viewport:   bare,
                 rect:       screenRect,
