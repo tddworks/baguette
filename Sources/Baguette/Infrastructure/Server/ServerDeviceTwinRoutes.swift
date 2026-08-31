@@ -434,7 +434,13 @@ extension Server {
         }
 
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        let stream = format.makeStream(config: .default.with(fps: 20), sink: sink, quality: 0.7)
+        // 60 fps, unlike the simulator's 3D stage at 20: the sim's pose
+        // only changes on a drag, but the gyro repositions the model at
+        // sample rate, and a stream paced below the apply rate drops
+        // pose steps unevenly — which reads as judder, not smoothing.
+        // On stages the render can't sustain at 60, the stream's own
+        // pacing degrades gracefully.
+        let stream = format.makeStream(config: .default.with(fps: 60), sink: sink, quality: 0.7)
         let screen = RenderedScreen(source: hub.view(), scene: scene)
         do {
             try stream.start(on: screen)

@@ -27,12 +27,14 @@ struct TwinGyroStateTests {
         #expect(applied?.attitude.isApproximately(.identity) == true)
     }
 
-    @Test func `samples are throttled to thirty applies a second`() {
+    @Test func `applies run at sample rate with only a jitter guard`() {
+        // The stream renders at 60 fps and samples arrive at 60 Hz —
+        // the guard only absorbs bursts, never paces below the render.
         let (gyro, clock) = make()
         _ = gyro.pose(for: aboutZ(0))
-        clock.now += 0.01
+        clock.now += 0.005
         #expect(gyro.pose(for: aboutZ(5)) == nil)
-        clock.now += 0.04
+        clock.now += 0.012
         #expect(gyro.pose(for: aboutZ(5)) != nil)
     }
 
@@ -46,7 +48,7 @@ struct TwinGyroStateTests {
         let applied = gyro.pose(for: aboutZ(40))
         let expected = Attitude.identity.slerped(
             toward: Attitude(x: 0, y: 0, z: sin(40 * .pi / 360), w: cos(40 * .pi / 360)),
-            fraction: 0.35
+            fraction: 0.25
         )
         #expect(applied?.attitude.isApproximately(expected) == true)
     }
@@ -55,11 +57,11 @@ struct TwinGyroStateTests {
         let (gyro, clock) = make()
         _ = gyro.pose(for: aboutZ(0))
         let target = aboutZ(40)
-        for _ in 0..<40 {
-            clock.now += 0.05
+        for _ in 0..<80 {
+            clock.now += 0.02
             _ = gyro.pose(for: target)
         }
-        clock.now += 0.05
+        clock.now += 0.02
         #expect(gyro.pose(for: target)?.attitude
             .isApproximately(target.attitude, tolerance: 0.0001) == true)
     }
@@ -76,7 +78,7 @@ struct TwinGyroStateTests {
     @Test func `quad pushes are rarer than applies`() {
         let (gyro, clock) = make()
         #expect(gyro.pose(for: aboutZ(0))?.pushQuad == true)
-        clock.now += 0.05
+        clock.now += 0.02
         #expect(gyro.pose(for: aboutZ(5))?.pushQuad == false)
         clock.now += 0.25
         #expect(gyro.pose(for: aboutZ(10))?.pushQuad == true)

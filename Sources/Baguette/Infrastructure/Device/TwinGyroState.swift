@@ -23,11 +23,17 @@ final class TwinGyroState: @unchecked Sendable {
     private var lastQuad: TimeInterval?
     private var announced = false
 
-    private static let applyInterval: TimeInterval = 1.0 / 30.0
+    /// A jitter guard, not a pacer: samples arrive at 60 Hz and the
+    /// twin's stream renders at 60 fps, so every sample normally
+    /// applies. The guard (just under one sample period) only absorbs
+    /// delivery bursts.
+    private static let applyInterval: TimeInterval = 0.012
     private static let quadInterval: TimeInterval = 0.25
-    /// Per-apply slerp fraction toward the latest target — the glide
-    /// that makes motion butter instead of 30 Hz steps.
-    private static let smoothing = 0.35
+    /// Per-apply slerp fraction toward the latest target at ~60
+    /// applies/s — the glide that makes motion butter instead of
+    /// steps. PhoneTwin proved 0.18 at 60 fps; 0.25 is a touch
+    /// snappier to offset our extra encode/decode latency.
+    private static let smoothing = 0.25
 
     init(
         zoom: Double,
