@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.1.97] - 2026-08-31
+
 ### Added
 
 - **Device twin: the host side of mirroring a physical iPhone.** A
@@ -1121,7 +1125,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.96...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.97...HEAD
+[0.1.97]: https://github.com/tddworks/baguette/compare/v0.1.96...v0.1.97
 [0.1.96]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.96
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.95...v0.1.95
 [0.1.95]: https://github.com/tddworks/baguette/compare/v0.1.94...v0.1.95
