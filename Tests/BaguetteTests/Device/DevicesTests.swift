@@ -6,14 +6,14 @@ import Testing
 @Suite("Devices")
 struct DevicesTests {
     private let hello = TwinHello(
-        udid: "U1", name: "Renwei's iPhone", model: "iPhone17,2",
+        udid: "U1", name: "Baguette's iPhone", model: "iPhone17,2",
         capabilities: ["motion", "screen"]
     )
 
     @Test func `a device is built from the companion's hello`() {
         let device = Device(hello: hello)
         #expect(device == Device(
-            udid: "U1", name: "Renwei's iPhone", model: "iPhone17,2",
+            udid: "U1", name: "Baguette's iPhone", model: "iPhone17,2",
             capabilities: ["motion", "screen"]
         ))
     }
@@ -21,7 +21,7 @@ struct DevicesTests {
     @Test func `find locates a connected device by udid`() {
         let devices = MockDevices()
         given(devices).all.willReturn([Device(hello: hello)])
-        #expect(devices.find(udid: "U1")?.name == "Renwei's iPhone")
+        #expect(devices.find(udid: "U1")?.name == "Baguette's iPhone")
         #expect(devices.find(udid: "nope") == nil)
     }
 
@@ -29,7 +29,7 @@ struct DevicesTests {
         let devices = MockDevices()
         given(devices).all.willReturn([Device(hello: hello)])
         #expect(devices.listJSON == """
-        {"connected":[{"capabilities":["motion","screen"],"model":"iPhone17,2","name":"Renwei's iPhone","udid":"U1"}]}
+        {"connected":[{"capabilities":["motion","screen"],"model":"iPhone17,2","name":"Baguette's iPhone","udid":"U1"}]}
         """)
     }
 

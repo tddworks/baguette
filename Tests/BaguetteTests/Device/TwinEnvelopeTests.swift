@@ -6,12 +6,12 @@ import Testing
 struct TwinEnvelopeTests {
     @Test func `parses a hello with identity and capabilities`() throws {
         let line = """
-        {"type":"hello","udid":"00008140-AA","name":"Renwei's iPhone","model":"iPhone17,2","capabilities":["motion","screen"]}
+        {"type":"hello","udid":"00008140-AA","name":"Baguette's iPhone","model":"iPhone17,2","capabilities":["motion","screen"]}
         """
         let envelope = try TwinEnvelope.parse(line: line)
         #expect(envelope == .hello(TwinHello(
             udid: "00008140-AA",
-            name: "Renwei's iPhone",
+            name: "Baguette's iPhone",
             model: "iPhone17,2",
             capabilities: ["motion", "screen"]
         )))
