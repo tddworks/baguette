@@ -11,6 +11,8 @@ public final class TwinTransport: @unchecked Sendable {
     private let lock = NSLock()
     private var chunkInFlight = false
     private var pendingChunk: Data?
+    private var textInFlight = false
+    private var pendingText: String?
     private var closed = false
 
     public init(url: URL) {
@@ -25,6 +27,40 @@ public final class TwinTransport: @unchecked Sendable {
     public func send(text: String) {
         task.send(.string(text)) { error in
             if let error { NSLog("TwinTransport text send failed: \(error)") }
+        }
+    }
+
+    /// Latest-drop for high-rate text (motion samples): while one send
+    /// is in flight the newest pending line replaces any unsent one.
+    /// Queuing stale samples is what turns a brief stall into a burst
+    /// of late arrivals — and each sample carries its timestamp, so
+    /// dropped ones cost nothing to the replayed trajectory.
+    public func send(coalescedText text: String) {
+        lock.lock()
+        if closed {
+            lock.unlock()
+            return
+        }
+        if textInFlight {
+            pendingText = text
+            lock.unlock()
+            return
+        }
+        textInFlight = true
+        lock.unlock()
+        sendTextNow(text)
+    }
+
+    private func sendTextNow(_ text: String) {
+        task.send(.string(text)) { [weak self] error in
+            if let error { NSLog("TwinTransport coalesced send failed: \(error)") }
+            guard let self else { return }
+            self.lock.lock()
+            let next = self.closed ? nil : self.pendingText
+            self.pendingText = nil
+            self.textInFlight = next != nil
+            self.lock.unlock()
+            if let next { self.sendTextNow(next) }
         }
     }
 
@@ -48,6 +84,7 @@ public final class TwinTransport: @unchecked Sendable {
         lock.lock()
         closed = true
         pendingChunk = nil
+        pendingText = nil
         lock.unlock()
         task.cancel(with: .goingAway, reason: nil)
     }

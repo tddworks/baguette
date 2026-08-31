@@ -18,6 +18,10 @@ final class TwinScreen: @unchecked Sendable {
     private var subscribers: [UUID: @Sendable (IOSurface) -> Void] = [:]
     private var latest: IOSurface?
     private var configured = false
+    // Deltas that follow a (re)configure reference frames this decoder
+    // never saw; VideoToolbox rejects them (-12909). Video resumes at
+    // the next keyframe, exactly like a late-joining viewer.
+    private var awaitingKeyframe = true
     private var closed = false
     private var published: TimeInterval?
 
@@ -55,13 +59,21 @@ final class TwinScreen: @unchecked Sendable {
                 }
                 lock.lock()
                 configured = true
+                awaitingKeyframe = true
                 lock.unlock()
             } catch {
                 log("[device] decoder configure failed: \(error)")
             }
-        case AVCCEnvelope.keyframeTag, AVCCEnvelope.deltaTag:
+        case AVCCEnvelope.keyframeTag:
             lock.lock()
             let ready = configured
+            awaitingKeyframe = false
+            lock.unlock()
+            guard ready else { return }
+            decoder.decode(payload)
+        case AVCCEnvelope.deltaTag:
+            lock.lock()
+            let ready = configured && !awaitingKeyframe
             lock.unlock()
             guard ready else { return }
             decoder.decode(payload)

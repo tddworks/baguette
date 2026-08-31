@@ -44,9 +44,15 @@ final class TwinGyroState: @unchecked Sendable {
     private var lastAttitude: Attitude?
     private var lastQuad: TimeInterval?
 
-    /// Playback runs this far behind the newest sample — three sample
-    /// periods of jitter absorbed before motion would ever stall.
-    private static let delay: TimeInterval = 0.05
+    /// The delay budget floor — three clean sample periods. The LIVE
+    /// budget adapts upward to measured arrival jitter (an extension
+    /// under load has been seen stalling 200+ ms): worst recent gap
+    /// × 1.5, decaying slowly, capped so lag stays bounded. Sized by
+    /// measurement, never by feel.
+    private static let delayFloor: TimeInterval = 0.05
+    private static let delayCap: TimeInterval = 0.3
+    private var lastArrival: TimeInterval?
+    private var gapEstimate: TimeInterval = 0.017
     private static let quadInterval: TimeInterval = 0.25
     private static let capacity = 120
     /// Poses closer than this (quaternion-dot tolerance, about a
@@ -72,6 +78,10 @@ final class TwinGyroState: @unchecked Sendable {
         ))
         let offset = sample.timestamp - host
         senderOffset = max(senderOffset ?? offset, offset)
+        if let lastArrival {
+            gapEstimate = max(host - lastArrival, gapEstimate * 0.98)
+        }
+        lastArrival = host
         if entries.count > Self.capacity {
             entries.removeFirst(entries.count - Self.capacity)
         }
@@ -85,7 +95,8 @@ final class TwinGyroState: @unchecked Sendable {
         defer { lock.unlock() }
         guard let newest = entries.last, let senderOffset else { return nil }
 
-        var playback = hostNow + senderOffset - Self.delay
+        let delay = min(max(Self.delayFloor, gapEstimate * 1.5), Self.delayCap)
+        var playback = hostNow + senderOffset - delay
         playback = min(max(playback, entries[0].sender), newest.sender)
         if let lastPlayback { playback = max(playback, min(lastPlayback, newest.sender)) }
         lastPlayback = playback

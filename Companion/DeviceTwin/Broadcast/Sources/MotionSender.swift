@@ -11,7 +11,15 @@ import UIKit
 /// delay a 16-byte pose sample.
 final class MotionSender {
     private let manager = CMMotionManager()
-    private let queue = OperationQueue()
+    // Serial and userInitiated (the Arvos configuration): the default
+    // queue competes with the extension's encode work and delivery
+    // gaps were measured at 200+ ms on device.
+    private let queue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
     private let transport: TwinTransport
 
     init?(endpoint: String, deviceId: String) {
@@ -33,14 +41,17 @@ final class MotionSender {
             NSLog("BaguetteTwin motion unavailable on this device")
             return
         }
-        manager.deviceMotionUpdateInterval = 1.0 / 60.0
+        // 100 Hz: a denser trajectory for the host to interpolate —
+        // the coalescing transport drops what the link can't carry,
+        // and dropped samples cost nothing (each carries its timestamp).
+        manager.deviceMotionUpdateInterval = 1.0 / 100.0
         // `.xArbitraryZVertical`: no compass dependency; the slow yaw
         // drift is corrected by the stage's re-zero.
         manager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) {
             [transport] motion, _ in
             guard let q = motion?.attitude.quaternion,
                   let timestamp = motion?.timestamp else { return }
-            transport.send(text: TwinWire.attitude(
+            transport.send(coalescedText: TwinWire.attitude(
                 x: q.x, y: q.y, z: q.z, w: q.w, timestamp: timestamp
             ))
         }
