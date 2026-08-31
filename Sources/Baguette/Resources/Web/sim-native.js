@@ -321,10 +321,20 @@
     //    the model has no DeviceKit chrome. Without the catch the whole
     //    bootstrap unwinds and the tab sits blank; the power card says
     //    so instead.
+    // A physical device borrows a user-picked DeviceKit chrome; the
+    // pick is remembered per device and rides `?chrome=` into the
+    // definition route.
+    const chromePick = deviceMode
+        ? localStorage.getItem('baguette.twin.chrome.' + udid) : null;
+    const deviceDefinitionURL = deviceMode
+        ? window.BaguetteTarget.path(udid, '/definition.json')
+            + (chromePick ? '?chrome=' + encodeURIComponent(chromePick) : '')
+        : undefined;
     try {
       sim = await window.Baguette.use({
         host: location.origin,
         udid,
+        definitionURL: deviceDefinitionURL,
         send: (payload) => {
           const out = currentOrientation === 'portrait'
             ? payload
@@ -341,6 +351,13 @@
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
+      if (deviceMode) {
+        // No chrome picked yet (or the pick stopped resolving) — offer
+        // the choices instead of a dead end. The stream needs the
+        // SDK's canvas, so nothing else can start until a pick lands.
+        await showChromePicker();
+        return;
+      }
     }
 
     // 4. Companion-screens rail. Mounted before the stream opens, and
@@ -1621,6 +1638,52 @@
         .forEach((n) => { n.hidden = true; });
     document.querySelectorAll('#simNativeView .tb-fold-btn')
         .forEach((n) => n.setAttribute('aria-expanded', 'false'));
+  }
+
+  /// A physical device renders inside a BORROWED DeviceKit chrome —
+  /// there is no bezel bundle for real hardware on this Mac, and
+  /// baguette never substitutes one silently. Choices are the host's
+  /// simulator device names (those provably have chrome) plus a small
+  /// evergreen set; the pick is stored per device and the page reloads
+  /// into it.
+  async function showChromePicker() {
+    const host = document.getElementById('nativeDeviceFrame') || document.body;
+    const evergreen = ['iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 17', 'iPhone Air'];
+    let names = [];
+    try {
+      const r = await fetch('/simulators.json', { cache: 'no-store' });
+      const json = await r.json();
+      names = (json.running || []).concat(json.available || [])
+          .map((d) => d.name).filter(Boolean);
+    } catch { /* evergreen list still renders */ }
+    const choices = [...new Set(evergreen.concat(names))];
+    const card = document.createElement('div');
+    card.id = 'nativeChromePicker';
+    card.style.cssText =
+        'position:absolute;inset:0;display:flex;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:10px;z-index:30;' +
+        'background:var(--bg,#f8fafc);color:var(--text,#334155);' +
+        'font:400 13px/1.4 -apple-system,Inter,sans-serif;text-align:center';
+    card.innerHTML =
+        '<strong style="font-size:15px">Pick a frame for this device</strong>' +
+        '<span style="color:#94a3b8;max-width:320px">Real hardware has no bezel ' +
+        'bundle on this Mac — choose a device chrome to borrow:</span>' +
+        '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">' +
+        choices.map((n) =>
+            '<button type="button" data-chrome-pick="' +
+            n.replace(/"/g, '&quot;') + '" style="height:32px;padding:0 16px;' +
+            'border:1px solid #e2e8f0;border-radius:8px;background:#fff;' +
+            'color:#475569;font:inherit;font-weight:700;cursor:pointer">' +
+            n.replace(/</g, '&lt;') + '</button>').join('') +
+        '</div>';
+    host.style.position = host.style.position || 'relative';
+    host.appendChild(card);
+    card.querySelectorAll('[data-chrome-pick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        localStorage.setItem('baguette.twin.chrome.' + udid, btn.dataset.chromePick);
+        location.reload();
+      });
+    });
   }
 
   /// Physical devices carry a reduced surface: the sim-only clusters

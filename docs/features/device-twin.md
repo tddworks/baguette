@@ -250,6 +250,8 @@ exactly as it does on `/simulators/:udid/stream`, not an extension:
 GET  /devices.json                     connected companions        (implemented)
 GET  /devices/:udid                    the unified page (sim.html) (implemented)
 GET  /devices/:udid/3d-model.json      matched model, or choices   (implemented)
+GET  /devices/:udid/definition.json    SDK bootstrap, ?chrome=name (implemented)
+GET  /devices/:udid/chrome/:name/…     borrowed bezel + button PNGs (implemented)
 WS   /devices/companion/video          companion video ingest      (implemented)
 WS   /devices/:udid/stream?format=     mirror stream, mjpeg|avcc   (implemented)
 WS   /devices/:udid/stream.3d.<fmt>    3D twin stage, mjpeg|avcc   (implemented)
@@ -263,6 +265,13 @@ device mode (control / simulate / inspect clusters hidden, a
 "DEVICE · view-only" badge beside the runtime, no boot or orientation
 calls). The list page shows connected companions in a DEVICES section
 between RUNNING and AVAILABLE.
+
+**The 2D page's bezel is borrowed, the same way**: real hardware has
+no DeviceKit chrome bundle on the Mac, so the SDK bootstrap
+(`definition.json`) requires `?chrome=<device name>` — the page offers
+a picker (simulator device names plus an evergreen set), the pick is
+stored per device, and the bezel/button image URLs carry the chosen
+name in their path so those routes stay stateless.
 
 **3D model resolution for physical hardware**: definitions gain a
 third match key, `"deviceModels": ["iPhone14,3"]` (`utsname.machine`
