@@ -99,7 +99,7 @@ struct LiveDeviceModelsTests {
         let models = try LiveDeviceModels(rootURLs: [overrideRoot, bundledRoot])
         let all = try models.all()
 
-        #expect(all.map(\.definition.id).sorted() == ["phone", "tablet"])
+        #expect(all.map(\.definition.id.rawValue).sorted() == ["phone", "tablet"])
         #expect(all.first { $0.definition.id == "phone" }?.definition.displayName == "Override")
     }
 }
