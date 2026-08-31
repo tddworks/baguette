@@ -126,6 +126,23 @@ struct TwinScreenTests {
         #expect(screen.lastPublish == 123.5)
     }
 
+    @Test func `deltas are dropped until a keyframe follows each configure`() {
+        // A companion (re)sends its description mid-GOP on reconnects;
+        // the deltas that follow reference frames this decoder never
+        // saw and VideoToolbox rejects them (-12909). Video resumes at
+        // the next keyframe, exactly like a late-joining viewer.
+        let (screen, decoder, _) = makeScreen()
+        screen.ingest(chunk: description)
+        screen.ingest(chunk: delta)
+        verify(decoder).decode(.any).called(0)
+        screen.ingest(chunk: keyframe)
+        screen.ingest(chunk: delta)
+        verify(decoder).decode(.any).called(2)
+        screen.ingest(chunk: AVCCEnvelope.description(avcc: Data([0xCC])))
+        screen.ingest(chunk: delta)
+        verify(decoder).decode(.any).called(2)
+    }
+
     @Test func `close tears down the decoder and detaches every view`() throws {
         let (screen, decoder, captures) = makeScreen()
         screen.ingest(chunk: description)

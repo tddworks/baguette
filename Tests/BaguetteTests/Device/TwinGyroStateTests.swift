@@ -102,6 +102,33 @@ struct TwinGyroStateTests {
         ) == true)
     }
 
+    @Test func `the delay budget adapts to measured arrival jitter`() {
+        // Clean 16 ms arrivals keep the budget small; a history of
+        // 200 ms bursts must grow it so playback stops underrunning
+        // into hold-then-snap cycles. Sized by measurement, not feel.
+        let clean = TwinGyroState(zoom: 1)
+        _ = clean.add(upright(heading: 40, t: 0), arrivedAt: 100)
+        _ = clean.add(upright(heading: 50, t: 0.1), arrivedAt: 100.1)
+        let cleanPose = clean.pose(at: 100.1)
+        #expect(cleanPose?.attitude.isApproximately(turnY(5), tolerance: 0.000001) == true)
+
+        let bursty = TwinGyroState(zoom: 1)
+        var t = 0.0
+        var host = 100.0
+        _ = bursty.add(upright(heading: 40, t: t), arrivedAt: host)
+        for _ in 0..<10 { // repeated 200 ms stalls teach the buffer
+            t += 0.2; host += 0.2
+            _ = bursty.add(upright(heading: 40, t: t), arrivedAt: host)
+        }
+        t += 0.1; host += 0.1
+        _ = bursty.add(upright(heading: 50, t: t), arrivedAt: host)
+        // With a grown budget (≥200 ms), the tick at arrival still
+        // plays inside the buffered past — nowhere near the newest
+        // sample's half-turn point.
+        let burstyPose = bursty.pose(at: host)
+        #expect(burstyPose?.attitude.isApproximately(turnY(0), tolerance: 0.00001) == true)
+    }
+
     @Test func `quad pushes are throttled by the host clock`() {
         let gyro = TwinGyroState(zoom: 1)
         _ = gyro.add(upright(heading: 0, t: 0), arrivedAt: 100)
