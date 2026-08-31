@@ -8,16 +8,22 @@ matching plus a user-pick fallback. The companion app + broadcast
 extension live under `Companion/DeviceTwin/` (Tuist) and stream from a
 real iPhone. The gyro twin is live: attitude flows from the broadcast
 extension over the motion socket into `TwinPoses`, and
-`TwinGyroState` drives the 3D stage's pose by two rules and no
-machinery: the pose is ABSOLUTE against gravity (a phone lying on the
-desk renders a model lying on the stage — `Attitude.stagePose` is the
-one documented transform, and only the compass-arbitrary heading is
-calibrated at connect / Re-zero), and it syncs WHEN IT CHANGED — each
-60 Hz sample applies only past a quarter-degree dead-band, paced to
-the stream's fps, riding the next mirror frame when one is flowing and
-forcing a render only when the source is idle. A resting phone emits
-zero pose frames. No buffer, no free-running clock, no smoothing
-filter: CoreMotion's fused attitude is already smooth. Not started: the control pipe (Twin runner).
+`TwinGyroState` drives the 3D stage's pose on three principles,
+each learned the hard way. (1) ABSOLUTE against gravity: a phone lying
+on the desk renders a model lying on the stage — `Attitude.stagePose`
+is the one documented transform, and only the compass-arbitrary
+heading is calibrated at connect / Re-zero. (2) A METRONOME sets the
+render cadence: pose travels inside server-rendered video, and video
+is only smooth when its frames sample motion at regular times —
+ReplayKit's mirror frames arrive irregularly (it emits on screen
+change), so the 3D socket ticks at the stream's fps, the server-side
+equivalent of the 60 fps client render loop a browser-rendered twin
+gets for free. (3) Ticks replay the TIMESTAMPED trajectory 50 ms
+behind the newest sample with a monotonic clock (a late arrival can
+never snap playback backwards), slerping between bracketing samples —
+even samples of the true motion, no exponential smoothing, no feel
+constant. A tick inside the quarter-degree dead-band renders nothing:
+a resting phone emits zero pose frames. Not started: the control pipe (Twin runner).
 
 A real, cable-free iPhone appears in baguette the way a simulator
 does: listed beside simulators, its live screen mirrored into the
