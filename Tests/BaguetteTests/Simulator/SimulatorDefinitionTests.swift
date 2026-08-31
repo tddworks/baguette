@@ -378,3 +378,34 @@ struct SimulatorDefinitionTests {
         )
     }
 }
+
+extension SimulatorDefinitionTests {
+    @Test func `a device definition composes from a picked chrome with device identity`() {
+        let chrome = DeviceChrome(
+            identifier: "phone17",
+            screenInsets: Insets(top: 20, left: 10, bottom: 20, right: 10),
+            outerCornerRadius: 60,
+            buttons: [],
+            compositeImageName: "PhoneComposite"
+        )
+        let assets = DeviceChromeAssets(
+            chrome: chrome,
+            composite: ChromeImage(
+                data: Data("MERGED".utf8),
+                size: Size(width: 400, height: 800)
+            )
+        )
+        let def = SimulatorDefinition.compose(
+            identity: SimulatorDefinition.Identity(
+                udid: "U1", name: "han's iPhone", model: "iPhone14,3"
+            ),
+            chrome: assets,
+            urlPrefix: "/devices/U1"
+        )
+        #expect(def.identity.udid == "U1")
+        #expect(def.identity.name == "han's iPhone")
+        #expect(def.identity.model == "iPhone14,3")
+        #expect(def.screen.bezelImage.rest == "/devices/U1/bezel.png")
+        #expect(def.screen.viewport == Size(width: 400, height: 800))
+    }
+}
