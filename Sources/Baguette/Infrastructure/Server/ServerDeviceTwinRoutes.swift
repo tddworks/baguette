@@ -434,13 +434,19 @@ extension Server {
         }
 
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        // 60 fps, unlike the simulator's 3D stage at 20: the sim's pose
-        // only changes on a drag, but the gyro repositions the model at
-        // sample rate, and a stream paced below the apply rate drops
-        // pose steps unevenly — which reads as judder, not smoothing.
-        // On stages the render can't sustain at 60, the stream's own
-        // pacing degrades gracefully.
-        let stream = format.makeStream(config: .default.with(fps: 60), sink: sink, quality: 0.7)
+        // Format-aware pacing, unlike the simulator's 3D stage at 20:
+        // the gyro repositions the model continuously, so the pose
+        // clock below ticks at the STREAM's fps — one pacing authority,
+        // and a `set_fps` from the browser retunes both together. The
+        // connect default respects what the format can afford: AVCC
+        // deltas are cheap at 60; MJPEG re-sends a full JPEG per frame,
+        // and a plain-HTTP LAN origin has no WebCodecs (issue #71) so
+        // MJPEG is exactly what those browsers are forced onto — 30 is
+        // its honest ceiling.
+        let defaultFPS = format == .avcc ? 60 : 30
+        let stream = format.makeStream(
+            config: .default.with(fps: defaultFPS), sink: sink, quality: 0.7
+        )
         let screen = RenderedScreen(source: hub.view(), scene: scene)
         do {
             try stream.start(on: screen)

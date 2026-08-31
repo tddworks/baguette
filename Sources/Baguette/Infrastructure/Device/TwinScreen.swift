@@ -13,14 +13,30 @@ import IOSurface
 /// latest decoded surface so it never stares at a blank canvas.
 final class TwinScreen: @unchecked Sendable {
     private let decoder: any H264Decoder
+    private let now: @Sendable () -> TimeInterval
     private let lock = NSLock()
     private var subscribers: [UUID: @Sendable (IOSurface) -> Void] = [:]
     private var latest: IOSurface?
     private var configured = false
     private var closed = false
+    private var published: TimeInterval?
 
-    init(decoder: any H264Decoder) {
+    init(
+        decoder: any H264Decoder,
+        now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    ) {
         self.decoder = decoder
+        self.now = now
+    }
+
+    /// When the hub last published a decoded frame — the gyro's render
+    /// clock skips its forced refresh while mirror frames flow (the
+    /// pose rides the next frame for free) and renders itself only
+    /// when the source goes idle.
+    var lastPublish: TimeInterval? {
+        lock.lock()
+        defer { lock.unlock() }
+        return published
     }
 
     /// One binary WebSocket message from the companion's video socket.
@@ -72,6 +88,7 @@ final class TwinScreen: @unchecked Sendable {
     private func publish(_ surface: IOSurface) {
         lock.lock()
         latest = surface
+        published = now()
         let sinks = Array(subscribers.values)
         lock.unlock()
         for sink in sinks { sink(surface) }

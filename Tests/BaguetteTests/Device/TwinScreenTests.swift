@@ -20,7 +20,11 @@ struct TwinScreenTests {
         func record(_ surface: IOSurface) { frames.append(surface) }
     }
 
-    private func makeScreen() -> (TwinScreen, MockH264Decoder, Captures) {
+    final class Clock: @unchecked Sendable {
+        var now: TimeInterval = 100
+    }
+
+    private func makeScreen(clock: Clock = Clock()) -> (TwinScreen, MockH264Decoder, Captures) {
         let decoder = MockH264Decoder()
         let captures = Captures()
         given(decoder).configure(description: .any, onFrame: .any).willProduce { description, onFrame in
@@ -29,7 +33,7 @@ struct TwinScreenTests {
         }
         given(decoder).decode(.any).willReturn()
         given(decoder).stop().willReturn()
-        return (TwinScreen(decoder: decoder), decoder, captures)
+        return (TwinScreen(decoder: decoder, now: { clock.now }), decoder, captures)
     }
 
     private func surface() throws -> IOSurface {
@@ -106,6 +110,20 @@ struct TwinScreenTests {
         captures.onFrame?(try surface())
         #expect(kept.frames.count == 1)
         #expect(dropped.frames.isEmpty)
+    }
+
+    @Test func `the hub records when it last published a frame`() throws {
+        // The gyro's render clock skips its forced refresh while
+        // mirror frames are flowing — pose rides the next frame for
+        // free — and only renders itself when the source goes idle
+        // (ReplayKit stops sending when the phone's screen is static).
+        let clock = Clock()
+        let (screen, _, captures) = makeScreen(clock: clock)
+        screen.ingest(chunk: description)
+        #expect(screen.lastPublish == nil)
+        clock.now = 123.5
+        captures.onFrame?(try surface())
+        #expect(screen.lastPublish == 123.5)
     }
 
     @Test func `close tears down the decoder and detaches every view`() throws {
