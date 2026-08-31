@@ -103,7 +103,17 @@ struct Server: Sendable {
 
         let app = Application(
             router: router,
-            server: .http1WebSocketUpgrade(webSocketRouter: router),
+            // The inbound frame decoder defaults to 16 KB and CLOSES
+            // the connection on a bigger frame. Browser traffic never
+            // gets near that, but a device-twin companion sends whole
+            // encoded video frames as single WS frames — an 888×1920
+            // keyframe is a few hundred KB — and the default silently
+            // killed the socket after the first one. 8 MB comfortably
+            // covers a keyframe at any current device resolution.
+            server: .http1WebSocketUpgrade(
+                webSocketRouter: router,
+                configuration: .init(maxFrameSize: 8 << 20)
+            ),
             configuration: .init(address: .hostname(host, port: port))
         )
         try await app.runService()

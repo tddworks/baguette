@@ -39,6 +39,18 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Label(groupStatus.message, systemImage: groupStatus.ok
+                        ? "checkmark.circle" : "exclamationmark.triangle")
+                        .foregroundStyle(groupStatus.ok ? Color.green : Color.red)
+                        .font(.footnote)
+                } header: {
+                    Text("app group")
+                } footer: {
+                    if !groupStatus.ok {
+                        Text("The broadcast extension reads the host address through this App Group — without it the mirror cannot start. In Xcode: every target → Signing & Capabilities → set your Team and confirm App Groups lists \(TwinWire.appGroup). If registration fails, the group id is set in Project.swift and TwinWire.swift.")
+                    }
+                }
                 Section("baguette host") {
                     TextField("mac-address:port", text: $endpoint)
                         .keyboardType(.URL)
@@ -92,6 +104,28 @@ struct ContentView: View {
             )
         }
         saved = true
+    }
+
+    /// Whether this process can actually attach to the shared App
+    /// Group — the exact failure the extension hits invisibly. The
+    /// container URL is nil whenever the entitlement wasn't granted
+    /// by signing, and a write/read probe catches a detached
+    /// cfprefsd suite.
+    private var groupStatus: (ok: Bool, message: String) {
+        guard FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: TwinWire.appGroup
+        ) != nil else {
+            return (false, "App Group entitlement missing — signing did not grant \(TwinWire.appGroup)")
+        }
+        guard let suite = UserDefaults(suiteName: TwinWire.appGroup) else {
+            return (false, "App Group suite unavailable")
+        }
+        let token = UUID().uuidString
+        suite.set(token, forKey: "twin.groupProbe")
+        guard suite.string(forKey: "twin.groupProbe") == token else {
+            return (false, "App Group detached — settings will not reach the extension")
+        }
+        return (true, "App Group ok — extension can read the saved host")
     }
 
     /// Forward our visible button's tap to the system picker's

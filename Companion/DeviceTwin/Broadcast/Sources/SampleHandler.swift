@@ -22,6 +22,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             return
         }
         let deviceId = defaults?.string(forKey: TwinWire.deviceIdKey) ?? "unknown-device"
+        NSLog("BaguetteTwin broadcast started → %@", url.absoluteString)
         let transport = TwinTransport(url: url)
         transport.connect()
         transport.send(text: TwinWire.hello(
@@ -34,15 +35,39 @@ final class SampleHandler: RPBroadcastSampleHandler {
         self.sender = H264Sender(transport: transport)
     }
 
+    private var sampleCount = 0
+
     override func processSampleBuffer(
         _ sampleBuffer: CMSampleBuffer,
         with sampleBufferType: RPSampleBufferType
     ) {
         guard sampleBufferType == .video else { return }
-        sender?.encode(sampleBuffer, orientation: Self.orientation(of: sampleBuffer))
+        sampleCount += 1
+        if sampleCount == 1 || sampleCount % 300 == 0 {
+            NSLog("BaguetteTwin broadcast sample #%d", sampleCount)
+        }
+        let encoderAlive = sender?.encode(
+            sampleBuffer, orientation: Self.orientation(of: sampleBuffer)
+        ) ?? false
+        if !encoderAlive {
+            finishBroadcastWithError(NSError(
+                domain: "baguette.twin", code: 2,
+                userInfo: [NSLocalizedDescriptionKey:
+                    "This device refused a hardware H.264 encoder for the broadcast."]
+            ))
+        }
+    }
+
+    override func broadcastPaused() {
+        NSLog("BaguetteTwin broadcast paused at sample %d", sampleCount)
+    }
+
+    override func broadcastResumed() {
+        NSLog("BaguetteTwin broadcast resumed")
     }
 
     override func broadcastFinished() {
+        NSLog("BaguetteTwin broadcast finished after %d samples", sampleCount)
         sender?.finish()
         transport?.close()
     }

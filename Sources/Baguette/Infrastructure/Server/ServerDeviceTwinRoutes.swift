@@ -79,6 +79,7 @@ extension Server {
     ) async {
         var session = TwinSession()
         var udid: String?
+        var chunks = 0
         log("[device] companion video socket opened")
         do {
             // Messages, not frames: a video chunk may arrive fragmented
@@ -102,12 +103,14 @@ extension Server {
                 case .binary(let buffer):
                     if case .frame(let chunk) = session.receive(binary: Data(buffer: buffer)),
                        let udid {
+                        chunks += 1
                         screens.find(udid: udid)?.ingest(chunk: chunk)
                     }
                 }
             }
+            log("[device] companion stream ended after \(chunks) chunks")
         } catch {
-            // socket closed; cleanup below
+            log("[device] companion socket errored after \(chunks) chunks: \(error)")
         }
         if let udid {
             screens.close(udid: udid)

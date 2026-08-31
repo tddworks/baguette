@@ -27,7 +27,7 @@ let project = Project(
             destinations: .iOS,
             product: .app,
             bundleId: "com.tddworks.baguette.twin",
-            deploymentTargets: .iOS("17.0"),
+            deploymentTargets: .iOS("18.0"),
             infoPlist: .extendingDefault(with: [
                 "UILaunchScreen": .dictionary([:]),
                 "CFBundleDisplayName": .string("Baguette Twin"),
@@ -49,7 +49,7 @@ let project = Project(
             destinations: .iOS,
             product: .appExtension,
             bundleId: "com.tddworks.baguette.twin.broadcast",
-            deploymentTargets: .iOS("17.0"),
+            deploymentTargets: .iOS("18.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": .string("Baguette Twin"),
                 "NSLocalNetworkUsageDescription": .string(
@@ -72,7 +72,7 @@ let project = Project(
             destinations: .iOS,
             product: .staticFramework,
             bundleId: "com.tddworks.baguette.twin.wire",
-            deploymentTargets: .iOS("17.0"),
+            deploymentTargets: .iOS("18.0"),
             infoPlist: .default,
             sources: ["Wire/Sources/**"]
         ),
