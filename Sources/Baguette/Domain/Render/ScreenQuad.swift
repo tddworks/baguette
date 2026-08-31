@@ -120,6 +120,46 @@ enum ScreenQuadProjection {
         )
     }
 
+    /// Quaternion twin of the euler projection — the gyro path. The
+    /// rotation is applied through `Attitude.rotate`, so this and the
+    /// entity the renderer poses share one transform by construction.
+    static func project(
+        corners: ScreenLocalCorners,
+        attitude: Attitude,
+        distance: Double,
+        fieldOfViewDegrees: Double,
+        aspect: Double
+    ) -> ScreenQuad {
+        func one(_ point: Vector3) -> NormalizedPoint {
+            projectRotated(
+                attitude.rotate(point),
+                distance: distance,
+                fieldOfViewDegrees: fieldOfViewDegrees,
+                aspect: aspect
+            )
+        }
+        return ScreenQuad(
+            topLeft: one(corners.topLeft),
+            topRight: one(corners.topRight),
+            bottomRight: one(corners.bottomRight),
+            bottomLeft: one(corners.bottomLeft)
+        )
+    }
+
+    private static func projectRotated(
+        _ rotated: Vector3,
+        distance: Double,
+        fieldOfViewDegrees: Double,
+        aspect: Double
+    ) -> NormalizedPoint {
+        let depth = distance - rotated.z
+        let halfVertical = fieldOfViewDegrees * .pi / 360
+        let halfHorizontal = atan(tan(halfVertical) * aspect)
+        let ndcX = rotated.x / (depth * tan(halfHorizontal))
+        let ndcY = rotated.y / (depth * tan(halfVertical))
+        return NormalizedPoint(u: (ndcX + 1) / 2, v: (1 - ndcY) / 2)
+    }
+
     private static func project(
         _ point: Vector3,
         rotation: DeviceRotation,

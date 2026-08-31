@@ -43,8 +43,9 @@ For releases prior to this changelog, see the
   twin turned physical: the broadcast extension streams
   `CMDeviceMotion` attitude over `WS /devices/companion/motion`
   (its own socket, so video bursts never delay a pose sample) and the
-  3D stage follows the phone in your hand — auto-zeroed on connect,
-  throttled to ~20 poses/s, `screen_quad` re-pushed for Interact
+  3D stage follows the phone in your hand — auto-zeroed on connect, the
+  quaternion applied directly (never euler-decomposed) with a 0.35
+  slerp glide at 30 applies/s, `screen_quad` re-pushed for Interact
   accuracy, with a Gyro-live chip and Re-zero button on the stage.
   Making `/devices` a resource root moved the
   simulator-list widget assets from `/devices/` to `/sim-list/` —

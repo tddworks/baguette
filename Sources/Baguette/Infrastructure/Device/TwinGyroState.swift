@@ -8,7 +8,7 @@ import Foundation
 /// lock; the clock is injected so tests drive time deterministically.
 final class TwinGyroState: @unchecked Sendable {
     struct Applied: Equatable {
-        let rotation: DeviceRotation
+        let attitude: Attitude
         let zoom: Double
         let announce: Bool
         let pushQuad: Bool
@@ -17,14 +17,17 @@ final class TwinGyroState: @unchecked Sendable {
     private let lock = NSLock()
     private let now: @Sendable () -> TimeInterval
     private var reference: Attitude?
+    private var current: Attitude = .identity
     private var zoom: Double
     private var lastApply: TimeInterval?
     private var lastQuad: TimeInterval?
     private var announced = false
 
-    private static let applyInterval: TimeInterval = 0.05
+    private static let applyInterval: TimeInterval = 1.0 / 30.0
     private static let quadInterval: TimeInterval = 0.25
-    private static let tiltBound = 80.0
+    /// Per-apply slerp fraction toward the latest target — the glide
+    /// that makes motion butter instead of 30 Hz steps.
+    private static let smoothing = 0.35
 
     init(
         zoom: Double,
@@ -34,7 +37,7 @@ final class TwinGyroState: @unchecked Sendable {
         self.now = now
     }
 
-    func rotation(for sample: AttitudeSample) -> Applied? {
+    func pose(for sample: AttitudeSample) -> Applied? {
         lock.lock()
         defer { lock.unlock() }
         let time = now()
@@ -45,17 +48,16 @@ final class TwinGyroState: @unchecked Sendable {
         let reference = self.reference ?? sample.attitude
         self.reference = reference
 
-        let euler = sample.attitude.rezeroed(against: reference).eulerDegrees
-        let rotation = DeviceRotation(
-            x: max(-Self.tiltBound, min(Self.tiltBound, euler.x)),
-            y: euler.y,
-            z: euler.z
-        )
+        // The sample moves the TARGET; the displayed pose glides toward
+        // it. `slerped` takes the shortest path through sign flips.
+        let target = sample.attitude.rezeroed(against: reference)
+        current = current.slerped(toward: target, fraction: Self.smoothing)
+
         let announce = !announced
         announced = true
         let pushQuad = lastQuad.map { time - $0 >= Self.quadInterval } ?? true
         if pushQuad { lastQuad = time }
-        return Applied(rotation: rotation, zoom: zoom, announce: announce, pushQuad: pushQuad)
+        return Applied(attitude: current, zoom: zoom, announce: announce, pushQuad: pushQuad)
     }
 
     /// The next sample becomes the new front.

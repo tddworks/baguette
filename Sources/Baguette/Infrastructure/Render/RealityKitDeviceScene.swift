@@ -84,6 +84,25 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
         }
     }
 
+    func update(pose: Attitude, zoom: Double) {
+        Self.onMain {
+            self.wrapper.orientation = simd_quatf(
+                ix: Float(pose.x), iy: Float(pose.y),
+                iz: Float(pose.z), r: Float(pose.w)
+            ).normalized
+            self.cameraEntity.position.z = Float(
+                self.cameraFraming.distance(at: zoom)
+            )
+            self.screenQuad = ScreenQuadProjection.project(
+                corners: self.screenLocalCorners,
+                attitude: pose,
+                distance: self.cameraFraming.distance(at: zoom),
+                fieldOfViewDegrees: self.cameraFraming.fieldOfViewDegrees,
+                aspect: Double(self.plan.outputSize.width) / Double(self.plan.outputSize.height)
+            )
+        }
+    }
+
     /// Where the screen mesh lands in the output image for the given pose —
     /// pure trig mirroring the same rotation and perspective camera the
     /// renderer uses, so the browser can map clicks back onto the screen

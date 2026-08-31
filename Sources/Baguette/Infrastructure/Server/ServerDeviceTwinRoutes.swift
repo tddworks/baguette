@@ -459,8 +459,8 @@ extension Server {
         let gyro = TwinGyroState(zoom: 1)
         let subscriberID = UUID().uuidString
         poses.subscribe(udid: udid, id: subscriberID) { sample in
-            guard let applied = gyro.rotation(for: sample) else { return }
-            scene.update(camera: Device3DCamera(rotation: applied.rotation, zoom: applied.zoom))
+            guard let applied = gyro.pose(for: sample) else { return }
+            scene.update(pose: applied.attitude, zoom: applied.zoom)
             screen.refresh()
             if applied.announce {
                 Task { try? await outbound.write(.text(#"{"type":"gyro","live":true}"#)) }

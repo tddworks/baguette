@@ -76,17 +76,21 @@ extension AttitudeTests {
         return Attitude(x: x * sin(half), y: y * sin(half), z: z * sin(half), w: cos(half))
     }
 
-    @Test func `single-axis rotations convert to euler degrees on their own axis`() {
-        let pitch = aboutAxis(30, x: 1, y: 0, z: 0).eulerDegrees
-        #expect(abs(pitch.x - 30) < 0.001 && abs(pitch.y) < 0.001 && abs(pitch.z) < 0.001)
-        let yaw = aboutAxis(45, x: 0, y: 1, z: 0).eulerDegrees
-        #expect(abs(yaw.y - 45) < 0.001 && abs(yaw.x) < 0.001 && abs(yaw.z) < 0.001)
-        let roll = aboutAxis(-60, x: 0, y: 0, z: 1).eulerDegrees
-        #expect(abs(roll.z + 60) < 0.001 && abs(roll.x) < 0.001 && abs(roll.y) < 0.001)
+    @Test func `rotates a vector the way the scene's euler composition does`() {
+        // 30° about Y must move a point exactly as the euler projection
+        // does — the quaternion quad path and the euler quad path have
+        // to agree or Interact clicks drift in gyro mode.
+        let q = Attitude(x: 0, y: sin(15 * .pi / 180), z: 0, w: cos(15 * .pi / 180))
+        let rotated = q.rotate(Vector3(x: 1, y: 0, z: 0))
+        #expect(abs(rotated.x - cos(30 * .pi / 180)) < 0.0001)
+        #expect(abs(rotated.y) < 0.0001)
+        #expect(abs(rotated.z + sin(30 * .pi / 180)) < 0.0001)
     }
 
-    @Test func `the identity attitude is zero euler`() {
-        let euler = Attitude.identity.eulerDegrees
-        #expect(abs(euler.x) < 0.001 && abs(euler.y) < 0.001 && abs(euler.z) < 0.001)
+    @Test func `the identity rotation leaves vectors alone`() {
+        let rotated = Attitude.identity.rotate(Vector3(x: 0.3, y: -0.7, z: 2))
+        #expect(abs(rotated.x - 0.3) < 0.0001)
+        #expect(abs(rotated.y + 0.7) < 0.0001)
+        #expect(abs(rotated.z - 2) < 0.0001)
     }
 }

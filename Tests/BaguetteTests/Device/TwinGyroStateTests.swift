@@ -22,63 +22,71 @@ struct TwinGyroStateTests {
 
     @Test func `the first sample auto-zeroes and announces`() {
         let (gyro, _) = make()
-        let applied = gyro.rotation(for: aboutZ(40))
+        let applied = gyro.pose(for: aboutZ(40))
         #expect(applied?.announce == true)
-        #expect(abs(applied?.rotation.z ?? 99) < 0.001)
+        #expect(applied?.attitude.isApproximately(.identity) == true)
     }
 
-    @Test func `samples are throttled to twenty applies a second`() {
+    @Test func `samples are throttled to thirty applies a second`() {
         let (gyro, clock) = make()
-        _ = gyro.rotation(for: aboutZ(0))
+        _ = gyro.pose(for: aboutZ(0))
         clock.now += 0.01
-        #expect(gyro.rotation(for: aboutZ(5)) == nil)
-        clock.now += 0.05
-        #expect(gyro.rotation(for: aboutZ(5)) != nil)
+        #expect(gyro.pose(for: aboutZ(5)) == nil)
+        clock.now += 0.04
+        #expect(gyro.pose(for: aboutZ(5)) != nil)
     }
 
-    @Test func `rotation is measured against the auto-zero reference`() {
+    @Test func `the pose glides toward the target instead of snapping`() {
+        // PhoneTwin's discipline: samples move a TARGET; the displayed
+        // pose slerps toward it a fraction per apply, so motion is
+        // butter at render rate rather than 30 Hz steps.
         let (gyro, clock) = make()
-        _ = gyro.rotation(for: aboutZ(30))
+        _ = gyro.pose(for: aboutZ(0))
         clock.now += 0.1
-        let applied = gyro.rotation(for: aboutZ(75))
-        #expect(abs((applied?.rotation.z ?? 0) - 45) < 0.001)
+        let applied = gyro.pose(for: aboutZ(40))
+        let expected = Attitude.identity.slerped(
+            toward: Attitude(x: 0, y: 0, z: sin(40 * .pi / 360), w: cos(40 * .pi / 360)),
+            fraction: 0.35
+        )
+        #expect(applied?.attitude.isApproximately(expected) == true)
+    }
+
+    @Test func `the pose converges on a held target`() {
+        let (gyro, clock) = make()
+        _ = gyro.pose(for: aboutZ(0))
+        let target = aboutZ(40)
+        for _ in 0..<40 {
+            clock.now += 0.05
+            _ = gyro.pose(for: target)
+        }
+        clock.now += 0.05
+        #expect(gyro.pose(for: target)?.attitude
+            .isApproximately(target.attitude, tolerance: 0.0001) == true)
     }
 
     @Test func `rezero captures the next sample as the new front`() {
         let (gyro, clock) = make()
-        _ = gyro.rotation(for: aboutZ(0))
+        _ = gyro.pose(for: aboutZ(0))
         clock.now += 0.1
         gyro.rezero()
-        let applied = gyro.rotation(for: aboutZ(60))
-        #expect(abs(applied?.rotation.z ?? 99) < 0.001)
-    }
-
-    @Test func `tilt is clamped to the stage's eighty-degree bound`() {
-        let (gyro, clock) = make()
-        _ = gyro.rotation(for: AttitudeSample(attitude: .identity, timestamp: 0))
-        clock.now += 0.1
-        let half = 100.0 * Double.pi / 360
-        let steep = AttitudeSample(
-            attitude: Attitude(x: sin(half), y: 0, z: 0, w: cos(half)), timestamp: 0
-        )
-        let applied = gyro.rotation(for: steep)
-        #expect(applied?.rotation.x == 80)
+        let applied = gyro.pose(for: aboutZ(60))
+        #expect(applied?.attitude.isApproximately(.identity) == true)
     }
 
     @Test func `quad pushes are rarer than applies`() {
         let (gyro, clock) = make()
-        #expect(gyro.rotation(for: aboutZ(0))?.pushQuad == true)
-        clock.now += 0.06
-        #expect(gyro.rotation(for: aboutZ(5))?.pushQuad == false)
+        #expect(gyro.pose(for: aboutZ(0))?.pushQuad == true)
+        clock.now += 0.05
+        #expect(gyro.pose(for: aboutZ(5))?.pushQuad == false)
         clock.now += 0.25
-        #expect(gyro.rotation(for: aboutZ(10))?.pushQuad == true)
+        #expect(gyro.pose(for: aboutZ(10))?.pushQuad == true)
     }
 
     @Test func `zoom updates ride along without disturbing the pose`() {
         let (gyro, clock) = make()
-        _ = gyro.rotation(for: aboutZ(0))
+        _ = gyro.pose(for: aboutZ(0))
         gyro.set(zoom: 1.6)
         clock.now += 0.1
-        #expect(gyro.rotation(for: aboutZ(0))?.zoom == 1.6)
+        #expect(gyro.pose(for: aboutZ(0))?.zoom == 1.6)
     }
 }

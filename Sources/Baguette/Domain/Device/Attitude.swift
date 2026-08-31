@@ -89,18 +89,21 @@ struct Attitude: Equatable, Sendable {
         )
     }
 
-    /// The attitude as Tait-Bryan angles in degrees, in the axis
-    /// vocabulary the 3D stage's `DeviceRotation` speaks: `x` tilts
-    /// (pitch), `y` turns (yaw), `z` rolls. This is the single
-    /// documented device-frame → model-frame transform; if a real
-    /// phone turns the wrong way on some axis, the sign flips here
-    /// and nowhere else.
-    var eulerDegrees: (x: Double, y: Double, z: Double) {
-        let sinPitch = max(-1, min(1, 2 * (w * y - z * x)))
-        return (
-            x: atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * 180 / .pi,
-            y: asin(sinPitch) * 180 / .pi,
-            z: atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * 180 / .pi
+    /// Rotate a vector by this attitude — the quaternion sandwich
+    /// `q v q⁻¹` in its expanded form. This is how the pose reaches
+    /// both the RealityKit entity (as the same quaternion) and the
+    /// screen-quad projection, so Interact clicks and the rendered
+    /// model can never disagree. Never decompose an attitude into
+    /// euler angles for display: the axis order won't match the
+    /// scene's and the motion comes out wrong off the primary axes.
+    func rotate(_ v: Vector3) -> Vector3 {
+        let tx = 2 * (y * v.z - z * v.y)
+        let ty = 2 * (z * v.x - x * v.z)
+        let tz = 2 * (x * v.y - y * v.x)
+        return Vector3(
+            x: v.x + w * tx + (y * tz - z * ty),
+            y: v.y + w * ty + (z * tx - x * tz),
+            z: v.z + w * tz + (x * ty - y * tx)
         )
     }
 

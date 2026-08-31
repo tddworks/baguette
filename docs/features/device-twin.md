@@ -8,9 +8,12 @@ matching plus a user-pick fallback. The companion app + broadcast
 extension live under `Companion/DeviceTwin/` (Tuist) and stream from a
 real iPhone. The gyro twin is live: attitude flows from the broadcast
 extension over the motion socket into `TwinPoses`, and
-`TwinGyroState` drives the 3D stage's pose (auto-zero on connect,
-~20 applies/s, quad re-pushes for Interact accuracy, browser Re-zero
-chip). Not started: the control pipe (Twin runner).
+`TwinGyroState` drives the 3D stage's pose the way PhoneTwin proved
+out: the QUATERNION goes straight to the entity (never decomposed to
+euler — the axis order wouldn't match the scene's), the displayed pose
+slerps toward the latest target (0.35 per apply at 30/s) so motion is
+butter rather than steps, auto-zero on connect, quad re-pushes for
+Interact accuracy, browser Re-zero chip. Not started: the control pipe (Twin runner).
 
 A real, cable-free iPhone appears in baguette the way a simulator
 does: listed beside simulators, its live screen mirrored into the
@@ -155,8 +158,11 @@ their role:
   and a sender may flip sign between samples; naive interpolation
   swings the model the long way round), re-zero calibration (the
   inverse of the current attitude becomes neutral, applied on the
-  model pivot, never mutated into the sensor stream), and the single
-  documented device-frame → model-frame transform. Quaternion order on
+  model pivot, never mutated into the sensor stream), and
+  `rotate(_:)` — the one transform both the RealityKit entity and the
+  screen-quad projection go through, so the rendered pose and Interact
+  clicks can never disagree. Attitudes are NEVER decomposed into euler
+  angles for display. Quaternion order on
   the wire is **`[x, y, z, w]`, CoreMotion's own** — declared once,
   because ordering and handedness disagreements are the classic bug of
   this feature class (`VirtualMotionFactory.m` already paid for that
