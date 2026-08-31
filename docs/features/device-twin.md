@@ -34,19 +34,27 @@ view-only mode even if control slips a release.
 
 **Wireless is a requirement**, which forces most of the choices:
 
-- **Pixels: ReplayKit broadcast upload extension.** The gyro pipe
-  already puts a companion app on the phone; the broadcast extension
-  lives inside that same install, so the extension's usual cost —
-  shipping an app — is already paid. System-wide capture, works over
-  Wi-Fi, keeps capturing after the user switches apps.
+- **Pixels: ReplayKit broadcast upload extension** — the only
+  wireless system-wide capture door on iOS 26, today's floor. The gyro
+  pipe already puts a companion app on the phone; the broadcast
+  extension lives inside that same install, so the extension's usual
+  cost — shipping an app — is already paid. System-wide capture,
+  works over Wi-Fi, keeps capturing after the user switches apps.
 - **CoreMediaIO screen capture (the QuickTime path) — rejected: USB
   only.** Otherwise the best pipe (no install, public API,
   ~100–200 ms); it remains the tethered fallback. Its undocumented
   wireless sibling flag
   (`kCMIOHardwarePropertyAllowWirelessScreenCaptureDevices`) is worth
   an experiment, not a foundation.
-- **ScreenCaptureKit — not applicable.** It captures Mac displays and
-  windows; it cannot see an iPhone.
+- **ScreenCaptureKit — the iOS 27+ successor, not the shipping
+  path.** On macOS it only captures Mac displays; on iOS it arrives in
+  **iOS 27 (beta)**: `SCContentSharingPicker.present()` captures the
+  entire display with user consent, and the `screen-capture`
+  `UIBackgroundModes` entry keeps the `SCStream` delivering while the
+  companion is backgrounded — in-process, no extension memory
+  ceiling. When iOS 27 is baguette's floor, the companion swaps its
+  capture source to `SCStream`; the wire protocol doesn't change
+  (both paths yield `CMSampleBuffer`s into the same encoder).
 - **AirPlay receiver on the Mac — rejected.** Its one advantage is
   zero install, which the gyro requirement already forfeits. What
   remains is a reverse-engineered FairPlay handshake that breaks
