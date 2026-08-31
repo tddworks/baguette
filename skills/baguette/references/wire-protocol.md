@@ -551,3 +551,12 @@ device today:
   `{"ok":false,"error":"device control is not wired yet"}`.
 
 See `docs/features/device-twin.md` for the full design.
+
+Since then the device tree has grown a unified page and 3D stage:
+`GET /devices/<UDID>` serves the same UI as a simulator (view-only),
+`GET /devices/<UDID>/3d-model.json` answers the matched USDZ model or
+`{"model":null,"hardware":…,"models":[…]}` choices, and
+`WS /devices/<UDID>/stream.3d.<mjpeg|avcc>` streams the 3D twin
+(accepts `?model=<id>` to use a user-picked model plus the same
+options as the simulator 3D socket; gestures still answer
+`device control is not wired yet`).

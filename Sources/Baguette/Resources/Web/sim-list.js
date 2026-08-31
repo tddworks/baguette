@@ -17,6 +17,7 @@
 
   const state = {
     devices: [],
+    physical: [],   // connected companions from /devices.json
     search: '',
     family: 'iphones',
     runtime: 'all',
@@ -283,6 +284,38 @@
       </table>`;
   }
 
+  // Physical phones mirrored by the companion app — the device-twin
+  // path. They live outside the simulator filters on purpose: a
+  // connected phone should never vanish behind a family dropdown.
+  function renderPhysicalSection() {
+    if (!state.physical.length) return '';
+    const rows = state.physical.map((device) => `
+        <tr>
+          <td>${escapeHTML(device.name)}</td>
+          <td><span class="asc-sim-dot" style="background:#2563eb"></span>Mirroring</td>
+          <td>${escapeHTML(device.model || '')}</td>
+          <td class="asc-sim-actions">
+            <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;margin-right:6px;border:1px solid #fde68a;border-radius:99px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700">View-only</span>
+            <a class="asc-sim-button" href="/devices/${encodeURIComponent(device.udid)}">Open</a>
+          </td>
+        </tr>`).join('');
+    return `
+      <div class="asc-sim-section-title">Devices</div>
+      <table class="asc-sim-table">
+        <thead><tr><th>Name</th><th>State</th><th>Hardware</th><th class="asc-sim-actions">Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  async function fetchPhysicalDevices() {
+    try {
+      const response = await fetch('/devices.json', { cache: 'no-store' });
+      if (!response.ok) return [];
+      const json = await response.json();
+      return json.connected || [];
+    } catch { return []; }
+  }
+
   function render() {
     const activeId = document.activeElement?.id;
     const selectionStart = document.activeElement?.selectionStart;
@@ -300,8 +333,8 @@
       : state.error
         ? `<div class="asc-sim-error">${escapeHTML(state.error)}</div>`
         : devices.length
-          ? `${renderSection('Running', running)}${renderSection('Available', available)}`
-          : '<div class="asc-sim-empty">No simulators match these filters.</div>';
+          ? `${renderSection('Running', running)}${renderPhysicalSection()}${renderSection('Available', available)}`
+          : `${renderPhysicalSection()}<div class="asc-sim-empty">No simulators match these filters.</div>`;
 
     list.innerHTML = `
       <div class="asc-sim-card">
@@ -353,6 +386,7 @@
     state.error = null;
     if (initial) render();
     try {
+      state.physical = await fetchPhysicalDevices();
       state.devices = await fetchDevices();
     } catch (error) {
       state.error = error.message || String(error);

@@ -28,7 +28,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         transport.send(text: TwinWire.hello(
             udid: deviceId,
             name: UIDevice.current.name,
-            model: UIDevice.current.model,
+            model: TwinWire.hardwareIdentifier,
             capabilities: ["screen"]
         ))
         self.transport = transport

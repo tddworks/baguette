@@ -20,7 +20,7 @@
   function deepLinkUdid() {
     const parts = location.pathname.split('/').filter(Boolean);
     if (parts.length !== 2) return null;
-    if (parts[0] !== 'simulators') return null;
+    if (parts[0] !== 'simulators' && parts[0] !== 'devices') return null;
     const u = decodeURIComponent(parts[1]);
     if (!u) return null;
     return u;
@@ -29,6 +29,10 @@
   const udid = deepLinkUdid();
   if (!udid) return; // not deep-link mode; let sim-list run.
   window.__baguetteNativeMode = true;
+  // Physical device behind the mirror: same page, reduced surface —
+  // no boot/orientation calls, sim-only toolbar clusters hidden,
+  // gestures rejected loudly by the server until the control pipe lands.
+  const deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
 
   // --- State -------------------------------------------------------
   let session = null;
@@ -346,7 +350,7 @@
     //    screen that isn't there is instructions rather than a pane.
     //    Also mounts first so it sits above the plugins rail in the
     //    shared right-edge stack.
-    mountScreensRail();
+    if (!deviceMode) mountScreensRail();
 
     // 5. Settle the codec picker — it's on screen even when no session
     //    ever starts, so a shutdown device can't be left offering H.264.
@@ -380,7 +384,7 @@
     // Swift side routes by extension. The drop zone + highlight are
     // scoped to the device frame so the overlay traces the phone, not
     // the whole page. See docs/features/file-upload.md.
-    if (window.SimFileDrop) {
+    if (window.SimFileDrop && !deviceMode) {
       window.__fileDrop =
           window.SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
     }
@@ -402,10 +406,11 @@
     // has ever been opened. A throttle armed from the CLI in another
     // terminal is exactly the one someone forgets about, and this page is
     // where they will be looking when the app feels slow.
-    watchNetworkArmed();
+    if (!deviceMode) watchNetworkArmed();
   }
 
   function resetToPortrait() {
+    if (deviceMode) return; // a physical phone rotates itself
     fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
         { method: 'POST' }).catch(() => { /* best-effort */ });
   }
@@ -1183,6 +1188,20 @@
   }
 
   async function fetchDeviceMeta(targetUdid) {
+    if (deviceMode) {
+      try {
+        const r = await fetch('/devices.json', { cache: 'no-store' });
+        if (!r.ok) throw new Error(String(r.status));
+        const json = await r.json();
+        const hit = (json.connected || []).find((d) => d.udid === targetUdid);
+        if (hit) {
+          // A connected companion is always live — 'Booted' keeps the
+          // power-card machinery quiet without a device special case.
+          return { name: hit.name || 'Device', runtime: hit.model || '', state: 'Booted' };
+        }
+      } catch { /* fall through to the placeholder */ }
+      return { name: 'Device', runtime: '', state: 'Booted' };
+    }
     try {
       const r = await fetch('/simulators.json', { cache: 'no-store' });
       if (!r.ok) throw new Error(String(r.status));
@@ -1604,8 +1623,35 @@
         .forEach((n) => n.setAttribute('aria-expanded', 'false'));
   }
 
+  /// Physical devices carry a reduced surface: the sim-only clusters
+  /// (control / simulate / inspect) hide, and a badge says why
+  /// Interact is missing. Stream, 3D view, and capture stay.
+  function applyDeviceModeChrome() {
+    if (!deviceMode) return;
+    ['control', 'simulate', 'inspect'].forEach((id) => {
+      document.querySelectorAll(
+        `#simNativeView [data-cluster="${id}"], #simNativeView [data-sep-for="${id}"], ` +
+        `#simNativeView [data-fold="${id}"]`
+      ).forEach((n) => { n.style.display = 'none'; });
+    });
+    const osEl = document.getElementById('nativeDeviceOS');
+    if (osEl && !document.getElementById('nativeDeviceBadge')) {
+      const badge = document.createElement('span');
+      badge.id = 'nativeDeviceBadge';
+      badge.textContent = 'DEVICE · view-only';
+      badge.title = 'A physical phone mirrored by the companion app. ' +
+        'Touch control arrives with the Twin runner.';
+      badge.style.cssText =
+        'margin-left:8px;padding:2px 8px;border:1px solid #fde68a;' +
+        'border-radius:99px;background:#fef3c7;color:#92400e;' +
+        'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
+      osEl.insertAdjacentElement('afterend', badge);
+    }
+  }
+
   function wireToolbarScroll() {
     if (!buildToolbarClusters()) return;
+    applyDeviceModeChrome();
 
     document.addEventListener('click', (event) => {
       const btn = event.target.closest('#simNativeView .tb-fold-btn');

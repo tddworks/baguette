@@ -1,12 +1,13 @@
 # Device twin — a physical iPhone in baguette
 
-Status: **in progress**. The host-side mirror pipeline is implemented
-and unit-tested (see [Implemented so far](#implemented-so-far)), and
-verified end-to-end by a fake-companion smoke run (real H.264 through
-ingest → VideoToolbox decode → `Screen` → `AVCCStream`). The companion
-app + broadcast extension are scaffolded under `Companion/DeviceTwin/`
-(Tuist; builds for the iOS Simulator) but not yet exercised on a
-device. The attitude-driven twin and the control pipe are not started.
+Status: **in progress**. The mirror pipeline is implemented, verified
+end-to-end against real hardware, and integrated into the web UI: the
+unified page at `/devices/:udid` (same `sim.html`, reduced surface),
+the DEVICES list section, and the 3D twin stage with hardware-id model
+matching plus a user-pick fallback. The companion app + broadcast
+extension live under `Companion/DeviceTwin/` (Tuist) and stream from a
+real iPhone. Not started: the motion socket (gyro-driven pose) and the
+control pipe (Twin runner).
 
 A real, cable-free iPhone appears in baguette the way a simulator
 does: listed beside simulators, its live screen mirrored into the
@@ -247,11 +248,31 @@ exactly as it does on `/simulators/:udid/stream`, not an extension:
 
 ```text
 GET  /devices.json                     connected companions        (implemented)
+GET  /devices/:udid                    the unified page (sim.html) (implemented)
+GET  /devices/:udid/3d-model.json      matched model, or choices   (implemented)
 WS   /devices/companion/video          companion video ingest      (implemented)
 WS   /devices/:udid/stream?format=     mirror stream, mjpeg|avcc   (implemented)
+WS   /devices/:udid/stream.3d.<fmt>    3D twin stage, mjpeg|avcc   (implemented)
 WS   /devices/companion/motion         attitude ingest             (twin phase)
-WS   /devices/:udid/stream.3d.<fmt>    3D stage + live attitude    (twin phase)
 ```
+
+The web UI is the **same page** as `/simulators/:udid` — `target.js`
+is the one seam that knows the base path, `stream-session.js` builds
+its socket URL through it, and `sim-native.js` reduces the surface in
+device mode (control / simulate / inspect clusters hidden, a
+"DEVICE · view-only" badge beside the runtime, no boot or orientation
+calls). The list page shows connected companions in a DEVICES section
+between RUNNING and AVAILABLE.
+
+**3D model resolution for physical hardware**: definitions gain a
+third match key, `"deviceModels": ["iPhone14,3"]` (`utsname.machine`
+identifiers; the companion sends its own in the hello). When nothing
+matches, baguette does not substitute a look-alike — the
+`3d-model.json` route answers with the installed models as choices,
+the browser renders a picker, and the pick rides `?model=<id>` on the
+3D socket (remembered per device in `localStorage`). The bundled
+definitions declare no hardware ids yet — guessed mappings would be
+worse than none.
 
 The stream socket is bidirectional exactly like the simulator's:
 encoded frames server→browser, JSON control lines browser→server

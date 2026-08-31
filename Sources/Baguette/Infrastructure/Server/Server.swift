@@ -1840,7 +1840,19 @@ struct Server: Sendable {
               let installed = try? simulator.deviceModel(in: models) else {
             return nil
         }
-        let definition = installed.definition
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: model3DJSONObject(definition: installed.definition),
+            options: [.sortedKeys]
+        ) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The public projection of one model definition — id, display
+    /// name, and variant metadata; USD prim paths never leave the
+    /// server. Shared by the simulator and device 3d-model routes.
+    static func model3DJSONObject(definition: DeviceModelDefinition) -> [String: Any] {
         let sets: [[String: Any]] = definition.variantSets.map { set in
             [
                 "id": set.id,
@@ -1858,18 +1870,11 @@ struct Server: Sendable {
                 },
             ]
         }
-        let object: [String: Any] = [
+        return [
             "id": definition.id.rawValue,
             "displayName": definition.displayName,
             "variantSets": sets,
         ]
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: object,
-            options: [.sortedKeys]
-        ) else {
-            return nil
-        }
-        return String(decoding: data, as: UTF8.self)
     }
 
     private static func imageDimensions(_ image: Data) -> RenderDimensions? {

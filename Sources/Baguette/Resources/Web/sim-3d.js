@@ -58,8 +58,11 @@
     this.background = options.background || this.background;
     this.renderLoading('Loading 3D model…');
     try {
+      const targetPath = (u, rest) => (window.BaguetteTarget
+          ? window.BaguetteTarget.path(u, rest)
+          : '/simulators/' + encodeURIComponent(u) + rest);
       const response = await fetch(
-          '/simulators/' + encodeURIComponent(udid) + '/3d-model.json',
+          targetPath(udid, '/3d-model.json'),
           { cache: 'no-store' }
       );
       if (!response.ok) {
@@ -68,6 +71,18 @@
           : 'Could not load model metadata.');
       }
       this.model = await response.json();
+      if (this.model && this.model.model === null && Array.isArray(this.model.models)) {
+        const stored = localStorage.getItem('baguette.twin.model.' + udid);
+        const choices = this.model.models;
+        const pick = choices.find((m) => m.id === stored);
+        if (pick) {
+          this.modelPick = pick.id;
+          this.model = { id: pick.id, displayName: pick.displayName, variantSets: [] };
+        } else {
+          this.renderModelPicker(this.model.hardware || '', choices);
+          return;
+        }
+      }
       (this.model.variantSets || []).forEach((set) => {
         this.variants[set.id] = set.default;
       });
@@ -140,12 +155,15 @@
       background: this.background,
     });
     if (this.screenGlass) params.set('screenGlass', 'true');
+    if (this.modelPick) params.set('model', this.modelPick);
     Object.keys(this.variants).forEach((set) => {
       params.append('variant', set + ':' + this.variants[set]);
     });
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const path = '/simulators/' + encodeURIComponent(this.udid) +
-        '/stream.3d.' + this.format + '?' + params.toString();
+    const base = (window.BaguetteTarget
+        ? window.BaguetteTarget.path(this.udid, '')
+        : '/simulators/' + encodeURIComponent(this.udid));
+    const path = base + '/stream.3d.' + this.format + '?' + params.toString();
     this.setState('Loading model…', true);
     this.session = new window.StreamSession({
       udid: this.udid,
@@ -285,6 +303,31 @@
           deviceSize: this.deviceSize, onFps: this.onFps, format: this.format,
         })
     );
+  };
+
+  /// No installed USDZ matches this phone's hardware id. Baguette
+  /// never substitutes a look-alike on its own — the user picks,
+  /// the pick rides `?model=` and is remembered per device.
+  Sim3DPanel.prototype.renderModelPicker = function (hardware, choices) {
+    if (!this.host) return;
+    const options = choices.map((m) =>
+        '<button type="button" data-model-pick="' + m.id + '">' +
+        (window.escapeHTML ? window.escapeHTML(m.displayName) : m.displayName) +
+        '</button>').join('');
+    this.host.innerHTML =
+        '<div class="r3d-empty"><strong>Pick a model for this device</strong>' +
+        '<span>No installed 3D model matches ' + hardware +
+        '. Choose one to stand in:</span>' +
+        '<div data-role="model-choices" style="display:flex;flex-direction:column;gap:6px;margin-top:10px">' +
+        (options || '<em>No models installed</em>') + '</div></div>';
+    this.host.querySelectorAll('[data-model-pick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        localStorage.setItem('baguette.twin.model.' + this.udid, btn.dataset.modelPick);
+        this.attach(this.host, this.stage, this.udid, {
+          deviceSize: this.deviceSize, onFps: this.onFps, format: this.format,
+        });
+      });
+    });
   };
 
   Sim3DPanel.prototype.renderControls = function () {
@@ -704,7 +747,9 @@
         streamSize: this.streamSize(),
       });
       const response = await fetch(
-          '/simulators/' + encodeURIComponent(this.udid) + '/render-3d.png',
+          (window.BaguetteTarget
+              ? window.BaguetteTarget.path(this.udid, '/render-3d.png')
+              : '/simulators/' + encodeURIComponent(this.udid) + '/render-3d.png'),
           {
             method: 'POST',
             cache: 'no-store',

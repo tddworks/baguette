@@ -53,6 +53,9 @@
      to `/simulators/<file>.js`, which the `/simulators/:udid` route
      happily answers with sim.html — leaving the browser to parse HTML
      as JS and throw `Unexpected token '<'`. -->
+<!-- The base-path seam: simulators vs physical devices. Must load
+     before every module that builds a resource URL. -->
+<script src="/target.js"></script>
 <script src="/frame-decoder.js"></script>
 <!-- Filters the stored format against frame-decoder.js's capability
      probe; must load before sim-stream.js / sim-native.js. -->

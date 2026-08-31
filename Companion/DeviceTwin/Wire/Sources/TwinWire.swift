@@ -28,6 +28,17 @@ public enum TwinWire {
         return endpoint
     }
 
+    /// The hardware identifier ("iPhone14,3") — what the host matches
+    /// USDZ definitions against. `UIDevice.model` is just "iPhone" and
+    /// useless for that.
+    public static var hardwareIdentifier: String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        return withUnsafeBytes(of: &systemInfo.machine) { raw in
+            String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+    }
+
     public static func chunk(tag: UInt8, payload: Data) -> Data {
         let length = UInt32(payload.count + 1)
         var out = Data([

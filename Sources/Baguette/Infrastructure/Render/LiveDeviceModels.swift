@@ -23,6 +23,14 @@ struct LiveDeviceModels: DeviceModels, Sendable {
         try catalog.match(deviceType: deviceType, deviceName: deviceName)
     }
 
+    func match(hardware: String) throws -> InstalledDeviceModel? {
+        try catalog.match(hardware: hardware)
+    }
+
+    func all() throws -> [InstalledDeviceModel] {
+        catalog.all()
+    }
+
     private static func loadLayer(
         at root: URL,
         fileManager: FileManager

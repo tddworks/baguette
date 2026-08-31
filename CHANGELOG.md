@@ -28,7 +28,16 @@ For releases prior to this changelog, see the
   because "companion screens" already means CarPlay in this codebase.
   The phone-side companion (app + ReplayKit broadcast extension +
   shared `TwinWire` framing) is scaffolded as a Tuist project under
-  `Companion/DeviceTwin/`. Making `/devices` a resource root moved the
+  `Companion/DeviceTwin/`. The web UI is unified rather than doubled:
+  `/devices/:udid` serves the same `sim.html` as a simulator —
+  `target.js` is the one seam that knows the base path — with sim-only
+  toolbar clusters hidden and a view-only badge; connected phones
+  appear in a DEVICES section on the list page. The 3D stage works for
+  physical hardware too: model definitions gain a `deviceModels` match
+  key (`utsname.machine` ids), and when nothing matches, the browser
+  offers the installed models and the user's pick rides `?model=` on
+  the 3D socket — baguette still never substitutes a look-alike on its
+  own. Making `/devices` a resource root moved the
   simulator-list widget assets from `/devices/` to `/sim-list/` —
   the folder held simulator-list UI, and on the public surface
   "devices" now means physical hardware, matching Xcode's own
