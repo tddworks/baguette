@@ -32,6 +32,10 @@ import NIOCore
 ///                                             device chrome (+ ?buttons=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
 ///   WS   /simulators/:udid/stream.3d.:format → live 3D AVCC/MJPEG frames
+///   GET  /devices.json                      → connected physical devices
+///   WS   /devices/:udid/companion/video     → companion app video ingest
+///   WS   /devices/:udid/companion/motion    → companion app attitude ingest
+///   WS   /devices/:udid/stream?format=      → physical-device mirror frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
 /// Static UI siblings live at the *root* (e.g. `GET /sim-list.js`)
@@ -59,6 +63,14 @@ struct Server: Sendable {
     /// location routes need to reach them to drive the activity.
     let motionSessions: MotionSessions
 
+    /// Device-twin state: connected companions and their per-device
+    /// video ingest hubs. Reference types for the same reason as
+    /// `motionSessions` — membership and decoder sessions must
+    /// survive between socket connections.
+    let devices: LiveDevices
+    let twinScreens: TwinScreens
+    let twinPoses: TwinPoses
+
     init(
         simulators: any Simulators,
         chromes: any Chromes,
@@ -69,10 +81,16 @@ struct Server: Sendable {
         port: Int = 8421,
         allowedHosts: [String] = [],
         grants: PluginGrants = PluginGrants(),
-        motionSessions: MotionSessions = MotionSessions()
+        motionSessions: MotionSessions = MotionSessions(),
+        devices: LiveDevices = LiveDevices(),
+        twinScreens: TwinScreens = TwinScreens(),
+        twinPoses: TwinPoses = TwinPoses()
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
+        self.devices = devices
+        self.twinScreens = twinScreens
+        self.twinPoses = twinPoses
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -89,7 +107,17 @@ struct Server: Sendable {
 
         let app = Application(
             router: router,
-            server: .http1WebSocketUpgrade(webSocketRouter: router),
+            // The inbound frame decoder defaults to 16 KB and CLOSES
+            // the connection on a bigger frame. Browser traffic never
+            // gets near that, but a device-twin companion sends whole
+            // encoded video frames as single WS frames — an 888×1920
+            // keyframe is a few hundred KB — and the default silently
+            // killed the socket after the first one. 8 MB comfortably
+            // covers a keyframe at any current device resolution.
+            server: .http1WebSocketUpgrade(
+                webSocketRouter: router,
+                configuration: .init(maxFrameSize: 8 << 20)
+            ),
             configuration: .init(address: .hostname(host, port: port))
         )
         try await app.runService()
@@ -147,6 +175,11 @@ struct Server: Sendable {
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerDeepLinkRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerDeviceTwinRoutes(
+            on: router,
+            rejectUntrustedBrowser: rejectUntrustedBrowser,
+            trustedWebSocketUpgrade: trustedWebSocketUpgrade
+        )
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -821,7 +854,7 @@ struct Server: Sendable {
         "carplay-frames",
         "carplay-frames/cupra",
         "carplay-frames/plain",
-        "devices",
+        "sim-list",
         "farm",
         "network",
         "screens",
@@ -1811,7 +1844,19 @@ struct Server: Sendable {
               let installed = try? simulator.deviceModel(in: models) else {
             return nil
         }
-        let definition = installed.definition
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: model3DJSONObject(definition: installed.definition),
+            options: [.sortedKeys]
+        ) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The public projection of one model definition — id, display
+    /// name, and variant metadata; USD prim paths never leave the
+    /// server. Shared by the simulator and device 3d-model routes.
+    static func model3DJSONObject(definition: DeviceModelDefinition) -> [String: Any] {
         let sets: [[String: Any]] = definition.variantSets.map { set in
             [
                 "id": set.id,
@@ -1829,18 +1874,11 @@ struct Server: Sendable {
                 },
             ]
         }
-        let object: [String: Any] = [
+        return [
             "id": definition.id.rawValue,
             "displayName": definition.displayName,
             "variantSets": sets,
         ]
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: object,
-            options: [.sortedKeys]
-        ) else {
-            return nil
-        }
-        return String(decoding: data, as: UTF8.self)
     }
 
     private static func imageDimensions(_ image: Data) -> RenderDimensions? {

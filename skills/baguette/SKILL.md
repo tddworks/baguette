@@ -334,6 +334,11 @@ NOT wired (skill should NOT propose these):
   phase-1 supported code set. Most iOS apps don't use them anyway.
 - `button: "siri"` — crashes `backboardd` via every known path.
   Refused by the CLI.
+- **Physical-device routes** (`/devices.json`,
+  `WS /devices/:udid/stream`) — the host side exists but no companion
+  app ships yet, so nothing ever connects; gestures on a device stream
+  are rejected with `device control is not wired yet`. Simulators
+  only for now. See `docs/features/device-twin.md`.
 
 ## Composing flows — the smoke-test pattern
 

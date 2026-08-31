@@ -210,3 +210,26 @@ private extension DeviceModelDefinitionTests {
     }
     """#
 }
+
+extension DeviceModelDefinitionTests {
+    @Test func `matches a physical device by hardware identifier`() throws {
+        let json = """
+        {"schemaVersion":1,"id":"iphone-13-pro-max","displayName":"iPhone 13 Pro Max",
+         "matches":{"simulatorDeviceTypes":[],"deviceNames":[],"deviceModels":["iPhone14,3"]},
+         "asset":{"file":"device.usdz"},
+         "scene":{"rootNode":"Device","screenNode":"Screen","screenMaterial":"Screen",
+                  "nativeOrientation":"portrait","textureSize":{"width":1284,"height":2778},
+                  "usesScreenOverlay":false},
+         "variantSets":[]}
+        """
+        let model = try DeviceModelDefinition.parsing(json: Data(json.utf8))
+        #expect(model.matches(hardware: "iPhone14,3") == true)
+        #expect(model.matches(hardware: "iPhone17,2") == false)
+    }
+
+    @Test func `definitions without deviceModels parse and match no hardware`() throws {
+        let model = try DeviceModelDefinition.parsing(json: Self.macBook)
+        #expect(model.matches.deviceModels == [])
+        #expect(model.matches(hardware: "iPhone14,3") == false)
+    }
+}

@@ -11,6 +11,11 @@ struct Device3DStreamOptions: Equatable, Sendable {
     let fit: DeviceScreenFit
     let background: DeviceRenderBackground
     let screenGlass: Bool
+    /// Explicit model choice for the device-twin path — the user's
+    /// pick when no installed definition matches the phone's hardware
+    /// identifier. `nil` keeps matching automatic; simulators never
+    /// send it.
+    var model: DeviceModelID?
 
     /// The largest frame the live path will encode, per axis. `size=` is
     /// held to it too, so a preset can't route around the bound `width=` /
@@ -69,6 +74,11 @@ struct Device3DStreamOptions: Equatable, Sendable {
             }
         }
 
+        let model = try query.single("model").map { value -> DeviceModelID in
+            guard !value.isEmpty else { throw DeviceModelError.invalidRenderOptions }
+            return DeviceModelID(value)
+        }
+
         return Device3DStreamOptions(
             rotation: rotation,
             variants: variants,
@@ -77,7 +87,8 @@ struct Device3DStreamOptions: Equatable, Sendable {
             ).renderDimensions,
             fit: fit,
             background: background,
-            screenGlass: screenGlass
+            screenGlass: screenGlass,
+            model: model
         )
     }
 

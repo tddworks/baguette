@@ -12,6 +12,48 @@ For releases prior to this changelog, see the
 
 ### Added
 
+- **Device twin: the host side of mirroring a physical iPhone.** A
+  companion app on the phone (not yet shipped) will stream H.264 screen
+  captures over `WS /devices/companion/video`; the server decodes them
+  once per device (`TwinScreen` + `VTH264Decoder`) and hands out
+  `Screen` views, so the existing `MJPEGStream` / `AVCCStream`
+  pipeline serves `WS /devices/:udid/stream?format=` with no changes —
+  the mirror is just another screen behind an existing role.
+  `GET /devices.json` lists connected companions. Gestures on a device
+  stream are rejected loudly (`device control is not wired yet`)
+  until the XCUITest control pipe lands. The `Attitude` value type
+  (CoreMotion `[x,y,z,w]` wire order, shortest-path slerp through
+  quaternion sign flips, re-zero calibration) is in place for the
+  gyroscope-driven twin phase. Named `Twin*` rather than `Companion*`
+  because "companion screens" already means CarPlay in this codebase.
+  The phone-side companion (app + ReplayKit broadcast extension +
+  shared `TwinWire` framing) is scaffolded as a Tuist project under
+  `Companion/DeviceTwin/`. The web UI is unified rather than doubled:
+  `/devices/:udid` serves the same `sim.html` as a simulator —
+  `target.js` is the one seam that knows the base path — with sim-only
+  toolbar clusters hidden and a view-only badge; connected phones
+  appear in a DEVICES section on the list page. The 3D stage works for
+  physical hardware too: model definitions gain a `deviceModels` match
+  key (`utsname.machine` ids), and when nothing matches, the browser
+  offers the installed models and the user's pick rides `?model=` on
+  the 3D socket — baguette still never substitutes a look-alike on its
+  own. The 2D page's bezel is borrowed the same way — real hardware
+  ships no DeviceKit chrome, so `definition.json` takes
+  `?chrome=<device name>` and the page offers a frame picker. And the
+  twin turned physical: the broadcast extension streams
+  `CMDeviceMotion` attitude over `WS /devices/companion/motion`
+  (its own socket, so video bursts never delay a pose sample) and the
+  3D stage follows the phone in your hand — the pose ABSOLUTE against gravity
+  (lay the phone down and the twin lies down; only the
+  compass-arbitrary heading is calibrated), rendered on a fps-paced metronome
+  replaying the timestamped trajectory 50 ms back (regular sampling is
+  what makes motion-through-video smooth; ReplayKit's own frame cadence
+  is irregular by design) —
+  the folder held simulator-list UI, and on the public surface
+  "devices" now means physical hardware, matching Xcode's own
+  Devices-vs-Simulators split.
+  See [`docs/features/device-twin.md`](docs/features/device-twin.md).
+
 - **`screenshot` and `input` accept `--display carplay`.** The two
   agent-facing surfaces could not reach the CarPlay plane at all: only the
   serve WebSocket read `?display=carplay`, and that rides the browser-trust

@@ -53,6 +53,9 @@
      to `/simulators/<file>.js`, which the `/simulators/:udid` route
      happily answers with sim.html — leaving the browser to parse HTML
      as JS and throw `Unexpected token '<'`. -->
+<!-- The base-path seam: simulators vs physical devices. Must load
+     before every module that builds a resource URL. -->
+<script src="/target.js"></script>
 <script src="/frame-decoder.js"></script>
 <!-- Filters the stored format against frame-decoder.js's capability
      probe; must load before sim-stream.js / sim-native.js. -->
@@ -137,7 +140,7 @@
      /simulators/<udid> deep link, which sim-list.js checks at the
      top of its IIFE to bail out cleanly. Order matters here. -->
 <script src="/sim-native.js"></script>
-<script src="/devices/device-filter.js"></script>
+<script src="/sim-list/device-filter.js"></script>
 <script src="/sim-list.js"></script>
 </body>
 </html>

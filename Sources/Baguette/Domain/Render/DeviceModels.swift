@@ -30,6 +30,12 @@ struct InstalledDeviceModel: Equatable, Sendable {
 protocol DeviceModels: Sendable {
     func find(id: DeviceModelID) throws -> InstalledDeviceModel?
     func match(deviceType: String, deviceName: String) throws -> InstalledDeviceModel?
+    /// Match a physical device by hardware identifier ("iPhone14,3").
+    func match(hardware: String) throws -> InstalledDeviceModel?
+    /// Every installed model, higher precedence layers shadowing lower
+    /// ones by id — the choices offered when no definition matches a
+    /// physical device and the user picks one explicitly.
+    func all() throws -> [InstalledDeviceModel]
 }
 
 struct DeviceModelCatalog: DeviceModels, Equatable, Sendable {
@@ -73,5 +79,31 @@ struct DeviceModelCatalog: DeviceModels, Equatable, Sendable {
             }
         }
         return nil
+    }
+
+    func match(hardware: String) throws -> InstalledDeviceModel? {
+        for layer in layers {
+            let matches = layer.filter { $0.definition.matches(hardware: hardware) }
+            if matches.count > 1 {
+                throw DeviceModelError.ambiguousMatch(
+                    matches.map { $0.definition.id.rawValue }.sorted()
+                )
+            }
+            if let match = matches.first {
+                return match
+            }
+        }
+        return nil
+    }
+
+    func all() -> [InstalledDeviceModel] {
+        var seen = Set<DeviceModelID>()
+        var models: [InstalledDeviceModel] = []
+        for layer in layers {
+            for model in layer where seen.insert(model.definition.id).inserted {
+                models.append(model)
+            }
+        }
+        return models
     }
 }

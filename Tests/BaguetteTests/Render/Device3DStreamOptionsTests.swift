@@ -93,3 +93,14 @@ struct Device3DStreamOptionsTests {
         }
     }
 }
+
+extension Device3DStreamOptionsTests {
+    @Test func `a stream may name an explicit model for unmatched hardware`() throws {
+        let options = try Device3DStreamOptions.parse(["model": ["iphone-17-pro"]])
+        #expect(options.model == DeviceModelID("iphone-17-pro"))
+    }
+
+    @Test func `the model defaults to nil so matching stays automatic`() throws {
+        #expect(try Device3DStreamOptions.parse([:]).model == nil)
+    }
+}

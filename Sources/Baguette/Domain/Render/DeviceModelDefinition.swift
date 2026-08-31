@@ -30,10 +30,29 @@ enum DeviceModelOrientation: String, Equatable, Sendable, Codable {
 struct DeviceModelMatches: Equatable, Sendable, Codable {
     let simulatorDeviceTypes: [String]
     let deviceNames: [String]
+    /// Physical-hardware identifiers (`utsname.machine`, e.g.
+    /// "iPhone14,3") for the device-twin path. Optional in the JSON so
+    /// every pre-existing definition keeps parsing.
+    let deviceModels: [String]
 
-    init(simulatorDeviceTypes: [String] = [], deviceNames: [String] = []) {
+    init(
+        simulatorDeviceTypes: [String] = [],
+        deviceNames: [String] = [],
+        deviceModels: [String] = []
+    ) {
         self.simulatorDeviceTypes = simulatorDeviceTypes
         self.deviceNames = deviceNames
+        self.deviceModels = deviceModels
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        simulatorDeviceTypes = try container.decodeIfPresent(
+            [String].self, forKey: .simulatorDeviceTypes) ?? []
+        deviceNames = try container.decodeIfPresent(
+            [String].self, forKey: .deviceNames) ?? []
+        deviceModels = try container.decodeIfPresent(
+            [String].self, forKey: .deviceModels) ?? []
     }
 }
 
@@ -155,6 +174,12 @@ struct DeviceModelDefinition: Equatable, Sendable, Codable {
     func matches(deviceType: String, deviceName: String) -> Bool {
         matches.simulatorDeviceTypes.contains(deviceType)
             || matches.deviceNames.contains(deviceName)
+    }
+
+    /// Match a physical device by its hardware identifier — the
+    /// device-twin sibling of `matches(deviceType:deviceName:)`.
+    func matches(hardware: String) -> Bool {
+        matches.deviceModels.contains(hardware)
     }
 
     func resolveVariants(_ requested: [String: String]) throws -> [DeviceVariantSelection] {

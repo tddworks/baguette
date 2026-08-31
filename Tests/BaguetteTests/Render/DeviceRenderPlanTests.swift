@@ -105,3 +105,29 @@ private extension DeviceRenderPlanTests {
         )
     }
 }
+
+@Suite("ScreenQuadProjection attitude")
+struct ScreenQuadProjectionAttitudeTests {
+    @Test func `a quaternion pose projects identically to its euler twin`() {
+        let corners = ScreenLocalCorners(
+            topLeft: Vector3(x: -0.4, y: 0.9, z: 0.05),
+            topRight: Vector3(x: 0.4, y: 0.9, z: 0.05),
+            bottomRight: Vector3(x: 0.4, y: -0.9, z: 0.05),
+            bottomLeft: Vector3(x: -0.4, y: -0.9, z: 0.05)
+        )
+        let half = 30.0 * Double.pi / 360
+        let byEuler = ScreenQuadProjection.project(
+            corners: corners, rotation: DeviceRotation(x: 0, y: 30, z: 0),
+            distance: 5, fieldOfViewDegrees: 32, aspect: 1
+        )
+        let byAttitude = ScreenQuadProjection.project(
+            corners: corners, attitude: Attitude(x: 0, y: sin(half), z: 0, w: cos(half)),
+            distance: 5, fieldOfViewDegrees: 32, aspect: 1
+        )
+        for (a, b) in [(byEuler.topLeft, byAttitude.topLeft),
+                       (byEuler.bottomRight, byAttitude.bottomRight)] {
+            #expect(abs(a.u - b.u) < 0.0001)
+            #expect(abs(a.v - b.v) < 0.0001)
+        }
+    }
+}

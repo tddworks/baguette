@@ -95,3 +95,66 @@ private extension DeviceModelCatalogTests {
         )
     }
 }
+
+extension DeviceModelCatalogTests {
+    static func installedHardware(
+        id: DeviceModelID, displayName: String, directory: String, deviceModels: [String]
+    ) -> InstalledDeviceModel {
+        InstalledDeviceModel(
+            definition: DeviceModelDefinition(
+                schemaVersion: 1,
+                id: id,
+                displayName: displayName,
+                matches: DeviceModelMatches(deviceModels: deviceModels),
+                asset: DeviceModelAsset(file: "device.usdz", downloadURL: nil, sha256: nil),
+                scene: DeviceModelScene(
+                    rootNode: "Device", screenNode: "Screen", screenMaterial: "Screen",
+                    nativeOrientation: .portrait,
+                    textureSize: RenderDimensions(width: 100, height: 200),
+                    usesScreenOverlay: false
+                ),
+                variantSets: []
+            ),
+            directoryURL: URL(fileURLWithPath: directory)
+        )
+    }
+
+    @Test func `match by hardware prefers the highest precedence layer`() throws {
+        let bundled = Self.installedHardware(
+            id: "stock", displayName: "Stock", directory: "/bundle", deviceModels: ["iPhone14,3"]
+        )
+        let override = Self.installedHardware(
+            id: "custom", displayName: "Custom", directory: "/override", deviceModels: ["iPhone14,3"]
+        )
+        let catalog = try DeviceModelCatalog(layers: [[override], [bundled]])
+        #expect(try catalog.match(hardware: "iPhone14,3")?.definition.id == "custom")
+    }
+
+    @Test func `match by hardware returns nil when nothing declares it`() throws {
+        let catalog = try DeviceModelCatalog(layers: [[
+            Self.installed(id: "phone", displayName: "Phone", directory: "/bundle")
+        ]])
+        #expect(try catalog.match(hardware: "iPhone14,3") == nil)
+    }
+
+    @Test func `rejects two hardware matches in the same layer`() throws {
+        let first = Self.installedHardware(
+            id: "first", displayName: "First", directory: "/a", deviceModels: ["iPhone14,3"]
+        )
+        let second = Self.installedHardware(
+            id: "second", displayName: "Second", directory: "/b", deviceModels: ["iPhone14,3"]
+        )
+        let catalog = try DeviceModelCatalog(layers: [[first, second]])
+        #expect(throws: (any Error).self) { _ = try catalog.match(hardware: "iPhone14,3") }
+    }
+
+    @Test func `all lists installed models with higher layers shadowing by id`() throws {
+        let bundled = Self.installed(id: "phone", displayName: "Bundled", directory: "/bundle")
+        let extra = Self.installed(id: "tablet", displayName: "Tablet", directory: "/bundle")
+        let override = Self.installed(id: "phone", displayName: "Override", directory: "/override")
+        let catalog = try DeviceModelCatalog(layers: [[override], [bundled, extra]])
+        let all = catalog.all()
+        #expect(all.map(\.definition.id) == ["phone", "tablet"])
+        #expect(all.first?.definition.displayName == "Override")
+    }
+}

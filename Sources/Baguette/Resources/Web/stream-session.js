@@ -139,7 +139,10 @@
   function buildWSUrl(udid, format, version, display) {
     const loc = window.location;
     const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-    let url = `${proto}//${loc.host}/simulators/${encodeURIComponent(udid)}/stream`
+    // BaguetteTarget switches the base for /devices/:udid pages; the
+    // fallback keeps embedders that load this file standalone working.
+    const base = (window.BaguetteTarget && window.BaguetteTarget.base) || 'simulators';
+    let url = `${proto}//${loc.host}/${base}/${encodeURIComponent(udid)}/stream`
          + `?format=${encodeURIComponent(format)}`
          + `&version=${encodeURIComponent(version)}`;
     if (display === 'phone' || display === 'carplay') {

@@ -58,8 +58,11 @@
     this.background = options.background || this.background;
     this.renderLoading('Loading 3D model…');
     try {
+      const targetPath = (u, rest) => (window.BaguetteTarget
+          ? window.BaguetteTarget.path(u, rest)
+          : '/simulators/' + encodeURIComponent(u) + rest);
       const response = await fetch(
-          '/simulators/' + encodeURIComponent(udid) + '/3d-model.json',
+          targetPath(udid, '/3d-model.json'),
           { cache: 'no-store' }
       );
       if (!response.ok) {
@@ -68,6 +71,18 @@
           : 'Could not load model metadata.');
       }
       this.model = await response.json();
+      if (this.model && this.model.model === null && Array.isArray(this.model.models)) {
+        const stored = localStorage.getItem('baguette.twin.model.' + udid);
+        const choices = this.model.models;
+        const pick = choices.find((m) => m.id === stored);
+        if (pick) {
+          this.modelPick = pick.id;
+          this.model = { id: pick.id, displayName: pick.displayName, variantSets: [] };
+        } else {
+          this.renderModelPicker(this.model.hardware || '', choices);
+          return;
+        }
+      }
       (this.model.variantSets || []).forEach((set) => {
         this.variants[set.id] = set.default;
       });
@@ -77,6 +92,33 @@
     } catch (error) {
       this.renderError(error.message || String(error));
     }
+  };
+
+  /// The phone's gyroscope is driving the pose — say so, and offer
+  /// Re-zero (captures the current physical pose as "facing front").
+  Sim3DPanel.prototype.showGyroChip = function (live) {
+    if (!this.stage) return;
+    let chip = this.stage.querySelector('[data-role="gyro-chip"]');
+    if (!live) { if (chip) chip.remove(); return; }
+    if (chip) return;
+    chip = document.createElement('div');
+    chip.dataset.role = 'gyro-chip';
+    chip.style.cssText =
+        'position:absolute;top:12px;left:12px;display:flex;align-items:center;' +
+        'gap:8px;z-index:6;font:700 11.5px/1 -apple-system,Inter,sans-serif';
+    chip.innerHTML =
+        '<span style="display:inline-flex;align-items:center;gap:7px;height:28px;' +
+        'padding:0 12px;border:1px solid #bbf7d0;border-radius:99px;' +
+        'background:#f0fdf4;color:#15803d">' +
+        '<span style="width:7px;height:7px;border-radius:99px;background:#16a34a"></span>' +
+        'Gyro live</span>' +
+        '<button type="button" data-role="gyro-rezero" style="height:28px;' +
+        'padding:0 12px;border:1px solid #e2e8f0;border-radius:99px;' +
+        'background:#f8fafc;color:#475569;font:inherit;cursor:pointer">Re-zero</button>';
+    this.stage.appendChild(chip);
+    chip.querySelector('[data-role="gyro-rezero"]').addEventListener('click', () => {
+      if (this.session) this.session.send({ type: 'rezero' });
+    });
   };
 
   Sim3DPanel.prototype.mountStage = function () {
@@ -140,12 +182,15 @@
       background: this.background,
     });
     if (this.screenGlass) params.set('screenGlass', 'true');
+    if (this.modelPick) params.set('model', this.modelPick);
     Object.keys(this.variants).forEach((set) => {
       params.append('variant', set + ':' + this.variants[set]);
     });
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const path = '/simulators/' + encodeURIComponent(this.udid) +
-        '/stream.3d.' + this.format + '?' + params.toString();
+    const base = (window.BaguetteTarget
+        ? window.BaguetteTarget.path(this.udid, '')
+        : '/simulators/' + encodeURIComponent(this.udid));
+    const path = base + '/stream.3d.' + this.format + '?' + params.toString();
     this.setState('Loading model…', true);
     this.session = new window.StreamSession({
       udid: this.udid,
@@ -166,6 +211,10 @@
         if (generation !== this.generation) return false;
         if (envelope && envelope.type === 'screen_quad') {
           this.screenQuad = window.Baguette._ScreenQuad.fromCorners(envelope.corners);
+          return true;
+        }
+        if (envelope && envelope.type === 'gyro') {
+          this.showGyroChip(!!envelope.live);
           return true;
         }
         if (envelope && envelope.error) {
@@ -285,6 +334,31 @@
           deviceSize: this.deviceSize, onFps: this.onFps, format: this.format,
         })
     );
+  };
+
+  /// No installed USDZ matches this phone's hardware id. Baguette
+  /// never substitutes a look-alike on its own — the user picks,
+  /// the pick rides `?model=` and is remembered per device.
+  Sim3DPanel.prototype.renderModelPicker = function (hardware, choices) {
+    if (!this.host) return;
+    const options = choices.map((m) =>
+        '<button type="button" data-model-pick="' + m.id + '">' +
+        (window.escapeHTML ? window.escapeHTML(m.displayName) : m.displayName) +
+        '</button>').join('');
+    this.host.innerHTML =
+        '<div class="r3d-empty"><strong>Pick a model for this device</strong>' +
+        '<span>No installed 3D model matches ' + hardware +
+        '. Choose one to stand in:</span>' +
+        '<div data-role="model-choices" style="display:flex;flex-direction:column;gap:6px;margin-top:10px">' +
+        (options || '<em>No models installed</em>') + '</div></div>';
+    this.host.querySelectorAll('[data-model-pick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        localStorage.setItem('baguette.twin.model.' + this.udid, btn.dataset.modelPick);
+        this.attach(this.host, this.stage, this.udid, {
+          deviceSize: this.deviceSize, onFps: this.onFps, format: this.format,
+        });
+      });
+    });
   };
 
   Sim3DPanel.prototype.renderControls = function () {
@@ -704,7 +778,9 @@
         streamSize: this.streamSize(),
       });
       const response = await fetch(
-          '/simulators/' + encodeURIComponent(this.udid) + '/render-3d.png',
+          (window.BaguetteTarget
+              ? window.BaguetteTarget.path(this.udid, '/render-3d.png')
+              : '/simulators/' + encodeURIComponent(this.udid) + '/render-3d.png'),
           {
             method: 'POST',
             cache: 'no-store',

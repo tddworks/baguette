@@ -310,7 +310,8 @@ same Apple-hosted assets used by 3dsg.
   "displayName": "MacBook Pro 14-inch",
   "matches": {
     "simulatorDeviceTypes": [],
-    "deviceNames": ["MacBook Pro 14-inch"]
+    "deviceNames": ["MacBook Pro 14-inch"],
+    "deviceModels": ["Mac14,5"]
   },
   "asset": {
     "file": "macbook-pro-14-in-space-black-variant.usdz",
@@ -353,6 +354,12 @@ same Apple-hosted assets used by 3dsg.
   ]
 }
 ```
+
+`matches.deviceModels` is optional and holds physical hardware
+identifiers (`utsname.machine`, e.g. `"iPhone14,3"`) for the
+device-twin path — see
+[`device-twin.md`](device-twin.md); the two simulator keys are
+unchanged and a definition may declare any mix of the three.
 
 `id` and choice IDs are baguette's stable public vocabulary.
 `usdName`, `usdValue`, and `primPath` are private model instructions. Render

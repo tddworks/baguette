@@ -36,6 +36,25 @@ struct AVCCEnvelopeTests {
         #expect(AVCCEnvelope.seedTag == 0x04)
     }
 
+    @Test func `unwrap recovers the tag and payload of a wrapped chunk`() {
+        let payload = Data([0xDE, 0xAD])
+        let chunk = AVCCEnvelope.keyframe(avcc: payload)
+        let unwrapped = AVCCEnvelope.unwrap(chunk)
+        #expect(unwrapped?.tag == AVCCEnvelope.keyframeTag)
+        #expect(unwrapped?.payload == payload)
+    }
+
+    @Test func `unwrap rejects chunks too short to carry length and tag`() {
+        #expect(AVCCEnvelope.unwrap(Data()) == nil)
+        #expect(AVCCEnvelope.unwrap(Data([0x00, 0x00, 0x00])) == nil)
+    }
+
+    @Test func `unwrap rejects a length prefix that disagrees with the data`() {
+        var lying = AVCCEnvelope.delta(avcc: Data([0x01, 0x02]))
+        lying[3] = 0xFF
+        #expect(AVCCEnvelope.unwrap(lying) == nil)
+    }
+
     @Test func `description prefixes 4-byte big-endian length and tag`() {
         let avcc = Data([0xDE, 0xAD, 0xBE, 0xEF])
         let framed = AVCCEnvelope.description(avcc: avcc)

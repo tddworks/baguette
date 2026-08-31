@@ -4,13 +4,13 @@ import Testing
 @testable import Baguette
 
 /// The static UI lives in subfolders under `Resources/Web/` (`farm/`,
-/// `baguette/gestures/`, `devices/`, …) and Hummingbird needs one
+/// `baguette/gestures/`, `sim-list/`, …) and Hummingbird needs one
 /// literal route per subdirectory (two placeholder routes sharing a
 /// path slot with different param names are rejected). That route
 /// table is data — `Server.staticAssetSubdirectories` — and this
 /// suite pins it against the web root on disk so adding a new
 /// subfolder without routing it fails a test instead of 404ing in
-/// the browser (as `devices/device-filter.js` once did).
+/// the browser (as `sim-list/device-filter.js` once did).
 @Suite("Server static asset routes")
 struct StaticAssetRoutesTests {
 

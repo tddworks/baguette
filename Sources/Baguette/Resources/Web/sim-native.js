@@ -20,7 +20,7 @@
   function deepLinkUdid() {
     const parts = location.pathname.split('/').filter(Boolean);
     if (parts.length !== 2) return null;
-    if (parts[0] !== 'simulators') return null;
+    if (parts[0] !== 'simulators' && parts[0] !== 'devices') return null;
     const u = decodeURIComponent(parts[1]);
     if (!u) return null;
     return u;
@@ -29,6 +29,10 @@
   const udid = deepLinkUdid();
   if (!udid) return; // not deep-link mode; let sim-list run.
   window.__baguetteNativeMode = true;
+  // Physical device behind the mirror: same page, reduced surface —
+  // no boot/orientation calls, sim-only toolbar clusters hidden,
+  // gestures rejected loudly by the server until the control pipe lands.
+  const deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
 
   // --- State -------------------------------------------------------
   let session = null;
@@ -317,10 +321,20 @@
     //    the model has no DeviceKit chrome. Without the catch the whole
     //    bootstrap unwinds and the tab sits blank; the power card says
     //    so instead.
+    // A physical device borrows a user-picked DeviceKit chrome; the
+    // pick is remembered per device and rides `?chrome=` into the
+    // definition route.
+    const chromePick = deviceMode
+        ? localStorage.getItem('baguette.twin.chrome.' + udid) : null;
+    const deviceDefinitionURL = deviceMode
+        ? window.BaguetteTarget.path(udid, '/definition.json')
+            + (chromePick ? '?chrome=' + encodeURIComponent(chromePick) : '')
+        : undefined;
     try {
       sim = await window.Baguette.use({
         host: location.origin,
         udid,
+        definitionURL: deviceDefinitionURL,
         send: (payload) => {
           const out = currentOrientation === 'portrait'
             ? payload
@@ -337,6 +351,13 @@
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
+      if (deviceMode) {
+        // No chrome picked yet (or the pick stopped resolving) — offer
+        // the choices instead of a dead end. The stream needs the
+        // SDK's canvas, so nothing else can start until a pick lands.
+        await showChromePicker();
+        return;
+      }
     }
 
     // 4. Companion-screens rail. Mounted before the stream opens, and
@@ -346,7 +367,7 @@
     //    screen that isn't there is instructions rather than a pane.
     //    Also mounts first so it sits above the plugins rail in the
     //    shared right-edge stack.
-    mountScreensRail();
+    if (!deviceMode) mountScreensRail();
 
     // 5. Settle the codec picker — it's on screen even when no session
     //    ever starts, so a shutdown device can't be left offering H.264.
@@ -380,7 +401,7 @@
     // Swift side routes by extension. The drop zone + highlight are
     // scoped to the device frame so the overlay traces the phone, not
     // the whole page. See docs/features/file-upload.md.
-    if (window.SimFileDrop) {
+    if (window.SimFileDrop && !deviceMode) {
       window.__fileDrop =
           window.SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
     }
@@ -402,10 +423,11 @@
     // has ever been opened. A throttle armed from the CLI in another
     // terminal is exactly the one someone forgets about, and this page is
     // where they will be looking when the app feels slow.
-    watchNetworkArmed();
+    if (!deviceMode) watchNetworkArmed();
   }
 
   function resetToPortrait() {
+    if (deviceMode) return; // a physical phone rotates itself
     fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
         { method: 'POST' }).catch(() => { /* best-effort */ });
   }
@@ -1183,6 +1205,20 @@
   }
 
   async function fetchDeviceMeta(targetUdid) {
+    if (deviceMode) {
+      try {
+        const r = await fetch('/devices.json', { cache: 'no-store' });
+        if (!r.ok) throw new Error(String(r.status));
+        const json = await r.json();
+        const hit = (json.connected || []).find((d) => d.udid === targetUdid);
+        if (hit) {
+          // A connected companion is always live — 'Booted' keeps the
+          // power-card machinery quiet without a device special case.
+          return { name: hit.name || 'Device', runtime: hit.model || '', state: 'Booted' };
+        }
+      } catch { /* fall through to the placeholder */ }
+      return { name: 'Device', runtime: '', state: 'Booted' };
+    }
     try {
       const r = await fetch('/simulators.json', { cache: 'no-store' });
       if (!r.ok) throw new Error(String(r.status));
@@ -1604,8 +1640,105 @@
         .forEach((n) => n.setAttribute('aria-expanded', 'false'));
   }
 
+  /// A physical device renders inside a BORROWED DeviceKit chrome —
+  /// there is no bezel bundle for real hardware on this Mac, and
+  /// baguette never substitutes one silently. Choices are the host's
+  /// simulator device names (those provably have chrome) plus a small
+  /// evergreen set; the pick is stored per device and the page reloads
+  /// into it.
+  async function showChromePicker() {
+    const host = document.getElementById('nativeDeviceFrame') || document.body;
+    const evergreen = ['iPhone 17 Pro', 'iPhone 17 Pro Max', 'iPhone 17', 'iPhone Air'];
+    let names = [];
+    try {
+      const r = await fetch('/simulators.json', { cache: 'no-store' });
+      const json = await r.json();
+      names = (json.running || []).concat(json.available || [])
+          .map((d) => d.name).filter(Boolean);
+    } catch { /* evergreen list still renders */ }
+    const choices = [...new Set(evergreen.concat(names))];
+    const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+    const phoneGlyph =
+        '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" ' +
+        'stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+        '<rect x="4" y="1.5" width="8" height="13" rx="2"></rect>' +
+        '<path d="M6.5 3 L9.5 3"></path></svg>';
+    const card = document.createElement('div');
+    card.id = 'nativeChromePicker';
+    card.style.cssText =
+        'position:absolute;inset:0;display:flex;align-items:center;' +
+        'justify-content:center;z-index:30;background:var(--bg,#f8fafc);' +
+        'font:400 13px/1.45 -apple-system,BlinkMacSystemFont,Inter,sans-serif';
+    card.innerHTML =
+        '<div style="display:flex;flex-direction:column;gap:6px;width:420px;' +
+        'max-width:calc(100vw - 48px);padding:24px;background:#fff;' +
+        'border:1px solid #e2e8f0;border-radius:14px;' +
+        'box-shadow:0 12px 32px rgba(15,23,42,.10)">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+        '<strong style="color:#1f2937;font-size:15px">Pick a frame for this device</strong>' +
+        '<span style="height:18px;padding:0 8px;display:inline-flex;align-items:center;' +
+        'border:1px solid #dbeafe;border-radius:99px;background:#eff6ff;color:#2563eb;' +
+        'font-size:10.5px;font-weight:700;letter-spacing:.03em">DEVICE</span></div>' +
+        '<span style="color:#94a3b8">Real hardware ships no bezel bundle, and ' +
+        'baguette never guesses one — borrow a device chrome:</span>' +
+        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));' +
+        'gap:8px;margin-top:10px">' +
+        choices.map((n) =>
+            '<button type="button" data-chrome-pick="' + esc(n) + '" ' +
+            'style="display:flex;align-items:center;gap:8px;height:38px;' +
+            'padding:0 12px;border:1px solid #e2e8f0;border-radius:9px;' +
+            'background:#f8fafc;color:#475569;font:inherit;font-size:12.5px;' +
+            'font-weight:700;cursor:pointer;text-align:left;' +
+            'transition:border-color .12s,background .12s" ' +
+            'onmouseover="this.style.borderColor=\'#93c5fd\';this.style.background=\'#eff6ff\'" ' +
+            'onmouseout="this.style.borderColor=\'#e2e8f0\';this.style.background=\'#f8fafc\'">' +
+            phoneGlyph + '<span style="overflow:hidden;text-overflow:ellipsis;' +
+            'white-space:nowrap">' + esc(n) + '</span></button>').join('') +
+        '</div>' +
+        '<span style="margin-top:8px;color:#94a3b8;font-size:12px">The frame is ' +
+        'cosmetic — the mirror inside it is your phone either way. Remembered ' +
+        'for this device.</span></div>';
+    host.style.position = host.style.position || 'relative';
+    host.appendChild(card);
+    card.querySelectorAll('[data-chrome-pick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        localStorage.setItem('baguette.twin.chrome.' + udid, btn.dataset.chromePick);
+        location.reload();
+      });
+    });
+  }
+
+  /// Physical devices carry a reduced surface: the sim-only clusters
+  /// (control / simulate / inspect) hide, and a badge says why
+  /// Interact is missing. Stream, 3D view, and capture stay.
+  function applyDeviceModeChrome() {
+    if (!deviceMode) return;
+    ['control', 'simulate', 'inspect'].forEach((id) => {
+      document.querySelectorAll(
+        `#simNativeView [data-cluster="${id}"], #simNativeView [data-sep-for="${id}"], ` +
+        `#simNativeView [data-fold="${id}"]`
+      ).forEach((n) => { n.style.display = 'none'; });
+    });
+    const osEl = document.getElementById('nativeDeviceOS');
+    if (osEl && !document.getElementById('nativeDeviceBadge')) {
+      const badge = document.createElement('span');
+      badge.id = 'nativeDeviceBadge';
+      badge.textContent = 'DEVICE · view-only';
+      badge.title = 'A physical phone mirrored by the companion app. ' +
+        'Touch control arrives with the Twin runner.';
+      badge.style.cssText =
+        'margin-left:8px;padding:2px 8px;border:1px solid #fde68a;' +
+        'border-radius:99px;background:#fef3c7;color:#92400e;' +
+        'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
+      osEl.insertAdjacentElement('afterend', badge);
+    }
+  }
+
   function wireToolbarScroll() {
     if (!buildToolbarClusters()) return;
+    applyDeviceModeChrome();
 
     document.addEventListener('click', (event) => {
       const btn = event.target.closest('#simNativeView .tb-fold-btn');

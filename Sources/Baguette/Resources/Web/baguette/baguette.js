@@ -34,12 +34,16 @@
    * @param {(msg:string, isErr?:boolean)=>void} [opts.log]
    * @returns {Promise<Simulator>}
    */
-  root.Baguette.use = async function use({ host, udid, send, log, getOrientation }) {
+  root.Baguette.use = async function use({ host, udid, send, log, getOrientation, definitionURL }) {
     if (!udid) throw new Error('Baguette.use: udid is required');
     if (typeof send !== 'function') throw new Error('Baguette.use: send must be a function');
 
     const base = host || location.origin;
-    const url  = `${base}/simulators/${encodeURIComponent(udid)}/definition.json`;
+    // `definitionURL` lets a non-simulator surface (a physical device
+    // borrowing a chrome) point the bootstrap somewhere else.
+    const url  = definitionURL
+        ? `${base}${definitionURL}`
+        : `${base}/simulators/${encodeURIComponent(udid)}/definition.json`;
     const res  = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) {
       throw new Error(`Baguette.use: definition fetch failed (${res.status})`);

@@ -15,6 +15,12 @@ protocol DeviceScene: AnyObject, Sendable {
     /// Mutate camera state without reloading the model or reconnecting.
     func update(camera: Device3DCamera)
 
+    /// Pose the model from a gyroscope attitude. The quaternion reaches
+    /// the entity and the screen-quad projection untouched — never
+    /// decomposed into euler angles, whose composition order would not
+    /// match the scene's.
+    func update(pose: Attitude, zoom: Double)
+
     /// Where the screen mesh currently lands in the rendered image, for
     /// mapping browser clicks back onto the device screen without ray
     /// casting into the GPU scene. `nil` until the first render/update.
