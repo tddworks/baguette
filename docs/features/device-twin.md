@@ -53,6 +53,38 @@ and any one can be cut without breaking the other two. That
 severability is the load-bearing property: mirror + twin ships as a
 view-only mode even if control slips a release.
 
+## How it works, end to end
+
+```text
+ iPhone                          Mac (baguette serve)                Browser
+ ───────                         ────────────────────                ───────
+ ReplayKit captures the screen
+   → VTCompressionSession
+     (hardware H.264, 30 fps,
+      latest-frame-drop)
+   → WS /devices/:udid/          TwinSession orders the protocol;
+       companion/video     ───►  VTH264Decoder → IOSurfaces
+                                 → TwinScreen hub (decode once,
+                                   fan out views)
+                                   ├─► MJPEGStream / AVCCStream ──►  2D mirror on the
+                                   │     (existing pipeline)          unified sim page
+                                   └─► RenderedScreen + RealityKit
+ CMDeviceMotion 100 Hz                 (USDZ, borrowed or matched
+   (fused attitude, coalesced           model)
+    latest-drop sends)                   ▲
+   → WS /devices/:udid/          TwinPoses fan-out → TwinGyroState:
+       companion/motion    ───►    absolute stagePose (lay it down,
+                                   it lies down), adaptive jitter
+                                   replay, dead-band, metronome at
+                                   the stream's fps
+                                       └─► stream.3d.mjpeg|avcc ──►  3D twin, gyro
+                                             + screen_quad pushes     chip, Re-zero
+```
+
+Because the server composes pose and screen into ONE rendered stream,
+video/pose timestamp alignment — the classic pain of client-rendered
+twins — does not exist here by construction.
+
 ## Decision record
 
 **Wireless is a requirement**, which forces most of the choices:
@@ -88,6 +120,18 @@ view-only mode even if control slips a release.
   event-synthesis APIs tap system-wide — not a convenience choice,
   the only door. The runner speaks baguette's own gesture envelope
   directly.
+- **ARKit worldTracking — rejected for orientation.** It requires
+  the camera and an `ARSession`, which a broadcast extension cannot
+  run — it would force motion into the suspendable foreground app and
+  cost battery. Its premise is also wrong for us: `CMDeviceMotion` is
+  already sensor-fused (Madgwick-style filtering only applies to raw
+  gyro integration, which baguette never does). ARKit earns its cost
+  only for 6DOF translation — parked as future work.
+- **USB transport (iproxy/usbmuxd) — parked.** Lower jitter than
+  Wi-Fi, but usbmuxd forwards host→device while our sockets run
+  device→host, so wired mode is a topology change (phone-side
+  listener or a reverse relay), not a flag. The adaptive jitter
+  budget is the Wi-Fi answer until someone needs the cable.
 - **Gyro: `CMDeviceMotion` in the broadcast extension** — not the
   app, which suspends when backgrounded; the extension lives exactly
   as long as the mirror, so attitude flows whenever the twin is on
