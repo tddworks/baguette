@@ -373,6 +373,33 @@ orientation, codec) then binary AVCC — the shape baguette's stream
 envelopes already speak, so `.avcc` mirroring can pass encoded frames
 through without re-encoding.
 
+## Performance model
+
+Separation of concerns, applied to resources: the hub serves two
+ROLES, and work happens only where a consumer actually needs it.
+
+- **Byte role — H.264 passthrough.** The phone already encodes H.264;
+  a browser watching the mirror as H.264 gets the companion's own
+  chunks forwarded — no decode, no re-encode, no generation loss, and
+  N viewers share the same bytes. Each byte viewer gets the cached
+  stream description on attach and video resumes at the next keyframe
+  (deltas referencing unseen frames are never forwarded). Stream
+  controls (`set_fps`, `set_bitrate`, `force_idr`) are accepted and
+  ignored — the encoder lives on the phone.
+- **Surface role — lazy pixels.** VideoToolbox decode runs ONLY while
+  something needs pixels (an MJPEG viewer, the 3D twin, recording).
+  The hub refcounts surface consumers: the decoder starts on the
+  first (from the cached description, resuming at the next keyframe —
+  worst case one GOP, ~2 s) and stops after the last. A connected but
+  unwatched phone costs the host nothing.
+
+Parked knobs, recorded so they aren't re-derived: the 3D stage's 2×
+supersampled render (designed for the 20 fps sim pose stage) as a live
+option — the moving twin hides aliasing that a static pose shows; a
+shared MJPEG encoder per hub when multiple MJPEG viewers matter; and
+`serve --tls` so LAN browsers get WebCodecs instead of being forced
+onto MJPEG (issue #71) — the single biggest client-side win available.
+
 ## Implemented so far
 
 The host-side mirror pipeline, all TDD-first

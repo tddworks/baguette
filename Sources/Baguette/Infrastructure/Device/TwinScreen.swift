@@ -16,7 +16,13 @@ final class TwinScreen: @unchecked Sendable {
     private let now: @Sendable () -> TimeInterval
     private let lock = NSLock()
     private var subscribers: [UUID: @Sendable (IOSurface) -> Void] = [:]
+    // Byte-role viewers: H.264 passthrough, each with its own
+    // keyframe gate (false until a keyframe followed their attach or
+    // the latest description).
+    private var byteSubscribers: [UUID: (sink: @Sendable (Data) -> Void, open: Bool)] = [:]
     private var latest: IOSurface?
+    private var descriptionChunk: Data?
+    private var descriptionPayload: Data?
     private var configured = false
     // Deltas that follow a (re)configure reference frames this decoder
     // never saw; VideoToolbox rejects them (-12909). Video resumes at
@@ -53,32 +59,72 @@ final class TwinScreen: @unchecked Sendable {
         }
         switch tag {
         case AVCCEnvelope.descriptionTag:
-            do {
-                try decoder.configure(description: payload) { [weak self] surface in
-                    self?.publish(surface)
-                }
-                lock.lock()
-                configured = true
-                awaitingKeyframe = true
-                lock.unlock()
-            } catch {
-                log("[device] decoder configure failed: \(error)")
-            }
+            lock.lock()
+            descriptionChunk = chunk
+            descriptionPayload = payload
+            let wantsPixels = !subscribers.isEmpty
+            // Fresh parameter sets re-gate every byte viewer too.
+            for id in byteSubscribers.keys { byteSubscribers[id]?.open = false }
+            let byteSinks = byteSubscribers.values.map(\.sink)
+            lock.unlock()
+            for sink in byteSinks { sink(chunk) }
+            if wantsPixels { configureDecoder(payload) }
         case AVCCEnvelope.keyframeTag:
             lock.lock()
             let ready = configured
             awaitingKeyframe = false
+            for id in byteSubscribers.keys { byteSubscribers[id]?.open = true }
+            let byteSinks = byteSubscribers.values.map(\.sink)
             lock.unlock()
+            for sink in byteSinks { sink(chunk) }
             guard ready else { return }
             decoder.decode(payload)
         case AVCCEnvelope.deltaTag:
             lock.lock()
             let ready = configured && !awaitingKeyframe
+            let openSinks = byteSubscribers.values.filter(\.open).map(\.sink)
             lock.unlock()
+            for sink in openSinks { sink(chunk) }
             guard ready else { return }
             decoder.decode(payload)
         default:
             break
+        }
+    }
+
+    /// The byte role: forward the companion's own H.264 chunks — no
+    /// decode, no re-encode, N viewers share the same bytes. The
+    /// cached description replays on attach; video resumes at the
+    /// next keyframe.
+    func attachBytes(id: UUID, sink: @escaping @Sendable (Data) -> Void) {
+        lock.lock()
+        guard !closed else {
+            lock.unlock()
+            return
+        }
+        byteSubscribers[id] = (sink, false)
+        let replay = descriptionChunk
+        lock.unlock()
+        if let replay { sink(replay) }
+    }
+
+    func detachBytes(id: UUID) {
+        lock.lock()
+        byteSubscribers[id] = nil
+        lock.unlock()
+    }
+
+    private func configureDecoder(_ payload: Data) {
+        do {
+            try decoder.configure(description: payload) { [weak self] surface in
+                self?.publish(surface)
+            }
+            lock.lock()
+            configured = true
+            awaitingKeyframe = true
+            lock.unlock()
+        } catch {
+            log("[device] decoder configure failed: \(error)")
         }
     }
 
@@ -112,16 +158,28 @@ final class TwinScreen: @unchecked Sendable {
             lock.unlock()
             return
         }
+        let firstConsumer = subscribers.isEmpty
         subscribers[id] = onFrame
         let replay = latest
+        // Lazy pixels: the decoder exists only while someone needs
+        // surfaces. The first consumer starts it from the cached
+        // description (video resumes at the next keyframe).
+        let pending = (firstConsumer && !configured) ? descriptionPayload : nil
         lock.unlock()
+        if let pending { configureDecoder(pending) }
         if let replay { onFrame(replay) }
     }
 
     fileprivate func detach(id: UUID) {
         lock.lock()
         subscribers[id] = nil
+        let idle = subscribers.isEmpty && configured
+        if idle {
+            configured = false
+            awaitingKeyframe = true
+        }
         lock.unlock()
+        if idle { decoder.stop() }
     }
 }
 
