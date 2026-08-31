@@ -46,6 +46,10 @@ extension Server {
                 ? String(parts[1]).removingPercentEncoding ?? "" : ""
             var session = TwinSession(expecting: pathUdid)
             var udid: String?
+            var lastArrival: TimeInterval?
+            var gapMax = 0.0
+            var gapSum = 0.0
+            var gapCount = 0
             do {
                 for try await frame in inbound {
                     guard frame.opcode == .text else { continue }
@@ -55,7 +59,27 @@ extension Server {
                         udid = hello.udid
                         try? await outbound.write(.text(#"{"ok":true}"#))
                     case .attitude(let sample):
-                        if let udid { poses.update(udid: udid, sample: sample) }
+                        if let udid {
+                            poses.update(udid: udid, sample: sample)
+                            // Cadence telemetry: smoothness disputes are
+                            // settled by arrival gaps, not vibes. One
+                            // line every ~5 s of samples.
+                            let now = ProcessInfo.processInfo.systemUptime
+                            if let last = lastArrival {
+                                let gap = now - last
+                                gapMax = max(gapMax, gap)
+                                gapSum += gap
+                                gapCount += 1
+                                if gapCount >= 300 {
+                                    let mean = gapSum / Double(gapCount) * 1000
+                                    log(String(format:
+                                        "[device] motion cadence: mean %.1fms, worst %.0fms over %d samples",
+                                        mean, gapMax * 1000, gapCount))
+                                    gapMax = 0; gapSum = 0; gapCount = 0
+                                }
+                            }
+                            lastArrival = now
+                        }
                     case .rejected(let reason):
                         try? await outbound.write(.text(Self.twinErrorFrame(reason)))
                     case .streamOpened, .frame:
