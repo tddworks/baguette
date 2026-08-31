@@ -15,7 +15,7 @@ final class MotionSender {
     private let transport: TwinTransport
 
     init?(endpoint: String, deviceId: String) {
-        guard let url = URL(string: "ws://\(endpoint)/devices/companion/motion") else {
+        guard let url = URL(string: "ws://\(endpoint)/devices/\(deviceId)/companion/motion") else {
             return nil
         }
         transport = TwinTransport(url: url)

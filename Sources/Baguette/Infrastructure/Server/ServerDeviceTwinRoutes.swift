@@ -11,9 +11,13 @@ import NIOCore
 /// function.
 ///
 /// ```text
-/// GET /devices.json               → connected companions
-/// WS  /devices/companion/video    → the companion app's video socket
-/// WS  /devices/:udid/stream?format= → mirror frames to the browser
+/// GET /devices.json                        → connected companions
+/// WS  /devices/:udid/companion/video       → that device's video ingest
+/// WS  /devices/:udid/companion/motion      → that device's attitude ingest
+/// WS  /devices/:udid/stream?format=        → mirror frames to the browser
+///
+/// The udid is always in the path, like everywhere else in the tree;
+/// the hello introduces the device but must agree with the address.
 /// ```
 extension Server {
     func registerDeviceTwinRoutes(
@@ -32,10 +36,15 @@ extension Server {
         // at sensor rate. Kept apart from the video socket on purpose —
         // video bursts must never delay 16-byte pose samples.
         router.ws(
-            "/devices/companion/motion",
+            "/devices/:udid/companion/motion",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { inbound, outbound, _ in
-            var session = TwinSession()
+        ) { inbound, outbound, context in
+            // 4 segments — `udidParam`'s second-to-last rule would grab
+            // "companion", so the position is explicit.
+            let parts = context.request.uri.path.split(separator: "/")
+            let pathUdid = parts.count >= 2
+                ? String(parts[1]).removingPercentEncoding ?? "" : ""
+            var session = TwinSession(expecting: pathUdid)
             var udid: String?
             do {
                 for try await frame in inbound {
@@ -218,10 +227,14 @@ extension Server {
         // AVCC chunks. `TwinSession` owns the protocol; this closure
         // only moves bytes and applies the events.
         router.ws(
-            "/devices/companion/video",
+            "/devices/:udid/companion/video",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { inbound, outbound, _ in
+        ) { inbound, outbound, context in
+            let parts = context.request.uri.path.split(separator: "/")
+            let pathUdid = parts.count >= 2
+                ? String(parts[1]).removingPercentEncoding ?? "" : ""
             await Self.twinVideoWS(
+                expecting: pathUdid,
                 devices: devices, screens: screens,
                 inbound: inbound, outbound: outbound
             )
@@ -252,12 +265,13 @@ extension Server {
     }
 
     private static func twinVideoWS(
+        expecting pathUdid: String,
         devices: LiveDevices,
         screens: TwinScreens,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
-        var session = TwinSession()
+        var session = TwinSession(expecting: pathUdid)
         var udid: String?
         var chunks = 0
         log("[device] companion video socket opened")

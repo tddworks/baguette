@@ -85,3 +85,27 @@ struct TwinSessionTests {
         #expect(!reason.isEmpty)
     }
 }
+
+extension TwinSessionTests {
+    @Test func `a session opened for one udid rejects a hello claiming another`() {
+        var session = TwinSession(expecting: "U-PATH")
+        guard case .rejected(let reason) = session.receive(
+            text: #"{"type":"hello","udid":"U-OTHER","name":"iPhone","model":"iPhone17,2"}"#
+        ) else {
+            Issue.record("expected rejection of mismatched udid")
+            return
+        }
+        #expect(reason.contains("U-PATH"))
+    }
+
+    @Test func `a session opened for a udid accepts the matching hello`() {
+        var session = TwinSession(expecting: "U-PATH")
+        guard case .registered(let hello) = session.receive(
+            text: #"{"type":"hello","udid":"U-PATH","name":"iPhone","model":"iPhone17,2"}"#
+        ) else {
+            Issue.record("expected registration")
+            return
+        }
+        #expect(hello.udid == "U-PATH")
+    }
+}

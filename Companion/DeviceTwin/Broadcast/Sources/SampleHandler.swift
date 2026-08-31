@@ -12,9 +12,10 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         let defaults = UserDefaults(suiteName: TwinWire.appGroup)
+        let deviceId = defaults?.string(forKey: TwinWire.deviceIdKey) ?? "unknown-device"
         guard let endpoint = defaults?.string(forKey: TwinWire.endpointKey)
                   .map(TwinWire.normalizedEndpoint),
-              let url = URL(string: "ws://\(endpoint)/devices/companion/video") else {
+              let url = URL(string: "ws://\(endpoint)/devices/\(deviceId)/companion/video") else {
             finishBroadcastWithError(NSError(
                 domain: "baguette.twin", code: 1,
                 userInfo: [NSLocalizedDescriptionKey:
@@ -22,7 +23,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
             ))
             return
         }
-        let deviceId = defaults?.string(forKey: TwinWire.deviceIdKey) ?? "unknown-device"
         NSLog("BaguetteTwin broadcast started → %@", url.absoluteString)
         let transport = TwinTransport(url: url)
         transport.connect()

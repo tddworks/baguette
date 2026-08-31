@@ -540,7 +540,8 @@ answer but nothing populates them — do not propose them for driving a
 device today:
 
 - `GET /devices.json` → `{"connected":[{"udid":…,"name":…,"model":…,"capabilities":[…]}]}`
-- `WS /devices/companion/video` — the phone-side ingest socket:
+- `WS /devices/<UDID>/companion/video` — the phone-side ingest socket
+  (the hello's udid must match the path):
   `{"type":"hello","udid":…,"name":…,"model":…,"capabilities":[…]}`,
   then `{"type":"format","width":…,"height":…,"codec":"avcc"}`, then
   binary AVCC-envelope chunks (same 4-byte-length + tag framing as the

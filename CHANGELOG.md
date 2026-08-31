@@ -37,7 +37,16 @@ For releases prior to this changelog, see the
   key (`utsname.machine` ids), and when nothing matches, the browser
   offers the installed models and the user's pick rides `?model=` on
   the 3D socket — baguette still never substitutes a look-alike on its
-  own. Making `/devices` a resource root moved the
+  own. The 2D page's bezel is borrowed the same way — real hardware
+  ships no DeviceKit chrome, so `definition.json` takes
+  `?chrome=<device name>` and the page offers a frame picker. And the
+  twin turned physical: the broadcast extension streams
+  `CMDeviceMotion` attitude over `WS /devices/companion/motion`
+  (its own socket, so video bursts never delay a pose sample) and the
+  3D stage follows the phone in your hand — auto-zeroed on connect,
+  throttled to ~20 poses/s, `screen_quad` re-pushed for Interact
+  accuracy, with a Gyro-live chip and Re-zero button on the stage.
+  Making `/devices` a resource root moved the
   simulator-list widget assets from `/devices/` to `/sim-list/` —
   the folder held simulator-list UI, and on the public surface
   "devices" now means physical hardware, matching Xcode's own

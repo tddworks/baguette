@@ -17,6 +17,15 @@ struct TwinSession: Sendable {
 
     private(set) var hello: TwinHello?
     private(set) var format: VideoFormat?
+    /// The udid the socket's PATH names (`/devices/:udid/companion/…`).
+    /// The hello must agree — the path is the address, the hello is the
+    /// introduction, and a disagreement is a protocol violation, not a
+    /// tiebreak. `nil` accepts any udid (used by tests of other rules).
+    private let expecting: String?
+
+    init(expecting: String? = nil) {
+        self.expecting = expecting
+    }
 
     mutating func receive(text: String) -> Event {
         let envelope: TwinEnvelope
@@ -29,6 +38,10 @@ struct TwinSession: Sendable {
         case .hello(let incoming):
             guard hello == nil else {
                 return .rejected(reason: "already registered as \(hello!.udid)")
+            }
+            if let expecting, incoming.udid != expecting {
+                return .rejected(reason:
+                    "hello claims \(incoming.udid) but this socket is /devices/\(expecting)")
             }
             hello = incoming
             return .registered(incoming)

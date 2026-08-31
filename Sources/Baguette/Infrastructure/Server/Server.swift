@@ -33,7 +33,8 @@ import NIOCore
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
 ///   WS   /simulators/:udid/stream.3d.:format → live 3D AVCC/MJPEG frames
 ///   GET  /devices.json                      → connected physical devices
-///   WS   /devices/companion/video           → companion app video ingest
+///   WS   /devices/:udid/companion/video     → companion app video ingest
+///   WS   /devices/:udid/companion/motion    → companion app attitude ingest
 ///   WS   /devices/:udid/stream?format=      → physical-device mirror frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///

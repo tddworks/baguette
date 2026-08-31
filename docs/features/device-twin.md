@@ -6,8 +6,11 @@ unified page at `/devices/:udid` (same `sim.html`, reduced surface),
 the DEVICES list section, and the 3D twin stage with hardware-id model
 matching plus a user-pick fallback. The companion app + broadcast
 extension live under `Companion/DeviceTwin/` (Tuist) and stream from a
-real iPhone. Not started: the motion socket (gyro-driven pose) and the
-control pipe (Twin runner).
+real iPhone. The gyro twin is live: attitude flows from the broadcast
+extension over the motion socket into `TwinPoses`, and
+`TwinGyroState` drives the 3D stage's pose (auto-zero on connect,
+~20 applies/s, quad re-pushes for Interact accuracy, browser Re-zero
+chip). Not started: the control pipe (Twin runner).
 
 A real, cable-free iPhone appears in baguette the way a simulator
 does: listed beside simulators, its live screen mirrored into the
@@ -72,8 +75,11 @@ view-only mode even if control slips a release.
   event-synthesis APIs tap system-wide — not a convenience choice,
   the only door. The runner speaks baguette's own gesture envelope
   directly.
-- **Gyro: `CMDeviceMotion` in the companion app.** Public API, 60–100
-  Hz attitude quaternions, four floats a sample. The pleasing
+- **Gyro: `CMDeviceMotion` in the broadcast extension** — not the
+  app, which suspends when backgrounded; the extension lives exactly
+  as long as the mirror, so attitude flows whenever the twin is on
+  screen. Public API, 60–100 Hz attitude quaternions, four floats a
+  sample. The pleasing
   inversion of `Injected/VirtualMotion`: the simulator must be *fed*
   attitude because CoreMotion is gated off there; the real device
   *reports* it, because on hardware CoreMotion is the one thing that
@@ -97,11 +103,10 @@ Companion/DeviceTwin/         phone-side: app + broadcast extension + runner
 ```text
         iPhone (no cable)                                Mac host (baguette serve)
  ┌─────────────────────────────────┐        ┌─────────────────────────────────────┐
- │ Companion app                   │        │                                     │
- │  ├─ CMDeviceMotion 60–100 Hz ───┼──WS───►│ attitude ──► 3D stage model pose    │
- │  ├─ broadcast picker button     │        │                                     │
- │  └─ Broadcast upload extension  │        │                                     │
- │      capture → VideoToolbox ────┼──WS───►│ decode ──► Screen ──► MJPEG/AVCC,   │
+ │ Companion app (pairing UI)      │        │                                     │
+ │ Broadcast upload extension      │        │                                     │
+ │  ├─ CMDeviceMotion 60 Hz ───────┼──WS───►│ attitude ─► TwinPoses ─► 3D pose    │
+ │  └─ capture → VideoToolbox ─────┼──WS───►│ decode ──► Screen ──► MJPEG/AVCC,   │
  │      H.264, encode-and-forward  │        │            recording, 3D stage      │
  │                                 │        │                                     │
  │ Twin runner (XCUITest) ◄────────┼──HTTP──┼── GestureDispatcher ──► Input       │
@@ -114,9 +119,9 @@ Two structural rules:
    jitter must never delay 16-byte pose samples. Degraded looks like
    "the twin stays buttery while the screen texture hiccups"; the two
    freezing together looks broken.
-2. **One envelope dialect, two speakers.** The app (motion) and the
-   extension (video) speak the same framing to the same listener, so
-   the two phone-side processes share transport code.
+2. **One envelope dialect, two sockets, one speaker.** Both sockets
+   speak the same framing from the extension, sharing the `TwinWire`
+   transport code.
 
 ### Everything downstream already exists
 
@@ -222,7 +227,7 @@ Capabilities), and generated artifacts are git-ignored. Targets:
   device id is `identifierForVendor` (a real UDID is not readable
   from app code).
 - **`DeviceTwinBroadcast`** (broadcast upload extension) —
-  `SampleHandler` connects to `/devices/companion/video`, sends the
+  `SampleHandler` connects to `/devices/:udid/companion/video`, sends the
   hello, and hands video buffers to `H264Sender`:
   `VTCompressionSession` (realtime, 4 Mbit/s, keyframe every 60
   frames, 30 fps throttle), avcC extracted from the first sample's
@@ -230,12 +235,14 @@ Capabilities), and generated artifacts are git-ignored. Targets:
   whose payloads are already AVCC length-prefixed. Orientation comes
   from `RPVideoSampleOrientationKey` per buffer.
 
+- **`MotionSender`** (in the broadcast extension, deliberately not
+  the app: the app suspends when backgrounded, the extension lives
+  exactly as long as the mirror) — `CMDeviceMotion` at 60 Hz,
+  reference frame `.xArbitraryZVertical`, on its own socket per the
+  separate-sockets rule.
+
 Still to come in the sub-project:
 
-- **Motion streaming** (twin phase) — the app gains a
-  `CMDeviceMotion.attitude.quaternion` sender (reference frame
-  `.xArbitraryZVertical`; no compass dependency, slow yaw drift
-  corrected by re-zero) once the host's motion socket exists.
 - **Twin runner** (control phase) — the XCUITest target. Launched over
   wireless development pairing; serves the gesture endpoint;
   synthesizes system-wide events through XCTest.
@@ -243,8 +250,10 @@ Still to come in the sub-project:
 ## Route surface
 
 Same resource-tree conventions as everywhere else — no `/api/` prefix,
-UDID in the path — under a sibling root. Format rides `?format=`
-exactly as it does on `/simulators/:udid/stream`, not an extension:
+**UDID always in the path** (the companion sockets included: the path
+is the address, the hello is the introduction, and a hello claiming a
+different udid is rejected loudly) — under a sibling root. Format
+rides `?format=` exactly as it does on `/simulators/:udid/stream`:
 
 ```text
 GET  /devices.json                     connected companions        (implemented)
@@ -252,10 +261,10 @@ GET  /devices/:udid                    the unified page (sim.html) (implemented)
 GET  /devices/:udid/3d-model.json      matched model, or choices   (implemented)
 GET  /devices/:udid/definition.json    SDK bootstrap, ?chrome=name (implemented)
 GET  /devices/:udid/chrome/:name/…     borrowed bezel + button PNGs (implemented)
-WS   /devices/companion/video          companion video ingest      (implemented)
+WS   /devices/:udid/companion/video    that device's video ingest  (implemented)
+WS   /devices/:udid/companion/motion   its attitude ingest         (implemented)
 WS   /devices/:udid/stream?format=     mirror stream, mjpeg|avcc   (implemented)
 WS   /devices/:udid/stream.3d.<fmt>    3D twin stage, mjpeg|avcc   (implemented)
-WS   /devices/companion/motion         attitude ingest             (twin phase)
 ```
 
 The web UI is the **same page** as `/simulators/:udid` — `target.js`
