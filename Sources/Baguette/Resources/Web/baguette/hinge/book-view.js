@@ -1,19 +1,10 @@
-// BookView — a foldable drawn as a book from its 2D frames: the flat
-// view's unfolded device (bezel + live stream, masked, creased) split at
-// the crease into two halves hinged in perspective, posed by `BookPose`.
-// The left half is two-faced: the live cover is on its back, so shutting
-// the book turns the cover toward the viewer.
-//
-// Clicks on the tilted halves land where they look: each half carries
-// 1×1 markers at the screen's corners, the browser projects them, and
-// `mapClientPoint` inverts the projected quad (`ScreenQuad.locate`).
-// Integration-only: DOM and canvas.
+// BookView — the flat view's unfolded device split at the crease into two
+// halves turned in CSS 3D (`BookPose`), the live cover on the left half's
+// back. Integration-only: DOM and canvas.
 (function (root) {
   'use strict';
 
-  // The resolution rim slices are drawn at (an edge, never read).
-  const RIM_SCALE = 0.5;
-  // The rim catches the light at the front and falls off to the back.
+  const RIM_SCALE = 0.5;   // an edge, never read closely
   const RIM_FRONT = [92, 92, 97];
   const RIM_BACK = [28, 28, 31];
 
@@ -25,8 +16,7 @@
   }
   const ready = (img) => !!(img && img.complete && img.naturalWidth);
 
-  // Bezel, screen (masked or rounded) and crease (its opacity, or 0)
-  // into `scratch`, W × H CSS px in the device's own unrotated layout.
+  // Bezel, masked screen and crease into `scratch`, in the device's unrotated layout.
   function compose(scratch, W, H, dpr, { bezel, frame, screen, mask, crease }) {
     const w = Math.max(1, Math.round(W * dpr)), h = Math.max(1, Math.round(H * dpr));
     if (scratch.width !== w || scratch.height !== h) { scratch.width = w; scratch.height = h; }
@@ -68,13 +58,10 @@
 
   class BookView {
     /**
-     * @param {object} front  `{ wrapper, canvas, screenArea, screen }` — the
-     *   flat view's mounted unfolded device and its definition.screen
+     * @param {object} front  `{ wrapper, canvas, screenArea, screen }` of the unfolded device
      * @param {object} back   `{ canvas, screen }` — the live cover feed
      * @param {number} rotation  the page's CSS rotation of `wrapper`, degrees
-     * @param {object} [opts]  `onMount(stage)` — each time the stage is
-     *   built, so input can be bound to it; `layer` — the element the
-     *   stage is added to, so the page's bars can stay above it
+     * @param {object} [opts]  `onMount(stage)` to bind input; `layer` to add the stage to
      */
     constructor(front, back, rotation, { onMount, layer } = {}) {
       this.front = front;
@@ -110,8 +97,7 @@
       this.degrees = degrees;
       if (this.disposed) return;
       if (!this.stage && !this._mount()) {
-        // A device just mounted has no size until its bezel loads; try
-        // again next frame rather than wait for the next hinge sample.
+        // Not laid out yet; retry next frame rather than on the next sample.
         if (!this.retry) {
           this.retry = requestAnimationFrame(() => { this.retry = 0; this.show(this.degrees); });
         }
@@ -121,7 +107,6 @@
       this.leafAngles = a;
       this.leaves.left.el.style.transform = `rotateY(${a.left}deg)`;
       this.leaves.right.el.style.transform = `rotateY(${a.right}deg)`;
-      // Past the crease the left half lies over the right one.
       this.leaves.left.el.style.zIndex = a.left > 90 ? '2' : '1';
       const BookPose = root.Baguette.BookPose;
       this.stage.style.transform = `translateX(${BookPose.shift(degrees, this.halfW)}px)`
@@ -129,13 +114,11 @@
       if (!this.raf) this._tick();
     }
 
-    /** Stop redrawing; the halves keep their last frame. */
     freeze() {
       if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
       this.frozen = true;
     }
 
-    /** Fade the stage out over `ms` onto whatever the page now shows. */
     fadeOut(ms) {
       if (!this.stage) return;
       this.freeze();
@@ -184,9 +167,7 @@
         return m;
       };
       const dpr = this.dpr;
-      // The body's thickness: slices of the device's own outline stacked
-      // behind the screen, so a tilted half shows its rim and the corners
-      // stay round. Drawn once (`_drawRims`), then only composited.
+      // Thickness: slices of the device's outline stacked behind the screen, drawn once.
       const T = Math.max(4, Math.round(rect.width * root.Baguette.BookPose.THICKNESS));
       const slices = Math.max(4, Math.min(12, Math.round(T / 2)));
       const leaf = (side) => {
@@ -214,8 +195,7 @@
         el.appendChild(c);
         let back = null;
         if (side === 'left' && this.back) {
-          // The cover at its own shape, as tall as the half and centred on
-          // it — exactly where and how big the flat cover stands.
+          // At its own shape, centred on the half: where the flat cover stands.
           const cvp = this.back.screen.viewport;
           const o = root.Baguette.BookPose.coverOverhang(halfW, H, cvp.width / cvp.height);
           this.coverWidth = halfW + 2 * o;
@@ -226,7 +206,7 @@
             + `transform:translateZ(${-T - 0.5}px) rotateY(180deg);`;
           el.appendChild(back);
         }
-        // This half's share of the screen, leaf-local: TL, TR, BR, BL.
+        // Screen corners (TL, TR, BR, BL), projected by the browser for mapClientPoint.
         const x0 = side === 'left' ? screenBox.left : 0;
         const x1 = side === 'left' ? halfW : screenBox.left + screenBox.width - halfW;
         const y0 = screenBox.top, y1 = screenBox.top + screenBox.height;
@@ -258,8 +238,7 @@
       }));
     }
 
-    /** Client point → screen point through the half it lands on. The
-     *  left half's screen faces away once it has turned past 90°. */
+    /** Client point → screen point; the left half faces away past 90°. */
     mapClientPoint(clientX, clientY, size) {
       const miss = { x: 0, y: 0, xNorm: 0, yNorm: 0, inside: false };
       if (!this.leaves) return miss;
@@ -276,8 +255,6 @@
       return miss;
     }
 
-    // Each rim slice is the device's outline (the composed scratch's
-    // alpha, turned as the page shows it) filled with its shade.
     _drawRims(W, Hu) {
       const halfW = this.halfW, H = this.height;
       for (const side of ['left', 'right']) {
@@ -318,12 +295,11 @@
         ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         ctx.clearRect(0, 0, halfW, H);
         ctx.save();
-        // Each half holds its own half of the turned device, centred on the crease.
         ctx.translate(side === 'left' ? halfW : 0, H / 2);
         ctx.rotate(this.rotation * Math.PI / 180);
         ctx.drawImage(this.scratch, -W / 2, -Hu / 2, W, Hu);
         ctx.restore();
-        // A half turned away from the viewer darkens toward the spine.
+        // Darken toward the spine as the half turns away.
         const tilt = this.leafAngles ? Math.min(90, Math.abs(this.leafAngles[side])) : 0;
         const shade = tilt / 90 * 0.45;
         if (shade > 0.01) {
@@ -341,7 +317,6 @@
       const back = this.leaves.left.back;
       if (!back || !this.back) return;
       const vp = this.back.screen.viewport;
-      // The cover fills its half, hinge side against the crease.
       compose(this.backScratch, vp.width, vp.height, this.dpr, {
         bezel: this.backImgs.bezel, frame: this.back.canvas, screen: this.back.screen,
         mask: this.backImgs.mask, crease: 0,

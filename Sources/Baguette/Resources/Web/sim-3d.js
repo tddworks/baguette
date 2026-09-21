@@ -272,10 +272,7 @@
         '<path d="M6 8V5.8a3 3 0 0 1 6 0V8"/></svg>';
   };
 
-  /**
-   * Device Hub's pose bar, under the book (`FoldBar`): the slider leads
-   * the hinge while dragged and the book follows the hinge samples.
-   */
+  /** Device Hub's pose bar under the book (`FoldBar`). */
   Sim3DPanel.prototype.placePosePicker = function (pose) {
     if (!this.stage) return;
     const FoldBar = window.Baguette && window.Baguette.FoldBar;
@@ -315,8 +312,7 @@
         ? window.BaguetteTarget.path(this.udid, '')
         : '/simulators/' + encodeURIComponent(this.udid));
     const path = base + '/stream.3d.' + this.format + '?' + params.toString();
-    // The server explains a refusal and then closes; the close must not
-    // bury the reason.
+    // The server explains a refusal, then closes; keep its reason on screen.
     let refused = false;
     this.setState('Loading model…', true);
     this.session = new window.StreamSession({

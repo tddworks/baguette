@@ -27,8 +27,8 @@ struct VerifiedDeviceAssets: @unchecked Sendable {
 
     func resolve(_ model: InstalledDeviceModel) throws -> URL {
         // An asset Apple ships inside Xcode: `<Xcode>/Contents/<resource>`,
-        // the developer dir being `<Xcode>/Contents/Developer`. The selected
-        // Xcode first, then any other installed one — a beta-only asset.
+        // the developer dir being `<Xcode>/Contents/Developer`. Other Xcodes
+        // too: a beta-only asset isn't in the selected one.
         if let resource = model.definition.asset.xcodeResource, !resource.isEmpty {
             for dir in [developerDir()] + installedDeveloperDirs() {
                 let candidate = URL(fileURLWithPath: dir)

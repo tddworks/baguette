@@ -1,8 +1,6 @@
 'use strict';
 
 // What the live 3D stage says when its socket ends before a frame lands.
-// The server explains a refusal (no model in this Xcode, an unknown
-// device) and then closes; the reason must survive the close.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

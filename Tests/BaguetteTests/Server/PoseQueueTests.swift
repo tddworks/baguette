@@ -3,8 +3,6 @@ import Testing
 import Mockable
 @testable import Baguette
 
-// A socket's `set_pose` requests: a slider drag sends a burst, and the
-// hinge should catch up to the thumb rather than replay its path.
 @Suite("PoseQueue")
 struct PoseQueueTests {
     @Test func `a burst plays the request under way and the newest, skipping the ones between`() async {
@@ -22,8 +20,6 @@ struct PoseQueueTests {
     }
 }
 
-// `set_pose` rides both sockets — the flat stream's fold bar and the 3D
-// book's pose picker — and moves the device's own hinge.
 @Suite("Server pose request")
 struct ServerPoseRequestTests {
     private func wiring() -> (MockSimulators, MockHinge) {

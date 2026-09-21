@@ -1,9 +1,5 @@
-// BookPose — how the flat view draws a foldable at a hinge angle: the
-// cover when shut, the unfolded panel when flat, and in between a book —
-// the unfolded panel split at the crease, the cover on the back of its
-// left half — posed as Device Hub's model is (`FoldPose` on the server):
-// above the open pose the bend is centred, below it the left half folds
-// over onto the right so the cover ends facing the viewer.
+// BookPose — how the flat view draws a foldable at a hinge angle, posed
+// as the server's `FoldPose` poses the 3D model.
 (function (root) {
   'use strict';
 
@@ -13,14 +9,11 @@
   const OPEN_POSE_DEGREES = 130;
   const CREASE_FLAT = 0.05;
   const CREASE_SHUT = 0.25;
-  // As shares of the whole unfolded device's width: each half's
-  // thickness, and the viewer's distance (CSS perspective).
+  // Shares of the unfolded device's width: each half's thickness, the viewer's distance.
   const THICKNESS = 0.024;
   const PERSPECTIVE = 3;
 
-  // How much taller than laid flat the book looks at this angle: its
-  // nearest point (a half's outer edge, raised toward the viewer) seen
-  // through the perspective.
+  // How much taller than flat the book looks: a half's outer edge comes toward the viewer.
   function magnification(degrees) {
     const { left, right } = BookPose.leaves(degrees);
     const sin = (d) => Math.max(0, Math.sin(d * Math.PI / 180));
@@ -37,11 +30,10 @@
 
     static magnification(degrees) { return magnification(degrees); }
 
-    /** How much larger than the flat device the box is: room for the open
-     *  pose's nearer edges, so it fills the box and never spills out. */
+    /** Room kept round the flat device so the open pose fills the box. */
     static get RESERVE() { return magnification(OPEN_POSE_DEGREES); }
 
-    /** Scale that brings a pose bulging past the box back into it. */
+    /** Scales a pose that would bulge past the box back into it. */
     static stageScale(degrees) {
       return Math.min(1, BookPose.RESERVE / magnification(degrees));
     }
@@ -53,13 +45,12 @@
       return 'book';
     }
 
-    /** The panel the view streams as its own: the cover only when shut. */
+    /** The book is the unfolded panel, so only shut streams the cover. */
     static panel(degrees) {
       return BookPose.view(degrees) === 'cover' ? 'primary' : 'secondary';
     }
 
-    /** Each half's turn about the crease, degrees; positive rotateY brings
-     *  an element's left edge forward. */
+    /** Each half's rotateY about the crease; the left half folds over the right. */
     static leaves(degrees) {
       const fold = Math.max(0, Math.min(180, 180 - degrees));
       const share = Math.max(0, Math.min(1, degrees / OPEN_POSE_DEGREES));
@@ -67,15 +58,12 @@
       return { left: r2(fold + right), right: r2(right) };
     }
 
-    /** The crease line's opacity: a hairline flat, deeper as it bends. */
     static creaseOpacity(degrees) {
       const fold = Math.max(0, Math.min(180, 180 - degrees));
       return r2(CREASE_FLAT + (CREASE_SHUT - CREASE_FLAT) * fold / 180);
     }
 
-    /** The device's unrotated size and place, px, to show it contained and
-     *  centred in `box` once turned by `rotation`; `aspect` is its own
-     *  width / height. One box for every pose keeps the page still. */
+    /** Unrotated size and offset, px, that contain the device in `box` once turned. */
     static fitDevice(box, aspect, rotation) {
       const turned = (((rotation % 360) + 360) % 360) % 180 !== 0;
       const shown = turned ? 1 / aspect : aspect;
@@ -88,14 +76,12 @@
       };
     }
 
-    /** How far the cover, drawn at its own shape and as tall as a half,
-     *  overhangs each side of that half (negative: it falls short). */
+    /** How far the cover, drawn at its own shape, overhangs each side of its half. */
     static coverOverhang(halfWidth, height, coverAspect) {
       return (height * coverAspect - halfWidth) / 2;
     }
 
-    /** Sideways shift, px, that keeps the folding book centred where the
-     *  flat device was; `halfWidth` is one half's width. */
+    /** Sideways shift, px, that keeps the folding book centred. */
     static shift(degrees, halfWidth) {
       const { left, right } = BookPose.leaves(degrees);
       const rad = (d) => d * Math.PI / 180;

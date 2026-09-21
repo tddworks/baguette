@@ -1,7 +1,6 @@
 'use strict';
 
-// Baguette.use — a page that already holds a definition (a foldable's
-// other panel, swapped in mid-fold) builds its simulator without a fetch.
+// Baguette.use with a definition in hand skips the fetch (a foldable's other panel).
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

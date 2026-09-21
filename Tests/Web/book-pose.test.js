@@ -1,8 +1,6 @@
 'use strict';
 
-// BookPose — how the flat view draws a foldable at a hinge angle: the
-// cover when shut, the unfolded panel flat when flat, and in between a
-// book whose two halves turn about the crease as Device Hub's model does.
+// BookPose — how the flat view draws a foldable at a hinge angle.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -29,8 +27,6 @@ test('shut shows the cover, flat the unfolded panel, anything between the book',
   assert.equal(BookPose.view(180), 'flat');
 });
 
-// The book is the unfolded panel with the cover on its back, so only the
-// shut device streams the cover as the view's own panel.
 test('the view streams the cover only when shut', () => {
   const BookPose = load();
   assert.equal(BookPose.panel(0), 'primary');
@@ -45,9 +41,6 @@ test('between open and flat both halves take half the bend, spine centred', () =
   assert.deepEqual(BookPose.leaves(130), { left: 25, right: -25 });
 });
 
-// The cover is the back of the left half: shutting lays the left half
-// onto the right, which settles flat, handing over continuously from
-// the open pose down.
 test('closing past the open pose, the left half folds over onto the right', () => {
   const BookPose = load();
   assert.deepEqual(BookPose.leaves(0), { left: 180, right: 0 });
@@ -58,7 +51,6 @@ test('closing past the open pose, the left half folds over onto the right', () =
   }
 });
 
-// The crease is a hairline laid flat and deepens as the panel bends.
 test('the crease is faint when flat and darkens with the fold', () => {
   const BookPose = load();
   assert.equal(BookPose.creaseOpacity(180), 0.05);
@@ -67,9 +59,7 @@ test('the crease is faint when flat and darkens with the fold', () => {
   assert.equal(BookPose.creaseOpacity(200), 0.05);
 });
 
-// One box holds every pose: the unfolded device fills it landscape, the
-// cover stands in it as tall as the box, centred — so nothing around it
-// moves as the device folds. Sizes are the device's own, unrotated.
+// Sizes are the device's own, unrotated.
 test('the unfolded device turned landscape fills the box exactly', () => {
   const BookPose = load();
   const box = { width: 924, height: 660 };
@@ -93,17 +83,13 @@ test('a device wider than the box is held to its width', () => {
   assert.ok(fit.height < 660);
 });
 
-// The book's back carries the cover at its own shape, centred on the
-// half it lies over when shut — so the shut book is the cover exactly.
 test('the cover on the book overhangs its half by the shapes the two differ by', () => {
   const BookPose = load();
   assert.equal(BookPose.coverOverhang(462, 660, 514 / 706), (660 * 514 / 706 - 462) / 2);
   assert.ok(BookPose.coverOverhang(500, 660, 514 / 706) < 0);
 });
 
-// Perspective brings a bent half's outer edge toward the viewer, so it
-// looks taller than the device laid flat. The box keeps room for Device
-// Hub's open pose; any pose that would bulge past it is scaled back in.
+// Perspective makes a bent half's outer edge look taller than the flat device.
 test('the box keeps room for the open pose to fill it', () => {
   const BookPose = load();
   assert.ok(BookPose.RESERVE > 1.08 && BookPose.RESERVE < 1.09);
@@ -119,8 +105,6 @@ test('a half turned toward the viewer is scaled back into the box', () => {
   assert.ok(Math.abs(BookPose.magnification(60) * s - BookPose.RESERVE) < 1e-9);
 });
 
-// As the book shuts it narrows to its right half; Device Hub keeps the
-// device in the middle, so the book slides back by half what it lost.
 test('the book is shifted to stay centred as it folds', () => {
   const BookPose = load();
   assert.equal(BookPose.shift(180, 200), 0);

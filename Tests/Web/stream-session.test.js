@@ -44,7 +44,6 @@ test('buildWSUrl appends display=phone when requested', () => {
   );
 });
 
-// A foldable's flat view pins its stream to the panel it shows.
 test('buildWSUrl pins a foldable panel when asked', () => {
   const { StreamSession } = loadStreamSession();
   assert.equal(

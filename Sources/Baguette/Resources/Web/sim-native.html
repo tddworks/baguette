@@ -1631,15 +1631,9 @@
   #simNativeView .r3d-pose-picker {
     position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 6;
   }
-  /* Under the flat chrome: the device gives up the bar's height (the bar
-     and its gap, with the 2px the 68px budget is already short by). */
+  /* The bar and its gap, plus the 2px the 68px budget is already short by. */
   #simNativeView[data-fold-bar] { --nv-fold-bar-h: 48px; }
-  /* A foldable draws every pose in one box (`fitFoldable`): the hidden
-     sizer is the full height the device may take — so the toolbar stays
-     at the top and the pose bar at the bottom, as for a phone that fills
-     the window — and as wide as the unfolded device held landscape, within
-     the page's width. The mounted panel is placed in it by JS, centred,
-     so no CSS cap may resize it. */
+  /* One full-height box for every pose (`fitFoldable` places the panel in it). */
   #simNativeView #nativeDeviceFrame[data-fold-box] { position: relative; }
   #simNativeView #nativeDeviceFrame[data-fold-box] > div,
   #simNativeView #nativeDeviceFrame[data-fold-box] img,

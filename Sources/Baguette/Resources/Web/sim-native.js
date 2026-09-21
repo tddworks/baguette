@@ -354,18 +354,13 @@
         ? window.BaguetteTarget.path(udid, '/definition.json')
             + (chromePick ? '?chrome=' + encodeURIComponent(chromePick) : '')
         : undefined;
-    // A foldable (iPhone Duo) shows the flat chrome of whichever panel
-    // the hinge lights, its stream pinned to that panel, with Device
-    // Hub's pose bar under it. The 3D book is one cube click away, as
-    // any device's model is.
     const hinge = deviceMode ? null : await readHinge();
     foldable = !!(hinge && hinge.foldable);
     if (foldable) {
       hingeDegrees = typeof hinge.angleDegrees === 'number'
         ? hinge.angleDegrees : (hinge.litPanel === 'secondary' ? 130 : 0);
       shownPanel = window.Baguette.BookPose.panel(hingeDegrees);
-      // Both panels' chromes up front: a fold never waits on a fetch, and
-      // the unfolded one sizes the box every pose is drawn in.
+      // Both up front: a fold never waits on a fetch, and the unfolded one sizes the box.
       await Promise.all(['primary', 'secondary'].map((p) => panelDefinition(p).catch(() => null)));
     }
     try {
@@ -492,14 +487,7 @@
   }
 
   // --- Foldable (iPhone Duo) ------------------------------------------
-  //
-  // Two panels and a hinge. The flat view draws the pose (`BookPose`):
-  // shut, the cover's chrome and stream; flat, the unfolded panel's; in
-  // between, the unfolded device as a book (`BookView`) with the live
-  // cover on the back of its left half, fed by a second stream pinned to
-  // the cover. Hinge samples on the stream socket drive it. The guest
-  // turns the unfolded panel to landscape by itself, so once the hinge
-  // goes quiet the page asks `/hinge` which way the panel faces.
+  // Posed by the hinge (`BookPose`); see docs/features/iphone-duo.md.
   let foldable = false;
   let shownPanel = 'primary';
   let hingeDegrees = 0;
@@ -532,20 +520,13 @@
     return definitions[panel];
   }
 
-  // Each panel faces the way SpringBoard turns it by itself: the cover
-  // portrait, the unfolded panel landscape-left. Connected Screens' `UI
-  // Orientation` can't say otherwise — it is the device's one interface
-  // orientation, reported on every panel alike — so it is not read here.
+  // As SpringBoard turns each panel; `/hinge`'s orientation is device-wide, not per panel.
   function panelOrientation() {
     return shownPanel === 'secondary' ? 'landscape-left' : 'portrait';
   }
 
-  // One box for every pose: a hidden sizer the unfolded device's shape,
-  // landscape, sized by the page's usual device limits; whichever panel
-  // is mounted is placed in it (`BookPose.fitDevice`). So the toolbar and
-  // pose bar never move as the device folds, and the cover stands exactly
-  // where the shut book leaves it. A mount clears the frame, so the sizer
-  // is put back each time.
+  // One box for every pose, so nothing around the device moves as it folds.
+  // A mount clears the frame, so the sizer is put back each time.
   let foldBoxObserver = null;
   function fitFoldable() {
     const frame = document.getElementById('nativeDeviceFrame');
@@ -567,8 +548,7 @@
     }
     const wrapper = frame.querySelector(':scope > div');
     if (!wrapper || !sizer.offsetWidth || !sizer.offsetHeight) return;
-    // The device lies flat inside the box with room kept round it for
-    // the open pose, whose nearer edges perspective makes taller.
+    // Room kept round the flat device for the open pose's nearer edges.
     const vp = sim.def.screen.viewport;
     const boxW = sizer.offsetWidth, boxH = sizer.offsetHeight;
     const inner = { width: boxW / BookPose.RESERVE, height: boxH / BookPose.RESERVE };
@@ -580,7 +560,6 @@
     wrapper.style.top = (sizer.offsetTop + (boxH - inner.height) / 2 + fit.top) + 'px';
   }
 
-  // A canvas's current picture, kept for the next surface to start from.
   function copyCanvas(source, into) {
     const out = into || document.createElement('canvas');
     if (!source || !source.width || !source.height) return out;
@@ -606,7 +585,6 @@
     foldBar.show(hingeDegrees);
   }
 
-  // A hinge sample on the flat stream: move the bar and pose the view.
   function followHinge(env) {
     if (!foldable || typeof env.angleDegrees !== 'number') return;
     if (foldBar) foldBar.show(env.angleDegrees);
@@ -639,7 +617,6 @@
         rotationDegrees,
         { layer: document.getElementById('simNativeView') || document.body,
           onMount: (stage) => {
-          // Taps on the tilted halves land where they look.
           const screen = sim.screen;
           screen.bindInteraction({
             element: stage, overlayHost: stage,
@@ -663,7 +640,7 @@
     }
   }
 
-  // The cover, streamed into a canvas nobody sees, for the book's back.
+  // The cover, streamed offscreen for the book's back.
   function startCoverFeed() {
     if (coverFeed || !window.StreamSession) return;
     const canvas = copyCanvas(coverSnapshot);
@@ -687,7 +664,7 @@
     confirmTimer = setTimeout(confirmPose, delay);
   }
 
-  // The fallback for samples the socket missed.
+  // Fallback for samples the socket missed.
   async function confirmPose() {
     confirmTimer = null;
     const state = await readHinge();
@@ -698,9 +675,7 @@
     }
   }
 
-  // Swaps the flat view to `target`'s chrome and a stream pinned to it,
-  // carrying the last picture across so nothing flashes black. A newer
-  // swap that lands first wins; this one then stands down.
+  // Carries the last picture across so nothing flashes black; a newer swap wins.
   async function showPanel(target) {
     if (target === shownPanel && !panelSwap) return;
     shownPanel = target;
@@ -721,7 +696,6 @@
       coverSnapshot = copyCanvas(leaving.canvas);
     } else if (target === 'primary') {
       carry = coverFeed ? copyCanvas(coverFeed.canvas) : coverSnapshot;
-      // The shut book fades over the cover as it comes in.
       closeBook({ fade: true });
     }
     if (leaving) { try { leaving.detach(); } catch (_) { /* ignore */ } }
@@ -732,10 +706,7 @@
     fitFoldable();
     panelSwap = null;
     if (!is3DOpen() && !powerCard) {
-      // The hinge samples ride the stream socket, and the server stops
-      // watching the hinge once no socket is left — mid-sweep, the new
-      // socket's watch would miss the fold. Hand over: the new socket
-      // first, the old one a moment later.
+      // New socket first: with none left the server stops watching the hinge mid-sweep.
       const previous = session;
       if (previous) { cancelRecording('switched panels'); session = null; }
       startSession(currentFormat());
@@ -745,8 +716,7 @@
     confirmPoseSoon(1500);
   }
 
-  // Leaving 3D on a foldable: the hinge may have moved while the book
-  // was shown, so come back to the view its angle draws.
+  // The hinge may have moved while the 3D book was shown.
   function returnToFlat() {
     const shown = render3DPanel && typeof render3DPanel.hingeDegrees === 'number'
       ? render3DPanel.hingeDegrees : hingeDegrees;
@@ -1411,8 +1381,7 @@
     firstFrameTimer = setTimeout(hidePowerCard, FIRST_FRAME_TIMEOUT_MS);
   }
 
-  // The live view of a booted guest: the flat stream in the device's
-  // chrome — on a foldable, posed by its hinge, with the pose bar under it.
+  // The live view of a booted guest: the flat stream in the device's chrome.
   function startMainView() {
     if (foldable) {
       showFoldBar();
@@ -2226,8 +2195,7 @@
         fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
         return;
       }
-      // A foldable's flat view turns without the animation, so a book
-      // drawn over it can be rebuilt at the new turn at once.
+      // No animation, so the book can be rebuilt at the new turn at once.
       if (foldable) {
         snapOrientation(value);
         if (book) { closeBook(); applyPose(hingeDegrees); }
@@ -2479,7 +2447,6 @@
     const btn = document.getElementById('native3DToggle');
     const open = view && view.getAttribute('data-render3d') === 'open';
     if (!view || !host || !stage || !sim) return;
-    // A foldable's book is shown straight on, with its pose bar and keys.
     const fixed = !!(opts && opts.fixed) || foldable;
     // The canvas being recorded is about to be swapped for the other
     // mode's, and the two are different surfaces at different sizes.
@@ -2518,7 +2485,6 @@
       if (!render3DPanel && window.Sim3DPanel && udid) {
         render3DPanel = new window.Sim3DPanel();
         render3DPanel.setCaptureSettings(captureSettings());
-        // The book stands the way the flat view was turned.
         if (foldable) render3DPanel.interfaceOrientation = currentOrientation;
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },

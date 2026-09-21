@@ -43,11 +43,7 @@ struct SharedHingeTests {
         wa.cancel(); wb.cancel()
     }
 
-    /// A foldable's page opens its stream and the book's cover feed
-    /// together, so two sockets subscribe at once. Both used to see no
-    /// monitor and start one; the second overwrote the first, which was
-    /// never stopped — and a second concurrent devicectl monitor answers
-    /// wrong angles, so the page flipped panels on stale samples.
+    /// A second devicectl monitor answers wrong angles, and the overwritten one was never stopped.
     @Test func `two watchers joining while the monitor starts share one monitor`() {
         let hinge = SlowStartingHinge()
         let shared = SharedHinge(inner: hinge)
@@ -68,9 +64,7 @@ struct SharedHingeTests {
         #expect(hinge.cancels == 1)
     }
 
-    /// A monitor whose first start takes a while, as devicectl's does. A
-    /// hand-rolled fake: a generated mock serialises its calls, so a start
-    /// held open would lock out the second caller this test is about.
+    /// Hand-rolled: a generated mock serialises calls, so a held start would block the second caller.
     final class SlowStartingHinge: Hinge, @unchecked Sendable {
         let starting = DispatchSemaphore(value: 0)
         let gate = DispatchSemaphore(value: 0)

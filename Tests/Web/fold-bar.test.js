@@ -1,8 +1,6 @@
 'use strict';
 
-// FoldBar — Device Hub's pose bar for a foldable: shut, open, flat and a
-// hinge slider that leads the hinge while dragged, in the flat view and
-// under the 3D book alike.
+// FoldBar — Device Hub's pose bar: three poses and a hinge slider.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

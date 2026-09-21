@@ -1,10 +1,7 @@
 import Foundation
 
-/// One socket's `set_pose` requests, played in the order they came, one
-/// at a time. A slider drag sends a burst, and detached drives racing for
-/// the motor would leave the hinge wherever the last to win said; a
-/// request the burst has already passed is skipped, so the hinge catches
-/// up to the thumb rather than replaying its path.
+/// One socket's `set_pose` requests, played in order; a request a slider
+/// burst has already passed is skipped, so the hinge catches up to the thumb.
 final class PoseQueue: @unchecked Sendable {
     private let lock = NSLock()
     private var tail: Task<Void, Never>?

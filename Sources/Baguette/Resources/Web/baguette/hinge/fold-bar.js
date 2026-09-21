@@ -1,8 +1,5 @@
-// FoldBar — Device Hub's pose bar for a foldable: shut, open (its 130°
-// book pose) and flat, then the hinge slider. A pick sweeps the device's
-// own hinge there; the slider puts it where the thumb is as it is
-// dragged. The pose nearest the hinge lights up and the slider tracks
-// the hinge whenever nobody holds it.
+// FoldBar — Device Hub's pose bar for a foldable: three poses and a hinge
+// slider the hinge follows while dragged.
 (function (root) {
   'use strict';
 
@@ -12,7 +9,6 @@
     { id: 'flat', degrees: 180, label: 'Flat' },
   ];
 
-  // The slider sends at most this often while dragged.
   const DRAG_INTERVAL_MS = 40;
 
   class FoldBar {
@@ -62,7 +58,7 @@
       this.send({ type: 'set_pose', hingeDegrees: degrees, duration: 0 });
     }
 
-    /** The hinge's reading: light the nearest pose, move the free slider. */
+    /** The slider follows the hinge unless it is held. */
     show(hingeDegrees) {
       const degrees = Number(hingeDegrees);
       if (!Number.isFinite(degrees)) return;
@@ -71,7 +67,6 @@
       this.render();
     }
 
-    /** Builds the bar into `container`; `className` places it. */
     mount(container, { className = '', glyph } = {}) {
       this.detach();
       const el = document.createElement('div');

@@ -1581,8 +1581,7 @@ struct Server: Sendable {
         }
     }
 
-    /// `set_pose` on a foldable's socket, flat or 3D: queued onto its
-    /// hinge, off the socket's loop. `false` for any other line.
+    /// Queues a `set_pose` line onto the hinge; `false` for any other line.
     static func queuePose(
         line: String, udid: String, simulators: any Simulators, poses: PoseQueue
     ) throws -> Bool {
@@ -2882,7 +2881,8 @@ struct Server: Sendable {
                         continue
                     }
                     // The pose picker: the device's own hinge is swept
-                    // there; the book follows the hinge samples as it goes.
+                    // there (a second or so, off this loop); the book
+                    // follows the hinge samples as it goes.
                     if foldable != nil,
                        try queuePose(line: line, udid: udid, simulators: simulators, poses: poses) {
                         continue
@@ -2991,8 +2991,6 @@ struct Server: Sendable {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
-                // The flat view's fold bar: the same `set_pose` the 3D
-                // book's picker sends, onto the device's own hinge.
                 if foldable {
                     do {
                         if try queuePose(line: line, udid: udid, simulators: simulators, poses: poses) {

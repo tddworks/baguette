@@ -151,8 +151,7 @@ extension VerifiedDeviceAssetsTests {
         }
     }
 
-    // The Duo's model ships only in the Xcode beta that brings its
-    // runtime, while `xcode-select` usually still names the release.
+    // The Duo's model ships only in the Xcode beta; xcode-select usually names the release.
     @Test func `an Xcode asset the selected Xcode lacks is read from another installed Xcode`() throws {
         let scratch = try Self.makeScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
