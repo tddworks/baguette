@@ -175,7 +175,11 @@ their projected quad (`ScreenQuad.locate`) into the unfolded panel's
 tap space; the cover on the back is not tappable.
 
 Crossing into or out of the cover swaps chrome and stream in place,
-carrying the last picture across: opening starts the book with the
+the new socket opened before the old one closes: the hinge samples ride
+the stream socket, and the server stops watching the hinge once no
+socket is left, so a swap mid-sweep would otherwise lose the fold until
+the page's `/hinge` fallback caught up. It carries the last picture
+across: opening starts the book with the
 cover's last frame on its back, and shutting fades the book out over
 the cover's flat chrome. Under the device sits Device Hub's pose bar
 (`FoldBar`, `baguette/hinge/fold-bar.js`): Closed (0°), Open (130°),
@@ -185,11 +189,12 @@ socket pushes every hinge sample (`{"type":"hinge","angleDegrees":130.0}`)
 and the page re-poses on each. The cube button opens the 3D book
 (below) straight on and closes back to the flat view.
 
-**One box for every pose.** The page reserves a single box the shape of
-the unfolded device held landscape — a hidden sizer that takes the
-page's usual device limits, less a margin — and places whichever panel
-is mounted in it (`BookPose.fitDevice`), so the toolbar and pose bar
-never move as the device folds. The flat device sits inside with room
+**One box for every pose.** The page reserves a single box — a hidden
+sizer as tall as the device may be, so the toolbar stays at the top and
+the pose bar at the bottom as they do for a phone that fills the window,
+and as wide as the unfolded device held landscape within the page's
+width — and places whichever panel is mounted in it, centred
+(`BookPose.fitDevice`), so nothing moves as the device folds. The flat device sits inside with room
 kept round it (`BookPose.RESERVE`, ≈ 8.5%) for the open pose, whose
 nearer edges perspective makes taller; a pose that would bulge further
 (a half turned edge-on toward the viewer) is scaled back in

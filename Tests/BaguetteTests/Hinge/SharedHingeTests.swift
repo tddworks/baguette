@@ -43,6 +43,57 @@ struct SharedHingeTests {
         wa.cancel(); wb.cancel()
     }
 
+    /// A foldable's page opens its stream and the book's cover feed
+    /// together, so two sockets subscribe at once. Both used to see no
+    /// monitor and start one; the second overwrote the first, which was
+    /// never stopped — and a second concurrent devicectl monitor answers
+    /// wrong angles, so the page flipped panels on stale samples.
+    @Test func `two watchers joining while the monitor starts share one monitor`() {
+        let hinge = SlowStartingHinge()
+        let shared = SharedHinge(inner: hinge)
+        final class Box: @unchecked Sendable { var watch: (any HingeWatch)? }
+        let first = Box()
+        let firstJoined = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            first.watch = shared.watch { _ in }
+            firstJoined.signal()
+        }
+        hinge.starting.wait()
+        let second = shared.watch { _ in }
+        hinge.gate.signal()
+        firstJoined.wait()
+        #expect(hinge.starts == 1)
+        second.cancel()
+        first.watch?.cancel()
+        #expect(hinge.cancels == 1)
+    }
+
+    /// A monitor whose first start takes a while, as devicectl's does. A
+    /// hand-rolled fake: a generated mock serialises its calls, so a start
+    /// held open would lock out the second caller this test is about.
+    final class SlowStartingHinge: Hinge, @unchecked Sendable {
+        let starting = DispatchSemaphore(value: 0)
+        let gate = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var startCount = 0, cancelCount = 0
+        var starts: Int { lock.withLock { startCount } }
+        var cancels: Int { lock.withLock { cancelCount } }
+
+        func angle() -> HingeAngle? { nil }
+        func fold(to degrees: Double, over duration: TimeInterval) throws {}
+        func watch(onAngle: @escaping @Sendable (HingeAngle) -> Void) -> any HingeWatch {
+            let first = lock.withLock { startCount += 1; return startCount == 1 }
+            if first { starting.signal(); gate.wait() }
+            return Stop { [self] in lock.withLock { cancelCount += 1 } }
+        }
+
+        final class Stop: HingeWatch, @unchecked Sendable {
+            let run: () -> Void
+            init(_ run: @escaping () -> Void) { self.run = run }
+            func cancel() { run() }
+        }
+    }
+
     @Test func `a watcher joining a running monitor is told the standing angle at once`() {
         // devicectl reports a change-driven stream: the standing angle
         // comes once, at start. A socket that joins later — a 3D scene

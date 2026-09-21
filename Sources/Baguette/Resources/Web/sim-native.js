@@ -513,6 +513,7 @@
   const loadedDefinitions = {};
   const HINGE_QUIET_MS = 900;
   const COVER_FADE_MS = 180;
+  const SOCKET_HANDOVER_MS = 1500;
 
   function panelDefinitionURL(panel) {
     return '/simulators/' + encodeURIComponent(udid) + '/definition.json?panel=' + panel;
@@ -730,7 +731,16 @@
     snapOrientation(panelOrientation());
     fitFoldable();
     panelSwap = null;
-    if (!is3DOpen() && !powerCard) startSession(currentFormat());
+    if (!is3DOpen() && !powerCard) {
+      // The hinge samples ride the stream socket, and the server stops
+      // watching the hinge once no socket is left — mid-sweep, the new
+      // socket's watch would miss the fold. Hand over: the new socket
+      // first, the old one a moment later.
+      const previous = session;
+      if (previous) { cancelRecording('switched panels'); session = null; }
+      startSession(currentFormat());
+      if (previous) setTimeout(() => { try { previous.stop(); } catch (_) { /* ignore */ } }, SOCKET_HANDOVER_MS);
+    }
     applyPose(hingeDegrees);
     confirmPoseSoon(1500);
   }

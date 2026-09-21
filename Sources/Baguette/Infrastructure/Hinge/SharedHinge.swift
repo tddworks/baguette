@@ -20,6 +20,11 @@ final class SharedHinge: Hinge, @unchecked Sendable {
     private let lock = NSLock()
     private var subscribers: [UUID: @Sendable (HingeAngle) -> Void] = [:]
     private var innerWatch: (any HingeWatch)?
+    /// Claimed under the lock by whoever starts the inner watch, before
+    /// the (slow) start: a second subscriber arriving meanwhile must not
+    /// start another — two devicectl monitors disagree, and the loser was
+    /// never stopped.
+    private var watching = false
     private var last: (angle: HingeAngle, at: Date)?
 
     /// How long the last sample stays the answer after the watch
@@ -115,13 +120,16 @@ final class SharedHinge: Hinge, @unchecked Sendable {
         let id = UUID()
         lock.lock()
         subscribers[id] = onAngle
-        let startInner = innerWatch == nil
+        let startInner = !watching
+        watching = true
         // The stream is change-driven: its standing angle came once, at
         // start. A watcher joining a running monitor gets it now.
         let standing = startInner ? nil : last?.angle
         lock.unlock()
         if let standing { onAngle(standing) }
         if startInner {
+            // The starter stays subscribed until this returns, so nobody
+            // can empty the subscribers before the watch is recorded.
             let started = inner.watch { [weak self] angle in self?.deliver(angle) }
             lock.lock()
             innerWatch = started
@@ -142,7 +150,7 @@ final class SharedHinge: Hinge, @unchecked Sendable {
         lock.lock()
         subscribers[id] = nil
         let stop = subscribers.isEmpty ? innerWatch : nil
-        if stop != nil { innerWatch = nil }
+        if subscribers.isEmpty { innerWatch = nil; watching = false }
         lock.unlock()
         stop?.cancel()
     }

@@ -36,6 +36,14 @@ For releases prior to this changelog, see the
   `V68.usdz` ships only in the Xcode 27.1 beta, while `xcode-select`
   usually names the release; an `asset.xcodeResource` is now looked up
   in every installed `/Applications/Xcode*.app` after the selected one.
+- **One hinge monitor per device, even when two sockets join at once.**
+  `SharedHinge` checked for a running monitor under its lock but only
+  recorded the one it started after the (slow) start, so two sockets
+  subscribing together each started a `devicectl` monitor; the first
+  was overwritten and never stopped. Two monitors on one device report
+  disagreeing angles, which made a foldable's page flip panels on stale
+  samples and hold a fold for seconds. The start is now claimed under
+  the lock.
 - **The 3D stage keeps the server's reason.** A refusal sent before the
   socket closed (a missing model, an unknown device) was overwritten by
   "3D stream disconnected"; it now stays on screen.

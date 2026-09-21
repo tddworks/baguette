@@ -1631,12 +1631,15 @@
   #simNativeView .r3d-pose-picker {
     position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 6;
   }
-  /* Under the flat chrome: the device gives up the bar's height. */
-  #simNativeView[data-fold-bar] { --nv-fold-bar-h: 44px; }
-  /* A foldable draws every pose in one box, the unfolded device's shape
-     landscape (`fitFoldable`): the hidden sizer takes the page's usual
-     device limits, less a margin so the bars never touch the device, and
-     the mounted panel is placed in it by JS — so no CSS cap may resize it. */
+  /* Under the flat chrome: the device gives up the bar's height (the bar
+     and its gap, with the 2px the 68px budget is already short by). */
+  #simNativeView[data-fold-bar] { --nv-fold-bar-h: 48px; }
+  /* A foldable draws every pose in one box (`fitFoldable`): the hidden
+     sizer is the full height the device may take — so the toolbar stays
+     at the top and the pose bar at the bottom, as for a phone that fills
+     the window — and as wide as the unfolded device held landscape, within
+     the page's width. The mounted panel is placed in it by JS, centred,
+     so no CSS cap may resize it. */
   #simNativeView #nativeDeviceFrame[data-fold-box] { position: relative; }
   #simNativeView #nativeDeviceFrame[data-fold-box] > div,
   #simNativeView #nativeDeviceFrame[data-fold-box] img,
@@ -1646,9 +1649,10 @@
   }
   #simNativeView #nativeDeviceFrame > canvas[data-fold-sizer] {
     display: block; visibility: hidden; pointer-events: none;
-    width: auto; height: auto; margin: 12px 0;
+    width: auto;
+    height: calc(var(--nv-device-max-h) - var(--nv-fold-bar-h, 0px)) !important;
     max-width: var(--nv-device-max-w) !important;
-    max-height: calc(var(--nv-device-max-h) - var(--nv-fold-bar-h, 0px) - 24px) !important;
+    max-height: none !important;
   }
   /* Above the folding book (z 30), as the toolbar is. */
   #simNativeView #nativeFoldBar { flex: none; position: relative; z-index: 50; }
