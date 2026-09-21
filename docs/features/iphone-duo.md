@@ -182,11 +182,29 @@ the cover's flat chrome. Under the device sits Device Hub's pose bar
 Flat (180°) and the hinge slider, which the hinge follows as it is
 dragged — the same `set_pose` bursts the 3D socket takes. The stream
 socket pushes every hinge sample (`{"type":"hinge","angleDegrees":130.0}`)
-and the page re-poses on each. The guest turns the unfolded panel to
-landscape by itself, so the page starts it at landscape-left and, once
-the hinge goes quiet, asks `GET /hinge` which way it faces; the book is
-only drawn for a vertical crease (landscape). The cube button opens the
-3D book (below) straight on and closes back to the flat view.
+and the page re-poses on each. The cube button opens the 3D book
+(below) straight on and closes back to the flat view.
+
+**One box for every pose.** The page reserves a single box the shape of
+the unfolded device held landscape — a hidden sizer that takes the
+page's usual device limits, less a margin — and places whichever panel
+is mounted in it (`BookPose.fitDevice`), so the toolbar and pose bar
+never move as the device folds. The flat device sits inside with room
+kept round it (`BookPose.RESERVE`, ≈ 8.5%) for the open pose, whose
+nearer edges perspective makes taller; a pose that would bulge further
+(a half turned edge-on toward the viewer) is scaled back in
+(`BookPose.stageScale`). The cover stands as tall as the unfolded device
+and centred, and the book's back carries it at the same shape and place
+(`BookPose.coverOverhang`), so the shut book is the cover exactly.
+
+**Orientation is not read back.** Each panel is shown the way
+SpringBoard turns it by itself — the cover portrait, the unfolded panel
+landscape-left — and the rotate button turns it from there. Connected
+Screens' `UI Orientation` cannot say otherwise: it is the device's one
+interface orientation, reported on every panel alike (measured: both
+read *Landscape Left* at every angle while the unfolded panel was lit),
+so a cover read that way turns sideways. The book is only drawn for a
+vertical crease (landscape).
 
 **Which panel is lit is the guest's call, not a function of the
 angle.** `HingeAngle.litPanel` splits at 90°, which agrees with

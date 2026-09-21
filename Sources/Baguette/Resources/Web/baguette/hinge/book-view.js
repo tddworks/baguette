@@ -11,9 +11,7 @@
 (function (root) {
   'use strict';
 
-  // Each half's thickness as a share of the whole device's width, and
-  // the resolution its rim slices are drawn at (an edge, never read).
-  const THICKNESS = 0.024;
+  // The resolution rim slices are drawn at (an edge, never read).
   const RIM_SCALE = 0.5;
   // The rim catches the light at the front and falls off to the back.
   const RIM_FRONT = [92, 92, 97];
@@ -75,12 +73,14 @@
      * @param {object} back   `{ canvas, screen }` — the live cover feed
      * @param {number} rotation  the page's CSS rotation of `wrapper`, degrees
      * @param {object} [opts]  `onMount(stage)` — each time the stage is
-     *   built, so input can be bound to it
+     *   built, so input can be bound to it; `layer` — the element the
+     *   stage is added to, so the page's bars can stay above it
      */
-    constructor(front, back, rotation, { onMount } = {}) {
+    constructor(front, back, rotation, { onMount, layer } = {}) {
       this.front = front;
       this.back = back;
       this.onMount = onMount || null;
+      this.layer = layer || document.body;
       this.host = null;
       this.rotation = ((rotation % 360) + 360) % 360;
       this.frontImgs = {
@@ -123,8 +123,9 @@
       this.leaves.right.el.style.transform = `rotateY(${a.right}deg)`;
       // Past the crease the left half lies over the right one.
       this.leaves.left.el.style.zIndex = a.left > 90 ? '2' : '1';
-      const shift = root.Baguette.BookPose.shift(degrees, this.halfW);
-      this.stage.style.transform = `translateX(${shift}px)`;
+      const BookPose = root.Baguette.BookPose;
+      this.stage.style.transform = `translateX(${BookPose.shift(degrees, this.halfW)}px)`
+        + ` scale(${BookPose.stageScale(degrees)})`;
       if (!this.raf) this._tick();
     }
 
@@ -173,7 +174,8 @@
       stage.style.cssText = [
         'position:fixed', `left:${rect.left}px`, `top:${rect.top}px`,
         `width:${rect.width}px`, `height:${H}px`,
-        'z-index:30', 'perspective:1600px', 'perspective-origin:50% 50%',
+        'z-index:30', `perspective:${root.Baguette.BookPose.PERSPECTIVE * rect.width}px`,
+        'perspective-origin:50% 50%',
         'cursor:crosshair', 'touch-action:none', 'user-select:none', '-webkit-user-select:none',
       ].join(';');
       const marker = (x, y) => {
@@ -185,7 +187,7 @@
       // The body's thickness: slices of the device's own outline stacked
       // behind the screen, so a tilted half shows its rim and the corners
       // stay round. Drawn once (`_drawRims`), then only composited.
-      const T = Math.max(4, Math.round(rect.width * THICKNESS));
+      const T = Math.max(4, Math.round(rect.width * root.Baguette.BookPose.THICKNESS));
       const slices = Math.max(4, Math.min(12, Math.round(T / 2)));
       const leaf = (side) => {
         const el = document.createElement('div');
@@ -212,9 +214,16 @@
         el.appendChild(c);
         let back = null;
         if (side === 'left' && this.back) {
+          // The cover at its own shape, as tall as the half and centred on
+          // it — exactly where and how big the flat cover stands.
+          const cvp = this.back.screen.viewport;
+          const o = root.Baguette.BookPose.coverOverhang(halfW, H, cvp.width / cvp.height);
+          this.coverWidth = halfW + 2 * o;
           back = document.createElement('canvas');
-          back.width = c.width; back.height = c.height;
-          back.style.cssText = box + `transform:translateZ(${-T - 0.5}px) rotateY(180deg);`;
+          back.width = Math.round(this.coverWidth * dpr); back.height = c.height;
+          back.style.cssText = plain + `left:${-o}px;width:${this.coverWidth}px;`
+            + 'backface-visibility:hidden;-webkit-backface-visibility:hidden;'
+            + `transform:translateZ(${-T - 0.5}px) rotateY(180deg);`;
           el.appendChild(back);
         }
         // This half's share of the screen, leaf-local: TL, TR, BR, BL.
@@ -229,7 +238,7 @@
       this.leaves = { left: leaf('left'), right: leaf('right') };
       stage.appendChild(this.leaves.left.el);
       stage.appendChild(this.leaves.right.el);
-      document.body.appendChild(stage);
+      this.layer.appendChild(stage);
       this.stage = stage;
       this.halfW = halfW;
       this.height = H;
@@ -339,8 +348,8 @@
       });
       const ctx = back.getContext('2d');
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      ctx.clearRect(0, 0, halfW, H);
-      ctx.drawImage(this.backScratch, 0, 0, halfW, H);
+      ctx.clearRect(0, 0, this.coverWidth, H);
+      ctx.drawImage(this.backScratch, 0, 0, this.coverWidth, H);
     }
   }
 

@@ -19,7 +19,9 @@ For releases prior to this changelog, see the
   in CSS 3D, each given a rim by stacked slices of the device's own
   outline, the live cover on the left half's back, taps mapped through
   the tilted halves. The crease is a faint hairline flat and deepens as
-  the device folds. Streams are pinned per panel (`?panel=`), swapped
+  the device folds. Every pose is drawn in one box, the unfolded
+  device's shape landscape, so the toolbar and pose bar never move and
+  the cover stands exactly where the shut book leaves it. Streams are pinned per panel (`?panel=`), swapped
   in place as the hinge crosses shut. Device Hub's pose bar sits under
   it — Closed / Open / Flat and a hinge slider the hinge follows as it
   is dragged (`FoldBar`, shared with the 3D book). The cube opens the 3D

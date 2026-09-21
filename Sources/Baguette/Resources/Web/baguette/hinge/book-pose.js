@@ -13,11 +13,38 @@
   const OPEN_POSE_DEGREES = 130;
   const CREASE_FLAT = 0.05;
   const CREASE_SHUT = 0.25;
+  // As shares of the whole unfolded device's width: each half's
+  // thickness, and the viewer's distance (CSS perspective).
+  const THICKNESS = 0.024;
+  const PERSPECTIVE = 3;
+
+  // How much taller than laid flat the book looks at this angle: its
+  // nearest point (a half's outer edge, raised toward the viewer) seen
+  // through the perspective.
+  function magnification(degrees) {
+    const { left, right } = BookPose.leaves(degrees);
+    const sin = (d) => Math.max(0, Math.sin(d * Math.PI / 180));
+    const near = 0.5 * Math.max(sin(left), sin(-right)) + THICKNESS;
+    return PERSPECTIVE / (PERSPECTIVE - near);
+  }
 
   const r2 = (v) => Math.round(v * 100) / 100 || 0;   // no -0
 
   class BookPose {
     static get OPEN_POSE_DEGREES() { return OPEN_POSE_DEGREES; }
+    static get THICKNESS() { return THICKNESS; }
+    static get PERSPECTIVE() { return PERSPECTIVE; }
+
+    static magnification(degrees) { return magnification(degrees); }
+
+    /** How much larger than the flat device the box is: room for the open
+     *  pose's nearer edges, so it fills the box and never spills out. */
+    static get RESERVE() { return magnification(OPEN_POSE_DEGREES); }
+
+    /** Scale that brings a pose bulging past the box back into it. */
+    static stageScale(degrees) {
+      return Math.min(1, BookPose.RESERVE / magnification(degrees));
+    }
 
     /** 'cover' | 'book' | 'flat' */
     static view(degrees) {
@@ -44,6 +71,27 @@
     static creaseOpacity(degrees) {
       const fold = Math.max(0, Math.min(180, 180 - degrees));
       return r2(CREASE_FLAT + (CREASE_SHUT - CREASE_FLAT) * fold / 180);
+    }
+
+    /** The device's unrotated size and place, px, to show it contained and
+     *  centred in `box` once turned by `rotation`; `aspect` is its own
+     *  width / height. One box for every pose keeps the page still. */
+    static fitDevice(box, aspect, rotation) {
+      const turned = (((rotation % 360) + 360) % 360) % 180 !== 0;
+      const shown = turned ? 1 / aspect : aspect;
+      let vw = box.width, vh = box.width / shown;
+      if (vh > box.height) { vh = box.height; vw = box.height * shown; }
+      const width = r2(turned ? vh : vw), height = r2(turned ? vw : vh);
+      return {
+        width, height,
+        left: r2((box.width - width) / 2), top: r2((box.height - height) / 2),
+      };
+    }
+
+    /** How far the cover, drawn at its own shape and as tall as a half,
+     *  overhangs each side of that half (negative: it falls short). */
+    static coverOverhang(halfWidth, height, coverAspect) {
+      return (height * coverAspect - halfWidth) / 2;
     }
 
     /** Sideways shift, px, that keeps the folding book centred where the

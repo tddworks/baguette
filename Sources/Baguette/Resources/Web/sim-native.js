@@ -152,6 +152,7 @@
       for (const wrapper of root.querySelectorAll(':scope > div')) {
         wrapper.style.transform = 'rotate(' + rotationDegrees + 'deg)';
       }
+      fitFoldable();
     }
   }
 
@@ -174,6 +175,7 @@
       void wrapper.offsetWidth;
       wrapper.style.transition = t;
     }
+    fitFoldable();
   }
 
   // Map a normalized coord [0, 1]² from the rotated visual frame
@@ -359,18 +361,19 @@
     const hinge = deviceMode ? null : await readHinge();
     foldable = !!(hinge && hinge.foldable);
     if (foldable) {
-      lastHinge = hinge;
       hingeDegrees = typeof hinge.angleDegrees === 'number'
         ? hinge.angleDegrees : (hinge.litPanel === 'secondary' ? 130 : 0);
       shownPanel = window.Baguette.BookPose.panel(hingeDegrees);
-      // Both panels' chromes, so a fold never waits on a fetch.
-      panelDefinition(shownPanel === 'primary' ? 'secondary' : 'primary').catch(() => {});
+      // Both panels' chromes up front: a fold never waits on a fetch, and
+      // the unfolded one sizes the box every pose is drawn in.
+      await Promise.all(['primary', 'secondary'].map((p) => panelDefinition(p).catch(() => null)));
     }
     try {
       sim = await useSimulator(foldable
           ? { definition: await panelDefinition(shownPanel) }
           : { definitionURL: deviceDefinitionURL });
       sim.mount(document.getElementById('nativeDeviceFrame'));
+      fitFoldable();
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
@@ -500,7 +503,6 @@
   let foldable = false;
   let shownPanel = 'primary';
   let hingeDegrees = 0;
-  let lastHinge = null;
   let foldBar = null;
   let book = null;
   let coverFeed = null;
@@ -529,11 +531,52 @@
     return definitions[panel];
   }
 
+  // Each panel faces the way SpringBoard turns it by itself: the cover
+  // portrait, the unfolded panel landscape-left. Connected Screens' `UI
+  // Orientation` can't say otherwise — it is the device's one interface
+  // orientation, reported on every panel alike — so it is not read here.
   function panelOrientation() {
-    if (lastHinge && lastHinge.litPanel === shownPanel && lastHinge.orientation) {
-      return lastHinge.orientation;
-    }
     return shownPanel === 'secondary' ? 'landscape-left' : 'portrait';
+  }
+
+  // One box for every pose: a hidden sizer the unfolded device's shape,
+  // landscape, sized by the page's usual device limits; whichever panel
+  // is mounted is placed in it (`BookPose.fitDevice`). So the toolbar and
+  // pose bar never move as the device folds, and the cover stands exactly
+  // where the shut book leaves it. A mount clears the frame, so the sizer
+  // is put back each time.
+  let foldBoxObserver = null;
+  function fitFoldable() {
+    const frame = document.getElementById('nativeDeviceFrame');
+    const unfolded = loadedDefinitions.secondary;
+    const BookPose = window.Baguette && window.Baguette.BookPose;
+    if (!foldable || !frame || !unfolded || !sim || !BookPose) return;
+    frame.setAttribute('data-fold-box', '');
+    let sizer = frame.querySelector(':scope > canvas[data-fold-sizer]');
+    if (!sizer) {
+      sizer = document.createElement('canvas');
+      sizer.setAttribute('data-fold-sizer', '');
+      sizer.width = unfolded.screen.viewport.height;
+      sizer.height = unfolded.screen.viewport.width;
+      frame.insertBefore(sizer, frame.firstChild);
+    }
+    if (!foldBoxObserver && window.ResizeObserver) {
+      foldBoxObserver = new ResizeObserver(() => fitFoldable());
+      foldBoxObserver.observe(frame);
+    }
+    const wrapper = frame.querySelector(':scope > div');
+    if (!wrapper || !sizer.offsetWidth || !sizer.offsetHeight) return;
+    // The device lies flat inside the box with room kept round it for
+    // the open pose, whose nearer edges perspective makes taller.
+    const vp = sim.def.screen.viewport;
+    const boxW = sizer.offsetWidth, boxH = sizer.offsetHeight;
+    const inner = { width: boxW / BookPose.RESERVE, height: boxH / BookPose.RESERVE };
+    const fit = BookPose.fitDevice(inner, vp.width / vp.height, rotationDegrees);
+    wrapper.style.position = 'absolute';
+    wrapper.style.width = fit.width + 'px';
+    wrapper.style.height = fit.height + 'px';
+    wrapper.style.left = (sizer.offsetLeft + (boxW - inner.width) / 2 + fit.left) + 'px';
+    wrapper.style.top = (sizer.offsetTop + (boxH - inner.height) / 2 + fit.top) + 'px';
   }
 
   // A canvas's current picture, kept for the next surface to start from.
@@ -593,7 +636,8 @@
           screenArea: sim.screenArea, screen: sim.def.screen },
         coverFeed && cover ? { canvas: coverFeed.canvas, screen: cover.screen } : null,
         rotationDegrees,
-        { onMount: (stage) => {
+        { layer: document.getElementById('simNativeView') || document.body,
+          onMount: (stage) => {
           // Taps on the tilted halves land where they look.
           const screen = sim.screen;
           screen.bindInteraction({
@@ -642,19 +686,14 @@
     confirmTimer = setTimeout(confirmPose, delay);
   }
 
-  // The fallback for missed samples, and the panel's facing once still.
+  // The fallback for samples the socket missed.
   async function confirmPose() {
     confirmTimer = null;
     const state = await readHinge();
     if (!state || !state.foldable || is3DOpen()) return;
-    lastHinge = state;
     if (typeof state.angleDegrees === 'number' && Math.abs(state.angleDegrees - hingeDegrees) > 0.5) {
       if (foldBar) foldBar.show(state.angleDegrees);
       applyPose(state.angleDegrees);
-    }
-    if (state.litPanel === shownPanel && state.orientation && state.orientation !== currentOrientation) {
-      snapOrientation(state.orientation);
-      if (book) { closeBook(); applyPose(hingeDegrees); }
     }
   }
 
@@ -689,6 +728,7 @@
     sim.mount(document.getElementById('nativeDeviceFrame'));
     if (carry) copyCanvas(carry, sim.canvas);
     snapOrientation(panelOrientation());
+    fitFoldable();
     panelSwap = null;
     if (!is3DOpen() && !powerCard) startSession(currentFormat());
     applyPose(hingeDegrees);

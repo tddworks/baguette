@@ -67,6 +67,58 @@ test('the crease is faint when flat and darkens with the fold', () => {
   assert.equal(BookPose.creaseOpacity(200), 0.05);
 });
 
+// One box holds every pose: the unfolded device fills it landscape, the
+// cover stands in it as tall as the box, centred — so nothing around it
+// moves as the device folds. Sizes are the device's own, unrotated.
+test('the unfolded device turned landscape fills the box exactly', () => {
+  const BookPose = load();
+  const box = { width: 924, height: 660 };
+  assert.deepEqual(BookPose.fitDevice(box, 660 / 924, 90), { width: 660, height: 924, left: 132, top: -132 });
+});
+
+test('the cover stands as tall as the box, centred', () => {
+  const BookPose = load();
+  const box = { width: 924, height: 660 };
+  const fit = BookPose.fitDevice(box, 514 / 706, 0);
+  assert.equal(fit.height, 660);
+  assert.equal(Math.round(fit.width), 481);
+  assert.equal(Math.round(fit.left), 222);
+  assert.equal(fit.top, 0);
+});
+
+test('a device wider than the box is held to its width', () => {
+  const BookPose = load();
+  const fit = BookPose.fitDevice({ width: 400, height: 660 }, 514 / 706, 0);
+  assert.equal(fit.width, 400);
+  assert.ok(fit.height < 660);
+});
+
+// The book's back carries the cover at its own shape, centred on the
+// half it lies over when shut — so the shut book is the cover exactly.
+test('the cover on the book overhangs its half by the shapes the two differ by', () => {
+  const BookPose = load();
+  assert.equal(BookPose.coverOverhang(462, 660, 514 / 706), (660 * 514 / 706 - 462) / 2);
+  assert.ok(BookPose.coverOverhang(500, 660, 514 / 706) < 0);
+});
+
+// Perspective brings a bent half's outer edge toward the viewer, so it
+// looks taller than the device laid flat. The box keeps room for Device
+// Hub's open pose; any pose that would bulge past it is scaled back in.
+test('the box keeps room for the open pose to fill it', () => {
+  const BookPose = load();
+  assert.ok(BookPose.RESERVE > 1.08 && BookPose.RESERVE < 1.09);
+  assert.equal(BookPose.stageScale(180), 1);
+  assert.equal(BookPose.stageScale(130), 1);
+  assert.equal(BookPose.stageScale(0), 1);
+});
+
+test('a half turned toward the viewer is scaled back into the box', () => {
+  const BookPose = load();
+  const s = BookPose.stageScale(60);   // the left half nearly edge-on
+  assert.ok(s < 0.95 && s > 0.85, `scale ${s}`);
+  assert.ok(Math.abs(BookPose.magnification(60) * s - BookPose.RESERVE) < 1e-9);
+});
+
 // As the book shuts it narrows to its right half; Device Hub keeps the
 // device in the middle, so the book slides back by half what it lost.
 test('the book is shifted to stay centred as it folds', () => {
