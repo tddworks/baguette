@@ -26,8 +26,8 @@ For releases prior to this changelog, see the
   it — Closed / Open / Flat and a hinge slider the hinge follows as it
   is dragged (`FoldBar`, shared with the 3D book). The cube opens the 3D
   book straight on, as before, and closes back to the flat view. The
-  stream socket accepts the same `set_pose` the 3D socket does (one
-  shared `PoseQueue`), and `Baguette.use` takes a `definition` in hand.
+  stream socket accepts the same `set_pose` the 3D socket does (each
+  socket through its own `PoseQueue`), and `Baguette.use` takes a `definition` in hand.
   See [`docs/features/iphone-duo.md`](docs/features/iphone-duo.md).
 
 ### Fixed

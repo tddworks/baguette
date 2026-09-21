@@ -558,6 +558,8 @@
     wrapper.style.height = fit.height + 'px';
     wrapper.style.left = (sizer.offsetLeft + (boxW - inner.width) / 2 + fit.left) + 'px';
     wrapper.style.top = (sizer.offsetTop + (boxH - inner.height) / 2 + fit.top) + 'px';
+    // After the window's resize event, which saw the old fit.
+    if (book) book.relayout();
   }
 
   function copyCanvas(source, into) {

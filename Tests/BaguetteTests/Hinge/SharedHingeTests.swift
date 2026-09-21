@@ -50,10 +50,11 @@ struct SharedHingeTests {
         final class Box: @unchecked Sendable { var watch: (any HingeWatch)? }
         let first = Box()
         let firstJoined = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
+        // A thread of its own: a pool thread might never come while this one waits.
+        Thread {
             first.watch = shared.watch { _ in }
             firstJoined.signal()
-        }
+        }.start()
         hinge.starting.wait()
         let second = shared.watch { _ in }
         hinge.gate.signal()

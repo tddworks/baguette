@@ -7,14 +7,14 @@ import Mockable
 struct PoseQueueTests {
     @Test func `a burst plays the request under way and the newest, skipping the ones between`() async {
         let queue = PoseQueue()
-        let started = DispatchSemaphore(value: 0)
-        let gate = DispatchSemaphore(value: 0)
         let played = Played()
-        queue.enqueue { started.signal(); gate.wait(); played.add(1) }
-        blockUntil(started)
-        queue.enqueue { played.add(2) }
-        queue.enqueue { played.add(3) }
-        gate.signal()
+        // The burst lands while the first is under way, without blocking a pool thread.
+        queue.enqueue {
+            played.add(1)
+            queue.enqueue { played.add(2) }
+            queue.enqueue { played.add(3) }
+        }
+        await queue.settled()
         await queue.settled()
         #expect(played.values == [1, 3])
     }
@@ -64,8 +64,6 @@ struct ServerPoseRequestTests {
         }
     }
 }
-
-private func blockUntil(_ semaphore: DispatchSemaphore) { semaphore.wait() }
 
 private final class Played: @unchecked Sendable {
     private let lock = NSLock()

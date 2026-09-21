@@ -85,7 +85,14 @@
       this.raf = null;
       this.degrees = 180;
       this.dpr = window.devicePixelRatio || 1;
-      this._onResize = () => { if (this.stage) { this._unmount(); this.show(this.degrees); } };
+      this._onResize = () => this.relayout();
+    }
+
+    /** Re-mounts over the device where it now stands. */
+    relayout() {
+      if (!this.stage) return;
+      this._unmount();
+      this.show(this.degrees);
     }
 
     /** Only a vertical crease folds as a book on the page. */
@@ -120,7 +127,8 @@
     }
 
     fadeOut(ms) {
-      if (!this.stage) return;
+      // Not mounted yet: dispose, or the pending retry mounts it later.
+      if (!this.stage) { this.dispose(); return; }
       this.freeze();
       window.removeEventListener('resize', this._onResize);
       if (this.host) this.host.style.visibility = '';

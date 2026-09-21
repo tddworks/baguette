@@ -215,12 +215,12 @@ vertical crease (landscape).
 angle.** `HingeAngle.litPanel` splits at 90°, which agrees with
 SpringBoard at the three poses. In between, SpringBoard keeps
 hysteresis, measured on iOS 27.1 by reading its `CADisplayStateDidChange`
-log after each move. Opening from shut, it lights the unfolded panel
-almost at once and keeps the cover on until somewhere between 80° and
-100°. Closing from open, it keeps the unfolded panel lit down to
-somewhere between 60° and 80°. The book sidesteps this by showing both
-panels at once; the server's own binding for a stream without `panel=`
-still follows the 90° rule.
+log after each move. Opening from shut, both panels are lit from 10°
+(the least measured) until the cover goes dark, somewhere between 80°
+and 100°. Closing from open, only the unfolded panel is lit down to
+somewhere between 60° and 80°, then only the cover. The book sidesteps
+this by showing both panels at once; a stream without `panel=` binds
+its panel once, at connect time, by the 90° rule.
 
 ### The 3D book
 
