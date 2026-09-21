@@ -600,7 +600,7 @@
     const BookPose = window.Baguette && window.Baguette.BookPose;
     if (!BookPose) return;
     const panel = BookPose.panel(degrees);
-    if (panel !== shownPanel) { void showPanel(panel); return; }
+    if (panel !== (panelSwap ? panelSwap.target : shownPanel)) { void showPanel(panel); return; }
     if (panelSwap) return;   // the swap poses the view when it lands
     if (BookPose.view(degrees) === 'book') bookAt(degrees);
     else closeBook();
@@ -678,10 +678,15 @@
   }
 
   // Carries the last picture across so nothing flashes black; a newer swap wins.
+  // `shownPanel` moves only once the panel mounts, so a failed swap is retried.
   async function showPanel(target) {
-    if (target === shownPanel && !panelSwap) return;
-    shownPanel = target;
-    const swap = {};
+    if (target === shownPanel) {
+      // Back before the swap landed: drop it.
+      if (panelSwap) { panelSwap = null; applyPose(hingeDegrees); }
+      return;
+    }
+    if (panelSwap && panelSwap.target === target) return;
+    const swap = { target };
     panelSwap = swap;
     let next = null;
     try {
@@ -692,6 +697,7 @@
       return;
     }
     if (panelSwap !== swap) return;
+    shownPanel = target;
     const leaving = sim;
     let carry = null;
     if (target === 'secondary' && leaving) {
