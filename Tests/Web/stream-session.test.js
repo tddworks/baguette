@@ -44,6 +44,19 @@ test('buildWSUrl appends display=phone when requested', () => {
   );
 });
 
+// A foldable's flat view pins its stream to the panel it shows.
+test('buildWSUrl pins a foldable panel when asked', () => {
+  const { StreamSession } = loadStreamSession();
+  assert.equal(
+    StreamSession.buildWSUrl('UDID-1', 'mjpeg', 'v2', 'phone', 'secondary'),
+    'ws://localhost:8421/simulators/UDID-1/stream?format=mjpeg&version=v2&display=phone&panel=secondary'
+  );
+  assert.equal(
+    StreamSession.buildWSUrl('UDID-1', 'mjpeg', 'v2', 'phone', 'sideways'),
+    'ws://localhost:8421/simulators/UDID-1/stream?format=mjpeg&version=v2&display=phone'
+  );
+});
+
 test('buildWSUrl encodes udid and ignores unknown display tokens', () => {
   const { StreamSession } = loadStreamSession();
   const url = StreamSession.buildWSUrl('a/b', 'mjpeg', 'v2', 'external');

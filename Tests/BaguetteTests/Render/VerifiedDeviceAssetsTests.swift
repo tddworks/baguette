@@ -129,7 +129,8 @@ extension VerifiedDeviceAssetsTests {
         let assets = VerifiedDeviceAssets(
             cacheRoot: scratch.appending(path: "cache"),
             fetch: { _ in Data() },
-            developerDir: { contents.appending(path: "Developer").path }
+            developerDir: { contents.appending(path: "Developer").path },
+            installedDeveloperDirs: { [] }
         )
 
         #expect(try assets.resolve(Self.model(directory: scratch, xcodeResource: resource)) == asset)
@@ -141,12 +142,35 @@ extension VerifiedDeviceAssetsTests {
         let assets = VerifiedDeviceAssets(
             cacheRoot: scratch.appending(path: "cache"),
             fetch: { _ in Data() },
-            developerDir: { scratch.appending(path: "Xcode.app/Contents/Developer").path }
+            developerDir: { scratch.appending(path: "Xcode.app/Contents/Developer").path },
+            installedDeveloperDirs: { [scratch.appending(path: "Xcode-beta.app/Contents/Developer").path] }
         )
 
         #expect(throws: DeviceModelError.localAssetNotFound("Plugins/V68.usdz")) {
             try assets.resolve(Self.model(directory: scratch, xcodeResource: "Plugins/V68.usdz"))
         }
+    }
+
+    // The Duo's model ships only in the Xcode beta that brings its
+    // runtime, while `xcode-select` usually still names the release.
+    @Test func `an Xcode asset the selected Xcode lacks is read from another installed Xcode`() throws {
+        let scratch = try Self.makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let selected = scratch.appending(path: "Xcode.app/Contents/Developer").path
+        let beta = scratch.appending(path: "Xcode-beta.app/Contents")
+        let resource = "SharedFrameworks/DeviceKit.framework/Resources/V68.usdz"
+        let asset = beta.appending(path: resource)
+        try FileManager.default.createDirectory(
+            at: asset.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("USDZ".utf8).write(to: asset)
+        let assets = VerifiedDeviceAssets(
+            cacheRoot: scratch.appending(path: "cache"),
+            fetch: { _ in Data() },
+            developerDir: { selected },
+            installedDeveloperDirs: { [selected, beta.appending(path: "Developer").path] }
+        )
+
+        #expect(try assets.resolve(Self.model(directory: scratch, xcodeResource: resource)) == asset)
     }
 
     static func model(directory: URL, xcodeResource: String) -> InstalledDeviceModel {

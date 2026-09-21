@@ -144,7 +144,62 @@ so `chrome.json`, `definition.json`, `bezel.png` and `chrome layout
 device that is folded or not booted. `describe-ui` frames come back in
 the lit panel's point space (`DisplayBinding.pointSize(scale:)`).
 
-### The page shows the book, in 3D
+### The page draws it from its 2D frames, with the 3D book one click away
+
+A booted Duo's page is posed by the hinge (`BookPose`,
+`baguette/hinge/book-pose.js`):
+
+| Hinge | The page shows | Stream |
+|---|---|---|
+| ≤ 5° (shut) | the cover's flat chrome, `phone15` | `panel=primary` |
+| ≥ 178° (flat) | the unfolded panel's flat chrome, `phone14` with its crease | `panel=secondary` |
+| between | the unfolded device as a **book** (`BookView`) | `panel=secondary`, plus the cover for the book's back |
+
+The book is drawn from the flat view's own frames: each rAF, the
+unfolded device (bezel, live frame through the panel's mask, crease) is
+drawn into two canvases, one per half, and CSS 3D turns them about the
+crease in perspective — above the open pose both halves share the bend,
+below it the left half folds over onto the right (the angles
+`FoldPose` gives the 3D model). Each half has a body: a dozen slices
+of the device's own outline stacked behind its screen, shaded from a
+lit front to a dark back and drawn once, so a tilted half shows a
+rounded rim and costs nothing per frame. The crease is a faint
+hairline flat and deepens with the fold (`BookPose.creaseOpacity`).
+The left half's back carries the cover,
+live, from a second stream pinned to it into a canvas nobody sees; so
+closing turns the cover toward the viewer, black until the guest lights
+it, as on the device. The book shifts sideways as it narrows so it
+stays centred. Taps on the tilted halves land where they look: each
+half carries 1×1 markers at the screen's corners, and the page inverts
+their projected quad (`ScreenQuad.locate`) into the unfolded panel's
+tap space; the cover on the back is not tappable.
+
+Crossing into or out of the cover swaps chrome and stream in place,
+carrying the last picture across: opening starts the book with the
+cover's last frame on its back, and shutting fades the book out over
+the cover's flat chrome. Under the device sits Device Hub's pose bar
+(`FoldBar`, `baguette/hinge/fold-bar.js`): Closed (0°), Open (130°),
+Flat (180°) and the hinge slider, which the hinge follows as it is
+dragged — the same `set_pose` bursts the 3D socket takes. The stream
+socket pushes every hinge sample (`{"type":"hinge","angleDegrees":130.0}`)
+and the page re-poses on each. The guest turns the unfolded panel to
+landscape by itself, so the page starts it at landscape-left and, once
+the hinge goes quiet, asks `GET /hinge` which way it faces; the book is
+only drawn for a vertical crease (landscape). The cube button opens the
+3D book (below) straight on and closes back to the flat view.
+
+**Which panel is lit is the guest's call, not a function of the
+angle.** `HingeAngle.litPanel` splits at 90°, which agrees with
+SpringBoard at the three poses. In between, SpringBoard keeps
+hysteresis, measured on iOS 27.1 by reading its `CADisplayStateDidChange`
+log after each move. Opening from shut, it lights the unfolded panel
+almost at once and keeps the cover on until somewhere between 80° and
+100°. Closing from open, it keeps the unfolded panel lit down to
+somewhere between 60° and 80°. The book sidesteps this by showing both
+panels at once; the server's own binding for a stream without `panel=`
+still follows the 90° rule.
+
+### The 3D book
 
 Device Hub does not draw the Duo with a 2D chrome at all. Its device
 view is `CoreDevicePopDeviceKitExtension`, a DeviceKit plug-in that
@@ -158,11 +213,14 @@ materials are screens: `CvyXbAGXoolRUYl` (unfolded), `YqugYDOqMSOpqyA`
 (`phone14` / `phone15`) are what the CLI's `chrome` verbs and the
 `bezel.png` routes still serve.
 
-baguette's page does the same, on its existing RealityKit pipeline
-([`3d-rendering.md`](3d-rendering.md)). `Models3D/iphone-duo/
-definition.json` names the asset by its path inside the selected
-Xcode (`asset.xcodeResource` — read from Xcode the way the 2D chromes
-are read from `/Library/Developer/DeviceKit`, never copied), the two
+baguette's cube button does the same, on its existing RealityKit
+pipeline ([`3d-rendering.md`](3d-rendering.md)). `Models3D/iphone-duo/
+definition.json` names the asset by its path inside Xcode
+(`asset.xcodeResource` — read from Xcode the way the 2D chromes are
+read from `/Library/Developer/DeviceKit`, never copied). The selected
+Xcode is tried first, then every other `/Applications/Xcode*.app`:
+`V68.usdz` ships only in the 27.1 beta, and `xcode-select` usually
+still names the release. The definition also names the two
 screen materials, the quarter turn the unfolded framebuffer needs on
 the mesh (`textureRotation: 270`), the rest rotation that stands the
 authored model up, the shutting clip and the joints that carry the
@@ -175,10 +233,9 @@ buttons:
          "openPoseDegrees": 130}
 ```
 
-A booted Duo's page opens the live 3D stream straight on (`fixed`:
-no orbiting, no stage tools; the cube button turns the book and sets
-it back) and never shows the flat chrome; a shut-down Duo still gets
-the flat chrome for its power card. The 3D socket binds **both**
+The cube opens the Duo's live 3D stream straight on (`fixed`: no
+orbiting, no stage tools), standing the way the flat view was turned;
+the cube again returns to the flat chrome. The 3D socket binds **both**
 panels (`RenderedFoldable`) and the shared hinge, and poses the book
 from every sample (`FoldPose`): the clip runs from flat at its start
 to shut at `shutTime`, and because it raises the left half alone the
@@ -210,7 +267,8 @@ up), as it turns a phone's flat chrome, and tells the guest the
 orientation it asked for. Nothing is read back — a rotation made in
 Device Hub is its own, and the page's button brings the two into step.
 
-**Pose picker.** Under the book sits Device Hub's picker — shut, open
+**Pose picker.** Under the book sits Device Hub's picker — the flat
+view's `FoldBar` — shut, open
 (130°), flat. A pick moves the device's own hinge there
 (`{"type":"set_pose","hingeDegrees":0}` on the 3D socket → `Hinge.fold`,
 swept over Device Hub's 0.8 s by `HingeControl` inside the guest — see

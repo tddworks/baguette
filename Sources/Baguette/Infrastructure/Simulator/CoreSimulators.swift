@@ -201,6 +201,15 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         SimulatorKitFramework.path(developerDir: developerDir) != nil
     }
 
+    /// Every `/Applications/Xcode*.app` developer dir with SimulatorKit.
+    static func installedDeveloperDirs() -> [String] {
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: "/Applications")) ?? []
+        return entries.sorted()
+            .filter { $0.hasPrefix("Xcode") && $0.hasSuffix(".app") }
+            .map { "/Applications/\($0)/Contents/Developer" }
+            .filter(hasSimulatorKit(at:))
+    }
+
     private static func scanApplications() -> String? {
         let fm = FileManager.default
         // Try the canonical path first so a normal install wins over

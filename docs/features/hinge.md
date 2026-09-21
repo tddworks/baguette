@@ -20,11 +20,14 @@ GET  /simulators/<udid>/hinge
 The `POST` blocks for the sweep and answers `{"ok":true}`; `400` for a
 pose that is not `closed`/`open`/`flat`, an angle off 0–180 or a
 negative duration; `404` for an unknown udid; `500` when the device
-could not be driven (no `HingeControl` shipped, guest refused). On the
-3D socket the picker sends `{"type":"set_pose","hingeDegrees":130}`,
-and the book follows the hinge samples as the device folds, panels
-swapping under it exactly as when Device Hub does it. A phone answers
-the `GET` with `foldable:false` and has nothing to drive.
+could not be driven (no `HingeControl` shipped, guest refused). On
+either socket — the flat stream or the 3D book — the page's pose bar
+sends `{"type":"set_pose","hingeDegrees":130}` (the slider adds
+`"duration":0` while it leads the hinge); a socket's requests play in
+order and a burst skips what it has passed (`PoseQueue`). Both views
+follow the hinge samples as the device folds — the 3D model, and the
+flat view's book drawn from 2D frames (`iphone-duo.md`). A phone
+answers the `GET` with `foldable:false` and has nothing to drive.
 
 ## How the hinge is driven
 

@@ -365,7 +365,7 @@
   #simNativeView #nativeDeviceFrame > div,
   #simNativeView #nativeDeviceFrame img,
   #simNativeView #nativeDeviceFrame canvas {
-    max-height: var(--nv-device-max-h) !important;
+    max-height: calc(var(--nv-device-max-h) - var(--nv-fold-bar-h, 0px)) !important;
     max-width: var(--nv-device-max-w) !important;
   }
 
@@ -519,7 +519,7 @@
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
-    max-height: min(var(--nv-device-max-h), calc(100vw - 32px)) !important;
+    max-height: min(calc(var(--nv-device-max-h) - var(--nv-fold-bar-h, 0px)), calc(100vw - 32px)) !important;
   }
 
   /* --- Power card ---------------------------------------------------
@@ -1602,35 +1602,41 @@
   #simNativeView #native3DStage:hover .r3d-hw-button { opacity: 1; }
   #simNativeView .r3d-hw-button:hover { color: #2f7cf6; }
   #simNativeView .r3d-hw-button:active { color: #1d5fd0; transform: translate(-50%, -50%) scale(0.92); }
-  /* Device Hub's pose bar, under the book: three poses and the hinge slider. */
-  #simNativeView .r3d-pose-picker {
-    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 99px; z-index: 6;
+  /* Device Hub's pose bar (FoldBar): three poses and the hinge slider. */
+  #simNativeView .fold-bar {
+    display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 99px;
     background: rgba(255, 255, 255, 0.94); border: 1px solid rgba(15, 23, 42, 0.12);
     box-shadow: 0 1px 6px rgba(15, 23, 42, 0.12);
   }
-  #simNativeView .r3d-pose-picker button {
+  #simNativeView .fold-bar button {
     width: 34px; height: 26px; border: 0; border-radius: 99px; padding: 0;
     background: transparent; color: #475569; cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  #simNativeView .r3d-pose-picker button:hover { background: rgba(15, 23, 42, 0.06); }
-  #simNativeView .r3d-pose-picker button.active { background: #dbeafe; color: #2563eb; }
-  #simNativeView .r3d-pose-picker input[type="range"] {
+  #simNativeView .fold-bar button:hover { background: rgba(15, 23, 42, 0.06); }
+  #simNativeView .fold-bar button.active { background: #dbeafe; color: #2563eb; }
+  #simNativeView .fold-bar input[type="range"] {
     -webkit-appearance: none; appearance: none; width: 120px; height: 26px; margin: 0 6px 0 4px;
     padding-left: 10px; border-left: 1px solid rgba(15, 23, 42, 0.12); background: transparent; cursor: pointer;
   }
-  #simNativeView .r3d-pose-picker input[type="range"]::-webkit-slider-runnable-track {
+  #simNativeView .fold-bar input[type="range"]::-webkit-slider-runnable-track {
     height: 4px; border-radius: 2px; background: rgba(15, 23, 42, 0.14);
   }
-  #simNativeView .r3d-pose-picker input[type="range"]::-webkit-slider-thumb {
+  #simNativeView .fold-bar input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
     background: #fff; border: 1px solid rgba(15, 23, 42, 0.18); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
   }
-  #simNativeView .r3d-pose-picker input[type="range"]:active::-webkit-slider-thumb { border-color: #2563eb; }
-  /* A booted foldable never shows the flat chrome: its view is the book. */
-  #simNativeView #nativeDeviceFrame[data-foldable] { display: none; }
-  /* Fixed 3D (a foldable's default view): straight on, no tools. */
+  #simNativeView .fold-bar input[type="range"]:active::-webkit-slider-thumb { border-color: #2563eb; }
+  /* Under the book, over the 3D stage. */
+  #simNativeView .r3d-pose-picker {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 6;
+  }
+  /* Under the flat chrome: the device gives up the bar's height. */
+  #simNativeView[data-fold-bar] { --nv-fold-bar-h: 44px; }
+  #simNativeView #nativeFoldBar { flex: none; }
+  #simNativeView #nativeFoldBar[hidden],
+  #simNativeView[data-render3d="open"] #nativeFoldBar { display: none; }
+  /* Fixed 3D (a foldable's book): straight on, no tools. */
   #simNativeView #native3DStage[data-fixed="true"] .r3d-stage-tools,
   #simNativeView #native3DStage[data-fixed="true"] .r3d-inspector-toggle {
     display: none;
@@ -2883,6 +2889,7 @@
   </div>
 
     <div id="nativeDeviceFrame"></div>
+    <div id="nativeFoldBar" hidden></div>
     <div id="native3DStage" class="r3d-live-stage" aria-label="Live 3D simulator"></div>
   </div>
 

@@ -10,6 +10,34 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+
+- **iPhone Duo is drawn from its 2D frames, with 3D one click away.**
+  A booted Duo's page shows the cover's flat chrome when shut, the wide
+  panel's (with its crease) when flat, and in between folds the live
+  wide panel as a book (`BookView`): two halves turned about the crease
+  in CSS 3D, each given a rim by stacked slices of the device's own
+  outline, the live cover on the left half's back, taps mapped through
+  the tilted halves. The crease is a faint hairline flat and deepens as
+  the device folds. Streams are pinned per panel (`?panel=`), swapped
+  in place as the hinge crosses shut. Device Hub's pose bar sits under
+  it — Closed / Open / Flat and a hinge slider the hinge follows as it
+  is dragged (`FoldBar`, shared with the 3D book). The cube opens the 3D
+  book straight on, as before, and closes back to the flat view. The
+  stream socket accepts the same `set_pose` the 3D socket does (one
+  shared `PoseQueue`), and `Baguette.use` takes a `definition` in hand.
+  See [`docs/features/iphone-duo.md`](docs/features/iphone-duo.md).
+
+### Fixed
+
+- **The Duo's 3D model is found when the selected Xcode lacks it.**
+  `V68.usdz` ships only in the Xcode 27.1 beta, while `xcode-select`
+  usually names the release; an `asset.xcodeResource` is now looked up
+  in every installed `/Applications/Xcode*.app` after the selected one.
+- **The 3D stage keeps the server's reason.** A refusal sent before the
+  socket closed (a missing model, an unknown device) was overwritten by
+  "3D stream disconnected"; it now stays on screen.
+
 ---
 
 ## [0.1.99] - 2026-09-19

@@ -24,6 +24,7 @@
     // 3D view orbits.
     this.fixed = false;
     this.litPanel = null;
+    this.foldBar = null;
     this.interfaceOrientation = null;
     this.variants = {};
     this.screenGlass = false;
@@ -272,89 +273,23 @@
   };
 
   /**
-   * Device Hub's pose bar, under the book: shut, open (its 130° book
-   * pose) and flat, then the hinge slider. A pick sweeps the device's
-   * own hinge there — the server plays it as Device Hub would — and the
-   * slider puts the hinge where the thumb is as it is dragged; the book
-   * follows the hinge either way, the pose nearest the hinge lights up
-   * and the slider tracks it whenever nobody is holding it.
+   * Device Hub's pose bar, under the book (`FoldBar`): the slider leads
+   * the hinge while dragged and the book follows the hinge samples.
    */
   Sim3DPanel.prototype.placePosePicker = function (pose) {
     if (!this.stage) return;
-    let host = this.stage.querySelector('[data-role="pose-picker"]');
-    if (!pose) { if (host) host.remove(); return; }
-    const POSES = [
-      { id: 'shut', degrees: 0, label: 'Closed', glyph: this.poseGlyph('shut') },
-      { id: 'open', degrees: 130, label: 'Open', glyph: this.poseGlyph('open') },
-      { id: 'flat', degrees: 180, label: 'Flat', glyph: this.poseGlyph('flat') },
-    ];
-    if (!host) {
-      host = document.createElement('div');
-      host.dataset.role = 'pose-picker';
-      host.className = 'r3d-pose-picker';
-      host.setAttribute('aria-label', 'Pose');
-      POSES.forEach((p) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.dataset.pose = p.id;
-        btn.title = p.label;
-        btn.setAttribute('aria-label', p.label);
-        btn.innerHTML = p.glyph;
-        btn.addEventListener('click', () => {
-          this.send({ type: 'set_pose', hingeDegrees: p.degrees });
-        });
-        host.appendChild(btn);
-      });
-      const slider = document.createElement('input');
-      slider.type = 'range';
-      slider.min = '0'; slider.max = '180'; slider.step = '1';
-      slider.dataset.role = 'hinge-slider';
-      slider.title = 'Hinge angle';
-      slider.setAttribute('aria-label', 'Hinge angle');
-      // Held: the thumb leads and the hinge follows, a few times a
-      // frame at most; released: the hinge leads again.
-      let timer = null;
-      let last = null;
-      const push = () => {
-        timer = null;
-        const degrees = Number(slider.value);
-        if (degrees === last) return;
-        last = degrees;
-        this.send({ type: 'set_pose', hingeDegrees: degrees, duration: 0 });
-      };
-      slider.addEventListener('pointerdown', () => { slider.dataset.held = 'true'; });
-      const release = () => { delete slider.dataset.held; if (!timer) push(); };
-      slider.addEventListener('pointerup', release);
-      slider.addEventListener('pointercancel', release);
-      slider.addEventListener('input', () => {
-        slider.dataset.held = 'true';
-        if (!timer) timer = setTimeout(push, 40);
-      });
-      slider.addEventListener('change', release);
-      host.appendChild(slider);
-      this.stage.appendChild(host);
+    const FoldBar = window.Baguette && window.Baguette.FoldBar;
+    if (!pose || !FoldBar) {
+      if (this.foldBar) this.foldBar.detach();
+      this.foldBar = null;
+      return;
     }
-    // Nearest pose to the angle shown lights up.
-    const deg = Number(pose.hingeDegrees);
-    const nearest = POSES.reduce((a, b) =>
-      Math.abs(b.degrees - deg) < Math.abs(a.degrees - deg) ? b : a);
-    host.dataset.active = nearest.id;
-    host.querySelectorAll('[data-pose]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.pose === nearest.id);
-    });
-    const slider = host.querySelector('[data-role="hinge-slider"]');
-    if (slider && !slider.dataset.held) slider.value = String(Math.round(deg));
-  };
-
-  Sim3DPanel.prototype.poseGlyph = function (id) {
-    const base = 'width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"';
-    if (id === 'shut') {
-      return '<svg ' + base + '><rect x="6.5" y="1" width="7" height="14" rx="2"/></svg>';
+    this.hingeDegrees = Number(pose.hingeDegrees);
+    if (!this.foldBar || !this.foldBar.el || !this.stage.contains(this.foldBar.el)) {
+      this.foldBar = new FoldBar({ send: (payload) => this.send(payload) });
+      this.foldBar.mount(this.stage, { className: 'r3d-pose-picker' });
     }
-    if (id === 'open') {
-      return '<svg ' + base + '><path d="M2.5 3.5 L10 1.5 L17.5 3.5 V13.5 L10 14.5 L2.5 13.5 Z"/><path d="M10 1.5 V14.5"/></svg>';
-    }
-    return '<svg ' + base + '><rect x="1.5" y="2" width="17" height="12" rx="2"/></svg>';
+    this.foldBar.show(pose.hingeDegrees);
   };
 
   Sim3DPanel.prototype.start = function () {
@@ -380,6 +315,9 @@
         ? window.BaguetteTarget.path(this.udid, '')
         : '/simulators/' + encodeURIComponent(this.udid));
     const path = base + '/stream.3d.' + this.format + '?' + params.toString();
+    // The server explains a refusal and then closes; the close must not
+    // bury the reason.
+    let refused = false;
     this.setState('Loading model…', true);
     this.session = new window.StreamSession({
       udid: this.udid,
@@ -412,6 +350,7 @@
           return true;
         }
         if (envelope && envelope.error) {
+          if (!this.canvas || !this.canvas.hasAttribute('data-painted')) refused = true;
           this.setState(envelope.error, false, true);
           return true;
         }
@@ -426,7 +365,7 @@
         if (generation === this.generation) this.setState('', false);
       },
       onClose: () => {
-        if (generation === this.generation && this.canvas &&
+        if (generation === this.generation && !refused && this.canvas &&
           !this.canvas.hasAttribute('data-painted')) {
           this.setState('3D stream disconnected', false, true);
         }

@@ -924,6 +924,7 @@ struct Server: Sendable {
         "baguette",
         "baguette/carplay",
         "baguette/gestures",
+        "baguette/hinge",
         "baguette/parts",
         "capture",
         "carplay-frames",
@@ -1578,6 +1579,24 @@ struct Server: Sendable {
         } catch {
             return .failed(.toolFailed(status: -1))
         }
+    }
+
+    /// `set_pose` on a foldable's socket, flat or 3D: queued onto its
+    /// hinge, off the socket's loop. `false` for any other line.
+    static func queuePose(
+        line: String, udid: String, simulators: any Simulators, poses: PoseQueue
+    ) throws -> Bool {
+        guard case .fold(let degrees, let duration)? = try Device3DPose.parsing(json: Data(line.utf8)) else {
+            return false
+        }
+        let target = String(degrees)
+        let over = duration.map { String($0) }
+        poses.enqueue {
+            let outcome = Self.driveHinge(
+                udid: udid, pose: nil, angle: target, duration: over, simulators: simulators)
+            if outcome != .ok { log("hinge: \(outcome)") }
+        }
+        return true
     }
 
     static func hingeCommandMessage(_ error: HingeCommandError) -> String {
@@ -2845,30 +2864,6 @@ struct Server: Sendable {
             try? await outbound.write(.text(json))
         }
 
-        // Pose requests play in the order they came, one at a time: a
-        // slider drag sends a burst of them, and detached tasks racing
-        // for the motor would leave the hinge wherever the last to win
-        // said, not where the thumb stopped. A request the burst has
-        // already passed is skipped, so the hinge catches up to the
-        // thumb rather than replaying its path.
-        final class PoseQueue: @unchecked Sendable {
-            private let lock = NSLock()
-            private var tail: Task<Void, Never>?
-            private var newest = 0
-            func enqueue(_ drive: @escaping @Sendable () -> Void) {
-                lock.lock()
-                newest += 1
-                let mine = newest
-                let previous = tail
-                let task = Task.detached { [self] in
-                    await previous?.value
-                    let stale = self.lock.withLock { mine != self.newest }
-                    if !stale { drive() }
-                }
-                tail = task
-                lock.unlock()
-            }
-        }
         let poses = PoseQueue()
 
         do {
@@ -2887,19 +2882,9 @@ struct Server: Sendable {
                         continue
                     }
                     // The pose picker: the device's own hinge is swept
-                    // there (a second or so, off this loop); the book
-                    // follows the hinge samples as it goes.
-                    if foldable != nil, let pose = try Device3DPose.parsing(json: Data(line.utf8)) {
-                        if case .fold(let degrees, let duration) = pose {
-                            let target = String(degrees)
-                            let over = duration.map { String($0) }
-                            poses.enqueue {
-                                let outcome = Self.driveHinge(
-                                    udid: udid, pose: nil, angle: target, duration: over,
-                                    simulators: simulators)
-                                if outcome != .ok { log("hinge: \(outcome)") }
-                            }
-                        }
+                    // there; the book follows the hinge samples as it goes.
+                    if foldable != nil,
+                       try queuePose(line: line, udid: udid, simulators: simulators, poses: poses) {
                         continue
                     }
                 } catch {
@@ -3000,11 +2985,24 @@ struct Server: Sendable {
             stream.stop()
             screen.stop()
         }
+        let poses = PoseQueue()
 
         do {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
+                // The flat view's fold bar: the same `set_pose` the 3D
+                // book's picker sends, onto the device's own hinge.
+                if foldable {
+                    do {
+                        if try queuePose(line: line, udid: udid, simulators: simulators, poses: poses) {
+                            continue
+                        }
+                    } catch {
+                        try? await outbound.write(.text(#"{"ok":false,"error":"invalid pose"}"#))
+                        continue
+                    }
+                }
                 if await handleDescribeUI(
                     line: line, sim: sim, outbound: outbound
                 ) {

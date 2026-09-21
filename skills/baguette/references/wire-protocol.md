@@ -296,6 +296,25 @@ tree, or skip the image and act on the labels and frames directly.
 
 These do not exist for `baguette input` (no stream there).
 
+### Foldables (iPhone Duo)
+
+Pin the stream to one panel with `&panel=primary` (cover) or
+`&panel=secondary` (unfolded). Taps then land in that panel's point
+space. Without it the stream binds whichever panel the hinge lights at
+connect time. The socket pushes every hinge sample and accepts pose
+requests:
+
+```json
+{"type":"hinge","angleDegrees":130.0}                  // server → client
+{"type":"set_pose","hingeDegrees":130}                 // sweep there (0.8 s)
+{"type":"set_pose","hingeDegrees":72,"duration":0}      // jump straight there
+```
+
+Between the poses the guest lights panels with hysteresis (not at a
+fixed angle), so for scripted taps prefer 0 / 130 / 180 and pin
+`panel=`. The same `set_pose` works on the live 3D socket;
+`POST /simulators/<UDID>/hinge?pose=open` is the HTTP form.
+
 ## Interface settings HTTP routes
 
 Appearance / contrast / text size are HTTP, not gesture verbs:

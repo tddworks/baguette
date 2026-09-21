@@ -89,7 +89,7 @@
 
       // A foldable's unfolded panel is one framebuffer creased by the
       // hinge across the middle of its long axis. Device Hub draws the
-      // seam; so does this — a hairline over the frame, no input.
+      // seam; so does this — a faint hairline over the flat panel, no input.
       if (this.def.crease) {
         const crease = document.createElement('div');
         const tall = r.height >= r.width;
@@ -98,9 +98,7 @@
           'position:absolute', 'pointer-events:none', 'z-index:3',
           tall ? 'left:0;right:0;top:50%;height:1px;transform:translateY(-50%)'
                : 'top:0;bottom:0;left:50%;width:1px;transform:translateX(-50%)',
-          'background:rgba(0,0,0,0.28)',
-          tall ? 'box-shadow:0 0 6px 1px rgba(255,255,255,0.10)'
-               : 'box-shadow:0 0 6px 1px rgba(255,255,255,0.10)',
+          'background:rgba(0,0,0,0.05)',
         ].join(';');
         screenArea.appendChild(crease);
       }

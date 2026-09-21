@@ -352,21 +352,24 @@
         ? window.BaguetteTarget.path(udid, '/definition.json')
             + (chromePick ? '?chrome=' + encodeURIComponent(chromePick) : '')
         : undefined;
-    // A foldable is a book, and its book is Apple's own 3D model
-    // (`V68.usdz`, the one Device Hub draws) posed by the hinge, with
-    // both panels on its screens. Its main view is the live 3D stream
-    // straight on, taps landing on whichever screen is lit, and the
-    // flat chrome never shows for it while the guest is up — the cube
-    // button turns the book instead of leaving 3D. The flat chrome
-    // still carries the power card for a device that is not booted.
+    // A foldable (iPhone Duo) shows the flat chrome of whichever panel
+    // the hinge lights, its stream pinned to that panel, with Device
+    // Hub's pose bar under it. The 3D book is one cube click away, as
+    // any device's model is.
     const hinge = deviceMode ? null : await readHinge();
     foldable = !!(hinge && hinge.foldable);
-    if (foldable) currentLitPanel = hinge.litPanel || 'primary';
-    if (foldable && isBooted(meta.state)) {
-      document.getElementById('nativeDeviceFrame').setAttribute('data-foldable', '');
+    if (foldable) {
+      lastHinge = hinge;
+      hingeDegrees = typeof hinge.angleDegrees === 'number'
+        ? hinge.angleDegrees : (hinge.litPanel === 'secondary' ? 130 : 0);
+      shownPanel = window.Baguette.BookPose.panel(hingeDegrees);
+      // Both panels' chromes, so a fold never waits on a fetch.
+      panelDefinition(shownPanel === 'primary' ? 'secondary' : 'primary').catch(() => {});
     }
     try {
-      sim = await useSimulator(deviceDefinitionURL);
+      sim = await useSimulator(foldable
+          ? { definition: await panelDefinition(shownPanel) }
+          : { definitionURL: deviceDefinitionURL });
       sim.mount(document.getElementById('nativeDeviceFrame'));
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
@@ -458,11 +461,12 @@
   // One SDK simulator for a definition URL, wired to this page's
   // transport: the phone at boot, and a foldable's other panel when the
   // hinge brings it in.
-  function useSimulator(definitionURL) {
+  function useSimulator({ definitionURL, definition } = {}) {
     return window.Baguette.use({
       host: location.origin,
       udid,
       definitionURL,
+      definition,
       send: (payload) => {
         const out = currentOrientation === 'portrait'
           ? payload
@@ -484,11 +488,230 @@
     } catch (e) { return null; }
   }
 
-  /** iPhone Duo: two panels and a hinge. The page shows its book in
-   *  3D — Apple's own model, posed by the hinge, both panels on its
-   *  screens — so nothing here follows the hinge; the 3D scene does. */
+  // --- Foldable (iPhone Duo) ------------------------------------------
+  //
+  // Two panels and a hinge. The flat view draws the pose (`BookPose`):
+  // shut, the cover's chrome and stream; flat, the unfolded panel's; in
+  // between, the unfolded device as a book (`BookView`) with the live
+  // cover on the back of its left half, fed by a second stream pinned to
+  // the cover. Hinge samples on the stream socket drive it. The guest
+  // turns the unfolded panel to landscape by itself, so once the hinge
+  // goes quiet the page asks `/hinge` which way the panel faces.
   let foldable = false;
-  let currentLitPanel = 'primary';
+  let shownPanel = 'primary';
+  let hingeDegrees = 0;
+  let lastHinge = null;
+  let foldBar = null;
+  let book = null;
+  let coverFeed = null;
+  let coverSnapshot = null;
+  let panelSwap = null;
+  let confirmTimer = null;
+  const definitions = {};
+  const loadedDefinitions = {};
+  const HINGE_QUIET_MS = 900;
+  const COVER_FADE_MS = 180;
+
+  function panelDefinitionURL(panel) {
+    return '/simulators/' + encodeURIComponent(udid) + '/definition.json?panel=' + panel;
+  }
+
+  function panelDefinition(panel) {
+    if (!definitions[panel]) {
+      definitions[panel] = fetch(panelDefinitionURL(panel), { cache: 'no-cache' })
+        .then((res) => {
+          if (!res.ok) throw new Error('definition fetch failed (' + res.status + ')');
+          return res.json();
+        })
+        .then((def) => { loadedDefinitions[panel] = def; return def; })
+        .catch((e) => { delete definitions[panel]; throw e; });
+    }
+    return definitions[panel];
+  }
+
+  function panelOrientation() {
+    if (lastHinge && lastHinge.litPanel === shownPanel && lastHinge.orientation) {
+      return lastHinge.orientation;
+    }
+    return shownPanel === 'secondary' ? 'landscape-left' : 'portrait';
+  }
+
+  // A canvas's current picture, kept for the next surface to start from.
+  function copyCanvas(source, into) {
+    const out = into || document.createElement('canvas');
+    if (!source || !source.width || !source.height) return out;
+    out.width = source.width;
+    out.height = source.height;
+    out.getContext('2d').drawImage(source, 0, 0);
+    return out;
+  }
+
+  function showFoldBar() {
+    const host = document.getElementById('nativeFoldBar');
+    const view = document.getElementById('simNativeView');
+    const FoldBar = window.Baguette && window.Baguette.FoldBar;
+    if (!host || !view || !FoldBar) return;
+    if (!foldBar) {
+      foldBar = new FoldBar({
+        send: (payload) => !!(session && session.send && session.send(payload)),
+      });
+      foldBar.mount(host);
+    }
+    host.hidden = false;
+    view.setAttribute('data-fold-bar', '');
+    foldBar.show(hingeDegrees);
+  }
+
+  // A hinge sample on the flat stream: move the bar and pose the view.
+  function followHinge(env) {
+    if (!foldable || typeof env.angleDegrees !== 'number') return;
+    if (foldBar) foldBar.show(env.angleDegrees);
+    applyPose(env.angleDegrees);
+    confirmPoseSoon(HINGE_QUIET_MS);
+  }
+
+  function applyPose(degrees) {
+    hingeDegrees = degrees;
+    if (!foldable || !sim || is3DOpen() || powerCard) return;
+    const BookPose = window.Baguette && window.Baguette.BookPose;
+    if (!BookPose) return;
+    const panel = BookPose.panel(degrees);
+    if (panel !== shownPanel) { void showPanel(panel); return; }
+    if (panelSwap) return;   // the swap poses the view when it lands
+    if (BookPose.view(degrees) === 'book') bookAt(degrees);
+    else closeBook();
+  }
+
+  function bookAt(degrees) {
+    const BookView = window.Baguette && window.Baguette.BookView;
+    if (!BookView || !BookView.canFold(rotationDegrees) || !sim.screenArea) { closeBook(); return; }
+    if (!book) {
+      startCoverFeed();
+      const cover = loadedDefinitions.primary;
+      book = new BookView(
+        { wrapper: sim.screenArea.parentElement, canvas: sim.canvas,
+          screenArea: sim.screenArea, screen: sim.def.screen },
+        coverFeed && cover ? { canvas: coverFeed.canvas, screen: cover.screen } : null,
+        rotationDegrees,
+        { onMount: (stage) => {
+          // Taps on the tilted halves land where they look.
+          const screen = sim.screen;
+          screen.bindInteraction({
+            element: stage, overlayHost: stage,
+            mapClientPoint: (x, y) => (book ? book.mapClientPoint(x, y, screen.size)
+              : { x: 0, y: 0, xNorm: 0, yNorm: 0, inside: false }),
+          });
+        } });
+    }
+    book.show(degrees);
+  }
+
+  function closeBook(opts) {
+    if (!book) return;
+    const closing = book;
+    book = null;
+    if (opts && opts.fade) closing.fadeOut(COVER_FADE_MS);
+    else closing.dispose();
+    stopCoverFeed();
+    if (!(opts && opts.fade) && sim && sim.screenArea) {
+      sim.screen.bindDOM({ screenArea: sim.screenArea, canvas: sim.canvas });
+    }
+  }
+
+  // The cover, streamed into a canvas nobody sees, for the book's back.
+  function startCoverFeed() {
+    if (coverFeed || !window.StreamSession) return;
+    const canvas = copyCanvas(coverSnapshot);
+    const feed = new window.StreamSession({
+      udid, format: currentFormat(), version: 'v2', display: 'phone', panel: 'primary',
+      canvas, onText: () => true,
+    });
+    try { feed.start(); } catch (e) { return; }
+    coverFeed = { session: feed, canvas };
+  }
+
+  function stopCoverFeed() {
+    if (!coverFeed) return;
+    coverSnapshot = copyCanvas(coverFeed.canvas);
+    try { coverFeed.session.stop(); } catch (_) { /* ignore */ }
+    coverFeed = null;
+  }
+
+  function confirmPoseSoon(delay) {
+    if (confirmTimer) clearTimeout(confirmTimer);
+    confirmTimer = setTimeout(confirmPose, delay);
+  }
+
+  // The fallback for missed samples, and the panel's facing once still.
+  async function confirmPose() {
+    confirmTimer = null;
+    const state = await readHinge();
+    if (!state || !state.foldable || is3DOpen()) return;
+    lastHinge = state;
+    if (typeof state.angleDegrees === 'number' && Math.abs(state.angleDegrees - hingeDegrees) > 0.5) {
+      if (foldBar) foldBar.show(state.angleDegrees);
+      applyPose(state.angleDegrees);
+    }
+    if (state.litPanel === shownPanel && state.orientation && state.orientation !== currentOrientation) {
+      snapOrientation(state.orientation);
+      if (book) { closeBook(); applyPose(hingeDegrees); }
+    }
+  }
+
+  // Swaps the flat view to `target`'s chrome and a stream pinned to it,
+  // carrying the last picture across so nothing flashes black. A newer
+  // swap that lands first wins; this one then stands down.
+  async function showPanel(target) {
+    if (target === shownPanel && !panelSwap) return;
+    shownPanel = target;
+    const swap = {};
+    panelSwap = swap;
+    let next = null;
+    try {
+      next = await useSimulator({ definition: await panelDefinition(target) });
+    } catch (e) {
+      console.warn('[native] no definition for panel ' + target + ':', (e && e.message) || e);
+      if (panelSwap === swap) panelSwap = null;
+      return;
+    }
+    if (panelSwap !== swap) return;
+    const leaving = sim;
+    let carry = null;
+    if (target === 'secondary' && leaving) {
+      coverSnapshot = copyCanvas(leaving.canvas);
+    } else if (target === 'primary') {
+      carry = coverFeed ? copyCanvas(coverFeed.canvas) : coverSnapshot;
+      // The shut book fades over the cover as it comes in.
+      closeBook({ fade: true });
+    }
+    if (leaving) { try { leaving.detach(); } catch (_) { /* ignore */ } }
+    sim = next;
+    sim.mount(document.getElementById('nativeDeviceFrame'));
+    if (carry) copyCanvas(carry, sim.canvas);
+    snapOrientation(panelOrientation());
+    panelSwap = null;
+    if (!is3DOpen() && !powerCard) startSession(currentFormat());
+    applyPose(hingeDegrees);
+    confirmPoseSoon(1500);
+  }
+
+  // Leaving 3D on a foldable: the hinge may have moved while the book
+  // was shown, so come back to the view its angle draws.
+  function returnToFlat() {
+    const shown = render3DPanel && typeof render3DPanel.hingeDegrees === 'number'
+      ? render3DPanel.hingeDegrees : hingeDegrees;
+    hingeDegrees = shown;
+    if (foldBar) foldBar.show(shown);
+    const BookPose = window.Baguette && window.Baguette.BookPose;
+    if (BookPose && BookPose.panel(shown) !== shownPanel) {
+      void showPanel(BookPose.panel(shown));
+      return;
+    }
+    snapOrientation(currentOrientation);
+    startSession(currentFormat());
+    applyPose(shown);
+    confirmPoseSoon(0);
+  }
 
   function resetToPortrait() {
     if (deviceMode) return; // a physical phone rotates itself
@@ -552,7 +775,7 @@
   // the inspector first, then claim paste_result; anything nobody
   // claims falls through to the decoder's error logger.
   function routeStreamText(env) {
-    if (env && env.type === 'hinge') return true;   // the 3D scene follows the hinge
+    if (env && env.type === 'hinge') { followHinge(env); return true; }
     if (axInspector && axInspector.handleEnvelope(env)) return true;
     if (env && env.type === 'paste_result') {
       if (!env.ok) console.warn('[native] paste failed:', env.error || 'unknown');
@@ -595,6 +818,7 @@
     session = new window.StreamSession(Object.assign({
       udid, format, version: 'v2',
       display: 'phone',
+      panel: foldable ? shownPanel : undefined,
       canvas: sim.canvas,
     }, sessionCallbacks()));
     // `boot()` runs this before wiring the toolbar and unload handler,
@@ -1138,20 +1362,17 @@
   }
 
   // The live view of a booted guest: the flat stream in the device's
-  // chrome, or — on a foldable — the book, straight on.
+  // chrome — on a foldable, posed by its hinge, with the pose bar under it.
   function startMainView() {
     if (foldable) {
-      const frame = document.getElementById('nativeDeviceFrame');
-      if (frame) frame.setAttribute('data-foldable', '');
-      toggle3D({ fixed: true });
-      // The unfolded panel is landscape-left by the guest's choice and
-      // the cover portrait; the rotate button cycles from there.
-      const start = currentLitPanel === 'secondary' ? 'landscape-left' : 'portrait';
-      currentOrientation = start;
-      orientationIndex = Math.max(0, orientationCycle().indexOf(start));
-      return;
+      showFoldBar();
+      snapOrientation(panelOrientation());
     }
     startSession(currentFormat());
+    if (foldable) {
+      applyPose(hingeDegrees);
+      confirmPoseSoon(HINGE_QUIET_MS);
+    }
   }
 
   // Lazy-mounts the AXInspector once a surface + session are ready.
@@ -1947,9 +2168,19 @@
       orientationIndex = (orientationIndex + 1) % cycle.length;
       const value = cycle[orientationIndex];
       // A foldable's book turns in 3D, as the flat chrome would.
-      if (foldable) {
+      if (foldable && is3DOpen()) {
         currentOrientation = value;
         if (render3DPanel) render3DPanel.setInterfaceOrientation(value);
+        const url = '/simulators/' + encodeURIComponent(udid)
+            + '/orientation?value=' + encodeURIComponent(value);
+        fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
+        return;
+      }
+      // A foldable's flat view turns without the animation, so a book
+      // drawn over it can be rebuilt at the new turn at once.
+      if (foldable) {
+        snapOrientation(value);
+        if (book) { closeBook(); applyPose(hingeDegrees); }
         const url = '/simulators/' + encodeURIComponent(udid)
             + '/orientation?value=' + encodeURIComponent(value);
         fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
@@ -2198,19 +2429,8 @@
     const btn = document.getElementById('native3DToggle');
     const open = view && view.getAttribute('data-render3d') === 'open';
     if (!view || !host || !stage || !sim) return;
-    const fixed = !!(opts && opts.fixed);
-    // A foldable lives in 3D: the cube turns the book, or sets it back
-    // straight, rather than leaving for the flat stream.
-    if (open && foldable && render3DPanel && !fixed) {
-      render3DPanel.setFixed(!render3DPanel.fixed);
-      if (btn) btn.classList.toggle('active', !render3DPanel.fixed);
-      const inspector = !render3DPanel.fixed && localStorage.getItem('asc.3dInspector') !== 'closed';
-      if (inspector) view.setAttribute('data-render3d-inspector', 'open');
-      else view.removeAttribute('data-render3d-inspector');
-      const sheet = document.getElementById('native3DSheet');
-      if (sheet) sheet.setAttribute('aria-hidden', inspector ? 'false' : 'true');
-      return;
-    }
+    // A foldable's book is shown straight on, with its pose bar and keys.
+    const fixed = !!(opts && opts.fixed) || foldable;
     // The canvas being recorded is about to be swapped for the other
     // mode's, and the two are different surfaces at different sizes.
     cancelRecording('switched between 2D and 3D');
@@ -2221,8 +2441,10 @@
       view.removeAttribute('data-render3d-inspector');
       if (btn) btn.classList.remove('active');
       if (render3DPanel) render3DPanel.stop();
-      startSession(currentFormat());
+      if (foldable) returnToFlat();
+      else startSession(currentFormat());
     } else {
+      if (foldable) closeBook();
       if (session) {
         session.stop();
         session = null;
@@ -2234,7 +2456,7 @@
       }
       const sheet = document.getElementById('native3DSheet');
       if (sheet) sheet.setAttribute('aria-hidden', inspectorOpen ? 'false' : 'true');
-      if (btn) btn.classList.toggle('active', !fixed);
+      if (btn) btn.classList.add('active');
       const status = document.getElementById('nativeStatus');
       if (status) status.textContent = '3D live';
       // Told BEFORE the stream starts: a picked size raises the
@@ -2246,6 +2468,8 @@
       if (!render3DPanel && window.Sim3DPanel && udid) {
         render3DPanel = new window.Sim3DPanel();
         render3DPanel.setCaptureSettings(captureSettings());
+        // The book stands the way the flat view was turned.
+        if (foldable) render3DPanel.interfaceOrientation = currentOrientation;
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
           format: currentFormat(),
@@ -2259,6 +2483,7 @@
       } else if (render3DPanel) {
         render3DPanel.background = live3DBackground();
         if (render3DPanel.fixed !== fixed) render3DPanel.setFixed(fixed, { silent: true });
+        if (foldable) render3DPanel.interfaceOrientation = currentOrientation;
         render3DPanel.start();
       }
     }

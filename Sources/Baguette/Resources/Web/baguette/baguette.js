@@ -34,21 +34,25 @@
    * @param {(msg:string, isErr?:boolean)=>void} [opts.log]
    * @returns {Promise<Simulator>}
    */
-  root.Baguette.use = async function use({ host, udid, send, log, getOrientation, definitionURL }) {
+  root.Baguette.use = async function use({ host, udid, send, log, getOrientation, definitionURL, definition }) {
     if (!udid) throw new Error('Baguette.use: udid is required');
     if (typeof send !== 'function') throw new Error('Baguette.use: send must be a function');
 
-    const base = host || location.origin;
-    // `definitionURL` lets a non-simulator surface (a physical device
-    // borrowing a chrome) point the bootstrap somewhere else.
-    const url  = definitionURL
-        ? `${base}${definitionURL}`
-        : `${base}/simulators/${encodeURIComponent(udid)}/definition.json`;
-    const res  = await fetch(url, { cache: 'no-cache' });
-    if (!res.ok) {
-      throw new Error(`Baguette.use: definition fetch failed (${res.status})`);
+    // A definition already in hand (a foldable's other panel) skips the fetch.
+    let def = definition;
+    if (!def) {
+      const base = host || location.origin;
+      // `definitionURL` lets a non-simulator surface (a physical device
+      // borrowing a chrome) point the bootstrap somewhere else.
+      const url  = definitionURL
+          ? `${base}${definitionURL}`
+          : `${base}/simulators/${encodeURIComponent(udid)}/definition.json`;
+      const res  = await fetch(url, { cache: 'no-cache' });
+      if (!res.ok) {
+        throw new Error(`Baguette.use: definition fetch failed (${res.status})`);
+      }
+      def = await res.json();
     }
-    const def = await res.json();
 
     const T = root.Baguette._Transport;
     const transport = new T({ send, log });

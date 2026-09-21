@@ -1,0 +1,78 @@
+'use strict';
+
+// BookPose — how the flat view draws a foldable at a hinge angle: the
+// cover when shut, the unfolded panel flat when flat, and in between a
+// book whose two halves turn about the crease as Device Hub's model does.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { loadBrowserModule } = require('./helpers/load-browser-module.js');
+
+const MODULE_PATH = path.join(
+  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
+  'baguette', 'hinge', 'book-pose.js'
+);
+
+function load() {
+  return loadBrowserModule(MODULE_PATH).Baguette.BookPose;
+}
+
+test('shut shows the cover, flat the unfolded panel, anything between the book', () => {
+  const BookPose = load();
+  assert.equal(BookPose.view(0), 'cover');
+  assert.equal(BookPose.view(3.2), 'cover');    // Device Hub's closed pose
+  assert.equal(BookPose.view(8), 'book');
+  assert.equal(BookPose.view(130), 'book');     // its open pose stays bent
+  assert.equal(BookPose.view(177), 'book');
+  assert.equal(BookPose.view(179), 'flat');
+  assert.equal(BookPose.view(180), 'flat');
+});
+
+// The book is the unfolded panel with the cover on its back, so only the
+// shut device streams the cover as the view's own panel.
+test('the view streams the cover only when shut', () => {
+  const BookPose = load();
+  assert.equal(BookPose.panel(0), 'primary');
+  assert.equal(BookPose.panel(40), 'secondary');
+  assert.equal(BookPose.panel(180), 'secondary');
+});
+
+test('between open and flat both halves take half the bend, spine centred', () => {
+  const BookPose = load();
+  assert.deepEqual(BookPose.leaves(180), { left: 0, right: 0 });
+  assert.deepEqual(BookPose.leaves(155), { left: 12.5, right: -12.5 });
+  assert.deepEqual(BookPose.leaves(130), { left: 25, right: -25 });
+});
+
+// The cover is the back of the left half: shutting lays the left half
+// onto the right, which settles flat, handing over continuously from
+// the open pose down.
+test('closing past the open pose, the left half folds over onto the right', () => {
+  const BookPose = load();
+  assert.deepEqual(BookPose.leaves(0), { left: 180, right: 0 });
+  assert.deepEqual(BookPose.leaves(65), { left: 86.25, right: -28.75 });
+  for (const a of [0, 30, 65, 100, 130, 160, 180]) {
+    const { left, right } = BookPose.leaves(a);
+    assert.ok(Math.abs(left - right - (180 - a)) < 0.02, `angle ${a}`);
+  }
+});
+
+// The crease is a hairline laid flat and deepens as the panel bends.
+test('the crease is faint when flat and darkens with the fold', () => {
+  const BookPose = load();
+  assert.equal(BookPose.creaseOpacity(180), 0.05);
+  assert.equal(BookPose.creaseOpacity(0), 0.25);
+  assert.ok(BookPose.creaseOpacity(130) > 0.05 && BookPose.creaseOpacity(130) < 0.12);
+  assert.equal(BookPose.creaseOpacity(200), 0.05);
+});
+
+// As the book shuts it narrows to its right half; Device Hub keeps the
+// device in the middle, so the book slides back by half what it lost.
+test('the book is shifted to stay centred as it folds', () => {
+  const BookPose = load();
+  assert.equal(BookPose.shift(180, 200), 0);
+  assert.equal(BookPose.shift(130, 200), 0);
+  assert.equal(BookPose.shift(0, 200), -100);
+  assert.ok(Math.abs(BookPose.shift(65, 100) - -40.57) < 0.05);
+});

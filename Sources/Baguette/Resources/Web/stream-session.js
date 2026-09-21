@@ -6,6 +6,7 @@
 //   const session = new StreamSession({
 //     udid, format, version,
 //     display,               // optional 'phone' | 'carplay'
+//     panel,                 // optional 'primary' | 'secondary' (a foldable's)
 //     url,                    // optional custom stream WebSocket URL
 //     canvas,
 //     onSize: (w, h) => …,    // first frame + on resize
@@ -35,13 +36,13 @@
 
   StreamSession.prototype.start = function () {
     const {
-      udid, format, version, canvas, url, display,
+      udid, format, version, canvas, url, display, panel,
       onSize, onFps, onLog, onText, onOpen, onClose, onError, onPaint,
     } = this.opts;
     const ctx = canvas.getContext('2d');
     const log = onLog || (() => {});
 
-    const wsUrl = url || buildWSUrl(udid, format, version || 'v2', display);
+    const wsUrl = url || buildWSUrl(udid, format, version || 'v2', display, panel);
     const socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';
     this.ws = socket;
@@ -136,7 +137,7 @@
     this.pending = null;
   };
 
-  function buildWSUrl(udid, format, version, display) {
+  function buildWSUrl(udid, format, version, display, panel) {
     const loc = window.location;
     const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
     // BaguetteTarget switches the base for /devices/:udid pages; the
@@ -147,6 +148,9 @@
          + `&version=${encodeURIComponent(version)}`;
     if (display === 'phone' || display === 'carplay') {
       url += `&display=${encodeURIComponent(display)}`;
+    }
+    if (panel === 'primary' || panel === 'secondary') {
+      url += `&panel=${panel}`;
     }
     return url;
   }
