@@ -45,6 +45,7 @@ struct MotionRoutesTests {
         given(motion).publish(.any, on: .any).willProduce { intent, _ in
             captures.intents.append(intent)
         }
+        given(motion).published().willProduce { captures.last }
         given(motion).clear(on: .any).willReturn(())
         return Wiring(simulators: simulators, sim: sim, motion: motion,
                       sessions: MotionSessions(makeMotion: { _ in motion }),
@@ -159,6 +160,7 @@ struct MotionRoutesTests {
         let motion = MockMotion()
         given(motion).publish(.any, on: .any).willReturn(())
         given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        given(motion).published().willProduce { nil }
         let sessions = MotionSessions(makeMotion: { _ in motion })
         _ = await Server.applyMotion(udid: "U", body: #"{"activity":"walking"}"#,
                                      simulators: simulators, sessions: sessions)
@@ -183,6 +185,55 @@ struct MotionRoutesTests {
         #expect(outcome == .ok)
         #expect(w.captures.last?.kind == .stationary)
         #expect(w.sessions.active(udid: "U") == nil)
+    }
+
+    @Test func `stopMotion after a server restart parks and disarms the published motion`() async {
+        let w = makeWiring()
+        // What the guest already reads from the previous server's run.
+        w.captures.intents.append(.stationary(startedAt: 1000, stepsBefore: 812, distanceBefore: 610))
+
+        let outcome = await Server.stopMotion(
+            udid: "U", simulators: w.simulators, sessions: w.sessions)
+
+        #expect(outcome == .ok)
+        #expect(w.captures.last?.kind == .stationary)
+        #expect(w.captures.last?.stepsBefore == 812)
+        #expect(w.captures.last?.distanceBefore == 610)
+        verify(w.motion).clear(on: .any).called(1)
+        #expect(w.sessions.active(udid: "U") == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func `stopMotion after a restart retains a failed cleanup until explicit retry`(failPublish: Bool) async {
+        let simulators = MockSimulators()
+        let sim = MockSimulator()
+        let motion = MockMotion()
+        given(simulators).find(udid: .any).willReturn(sim)
+        given(sim).udid.willReturn("U")
+        given(motion).published().willReturn(
+            .stationary(startedAt: 1000, stepsBefore: 812, distanceBefore: 610))
+        var reject = true
+        let captures = Captures()
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            if reject && failPublish { throw SimulatorInjectionError.simctlFailed(status: 2) }
+            captures.intents.append(intent)
+        }
+        given(motion).clear(on: .any).willProduce { _ in
+            if reject { throw SimulatorInjectionError.simctlFailed(status: 3) }
+        }
+        let sessions = MotionSessions(makeMotion: { _ in motion })
+
+        #expect(await Server.stopMotion(udid: "U", simulators: simulators, sessions: sessions) == .dispatchFailed)
+        #expect(sessions.active(udid: "U")?.lastError != nil)
+        verify(motion).publish(.any, on: .any).called(1)
+        verify(motion).clear(on: .any).called(failPublish ? 0 : 1)
+
+        reject = false
+        #expect(await Server.stopMotion(udid: "U", simulators: simulators, sessions: sessions) == .ok)
+        #expect(captures.last?.kind == .stationary)
+        #expect(captures.last?.stepsBefore == 812)
+        #expect(captures.last?.distanceBefore == 610)
+        #expect(sessions.active(udid: "U") == nil)
     }
 
     // MARK: - the location hook

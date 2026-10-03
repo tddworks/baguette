@@ -13,6 +13,9 @@ For releases prior to this changelog, see the
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
 
+### Fixed
+- `DELETE /simulators/:udid/motion` parks and disarms after a server restart and after a first publish that wrote the intent before failing, resuming the published pedometer totals; a failed cleanup stays retryable instead of being reported as stopped. → [docs](docs/features/motion/README.md)
+
 ---
 
 ## [0.2.2] - 2026-10-03

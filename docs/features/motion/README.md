@@ -93,8 +93,12 @@ Both return the current state, which is also what `GET` answers:
 ```
 
 `DELETE /simulators/:udid/motion` parks the device as stationary and
-disarms. A body naming no activity and carrying no speed returns `400`; an
-unknown udid `404`; a build with no bundled dylib `500`.
+disarms, including after the server restarts: it resumes the published
+pedometer totals, and a failed park or disarm returns an error and keeps the
+cleanup pending until the next explicit stop. Restarting the server alone
+does not stop guest injection. A body naming no activity and carrying no
+speed returns `400`; an unknown udid `404`; a build with no bundled dylib
+`500`.
 
 Unlike location — which has no `GET`, because `simctl` can't report the
 active position — motion **can** be read back: the state is baguette's own.
@@ -138,3 +142,10 @@ active position — motion **can** be read back: the state is baguette's own.
 
 - [design.md](design.md) — why it needs a dylib, the intent file, the measured CoreMotion ABI, the self-check
 - [Location](../location/README.md) · [Camera](../camera/README.md)
+
+A first publish may write the shared motion intent and arm the dylib before
+it fails. The session keeps the cleanup responsibility: stopping still parks
+the device and disarms injection, and a failed cleanup stays available for
+retry. A retry banks what the guest actually read: a park that wrote
+"stationary" before failing adds no steps for the time the device then stood
+still, and a failed change of kind banks the kind that was published.

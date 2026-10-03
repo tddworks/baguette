@@ -35,13 +35,14 @@ struct MotionSessionTests {
         var now: Double = 1000
     }
 
-    private func makeWiring() -> Wiring {
+    private func makeWiring(published: MotionIntent? = nil) -> Wiring {
         let motion = MockMotion()
         let captures = Captures()
         given(motion).publish(.any, on: .any).willProduce { intent, _ in
             captures.intents.append(intent)
         }
         given(motion).clear(on: .any).willReturn(())
+        given(motion).published().willProduce { captures.last ?? published }
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let clock = Clock()
@@ -132,7 +133,7 @@ struct MotionSessionTests {
         await w.session.set(kind: .walking, confidence: .high, speed: 1.5, on: w.sim)
 
         w.clock.now = 1010
-        await w.session.stop()
+        await w.session.stop(on: w.sim)
 
         #expect(w.session.phase == .idle)
         #expect(w.captures.last?.kind == .stationary)
@@ -144,7 +145,7 @@ struct MotionSessionTests {
         await w.session.set(kind: .walking, confidence: .high, speed: 1.5, on: w.sim)
 
         w.clock.now = 1010
-        await w.session.stop()
+        await w.session.stop(on: w.sim)
 
         // The parked intent still reports 20 steps: a pedometer that reset
         // to zero on stop would make an app's chart jump backwards.
@@ -152,13 +153,29 @@ struct MotionSessionTests {
         #expect(w.session.steps == 20)
     }
 
-    @Test func `stop does nothing when motion was never started`() async {
+    @Test func `an explicit stop parks and disarms even without a recorded start`() async {
         let w = makeWiring()
 
-        await w.session.stop()
+        #expect(await w.session.stop(on: w.sim))
 
-        verify(w.motion).clear(on: .any).called(0)
-        verify(w.motion).publish(.any, on: .any).called(0)
+        #expect(w.captures.last?.kind == .stationary)
+        #expect(w.captures.last?.stepsBefore == 0)
+        verify(w.motion).clear(on: .any).called(1)
+    }
+
+    @Test func `an explicit stop resumes the published walking totals after a restart`() async {
+        let w = makeWiring(
+            published: MotionIntent(
+                kind: .walking, confidence: .high, speed: 1.5,
+                startedAt: 1000, stepsBefore: 5, distanceBefore: 3.75))
+        w.clock.now = 1010
+
+        #expect(await w.session.stop(on: w.sim))
+
+        #expect(w.captures.last?.kind == .stationary)
+        #expect(w.captures.last?.stepsBefore == 25)
+        #expect(w.captures.last?.distanceBefore == 18.75)
+        verify(w.motion).clear(on: .any).called(1)
     }
 
     @Test func `a failed republish does not bank the same leg twice`() async {
@@ -179,6 +196,9 @@ struct MotionSessionTests {
             captures.intents.append(intent)
         }
         given(motion).clear(on: .any).willReturn(())
+        // A publish that fails before writing leaves the guest on the
+        // previous intent, which is what the session already holds.
+        given(motion).published().willProduce { captures.last }
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let clock = Clock()
@@ -211,6 +231,7 @@ struct MotionSessionTests {
             captures.intents.append(intent)
         }
         given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        given(motion).published().willProduce { captures.last }
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let clock = Clock()
@@ -218,12 +239,12 @@ struct MotionSessionTests {
 
         await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
         clock.now = 1010
-        #expect(await session.stop() == false)   // parked, but still armed
+        #expect(await session.stop(on: sim) == false)   // parked, but still armed
 
         // Ten seconds parked, then a retry. The 20 steps from the walk stand;
         // the parked interval adds none.
         clock.now = 1020
-        _ = await session.stop()
+        _ = await session.stop(on: sim)
 
         #expect(captures.last?.kind == .stationary)
         #expect(captures.last?.stepsBefore == 20)
@@ -241,5 +262,98 @@ struct MotionSessionTests {
 
         #expect(session.phase == .idle)
         #expect(session.lastError != nil)
+    }
+
+    @Test func `a first publish that writes then fails still requires parking and disarming`() async {
+        let motion = MockMotion()
+        let captures = Captures()
+        var reject = true
+        var disarmed = false
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            captures.intents.append(intent)
+            if reject { throw SimulatorInjectionError.simctlFailed(status: 2) }
+        }
+        given(motion).clear(on: .any).willProduce { _ in disarmed = true }
+        given(motion).published().willProduce { captures.last }
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let session = MotionSession(motion: motion, now: { 1000 })
+
+        await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
+        #expect(captures.last?.kind == .walking)
+        #expect(session.lastError != nil)
+
+        #expect(await session.stop(on: sim) == false)
+        #expect(captures.last?.kind == .stationary)
+        #expect(!disarmed)
+
+        reject = false
+        #expect(await session.stop(on: sim))
+        #expect(disarmed)
+        #expect(captures.last?.kind == .stationary)
+        #expect(session.lastError == nil)
+    }
+
+    @Test func `a retry after a park that wrote before failing banks no steps for the standing time`() async {
+        let motion = MockMotion()
+        let captures = Captures()
+        var reject = false
+        let clock = Clock()
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            captures.intents.append(intent)
+            if reject { throw SimulatorInjectionError.simctlFailed(status: 2) }
+        }
+        given(motion).clear(on: .any).willReturn(())
+        given(motion).published().willProduce { captures.last }
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let session = MotionSession(motion: motion, now: { clock.now })
+
+        await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
+        clock.now += 60
+        reject = true
+        #expect(await session.stop(on: sim) == false)
+        let parked = captures.last
+        #expect(parked?.kind == .stationary)
+        #expect((parked?.stepsBefore ?? 0) > 0)
+
+        // The guest has read "stationary" for a minute; the retry must not
+        // bank that minute as the walk the failed park replaced.
+        clock.now += 60
+        reject = false
+        #expect(await session.stop(on: sim))
+        #expect(captures.last?.kind == .stationary)
+        #expect(captures.last?.stepsBefore == parked?.stepsBefore)
+    }
+
+    @Test func `a failed change of kind banks the activity the guest actually read`() async {
+        let motion = MockMotion()
+        let captures = Captures()
+        var reject = false
+        let clock = Clock()
+        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+            captures.intents.append(intent)
+            if reject { throw SimulatorInjectionError.simctlFailed(status: 2) }
+        }
+        given(motion).clear(on: .any).willReturn(())
+        given(motion).published().willProduce { captures.last }
+        let sim = MockSimulator()
+        given(sim).udid.willReturn("U")
+        let session = MotionSession(motion: motion, now: { clock.now })
+
+        await session.set(kind: .walking, confidence: .high, speed: 1.5, on: sim)
+        clock.now += 60
+        reject = true
+        await session.set(kind: .running, confidence: .high, speed: 3.0, on: sim)
+        #expect(captures.last?.kind == .running)
+        #expect(session.lastError != nil)
+
+        clock.now += 60
+        reject = false
+        #expect(await session.stop(on: sim))
+        let expected = MotionLedger(steps: 0, metres: 0)
+            .banking(captures.intents[0], at: 1060)
+            .banking(captures.intents[1], at: 1120)
+        #expect(captures.last?.stepsBefore == expected.steps)
     }
 }

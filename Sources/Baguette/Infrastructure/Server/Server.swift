@@ -1413,15 +1413,16 @@ struct Server: Sendable {
         simulators: any Simulators,
         sessions: MotionSessions
     ) async -> LocationOutcome {
-        guard !udid.isEmpty, simulators.find(udid: udid) != nil else {
+        guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
             return .unknownDevice
         }
-        if let session = await sessions.active(udid: udid) {
-            // Keep the session when the stop failed, so a retry still has
-            // something to disarm — dropping it would strand an armed dylib
-            // with nothing tracking it.
-            guard await session.stop() else { return .dispatchFailed }
-        }
+        // A restarted server has no session in memory, but the guest is
+        // still reading the intent it published; an explicit stop must
+        // park and disarm regardless. Keep the session when the stop
+        // failed, so a retry still has something to disarm — dropping it
+        // would strand an armed dylib with nothing tracking it.
+        let session = await sessions.session(for: simulator)
+        guard await session.stop(on: simulator) else { return .dispatchFailed }
         await sessions.end(udid: udid)
         return .ok
     }
