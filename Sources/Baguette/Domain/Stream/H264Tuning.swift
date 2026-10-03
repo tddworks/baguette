@@ -32,6 +32,18 @@ struct H264Tuning: Equatable, Sendable {
         keyFrameIntervalSeconds: 5
     )
 
+    /// The preset for a session that must accept every property it is
+    /// given: low-latency rate control already forbids lookahead and
+    /// B-frames, and `MaxFrameDelayCount` is left out because not every
+    /// encoder supports it.
+    static let strict = H264Tuning(
+        realTime: true,
+        allowFrameReordering: false,
+        maxFrameDelayCount: nil,
+        lowLatencyRateControl: true,
+        keyFrameIntervalSeconds: 5
+    )
+
     /// Frames between forced IDRs at a given capture rate. Guards fps 0 so
     /// a misconfigured stream still forces periodic keyframes.
     func maxKeyFrameInterval(fps: Int) -> Int {

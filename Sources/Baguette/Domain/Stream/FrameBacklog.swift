@@ -3,11 +3,16 @@ import Foundation
 /// The encoded frames a client has not read yet, held under a byte
 /// budget so a slow consumer can never grow the server without bound.
 ///
-/// A live stream values freshness over completeness: once the budget is
-/// reached the *oldest* frames go, because what the viewer wants on
-/// screen is the newest one. Two frames are never discarded — the
-/// newest avcC description, without which a decoder can never start,
-/// and the frame that just arrived.
+/// A stream of independent images values freshness over completeness:
+/// once the budget is reached the *oldest* frames go, because what the
+/// viewer wants on screen is the newest one. Two frames are never
+/// discarded — the newest avcC description, without which a decoder can
+/// never start, and the frame that just arrived.
+///
+/// A reference codec cannot drop that way: every encoded H.264 frame is
+/// needed to decode the ones after it, so an AVCC backlog rejects the
+/// frame that would overflow its (larger) budget instead, and the owner
+/// ends the stream.
 ///
 /// Frames arrive here already stripped of their transport envelope, so
 /// an AVCC frame's first byte is its `AVCCEnvelope` tag. A JPEG starts
@@ -18,24 +23,44 @@ struct FrameBacklog {
     /// latency, not smoothness — so this is deliberately shallow.
     static let defaultByteBudget = 4 * 1024 * 1024
 
+    /// The budget a reference stream may hold before the consumer is
+    /// declared too slow: deeper than the discard budget, because the
+    /// frames behind a stall are all still needed.
+    static let referenceByteBudget = 32 * 1024 * 1024
+
     let byteBudget: Int
+    private let rejectingOverflow: Bool
     private var frames: [Data] = []
     private(set) var byteCount = 0
     /// How many frames the backlog has discarded over its lifetime, so a
     /// caller can tell a viewer the stream skipped rather than stalled.
     private(set) var droppedCount = 0
 
-    init(byteBudget: Int = FrameBacklog.defaultByteBudget) {
+    init(byteBudget: Int = FrameBacklog.defaultByteBudget, rejectingOverflow: Bool = false) {
         self.byteBudget = byteBudget
+        self.rejectingOverflow = rejectingOverflow
+    }
+
+    /// The policy a format needs: MJPEG discards, AVCC rejects overflow.
+    init(format: StreamFormat) {
+        self.init(
+            byteBudget: format == .avcc ? Self.referenceByteBudget : Self.defaultByteBudget,
+            rejectingOverflow: format == .avcc)
     }
 
     var count: Int { frames.count }
     var isEmpty: Bool { frames.isEmpty }
 
-    mutating func append(_ frame: Data) {
+    /// Appends `frame`, or returns `false` when this backlog rejects
+    /// overflow and the frame does not fit: dropping it, or anything
+    /// before it, would invalidate every frame that follows.
+    @discardableResult
+    mutating func append(_ frame: Data) -> Bool {
+        if rejectingOverflow, frame.count > byteBudget - byteCount { return false }
         frames.append(frame)
         byteCount += frame.count
         trim()
+        return true
     }
 
     mutating func popFirst() -> Data? {

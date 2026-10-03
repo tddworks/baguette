@@ -43,5 +43,6 @@ struct StreamFormatTests {
 }
 
 private final class FakeFrameSink: FrameSink, @unchecked Sendable {
+    func fail(_ error: any Error) {}
     func write(_ data: Data) {}
 }

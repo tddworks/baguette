@@ -4,6 +4,14 @@ import Testing
 @Suite("H264Tuning")
 struct H264TuningTests {
 
+    @Test func `strict preset keeps low latency without the optional frame delay property`() {
+        let tuning = H264Tuning.strict
+        #expect(tuning.realTime)
+        #expect(!tuning.allowFrameReordering)
+        #expect(tuning.lowLatencyRateControl)
+        #expect(tuning.maxFrameDelayCount == nil)
+    }
+
     @Test func `low-latency preset holds no frames and disables reordering`() {
         let t = H264Tuning.lowLatency
         #expect(t.realTime == true)
