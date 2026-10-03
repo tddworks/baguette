@@ -65,13 +65,14 @@ baguette lifetime [--detach] [--shutdown]
 Read newline-delimited JSON gestures from stdin, ack each on stdout
 
 ```
-baguette input --udid <udid> [--display <display>]
+baguette input --udid <udid> [--display <display>] [--require-existing-display]
 ```
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
 | `--udid` | yes |  | Simulator UDID |
 | `--display` |  |  | Target display plane: phone \| carplay |
+| `--require-existing-display` |  |  | Require the target display to be attached; never enable CarPlay implicitly |
 
 ## baguette stream
 

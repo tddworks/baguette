@@ -835,12 +835,20 @@ struct Server: Sendable {
             "/simulators/:udid/stream",
             shouldUpgrade: trustedWebSocketUpgrade
         ) { [simulators, chromes] inbound, outbound, context in
+            let existingDisplayValues = context.request.uri.queryParameters
+                .filter { $0.key == "requireExistingDisplay" }.map { String($0.value) }
+            guard let requireExistingDisplay = try? StreamDisplayPlan.requireExistingDisplay(query: existingDisplayValues)
+            else {
+                try? await outbound.write(.text(#"{"ok":false,"error":"invalid requireExistingDisplay"}"#))
+                return
+            }
             await Self.streamWS(
                 udid: Self.udidParam(context.request),
                 format: context.request.uri.queryParameters.get("format")
                     .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
                 displayQuery: context.request.uri.queryParameters.get("display"),
                 panelQuery: context.request.uri.queryParameters.get("panel").map { String($0) },
+                requireExistingDisplay: requireExistingDisplay,
                 simulators: simulators,
                 chromes: chromes,
                 inbound: inbound,
@@ -2950,6 +2958,7 @@ struct Server: Sendable {
         format: StreamFormat,
         displayQuery: String?,
         panelQuery: String? = nil,
+        requireExistingDisplay: Bool = false,
         simulators: any Simulators,
         chromes: any Chromes,
         inbound: WebSocketInboundStream,
@@ -2960,7 +2969,9 @@ struct Server: Sendable {
             return
         }
 
-        let displayPlan = StreamDisplayPlan.from(query: displayQuery, panel: panelQuery)
+        let displayPlan = StreamDisplayPlan.from(
+            query: displayQuery, panel: panelQuery, requireExistingDisplay: requireExistingDisplay
+        )
         let bound: (screen: any Screen, input: any Input)
         do {
             bound = try displayPlan.bind(to: sim)

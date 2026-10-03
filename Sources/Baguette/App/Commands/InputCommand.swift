@@ -15,6 +15,12 @@ struct InputCommand: AsyncParsableCommand {
     @Option(help: "Target display plane: phone | carplay")
     var display: String?
 
+    /// A CarPlay session that must not open the host External Displays
+    /// panel: with no CarPlay framebuffer attached the command fails
+    /// instead of enabling one.
+    @Flag(help: "Require the target display to be attached; never enable CarPlay implicitly")
+    var requireExistingDisplay = false
+
     /// Rejected here rather than in `run()` so a malformed flag is not
     /// masked by the device lookup that used to precede it: `--display
     /// carply` against an absent udid reported `Device ... not found`,
@@ -23,7 +29,7 @@ struct InputCommand: AsyncParsableCommand {
     /// already fails it at the same point.
     mutating func validate() throws {
         do {
-            _ = try StreamDisplayPlan.from(cliFlag: display)
+            _ = try StreamDisplayPlan.from(cliFlag: display, requireExistingDisplay: requireExistingDisplay)
         } catch let error as DisplayFlagError {
             throw ValidationError(error.message)
         }
@@ -40,7 +46,7 @@ struct InputCommand: AsyncParsableCommand {
         let plan: StreamDisplayPlan
         let bound: (screen: any Screen, input: any Input)
         do {
-            plan = try StreamDisplayPlan.from(cliFlag: display)
+            plan = try StreamDisplayPlan.from(cliFlag: display, requireExistingDisplay: requireExistingDisplay)
             bound = try plan.bind(to: simulator)
         } catch let error as DisplayFlagError {
             log(error.message)

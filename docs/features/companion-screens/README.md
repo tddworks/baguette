@@ -48,6 +48,9 @@ baguette screenshot --udid <UDID> --display carplay -o carplay.png
 
 # gestures against the CarPlay digitizer, over the stdin pipe
 baguette input --udid <UDID> --display carplay < gestures.jsonl
+
+# require an already attached display, without opening Simulator menus
+baguette input --udid <UDID> --display carplay --require-existing-display < gestures.jsonl
 ```
 
 The watch needs no flag: it is its own udid, so the ordinary commands point at it.
@@ -119,6 +122,10 @@ framebuffer actually binds, not just that a screen is listed — the same check
 the stream performs, so the rail and the stream can't disagree. Absence is an
 answer, not an error; only an unknown udid is a failure (404). Both probes fail
 closed. Browser-facing only: these routes are not plugin-reachable.
+
+For an already attached display, add `requireExistingDisplay=1` to the stream
+WebSocket query. A missing display then fails the stream instead of attaching
+one; any value other than a single `0` or `1` is rejected.
 
 When a stream can't bind anyway, the socket gets `{"ok":false,"error":…}` and
 closes; the pane shows the instructions plus the server's verbatim error

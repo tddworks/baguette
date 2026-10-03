@@ -8,11 +8,14 @@ import Foundation
 /// as a validation error rather than falling back to phone.
 enum DisplayFlagError: Error, Equatable {
     case unknown(String)
+    case invalidExistingDisplay
 
     var message: String {
         switch self {
         case .unknown(let raw):
             return "--display must be one of: phone, carplay (got \"\(raw)\")"
+        case .invalidExistingDisplay:
+            return "requireExistingDisplay must be a single 0 or 1"
         }
     }
 }
@@ -37,10 +40,15 @@ struct StreamDisplayPlan: Equatable, Sendable {
     /// quietly means phone — a mistyped `--display` must stop the
     /// invocation, because the caller asked one plane and would silently
     /// get another.
-    static func from(cliFlag: String?) throws -> StreamDisplayPlan {
+    ///
+    /// `requireExistingDisplay` keeps a CarPlay plan from enabling the
+    /// host External Displays panel: the caller wants the display that
+    /// is already attached, and an absent one must fail instead of
+    /// appearing because the stream asked for it.
+    static func from(cliFlag: String?, requireExistingDisplay: Bool = false) throws -> StreamDisplayPlan {
         switch DisplayKind.parse(cliFlag: cliFlag) {
         case .carPlay:
-            return StreamDisplayPlan(kind: .carPlay, enableCarPlay: true)
+            return StreamDisplayPlan(kind: .carPlay, enableCarPlay: !requireExistingDisplay)
         case .phone:
             return StreamDisplayPlan(kind: .phone, enableCarPlay: false)
         case .none:
@@ -58,7 +66,7 @@ struct StreamDisplayPlan: Equatable, Sendable {
 
     /// `panel` is the stream route's `?panel=primary|secondary`; anything
     /// else leaves the plane to the hinge.
-    static func from(query: String?, panel: String? = nil) -> StreamDisplayPlan {
+    static func from(query: String?, panel: String? = nil, requireExistingDisplay: Bool = false) -> StreamDisplayPlan {
         let pinned: IntegratedPanel?
         switch panel {
         case "primary": pinned = .primary
@@ -67,9 +75,22 @@ struct StreamDisplayPlan: Equatable, Sendable {
         }
         switch DisplayKind.parse(query: query) {
         case .carPlay:
-            return StreamDisplayPlan(kind: .carPlay, enableCarPlay: true)
+            return StreamDisplayPlan(kind: .carPlay, enableCarPlay: !requireExistingDisplay)
         case .phone, .none:
             return StreamDisplayPlan(kind: .phone, enableCarPlay: false, panel: pinned)
+        }
+    }
+
+    /// The stream route's `?requireExistingDisplay=` values. Strict, unlike
+    /// `display`: a typo here would silently attach a display the caller
+    /// asked never to attach, so anything but one `0` or `1` is rejected.
+    static func requireExistingDisplay(query: [String]) throws -> Bool {
+        guard query.count <= 1 else { throw DisplayFlagError.invalidExistingDisplay }
+        guard let value = query.first else { return false }
+        switch value {
+        case "0": return false
+        case "1": return true
+        default: throw DisplayFlagError.invalidExistingDisplay
         }
     }
 

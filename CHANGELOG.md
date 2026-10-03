@@ -12,6 +12,7 @@ For releases prior to this changelog, see the
 
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
+- `input --require-existing-display` and `stream?requireExistingDisplay=1` fail when the requested CarPlay display is not attached, instead of enabling the host External Displays panel on the caller's behalf. → [docs](docs/features/companion-screens/README.md)
 
 ---
 
