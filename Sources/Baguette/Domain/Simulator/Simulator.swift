@@ -215,10 +215,13 @@ extension Simulator {
     }
 
     /// Resolve the installed 3D model for this simulator. Device type
-    /// is stable across simulator renames; visible name remains a
-    /// fallback for model definitions that target a named device.
+    /// is stable across simulator renames, so a definition that targets
+    /// a named device is matched against the type name first; the
+    /// visible name remains a fallback for definitions that only know
+    /// the user-given name.
     func deviceModel(in models: any DeviceModels) throws -> InstalledDeviceModel? {
-        try models.match(deviceType: deviceTypeName, deviceName: name)
+        try models.match(deviceType: deviceTypeName, deviceName: deviceTypeName)
+            ?? models.match(deviceType: deviceTypeName, deviceName: name)
     }
 }
 

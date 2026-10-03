@@ -13,6 +13,9 @@ For releases prior to this changelog, see the
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
 
+### Fixed
+- Renamed simulators keep their 3D hardware model: definitions that target a named device are matched against the stable device type name before the editable display name. → [docs](docs/features/3d-rendering/models.md)
+
 ---
 
 ## [0.2.2] - 2026-10-03

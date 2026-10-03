@@ -26,6 +26,8 @@ Definitions are resolved in precedence order:
 
 An ID found in a higher-precedence directory replaces the same ID below it.
 Two definitions at the same precedence that match one simulator are an error.
+Simulator lookup checks the stable device type name before the editable display
+name, so renaming a simulator does not change its hardware model.
 
 The third entry is the one that surprises people: "bundled definitions" means
 the SPM resource bundle, which sits beside the binary in `.build/`. `build.sh`

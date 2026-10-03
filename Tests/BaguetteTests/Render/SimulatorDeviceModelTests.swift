@@ -6,12 +6,26 @@ import Testing
 @Suite("Simulator 3D model")
 struct SimulatorDeviceModelTests {
 
+    @Test func `renamed simulator retains its hardware model`() throws {
+        let simulator = MockSimulator()
+        given(simulator).deviceTypeName.willReturn("iPhone 17 Pro")
+        given(simulator).name.willReturn("Team QA iPhone")
+        let installed = Self.installed(matches: DeviceModelMatches(deviceNames: ["iPhone 17 Pro"]))
+        let catalog = try DeviceModelCatalog(layers: [[installed]])
+
+        #expect(try simulator.deviceModel(in: catalog) == installed)
+    }
+
     @Test func `resolves a model from stable device type and visible name`() throws {
         let simulator = MockSimulator()
         let models = MockDeviceModels()
         let installed = Self.installed()
         given(simulator).deviceTypeName.willReturn("iPhone 17 Pro")
         given(simulator).name.willReturn("Demo Phone")
+        given(models).match(
+            deviceType: .value("iPhone 17 Pro"),
+            deviceName: .value("iPhone 17 Pro")
+        ).willReturn(nil)
         given(models).match(
             deviceType: .value("iPhone 17 Pro"),
             deviceName: .value("Demo Phone")
@@ -28,13 +42,13 @@ struct SimulatorDeviceModelTests {
 }
 
 private extension SimulatorDeviceModelTests {
-    static func installed() -> InstalledDeviceModel {
+    static func installed(matches: DeviceModelMatches = DeviceModelMatches()) -> InstalledDeviceModel {
         InstalledDeviceModel(
             definition: DeviceModelDefinition(
                 schemaVersion: 1,
                 id: "iphone-17-pro",
                 displayName: "iPhone 17 Pro",
-                matches: DeviceModelMatches(),
+                matches: matches,
                 asset: DeviceModelAsset(file: "device.usdz", downloadURL: nil, sha256: nil),
                 scene: DeviceModelScene(
                     rootNode: "Device",

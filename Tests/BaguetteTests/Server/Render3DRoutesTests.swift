@@ -30,10 +30,15 @@ struct Render3DRoutesTests {
         )
 
         #expect(outcome == .rendered(Data("PNG".utf8)))
+        // The stable type name resolves the model; the visible name is never consulted.
+        verify(models).match(
+            deviceType: .value("iPhone 17 Pro"),
+            deviceName: .value("iPhone 17 Pro")
+        ).called(1)
         verify(models).match(
             deviceType: .value("iPhone 17 Pro"),
             deviceName: .value("Demo")
-        ).called(1)
+        ).called(0)
         verify(renderer).render(
             plan: .matching {
                 $0.model == installed
