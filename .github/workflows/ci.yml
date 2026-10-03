@@ -34,7 +34,7 @@ jobs:
         run: swift --version
 
       - name: Build
-        run: swift build -c release
+        run: ./build.sh
 
       - name: Generated docs are current
         run: |

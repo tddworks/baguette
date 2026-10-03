@@ -55,7 +55,7 @@ jobs:
           echo "Only Xcode 27 installed — no fallback available."
 
       - name: Build
-        run: swift build -c release
+        run: ./build.sh
 
       # Runs before the suite so an unrelated test failure can't skip it.
       - name: Assert baguette resolves SimulatorKit

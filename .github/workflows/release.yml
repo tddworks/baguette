@@ -51,7 +51,7 @@ jobs:
 
       - name: Build arm64
         run: |
-          swift build -c release --arch arm64 --disable-sandbox
+          BAGUETTE_INJECTED_ARCHS=arm64 ./build.sh --arch arm64 --disable-sandbox
           strip -rSTx .build/arm64-apple-macosx/release/Baguette
 
       - name: Package binary + resource bundle

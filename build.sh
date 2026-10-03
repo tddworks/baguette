@@ -12,7 +12,9 @@ cd "$(dirname "$0")"
 
 # Pure-SPM build. Private frameworks resolve through the rpath flags +
 # linkedFramework declarations in Package.swift.
-swift build -c release
+# Match Package.swift's macOS 15 target across Swift dependencies. Mixed targets
+# emit incompatible Clock async specializations in optimized Swift 6.3 builds.
+swift build -c release -Xswiftc -target -Xswiftc arm64-apple-macosx15.0 "$@"
 
 # Drop the binary at the workspace root so the Makefile / install scripts
 # find it where they always have.

@@ -12,13 +12,16 @@ swift build              # debug build (carries the MOCKING flag + mocks)
 swift test               # the Swift Testing suite; no booted simulator needed
 swift test --filter Simulators                   # one suite
 swift test --filter "GestureRegistry/parses tap" # one test
+make test-release        # optimized WebSocket disconnect regression (Node 22+)
 make test-web            # JS unit tests for Resources/Web/ (node --test)
 make docs                # regenerate docs/commands.md, docs/README.md, the skill references
 make check-docs          # links, line budgets, changelog shape
 make test-changelog      # the release-time changelog scripts
 ```
 
-The build is hybrid: SPM fetches the dependencies (`ArgumentParser`, `Mockable`, `Hummingbird`, `HummingbirdWebSocket`) and compiles for `arm64e-apple-macos26.0` with an Objective-C bridging header, linking `CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`, `CoreGraphics` and `ImageIO` from Xcode's private frameworks. `build.sh` builds the injected dylibs under `Injected/` first, then runs `swift build -c release`.
+The build is hybrid: SPM fetches the dependencies (`ArgumentParser`, `Mockable`, `Hummingbird`, `HummingbirdWebSocket`) and compiles for `arm64e-apple-macos26.0` with an Objective-C bridging header, linking `CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`, `CoreGraphics` and `ImageIO` from Xcode's private frameworks. `build.sh` builds the injected dylibs under `Injected/` first, then runs `swift build -c release` (extra arguments are forwarded).
+
+Release builds compile every Swift dependency for `arm64-apple-macosx15.0`, matching `Package.swift`. SwiftPM otherwise keeps each dependency's own, lower deployment target, and with Swift 6.3 the optimized build can then link two specializations of `Clock.sleep(for:)` whose async frame layouts differ, which aborts in `swift_task_dealloc` when a WebSocket heartbeat is cancelled ([swiftlang/swift#86204](https://github.com/swiftlang/swift/issues/86204)). The explicit target in `build.sh` keeps those layouts consistent. `make test-release` opens and closes ten WebSocket connections against the built server; it needs no booted simulator.
 
 ## Troubleshooting the Homebrew install
 
