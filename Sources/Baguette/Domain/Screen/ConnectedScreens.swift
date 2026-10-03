@@ -25,6 +25,38 @@ enum ConnectedScreens {
         }
     }
 
+    /// The exact phone panel an observation is read from, with the
+    /// scale that turns its framebuffer pixels into points. A foldable
+    /// needs a hinge angle to name the lit panel; a missing angle, an
+    /// absent or ambiguous framebuffer, or an unusable scale is an
+    /// error, never a fallback to another panel.
+    static func observedPhone(
+        ports: [SizedFramebufferPort], screens: [ConnectedScreenRecord], angle: HingeAngle?
+    ) throws -> (binding: DisplayBinding, scale: Double, multiplePanels: Bool) {
+        let integrated = screens.filter { $0.screenType == .integrated }
+        let record: ConnectedScreenRecord
+        if integrated.count == 1, let only = integrated.first {
+            record = only
+        } else {
+            guard integrated.count > 1, let angle,
+                let lit = integrated.first(where: { $0.panel == angle.litPanel })
+            else { throw ObservedScreenError.unavailable }
+            record = lit
+        }
+        let matches = ports.filter { $0.size == record.size }
+        guard matches.count == 1, let port = matches.first,
+            let scale = record.scale, scale.isFinite, scale > 0,
+            record.size.width.isFinite, record.size.height.isFinite,
+            record.size.width > 0, record.size.height > 0
+        else { throw ObservedScreenError.unavailable }
+        return (
+            DisplayBinding(
+                kind: .phone, connectedScreenId: record.screenId, portName: port.portName,
+                size: port.size, orientation: record.uiOrientation, panel: record.panel),
+            scale, integrated.count > 1
+        )
+    }
+
     private static func bindPhone(
         ports: [FramebufferPortSnapshot],
         litPanel: IntegratedPanel
@@ -114,7 +146,8 @@ enum ConnectedScreens {
             connectedScreenId: screenId,
             portName: port.portName,
             size: port.size,
-            orientation: port.orientation
+            orientation: port.orientation,
+            panel: port.panel
         )
     }
 }

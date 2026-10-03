@@ -24,11 +24,26 @@ baguette describe-ui --udid <UDID> --output tree.json
 
 ## Workflow: find it, then tap it
 
-A node's `frame` is in device points, **letterbox-corrected** for
-devices whose host-window aspect doesn't match their screen. Pipe
-`frame.x + frame.width / 2`, `frame.y + frame.height / 2` straight
-back into a `tap` and the touch lands. Re-read the tree after each
-gesture — it's a snapshot.
+A node's `frame` is in **native panel points**, the same space HID input
+and the unrotated framebuffer use. The outer result's `screen` reports
+`width`, `height` and the observed `orientation` (`portrait`,
+`portrait-upside-down`, `landscape-left`, `landscape-right`); take gesture
+envelope dimensions from there. Pipe `frame.x + frame.width / 2`,
+`frame.y + frame.height / 2` straight back into a `tap` and the touch
+lands; never rotate a frame a second time. The application root frame may
+cover only part of the screen. Re-read the tree after each gesture — it's
+a snapshot.
+
+`screen.target` records the connected `screenId`, the raw `pixelSize` and
+the `litPanel` (`primary`, `secondary`, or `null` on a single-panel
+device), so a later observation can be compared with this one. The
+geometry is read before and after the AX query; a rotation or panel change
+in between fails the query instead of returning frames for a screen that
+no longer exists. Missing or unknown geometry fails explicitly rather than
+assuming a phone-sized portrait panel. On a foldable the observation needs
+a fresh hinge sample, which `devicectl` cannot provide for a custom device
+set; `describe-ui` on a foldable there reports the display as unavailable
+instead of guessing the cover panel.
 
 ## HTTP / WebSocket
 

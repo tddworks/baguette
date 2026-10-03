@@ -13,6 +13,9 @@ For releases prior to this changelog, see the
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
 
+### Fixed
+- `describe-ui` frames and point queries use native panel (HID) coordinates in all four orientations, and results report the observed `screen` size, orientation and target; missing or changing geometry fails instead of scaling the application root. → [docs](docs/features/accessibility/README.md)
+
 ---
 
 ## [0.2.2] - 2026-10-03

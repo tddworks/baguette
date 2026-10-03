@@ -11,19 +11,22 @@ struct DisplayBinding: Sendable, Equatable {
     /// The guest's interface orientation on the bound screen, when it
     /// reported one. See `ConnectedScreenRecord.uiOrientation`.
     let orientation: DeviceOrientation?
+    let panel: IntegratedPanel?
 
     init(
         kind: DisplayKind,
         connectedScreenId: UInt32,
         portName: String,
         size: Size,
-        orientation: DeviceOrientation? = nil
+        orientation: DeviceOrientation? = nil,
+        panel: IntegratedPanel? = nil
     ) {
         self.kind = kind
         self.connectedScreenId = connectedScreenId
         self.portName = portName
         self.size = size
         self.orientation = orientation
+        self.panel = panel
     }
 
     /// The panel's size in points, given the device's screen scale.
