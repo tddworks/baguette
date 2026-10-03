@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 
 /// `CameraFrameSink` backed by a fixed-size mmap'd file. Every write
 /// rewrites the 24-byte header plus the pixel payload at offset 24,
@@ -11,11 +11,9 @@ import Darwin
 /// pass that same path; tests pass a unique path under
 /// `NSTemporaryDirectory()`.
 ///
-/// Coexistence: only one producer should drive `/tmp/SimCam.bgra` at
-/// a time. The dylib doesn't care which producer; if both SimCamMac
-/// and baguette write the same file the dylib will see whichever
-/// frame landed last. The Camera WS route refuses to start a second
-/// session.
+/// A nonblocking file lock excludes other cooperating producers before
+/// this sink changes the buffer. Readers need no lock. Older or unrelated
+/// writers that ignore the lock can still overwrite the shared file.
 final class SharedMemoryFrameSink: CameraFrameSink, @unchecked Sendable {
     let path: String
     private let lock = NSLock()
@@ -30,7 +28,8 @@ final class SharedMemoryFrameSink: CameraFrameSink, @unchecked Sendable {
     deinit { unmap() }
 
     func write(_ frame: CameraFrame, flags: CameraFlags) throws {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         guard let base = buffer else {
             throw SharedMemoryFrameSinkError.notOpen
         }
@@ -68,19 +67,26 @@ final class SharedMemoryFrameSink: CameraFrameSink, @unchecked Sendable {
         if fd == -1 {
             throw SharedMemoryFrameSinkError.openFailed(path: path, errno: errno)
         }
+        if flock(fd, LOCK_EX | LOCK_NB) == -1 {
+            let err = errno
+            Darwin.close(fd)
+            throw SharedMemoryFrameSinkError.lockFailed(path: path, errno: err)
+        }
         if ftruncate(fd, off_t(SharedFrameLayout.totalByteCount)) == -1 {
             let err = errno
             Darwin.close(fd)
             throw SharedMemoryFrameSinkError.truncateFailed(errno: err)
         }
-        guard let base = mmap(
-            nil,
-            SharedFrameLayout.totalByteCount,
-            PROT_READ | PROT_WRITE,
-            MAP_SHARED,
-            fd,
-            0
-        ), base != UnsafeMutableRawPointer(bitPattern: -1) else {
+        guard
+            let base = mmap(
+                nil,
+                SharedFrameLayout.totalByteCount,
+                PROT_READ | PROT_WRITE,
+                MAP_SHARED,
+                fd,
+                0
+            ), base != UnsafeMutableRawPointer(bitPattern: -1)
+        else {
             let err = errno
             Darwin.close(fd)
             throw SharedMemoryFrameSinkError.mmapFailed(errno: err)
@@ -90,7 +96,8 @@ final class SharedMemoryFrameSink: CameraFrameSink, @unchecked Sendable {
     }
 
     private func unmap() {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         if let base = buffer {
             munmap(base, SharedFrameLayout.totalByteCount)
             buffer = nil
@@ -104,6 +111,7 @@ final class SharedMemoryFrameSink: CameraFrameSink, @unchecked Sendable {
 
 enum SharedMemoryFrameSinkError: Error, Equatable, CustomStringConvertible {
     case openFailed(path: String, errno: Int32)
+    case lockFailed(path: String, errno: Int32)
     case truncateFailed(errno: Int32)
     case mmapFailed(errno: Int32)
     case notOpen
@@ -112,6 +120,8 @@ enum SharedMemoryFrameSinkError: Error, Equatable, CustomStringConvertible {
         switch self {
         case .openFailed(let path, let err):
             return "open(\(path)) failed: \(String(cString: strerror(err)))"
+        case .lockFailed(let path, let err):
+            return "camera frame buffer \(path) is unavailable: \(String(cString: strerror(err)))"
         case .truncateFailed(let err):
             return "ftruncate failed: \(String(cString: strerror(err)))"
         case .mmapFailed(let err):

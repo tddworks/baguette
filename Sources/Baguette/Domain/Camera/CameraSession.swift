@@ -24,11 +24,15 @@ final class CameraSession {
     private(set) var startedAt: Date?
     private(set) var flags: CameraFlags = CameraFlags()
 
+    /// Capture has stopped, but removing the guest injection still needs an explicit stop.
+    var cleanupRequired: Bool { phase == .idle && armedSimulator != nil }
+
     private let webcam: any CameraCapture
     private let image: any CameraCapture
     private let video: any CameraCapture
     private let sink: any CameraFrameSink
     private let injection: any SimulatorInjection
+    private let guestTerminated: (String) throws -> Bool
 
     /// The capture serving the current stream — retained so `stop`
     /// tears down exactly the producer that `start` selected.
@@ -44,6 +48,7 @@ final class CameraSession {
     /// shared with other injecting features, so teardown has to name its
     /// own entry rather than dropping whatever else is loaded.
     private var armedDylibPath: String?
+    private var cleanupTask: Task<Void, Never>?
 
     private var frameCount: UInt64 = 0
     private var fpsLastSample: (Date, UInt64)?
@@ -53,13 +58,15 @@ final class CameraSession {
         image: any CameraCapture,
         video: any CameraCapture,
         sink: any CameraFrameSink,
-        injection: any SimulatorInjection
+        injection: any SimulatorInjection,
+        guestTerminated: @escaping (String) throws -> Bool
     ) {
         self.webcam = webcam
         self.image = image
         self.video = video
         self.sink = sink
         self.injection = injection
+        self.guestTerminated = guestTerminated
     }
 
     /// The producer that owns `source`. The session is the single place
@@ -67,8 +74,8 @@ final class CameraSession {
     private func capture(for source: CameraSource) -> any CameraCapture {
         switch source {
         case .device: return webcam
-        case .image:  return image
-        case .video:  return video
+        case .image: return image
+        case .video: return video
         }
     }
 
@@ -83,6 +90,8 @@ final class CameraSession {
     /// `lastError` populated; callers can read both fields without
     /// catching.
     func start(source: CameraSource, on simulator: any Simulator, dylibPath: String) async {
+        if let cleanupTask { await cleanupTask.value }
+        guard !cleanupRequired else { return }
         guard case .idle = phase else { return }
         do {
             try await injection.arm(dylibPath: dylibPath, on: simulator)
@@ -98,10 +107,9 @@ final class CameraSession {
                 Task { @MainActor in self?.deliver(frame) }
             }
         } catch {
-            lastError = error.localizedDescription
-            try? await injection.disarm(dylibPath: dylibPath, on: simulator)
-            armedSimulator = nil
-            armedDylibPath = nil
+            let captureError = error.localizedDescription
+            await disarm()
+            lastError = [captureError, lastError].compactMap { $0 }.joined(separator: "; ")
             return
         }
         activeCapture = capture
@@ -112,29 +120,62 @@ final class CameraSession {
         lastError = nil
     }
 
+    /// A restarted server has no arm history; explicit stop must still remove the selected guest's injection.
+    func stop(on simulator: any Simulator, dylibPath: String) async {
+        if armedSimulator == nil {
+            armedSimulator = simulator
+            armedDylibPath = dylibPath
+        }
+        await stop()
+    }
+
     /// Tear the stream down and disarm the dylib.
     ///
-    /// Every state change is claimed *before* the first `await`. Being
-    /// `@MainActor` serialises the steps but doesn't make them atomic:
-    /// a second `stop` interleaving at a suspension point would still
-    /// read `.streaming`, and go on to stop the same capture and disarm
-    /// the same simulator twice.
+    /// Concurrent callers await the same cleanup. Failed disarming keeps
+    /// the target and error, so only a later explicit stop retries it.
     func stop() async {
-        guard case .streaming = phase else { return }
+        if let cleanupTask {
+            await cleanupTask.value
+            return
+        }
+        let task = Task { await tearDown() }
+        cleanupTask = task
+        await task.value
+        cleanupTask = nil
+    }
+
+    private func tearDown() async {
         let capture = activeCapture
-        let sim = armedSimulator
-        let dylibPath = armedDylibPath
         phase = .idle
         activeCapture = nil
-        armedSimulator = nil
-        armedDylibPath = nil
         startedAt = nil
         fps = 0
         fpsLastSample = nil
 
         await capture?.stop()
-        if let sim, let dylibPath {
-            try? await injection.disarm(dylibPath: dylibPath, on: sim)
+        await disarm()
+    }
+
+    private func disarm() async {
+        lastError = nil
+        guard let sim = armedSimulator, let dylibPath = armedDylibPath else { return }
+        do {
+            try await injection.disarm(dylibPath: dylibPath, on: sim)
+            armedSimulator = nil
+            armedDylibPath = nil
+        } catch {
+            let failure =
+                "Camera injection cleanup failed on \(sim.udid): \(error.localizedDescription). Stop again to retry cleanup before starting another camera."
+            do {
+                if try guestTerminated(sim.udid) {
+                    armedSimulator = nil
+                    armedDylibPath = nil
+                    return
+                }
+                lastError = failure
+            } catch {
+                lastError = "\(failure) Guest termination could not be confirmed: \(error.localizedDescription)"
+            }
         }
     }
 

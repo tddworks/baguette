@@ -8,10 +8,29 @@ import ObjectiveC
 /// path; the default Xcode set is used when `deviceSetPath` is `nil`.
 final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     private let deviceSetPath: String?
+    private let serviceContext: @Sendable () -> NSObject?
 
-    init(deviceSetPath: String? = nil) {
+    init(
+        deviceSetPath: String? = nil,
+        serviceContext: @escaping @Sendable () -> NSObject? = { CoreSimulators.sharedServiceContext() }
+    ) {
         self.deviceSetPath = deviceSetPath
+        self.serviceContext = serviceContext
         Self.loadFrameworks()
+    }
+
+    /// Whether the guest is shut down or gone, per a fresh listing of
+    /// the device set this host resolves to. Camera cleanup treats only
+    /// that as proof that a failed disarm no longer matters.
+    func hasTerminated(udid: String, xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")) throws -> Bool {
+        guard let set = resolveSet() else { throw DeviceSetUnavailable() }
+        return try SimctlCameraGuest.hasTerminated(udid: udid, deviceSetPath: set.path, xcrun: xcrun)
+    }
+
+    private struct DeviceSetUnavailable: LocalizedError {
+        var errorDescription: String? {
+            "The CoreSimulator device set could not be resolved; camera cleanup remains unconfirmed."
+        }
     }
 
     var all: [any Simulator] {
@@ -42,14 +61,14 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     // MARK: - private
 
     private func resolveSet() -> (object: NSObject, path: String?)? {
-        guard let ctx = sharedServiceContext() else { return nil }
+        guard let ctx = serviceContext() else { return nil }
         if let path = deviceSetPath {
             return customDeviceSet(context: ctx, path: path)
         }
         return defaultDeviceSet(context: ctx).map { ($0, nil) }
     }
 
-    private func sharedServiceContext() -> NSObject? {
+    private static func sharedServiceContext() -> NSObject? {
         guard let cls = NSClassFromString("SimServiceContext") else { return nil }
         let sel = NSSelectorFromString("sharedServiceContextForDeveloperDir:error:")
         var err: NSError?

@@ -63,6 +63,11 @@ struct Server: Sendable {
     /// location routes need to reach them to drive the activity.
     let motionSessions: MotionSessions
 
+    /// The one owner of the host-wide camera frame buffer. A reference
+    /// type for the same reason as `motionSessions`: a failed cleanup
+    /// must survive the socket that started it.
+    let cameraSessions: CameraSessions
+
     /// Device-twin state: connected companions and their per-device
     /// video ingest hubs. Reference types for the same reason as
     /// `motionSessions` — membership and decoder sessions must
@@ -82,12 +87,14 @@ struct Server: Sendable {
         allowedHosts: [String] = [],
         grants: PluginGrants = PluginGrants(),
         motionSessions: MotionSessions = MotionSessions(),
+        cameraSessions: CameraSessions = CameraSessions(guestTerminated: { _ in false }),
         devices: LiveDevices = LiveDevices(),
         twinScreens: TwinScreens = TwinScreens(),
         twinPoses: TwinPoses = TwinPoses()
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
+        self.cameraSessions = cameraSessions
         self.devices = devices
         self.twinScreens = twinScreens
         self.twinPoses = twinPoses
@@ -424,12 +431,16 @@ struct Server: Sendable {
                 udid: Self.udidParam(r), body: body, simulators: simulators
             ) {
             case .ok:
-                guard let json = await Self.networkStateJSON(
-                    udid: Self.udidParam(r), simulators: simulators
-                ) else {
-                    return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                do {
+                    guard let json = try await Self.networkStateJSON(
+                        udid: Self.udidParam(r), simulators: simulators
+                    ) else {
+                        return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                    }
+                    return Self.jsonResponse(json)
+                } catch {
+                    return errorJSON("network status failed: \(error)", status: .internalServerError)
                 }
-                return Self.jsonResponse(json)
             case .invalidBody:
                 return errorJSON(
                     "network body must name exactly one of: a profile "
@@ -450,12 +461,17 @@ struct Server: Sendable {
         // slow", so the UI has to be able to say plainly that one is on.
         router.get("/simulators/:udid/network") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            guard let json = await Self.networkStateJSON(
-                udid: Self.udidParam(r), simulators: simulators
-            ) else {
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            do {
+                guard let json = try await Self.networkStateJSON(
+                    udid: Self.udidParam(r), simulators: simulators
+                ) else {
+                    return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                }
+                return Self.jsonResponse(json)
+            } catch {
+                // An unreadable injection state is not "no conditioning".
+                return errorJSON("network status failed: \(error)", status: .internalServerError)
             }
-            return Self.jsonResponse(json)
         }
         router.delete("/simulators/:udid/network") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -910,8 +926,9 @@ struct Server: Sendable {
         // owns the device picker; baguette enumerates Mac cameras,
         // pumps BGRA frames into the shared-memory ring buffer that
         // VirtualCamera.dylib reads inside the simulator. One WS per
-        // sim; closing the socket stops capture but leaves the dylib
-        // armed on the sim's launchd domain.
+        // server; closing the socket stops capture and disarms the
+        // dylib, and a failed disarm keeps the owner until an explicit
+        // stop succeeds. See `ServerCameraRoutes.swift`.
         registerCameraRoute(on: router)
 
         // Static UI siblings — JS / HTML / CSS files in Resources/Web/
@@ -1633,12 +1650,12 @@ struct Server: Sendable {
             + #""litPanel":"\#(lit == .primary ? "primary" : "secondary")","orientation":\#(orientation)}"#
     }
 
-    static func networkStateJSON(udid: String, simulators: any Simulators) async -> String? {
+    static func networkStateJSON(udid: String, simulators: any Simulators) async throws -> String? {
         let profiles = NetworkProfile.allCases
             .map { "\"\($0.rawValue)\"" }
             .joined(separator: ",")
         guard let sim = simulators.find(udid: udid) else { return nil }
-        guard let condition = await sim.network().current(on: sim) else {
+        guard let condition = try await sim.network().current(on: sim) else {
             return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
         }
         let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"
@@ -3260,239 +3277,6 @@ struct Server: Sendable {
         try? await outbound.write(.text(#"{"type":"log_stopped","reason":"client closed"}"#))
     }
 
-    /// Register the `/simulators/:udid/camera` WebSocket route — the
-    /// browser's camera picker drives this. One WS per simulator; the
-    /// session is set up lazily on the first `camera_start`. Closing
-    /// the socket tears down capture but leaves the dylib's launchd
-    /// env in place, so a freshly-launched iOS app still loads the
-    /// VirtualCamera dylib without re-arming.
-    private func registerCameraRoute(on router: Router<BasicWebSocketRequestContext>) {
-        let simulators = self.simulators
-        let bindHost = self.host
-        let bindPort = self.port
-        let allowedHosts = self.allowedHosts
-        let trustedWebSocketUpgrade:
-            @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
-                request, _ in
-                Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
-                ) ? .upgrade([:]) : .dontUpgrade
-            }
-        router.ws(
-            "/simulators/:udid/camera",
-            shouldUpgrade: trustedWebSocketUpgrade
-        ) { inbound, outbound, context in
-            await Self.cameraWS(
-                udid: Self.udidParam(context.request),
-                simulators: simulators,
-                inbound: inbound,
-                outbound: outbound
-            )
-        }
-    }
-
-    /// One WS lifecycle. On connect: push the device list. Then read
-    /// JSON messages forever, dispatching to the per-WS
-    /// `CameraSession`. The session writes BGRA frames into
-    /// `/tmp/SimCam.bgra` (the path the VirtualCamera dylib reads);
-    /// `VirtualCameraInstaller` resolves the bundled dylib's
-    /// per-hash dest path, and `SimctlSimulatorInjection` arms the
-    /// simulator's launchd env to point at it.
-    @MainActor
-    private static func cameraWS(
-        udid: String,
-        simulators: any Simulators,
-        inbound: WebSocketInboundStream,
-        outbound: WebSocketOutboundWriter
-    ) async {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            try? await outbound.write(.text(
-                #"{"type":"camera_state","ok":false,"error":"unknown udid"}"#
-            ))
-            return
-        }
-        let cameras = AVCameras()
-        let sink: any CameraFrameSink
-        do {
-            sink = try SharedMemoryFrameSink(path: "/tmp/SimCam.bgra")
-        } catch {
-            try? await outbound.write(.text(
-                #"{"type":"camera_state","ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
-            ))
-            return
-        }
-        let session = CameraSession(
-            webcam: AVCameraCapture(),
-            image: ImageFileCapture(),
-            video: VideoFileCapture(),
-            sink: sink,
-            injection: SimctlSimulatorInjection()
-        )
-
-        // Push the initial device list so the picker can render
-        // immediately without an extra round-trip.
-        await sendDeviceList(cameras: cameras, outbound: outbound)
-
-        // 1-Hz heartbeat: sample FPS off the frame counter and push
-        // `camera_state` so the browser's "streaming · X fps" readout
-        // updates while frames flow. Detached child task — cancelled
-        // during teardown below.
-        let heartbeat = Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                if Task.isCancelled { break }
-                session.sampleFPS()
-                if case .streaming = session.phase {
-                    await sendCameraState(session: session, outbound: outbound)
-                }
-            }
-        }
-
-        do {
-            for try await frame in inbound {
-                guard frame.opcode == .text else { continue }
-                let line = String(buffer: frame.data)
-                await handleCameraLine(
-                    line: line,
-                    cameras: cameras,
-                    session: session,
-                    sim: sim,
-                    outbound: outbound
-                )
-            }
-        } catch {
-            // socket closed; teardown below
-        }
-
-        // Teardown, explicitly ordered rather than deferred. `stop()`
-        // disarms DYLD_INSERT_LIBRARIES on this sim, so it has to be
-        // *awaited* here: fired into a detached task it could land after
-        // a reconnecting socket armed the next session and disarm that
-        // one instead. Capture must also stop before the staged file is
-        // dropped, which is the reverse of what LIFO defers gave us.
-        heartbeat.cancel()
-        await session.stop()
-        // Drop any uploaded image/video source when the socket closes so
-        // a stale file can't leak into the next session.
-        await CameraSourceStaging.shared.clear(udid: udid)
-    }
-
-    @MainActor
-    private static func handleCameraLine(
-        line: String,
-        cameras: any Cameras,
-        session: CameraSession,
-        sim: any Simulator,
-        outbound: WebSocketOutboundWriter
-    ) async {
-        guard let data = line.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return
-        }
-        let msg: CameraMessage
-        do { msg = try CameraMessage.parse(dict) } catch {
-            try? await outbound.write(.text(
-                #"{"type":"camera_state","ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
-            ))
-            return
-        }
-
-        switch msg {
-        case .list:
-            await sendDeviceList(cameras: cameras, outbound: outbound)
-        case .start(let startSource, let flags):
-            session.setFlags(flags)
-            let source: CameraSource
-            switch startSource {
-            case .webcam(let uid):
-                let devices = await cameras.available()
-                guard devices.contains(where: { $0.uid == uid }) else {
-                    try? await outbound.write(.text(
-                        #"{"type":"camera_state","ok":false,"error":"unknown camera deviceUID"}"#
-                    ))
-                    return
-                }
-                source = .device(uid: uid)
-            case .image, .video:
-                guard let path = CameraSourceStaging.shared.path(udid: sim.udid) else {
-                    try? await outbound.write(.text(
-                        #"{"type":"camera_state","ok":false,"error":"no file uploaded — drop an image or video on the camera card first"}"#
-                    ))
-                    return
-                }
-                // Guard against a start that names a different kind than
-                // the staged file (e.g. an image staged, "video" started).
-                let stagedKind = CameraMediaKind.at(URL(fileURLWithPath: path))
-                let wantImage = (startSource == .image)
-                guard stagedKind == (wantImage ? .image : .video) else {
-                    try? await outbound.write(.text(
-                        #"{"type":"camera_state","ok":false,"error":"the uploaded file doesn't match the selected source kind"}"#
-                    ))
-                    return
-                }
-                source = wantImage ? .image(path: path) : .video(path: path)
-            }
-            guard let dylibPath = InjectedDylibInstaller.installIfNeeded(.camera) else {
-                try? await outbound.write(.text(
-                    #"{"type":"camera_state","ok":false,"error":"VirtualCamera.dylib is not bundled in this build"}"#
-                ))
-                return
-            }
-            await session.start(source: source, on: sim, dylibPath: dylibPath)
-            await sendCameraState(session: session, outbound: outbound)
-        case .stop:
-            await session.stop()
-            await sendCameraState(session: session, outbound: outbound)
-        case .setFlags(let flags):
-            session.setFlags(flags)
-            await sendCameraState(session: session, outbound: outbound)
-        }
-    }
-
-    @MainActor
-    private static func sendDeviceList(
-        cameras: any Cameras,
-        outbound: WebSocketOutboundWriter
-    ) async {
-        let devices = await cameras.available()
-        let arr = devices.map { $0.wireDictionary }
-        let payload: [String: Any] = ["type": "camera_devices", "devices": arr]
-        if let bytes = try? JSONSerialization.data(withJSONObject: payload),
-           let json = String(data: bytes, encoding: .utf8) {
-            try? await outbound.write(.text(json))
-        }
-    }
-
-    @MainActor
-    private static func sendCameraState(
-        session: CameraSession,
-        outbound: WebSocketOutboundWriter
-    ) async {
-        let phase: String
-        var sourceKind: String? = nil
-        var deviceUID: String? = nil
-        if case .streaming(let source) = session.phase {
-            phase = "streaming"
-            sourceKind = source.wireKind
-            if case .device(let uid) = source { deviceUID = uid }
-        } else {
-            phase = "idle"
-        }
-        var payload: [String: Any] = [
-            "type": "camera_state",
-            "ok": session.lastError == nil,
-            "phase": phase,
-            "fps": session.fps,
-        ]
-        if let kind = sourceKind { payload["source"] = kind }
-        if let uid = deviceUID { payload["device"] = uid }
-        if let err = session.lastError { payload["error"] = err }
-        if let bytes = try? JSONSerialization.data(withJSONObject: payload),
-           let json = String(data: bytes, encoding: .utf8) {
-            try? await outbound.write(.text(json))
-        }
-    }
-
     /// Triage one upstream text line: stream config first (cheapest
     /// to detect), then format-level verbs, then gesture dispatch as
     /// the catch-all. ReconfigParser returns the same config when
@@ -3812,7 +3596,7 @@ private struct LogsRouteOptions: Sendable {
 /// control characters that JSON forbids unescaped. Sufficient for
 /// embedding a log line into a `{"line":"…"}` envelope without
 /// rebuilding the whole dict via JSONSerialization.
-private func jsonEscape(_ s: String) -> String {
+func jsonEscape(_ s: String) -> String {
     var out = ""
     out.reserveCapacity(s.count + 8)
     for ch in s.unicodeScalars {

@@ -158,7 +158,7 @@ struct MotionRoutesTests {
         given(sim).name.willReturn("iPhone 17 Pro")
         let motion = MockMotion()
         given(motion).publish(.any, on: .any).willReturn(())
-        given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        given(motion).clear(on: .any).willThrow(SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
         let sessions = MotionSessions(makeMotion: { _ in motion })
         _ = await Server.applyMotion(udid: "U", body: #"{"activity":"walking"}"#,
                                      simulators: simulators, sessions: sessions)

@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import Baguette
 
 /// `CameraSession` reports a failed start to the browser as
@@ -10,6 +11,11 @@ import Foundation
 /// StillImageError error 0.)"), which tells the user nothing.
 @Suite("Camera error reporting")
 struct CameraErrorReportingTests {
+
+    @Test func `an injection cleanup failure preserves the native exit status`() {
+        let error: any Error = SimctlCapture.Failure.failed(udid: "U", status: 73, output: "")
+        #expect(error.localizedDescription.contains("exited with status 73"))
+    }
 
     @Test func `a still-image decode failure names the file it couldn't read`() {
         let error: any Error = StillImageError.decodeFailed("/tmp/pic.png")

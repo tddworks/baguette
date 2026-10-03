@@ -242,7 +242,10 @@ Wired (use freely):
   (with `source: webcam | image | video`) / `camera_stop` /
   `camera_set_flags` upstream, `camera_devices` / `camera_state`
   downstream (phase = `idle | streaming`, plus live `fps` and active
-  `source`). Image/video files upload first via
+  `source`). A failed stop answers `cleanupRequired: true`; reconnect to
+  the same device and stop again before starting another source. See
+  [camera cleanup](https://github.com/tddworks/baguette/blob/main/docs/features/camera/README.md#gotchas).
+  Image/video files upload first via
   `POST /simulators/<UDID>/camera-source?name=<file>`. Frames flow
   through `/tmp/SimCam.bgra`
   (24-byte LE header + BGRA pixels) into `VirtualCamera.dylib`

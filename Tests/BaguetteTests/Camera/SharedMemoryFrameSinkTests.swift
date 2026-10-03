@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import Baguette
 
 @Suite("SharedMemoryFrameSink")
@@ -15,11 +16,13 @@ struct SharedMemoryFrameSinkTests {
         defer { try? FileManager.default.removeItem(atPath: path) }
         let sink = try SharedMemoryFrameSink(path: path)
 
-        let pixels = Data([0x11, 0x22, 0x33, 0xFF,  0x44, 0x55, 0x66, 0xFF,
-                           0x77, 0x88, 0x99, 0xFF,  0xAA, 0xBB, 0xCC, 0xFF])
+        let pixels = Data([
+            0x11, 0x22, 0x33, 0xFF, 0x44, 0x55, 0x66, 0xFF,
+            0x77, 0x88, 0x99, 0xFF, 0xAA, 0xBB, 0xCC, 0xFF,
+        ])
         let frame = try CameraFrame(
-            sequence: 0x01020304,
-            timestampMs: 0x05060708,
+            sequence: 0x0102_0304,
+            timestampMs: 0x0506_0708,
             width: 2, height: 2,
             pixels: pixels
         )
@@ -41,5 +44,20 @@ struct SharedMemoryFrameSinkTests {
         defer { try? FileManager.default.removeItem(atPath: path) }
         let sink = try SharedMemoryFrameSink(path: path)
         #expect(sink.path == path)
+    }
+
+    @Test func `a second producer cannot overwrite a live camera frame`() throws {
+        let path = tmpPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        var sink: SharedMemoryFrameSink? = try SharedMemoryFrameSink(path: path)
+        let frame = try CameraFrame(
+            sequence: 42, timestampMs: 0, width: 1, height: 1,
+            pixels: Data([1, 2, 3, 255]))
+        try sink?.write(frame, flags: CameraFlags())
+        #expect(throws: (any Error).self) { try SharedMemoryFrameSink(path: path) }
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path))[0] == 42)
+        sink = nil
+        let replacement = try SharedMemoryFrameSink(path: path)
+        try replacement.write(frame, flags: CameraFlags())
     }
 }

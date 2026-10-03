@@ -19,7 +19,7 @@ final class HostExternalDisplays: ExternalDisplays, @unchecked Sendable {
     }
 
     convenience init(udid: String, deviceSetPath: String? = nil) {
-        self.init(enumerateIO: { try SimctlIOCapture.enumerate(udid: udid, deviceSetPath: deviceSetPath) })
+        self.init(enumerateIO: { try SimctlCapture.enumerate(udid: udid, deviceSetPath: deviceSetPath) })
     }
 
     var isCarPlayConnected: Bool {

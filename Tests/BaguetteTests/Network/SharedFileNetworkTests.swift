@@ -129,15 +129,16 @@ struct SharedFileNetworkTests {
     }
 
     @Test func `a failed arm surfaces rather than reporting success`() async {
+        let failure = SimctlCapture.Failure.failed(udid: "U", status: 2, output: "arm failed")
         let (network, _, sim, _) = makeNetwork(
-            armError: SimulatorInjectionError.simctlFailed(status: 2))
+            armError: failure)
 
         var threw = false
         do {
             try await network.apply(threeG, on: sim)
         } catch {
             threw = true
-            #expect((error as? SimulatorInjectionError) == .simctlFailed(status: 2))
+            #expect((error as? SimctlCapture.Failure) == failure)
         }
         #expect(threw)
     }
@@ -165,7 +166,7 @@ struct SharedFileNetworkTests {
         given(injection).armed(dylibPath: .any, on: .any).willReturn(true)
         try await network.apply(threeG, on: sim)
 
-        #expect(await network.current(on: sim) == threeG)
+        #expect(try await network.current(on: sim) == threeG)
     }
 
     @Test func `current reports nothing for a simulator that is not armed`() async throws {
@@ -178,14 +179,27 @@ struct SharedFileNetworkTests {
         given(injection).armed(dylibPath: .any, on: .any).willReturn(false)
         try await network.apply(threeG, on: sim)
 
-        #expect(await network.current(on: sim) == nil)
+        #expect(try await network.current(on: sim) == nil)
     }
 
-    @Test func `current reports nothing when nothing has been published`() async {
+    @Test func `current reports nothing when nothing has been published`() async throws {
         let (network, injection, sim, _) = makeNetwork()
         given(injection).armed(dylibPath: .any, on: .any).willReturn(true)
 
-        #expect(await network.current(on: sim) == nil)
+        #expect(try await network.current(on: sim) == nil)
+    }
+
+    @Test func `current propagates an unreadable injection state instead of reporting no conditioning`() async throws {
+        let fixture = try SimulatorInjectionFixture()
+        defer { fixture.remove() }
+        try fixture.output("", stderr: "simulator unavailable", status: 2)
+        let network = SharedFileNetwork(
+            fileURL: fixture.directory.appendingPathComponent("network.json"),
+            dylibPath: Self.dylib, injection: fixture.injection)
+
+        await #expect(throws: SimctlCapture.Failure.failed(udid: "U", status: 2, output: "simulator unavailable")) {
+            try await network.current(on: fixture.simulator)
+        }
     }
 
     @Test func `clearing a build with no dylib does nothing rather than failing`() async throws {

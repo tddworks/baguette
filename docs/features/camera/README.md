@@ -31,7 +31,17 @@ into apps at launch:
    re-exec, so relaunch the native process.
 3. Open the camera screen — the app sees the virtual camera.
 
-**Stop** disarms, so apps launched afterwards no longer load it.
+**Stop** disarms, so apps launched afterwards no longer load it. If cleanup
+fails, the card shows **Retry stop** and preserves the error; starting another
+source is blocked until an explicit stop succeeds.
+If a fresh listing of the selected device set confirms the guest is shut down
+or deleted, Stop can finish without a launchd domain to disarm. After the old
+connection closes, that confirmation also allows another device to acquire
+the camera. Unknown states and failed queries keep the old owner and error;
+they never count as confirmed cleanup.
+After a server restart, an explicit Stop still removes the selected guest's
+camera injection; an empty new session is not evidence of cleanup. Failed
+removal keeps that target available for another explicit Stop.
 
 ## Workflow: inject into a single app
 
@@ -50,7 +60,9 @@ restarts.
 ## HTTP / WebSocket
 
 The browser opens `ws://<host>:<port>/simulators/<udid>/camera` and
-exchanges text frames.
+exchanges text frames. Commands may include a string `requestId`; their
+reply echoes it even on errors. Initial state and streaming heartbeats omit
+it, so clients can match a reply without treating a heartbeat as an ACK.
 
 **Browser → server:**
 
@@ -63,7 +75,7 @@ exchanges text frames.
   "mirror": false }
 { "type": "camera_start", "source": "image", "fit": "fit", "mirror": false }
 { "type": "camera_start", "source": "video", "fit": "fill", "mirror": false }
-{ "type": "camera_stop" }
+{ "type": "camera_stop", "requestId": "stop-1" }
 { "type": "camera_set_flags",
   "fit": "fill",
   "mirror": true }
@@ -88,13 +100,15 @@ the staged host file for this udid. A missing `source` defaults to
   "ok": true,
   "phase": "streaming",        // "idle" | "streaming"
   "fps": 29.97,
+  "cleanupRequired": false,
   "source": "webcam",          // "webcam" | "image" | "video" while streaming
   "device": "0x14600000046d0825" }  // present only for a webcam source
 { "type": "camera_state",
   "ok": false,
   "phase": "idle",
   "fps": 0,
-  "error": "Camera access denied. Open System Settings → Privacy → Camera and enable baguette." }
+  "cleanupRequired": true,
+  "error": "Camera injection cleanup failed. Stop again to retry cleanup before starting another camera." }
 ```
 
 ### Uploading an image / video source
@@ -123,7 +137,7 @@ upload, and the udid arrives percent-decoded off the request path, so
 an unchecked one could carry `..` out of the staging root.
 
 `camera_devices` lands once on connect and again after every
-`camera_list`. `camera_state` lands after every `camera_start` /
+`camera_list`. `camera_state` lands on connect and after every `camera_start` /
 `camera_stop` / `camera_set_flags`.
 
 ## Gotchas
@@ -132,9 +146,19 @@ an unchecked one could carry `..` out of the staging root.
   at exec time; baguette doesn't reopen apps for you. If frames don't
   appear, terminate and relaunch the iOS app.
 - **One camera at a time per host.** All simulators write
-  `/tmp/SimCam.bgra`; the dylib reads whichever bytes landed last.
-  The Server's camera WS doesn't reject a second concurrent start
-  in v1 — the second one just trashes the first one's frames.
+  `/tmp/SimCam.bgra`. The server rejects a second camera connection,
+  even for another device. A file lock also excludes other cooperating
+  Baguette processes; older or unrelated producers that ignore this lock
+  can still overwrite the buffer.
+- **Failed cleanup remains owned.** Closing the socket stops capture and
+  attempts disarming once. If that fails, reconnect to the same device and
+  send `camera_stop` explicitly; other devices remain blocked. A failed
+  explicit stop is not retried by disconnecting. `phase: "idle"` alone does
+  not prove cleanup: require `ok: true` and `cleanupRequired: false`.
+- **Keep the server alive until cleanup succeeds.** A process crash or forced
+  termination releases its file lock but can leave guest injection armed.
+  Restarting the server cannot recover the previous in-memory owner. Reboot
+  that simulator to clear its launchd environment before another session.
 - **Video rotation isn't applied.** `VideoFileCapture` streams frames
   in their *encoded* orientation — a clip recorded with a rotation
   transform (many phone videos) plays sideways. Fitting and looping

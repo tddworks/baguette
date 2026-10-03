@@ -119,14 +119,14 @@ struct SharedFileMotionTests {
 
     @Test func `a failed arm surfaces rather than reporting success`() async {
         let (motion, _, sim, _) = makeMotion(
-            armError: SimulatorInjectionError.simctlFailed(status: 2))
+            armError: SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
 
         var threw = false
         do {
             try await motion.publish(walking(), on: sim)
         } catch {
             threw = true
-            #expect((error as? SimulatorInjectionError) == .simctlFailed(status: 2))
+            #expect((error as? SimctlCapture.Failure) == .failed(udid: "U", status: 2, output: ""))
         }
         #expect(threw)
     }

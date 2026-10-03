@@ -175,7 +175,7 @@ struct MotionSessionTests {
         let captures = Captures()
         var failNext = false
         given(motion).publish(.any, on: .any).willProduce { intent, _ in
-            if failNext { throw SimulatorInjectionError.simctlFailed(status: 2) }
+            if failNext { throw SimctlCapture.Failure.failed(udid: "U", status: 2, output: "") }
             captures.intents.append(intent)
         }
         given(motion).clear(on: .any).willReturn(())
@@ -210,7 +210,7 @@ struct MotionSessionTests {
         given(motion).publish(.any, on: .any).willProduce { intent, _ in
             captures.intents.append(intent)
         }
-        given(motion).clear(on: .any).willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+        given(motion).clear(on: .any).willThrow(SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let clock = Clock()
@@ -232,7 +232,7 @@ struct MotionSessionTests {
     @Test func `a failed publish reports the error and stays off`() async {
         let motion = MockMotion()
         given(motion).publish(.any, on: .any)
-            .willThrow(SimulatorInjectionError.simctlFailed(status: 2))
+            .willThrow(SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let session = MotionSession(motion: motion, now: { 1000 })

@@ -121,7 +121,9 @@ All return the current state, which is also what `GET` answers:
 ```
 
 `400` for a body naming no condition or more than one; `404` for an unknown
-udid; `500` for a build with no bundled dylib.
+udid; `500` for a build with no bundled dylib or an injection status query
+that fails. `network status` also reports a failed query as an error,
+never as inactive conditioning.
 
 ## Gotchas
 

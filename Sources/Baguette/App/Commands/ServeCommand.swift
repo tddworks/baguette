@@ -49,9 +49,14 @@ struct ServeCommand: AsyncParsableCommand {
             ? FileSystemPlugins(roots: [])
             : FileSystemPlugins.standard(extraRoots: pluginDirs.map { URL(fileURLWithPath: $0) })
 
-
+        let simulators = CoreSimulators(deviceSetPath: deviceSet)
+        // A camera owner whose disarm failed is released only once the
+        // guest is confirmed gone from this device set.
+        let cameraSessions = CameraSessions(guestTerminated: {
+            try simulators.hasTerminated(udid: $0)
+        })
         let server = Server(
-            simulators: CoreSimulators(deviceSetPath: deviceSet),
+            simulators: simulators,
             chromes: LiveChromes(
                 store: FileSystemChromeStore(),
                 rasterizer: CoreGraphicsPDFRasterizer()
@@ -61,7 +66,8 @@ struct ServeCommand: AsyncParsableCommand {
             plugins: plugins,
             host: host,
             port: port,
-            allowedHosts: allowedHosts
+            allowedHosts: allowedHosts,
+            cameraSessions: cameraSessions
         )
         for plugin in (try? plugins.all()) ?? [] {
             log("plugin: \(plugin.id) \(plugin.manifest.version)")
