@@ -20,6 +20,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     /// guest must be asked to build a digitizer first — see
     /// `warmServices`.
     private let plane: DisplayKind
+    private let screenGuard: InputScreenGuard?
 
     private var client: AnyObject?
     private var warmed = false
@@ -113,12 +114,14 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     init(
         udid: String, host: any DeviceHost,
         touchTarget: UInt32 = IndigoHIDTouchTarget.phone,
-        plane: DisplayKind = .phone
+        plane: DisplayKind = .phone,
+        screenGuard: InputScreenGuard? = nil
     ) {
         self.udid = udid
         self.host = host
         self.touchTarget = touchTarget
         self.plane = plane
+        self.screenGuard = screenGuard
     }
 
     private func resolveDevice() -> NSObject? {
@@ -168,7 +171,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             holdSeconds: duration > 0 ? duration : 0.05,
             edge: IOHIDDigitizerDispatch.Edge.from(edge),
             identifier: nextTouchIdentifier(),
-            target: touchTarget, on: c
+            target: touchTarget, screenGuard: screenGuard, on: c
         )
     }
 
@@ -187,7 +190,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             from: normStart, to: normEnd,
             steps: steps, stepMs: max(8, stepMs),
             edge: .none, identifier: nextTouchIdentifier(),
-            target: touchTarget, on: c
+            target: touchTarget, screenGuard: screenGuard, on: c
         )
     }
 
@@ -214,7 +217,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return IOHIDDigitizerDispatch.send(
             point: normalised, identifier: id,
             phase: dispatchPhase, edge: IOHIDDigitizerDispatch.Edge.from(edge),
-            target: touchTarget, on: c
+            target: touchTarget, screenGuard: screenGuard, on: c
         )
     }
 
@@ -277,7 +280,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to: CGPoint(x: 0.5, y: 0.58),
                 steps: 30, stepMs: 35, dwellMs: 900,
                 edge: .bottom, identifier: nextTouchIdentifier(),
-                target: touchTarget, on: c
+                target: touchTarget, screenGuard: screenGuard, on: c
             ) ? true : false
         case .swipeToHome:
             // Fast edge-flagged flick from the home indicator up
@@ -290,7 +293,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to: CGPoint(x: 0.5, y: 0.30),
                 steps: 12, stepMs: 16, dwellMs: 0,
                 edge: .bottom, identifier: nextTouchIdentifier(),
-                target: touchTarget, on: c
+                target: touchTarget, screenGuard: screenGuard, on: c
             ) ? true : false
         case .pullDownToLockScreen:
             // Slow drag down from top-LEFT (above the dynamic
@@ -302,7 +305,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to: CGPoint(x: 0.25, y: 0.55),
                 steps: 24, stepMs: 25, dwellMs: 0,
                 edge: .top, identifier: nextTouchIdentifier(),
-                target: touchTarget, on: c
+                target: touchTarget, screenGuard: screenGuard, on: c
             ) ? true : false
         case .pullDownToNotificationCenter:
             // Slow drag down from top-RIGHT (above the dynamic
@@ -314,7 +317,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 to: CGPoint(x: 0.75, y: 0.55),
                 steps: 24, stepMs: 25, dwellMs: 0,
                 edge: .top, identifier: nextTouchIdentifier(),
-                target: touchTarget, on: c
+                target: touchTarget, screenGuard: screenGuard, on: c
             ) ? true : false
         }
     }
@@ -365,7 +368,9 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     }
 
     func scroll(deltaX: Double, deltaY: Double) -> Bool {
-        guard let c = ensureWarm(), let sfn = scrollFn else { return false }
+        guard screenGuard?.allows(.move) != false,
+            let c = ensureWarm(), let sfn = scrollFn
+        else { return false }
         guard let msg = sfn(touchTarget, deltaX, deltaY, 0) else { return false }
         return send(message: msg, to: c)
     }
@@ -523,7 +528,9 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         p1: CGPoint, p2: CGPoint?,
         eventType: UInt32, edge: UInt32
     ) -> Bool {
-        guard let mfn = mouseEdgeFn else { return false }
+        guard screenGuard?.allows(eventType == Self.nsEventUp ? .up : .move) != false,
+            let mfn = mouseEdgeFn
+        else { return false }
         var pt1 = p1
         var msg: UnsafeMutableRawPointer?
         for _ in 0..<3 {
@@ -582,7 +589,9 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         eventType: UInt32, direction: UInt32,
         size: Size
     ) -> Bool {
-        guard let mfn = mouseFn else { return false }
+        guard screenGuard?.allows(eventType == Self.nsEventUp ? .up : .move) != false,
+            let mfn = mouseFn
+        else { return false }
         let maxAttempts = (p2 != nil) ? 12 : 3
         var pt1 = CGPoint(
             x: clamp01(p1.x / size.width),

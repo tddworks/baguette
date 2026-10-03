@@ -12,6 +12,10 @@ For releases prior to this changelog, see the
 
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
+- `baguette input --expected-screen <describe-ui screen JSON>` pins coordinate input to an observed screen: a changed size, rotation, pixels or lit panel rejects `down` and `move`, while `up` still releases on the original binding. → [docs](docs/features/accessibility/README.md)
+
+### Fixed
+- `describe-ui` frames and point queries use native panel (HID) coordinates in all four orientations, and results report the observed `screen` size, orientation and target; missing or changing geometry fails instead of scaling the application root. → [docs](docs/features/accessibility/README.md)
 
 ---
 

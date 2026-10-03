@@ -43,6 +43,31 @@ struct GestureDispatcherTests {
         ).called(1)
     }
 
+    @Test func `rejects an envelope whose size is not the expected screen before dispatching`() throws {
+        let input = MockInput()
+        let expected = try ExpectedScreen(json: ExpectedScreenTests.json)
+        let screenGuard = InputScreenGuard(expected: expected) { expected.screen }
+        let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
+
+        let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1,"y":2,"width":1206,"height":2622}"#)
+
+        #expect(ack == #"{"ok":false,"error":"input dimensions must match the observed native panel points"}"#)
+        verify(input).tap(at: .any, size: .any, duration: .any, edge: .any).called(0)
+    }
+
+    @Test func `names the screen change when the guarded input surface refuses a gesture`() throws {
+        let input = MockInput()
+        let expected = try ExpectedScreen(json: ExpectedScreenTests.json)
+        let screenGuard = InputScreenGuard(expected: expected) { throw ObservedScreenError.unavailable }
+        given(input).tap(at: .any, size: .any, duration: .any, edge: .any)
+            .willProduce { _, _, _, _ in screenGuard.allows(.down) }
+        let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
+
+        let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1,"y":2,"width":402,"height":874}"#)
+
+        #expect(ack == #"{"ok":false,"error":"the display cannot provide a fresh screen target"}"#)
+    }
+
     @Test func `returns parse error on missing field`() {
         let input = MockInput()
         let dispatcher = GestureDispatcher(input: input)

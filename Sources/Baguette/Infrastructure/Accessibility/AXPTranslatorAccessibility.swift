@@ -28,11 +28,13 @@ import CoreGraphics
 ///      sub-translation.
 ///   5. Unregister on exit.
 ///
-/// Coordinates: AXP frames come back in **macOS host-window**
-/// coordinates. We project to device points using the simulator's
-/// `mainScreenSize` / `mainScreenScale` so callers can pipe values
-/// straight back into baguette's gesture wire (which is also in
-/// device points).
+/// Coordinates: the bridge delegate leaves guest frames unchanged, so
+/// AXP reports UIKit screen points. The observed display geometry
+/// (native panel points plus the interface orientation) rotates them
+/// into the native panel space that raw pixels and HID input share, so
+/// callers can pipe values straight back into baguette's gesture wire.
+/// The application root's bounds define neither the screen size nor a
+/// scale: a hosted app can report a partial window.
 ///
 /// Cribbed from cameroncooke/AXe + Silbercue/SilbercueSwift's
 /// `AXPBridge.swift` — the only Swift implementations of the iOS-26
@@ -50,21 +52,24 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// hung simulator doesn't pin our caller.
     private static let xpcTimeoutSeconds: Double = 5.0
 
-    /// `litPanelPointSize` answers the point space of the panel the
-    /// phone plane is bound to, when the device has more than one;
-    /// `nil` for every single-panel device, which then uses the device
-    /// type's `mainScreenSize` as it always has. Pluggable so tests can
-    /// drive the transform without a display resolve.
-    private let litPanelPointSize: @Sendable () -> CGSize?
+    typealias DisplayGeometry = AXScreen
+
+    /// The screen every result is expressed in: native panel points, the
+    /// observed interface orientation and the connected screen's
+    /// identity. Read before and after each query; a geometry that
+    /// cannot be observed fails the query instead of guessing a phone
+    /// size. Pluggable so tests can drive the transform without a
+    /// display resolve.
+    private let displayGeometry: @Sendable () throws -> DisplayGeometry
 
     init(
         udid: String,
         host: any DeviceHost,
-        litPanelPointSize: @escaping @Sendable () -> CGSize? = { nil }
+        displayGeometry: @escaping @Sendable () throws -> DisplayGeometry
     ) {
         self.udid = udid
         self.host = host
-        self.litPanelPointSize = litPanelPointSize
+        self.displayGeometry = displayGeometry
     }
 
     private func resolveDevice() -> NSObject? {
@@ -99,15 +104,17 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             return hit
         }
         guard let tree = try fetchTree(hitTest: point) else { return nil }
-        return tree.hitTest(point) ?? tree
+        var result = tree.hitTest(point) ?? tree
+        result.screen = tree.screen
+        return result
     }
 
     // MARK: - tree fetch
 
     /// The pieces every AXP entry point needs: a working translator,
-    /// a registered token, the frontmost app's root element (which
-    /// carries the host-window frame), an `AXFrameTransform` for
-    /// projecting/unprojecting coordinates, and the per-call deadline.
+    /// a registered token, the frontmost app's root element, an
+    /// `AXFrameTransform` for rotating UIKit points into native panel
+    /// points and back, and the per-call deadline.
     /// Held together inside the closure passed to
     /// `withAXPContext(_:)`, which owns the dispatcher register +
     /// unregister around it.
@@ -122,13 +129,14 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// Run `body` inside a fully-prepared AXP context. Handles the
     /// dispatcher token lifecycle (register on entry, unregister on
     /// exit), translator + frontmost-app resolution, and the
-    /// host-coord ↔ device-point `AXFrameTransform` setup. Returns
-    /// `nil` if any setup step fails (framework not loaded, device
-    /// missing, frontmost app not resolvable, etc.) — same nil
-    /// semantics each entry point had pre-refactor.
-    private func withAXPContext<T>(
-        _ body: (AXPContext) throws -> T?
-    ) throws -> T? {
+    /// UIKit-point → native-panel-point `AXFrameTransform` setup.
+    /// Returns `nil` if any setup step fails (framework not loaded,
+    /// device missing, frontmost app not resolvable, etc.); throws when
+    /// the display geometry cannot be observed or changes during the
+    /// read, because frames without a known screen are not usable.
+    private func withAXPContext(
+        _ body: (AXPContext) throws -> AXNode?
+    ) throws -> AXNode? {
         guard Self.isAvailable else {
             logErr("[ax] framework / dispatcher not available")
             return nil
@@ -137,6 +145,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             logErr("[ax] device not found: \(udid)")
             return nil
         }
+        let geometry = try displayGeometry()
 
         let token = UUID().uuidString
         let deadline = Date().addingTimeInterval(Self.xpcTimeoutSeconds)
@@ -159,19 +168,37 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             log("[ax] no mac platform element from translation")
             return nil
         }
-        // A foldable's AX space is the lit panel's, which the hinge
-        // moves; every other device's is its one screen.
-        let pointSize = litPanelPointSize() ?? Self.devicePointSize(for: device)
-        let rootFrame = AXElementReader.frame(of: frontmostRoot)
-        let transform = AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
+        let transform = AXFrameTransform(
+            pointSize: CGSize(width: geometry.width, height: geometry.height),
+            orientation: geometry.orientation
+        )
 
-        return try body(AXPContext(
+        var result = try body(AXPContext(
             translator: translator,
             token: token,
             frontmostRoot: frontmostRoot,
             transform: transform,
             deadline: deadline
         ))
+        try Self.requireUnchanged(geometry, try displayGeometry())
+        result?.screen = geometry
+        return result
+    }
+
+    /// A rotation or panel change during the read means the frames no
+    /// longer describe the screen the result names. Matching endpoints
+    /// do not make the guest's tree an atomic snapshot; they only rule
+    /// out a transition the host could observe.
+    static func requireUnchanged(_ before: DisplayGeometry, _ after: DisplayGeometry) throws {
+        guard before == after else { throw Failure.displayChanged }
+    }
+
+    enum Failure: LocalizedError, Equatable {
+        case displayChanged
+
+        var errorDescription: String? {
+            "The display changed while reading accessibility; discard the result and observe again."
+        }
     }
 
     /// Grid step / point cap for the hit-test sweep. 32 pt is fine
@@ -446,34 +473,6 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         if let trans = element.value(forKey: "translation") as? NSObject {
             stamp(token: token, on: trans)
         }
-    }
-
-    // MARK: - device → screen size
-
-    /// Resolve the simulator's logical-point size from its
-    /// `deviceType.mainScreenSize` (pixels) / `mainScreenScale`.
-    /// Falls back to a sensible iPhone-15-Pro size when the
-    /// runtime doesn't expose the values (unlikely on iOS 26).
-    /// Internal so unit tests can drive it against a fake device.
-    static func devicePointSize(for device: NSObject) -> CGSize {
-        let fallback = CGSize(width: 393, height: 852)
-        guard let deviceType = device.value(forKey: "deviceType") as? NSObject else {
-            return fallback
-        }
-        let pixelSize: CGSize
-        if let raw = deviceType.value(forKey: "mainScreenSize") as? CGSize {
-            pixelSize = raw
-        } else if let nsv = deviceType.value(forKey: "mainScreenSize") as? NSValue {
-            pixelSize = nsv.sizeValue
-        } else {
-            return fallback
-        }
-        let scale = (deviceType.value(forKey: "mainScreenScale") as? NSNumber)?.doubleValue ?? 3.0
-        guard scale > 0 else { return fallback }
-        return CGSize(
-            width: pixelSize.width / scale,
-            height: pixelSize.height / scale
-        )
     }
 }
 

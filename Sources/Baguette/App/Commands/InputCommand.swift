@@ -15,6 +15,13 @@ struct InputCommand: AsyncParsableCommand {
     @Option(help: "Target display plane: phone | carplay")
     var display: String?
 
+    /// The `screen` JSON a `describe-ui` result carried. Coordinate input
+    /// is pinned to that observation: a contact goes down or moves only
+    /// while a fresh observation still matches it, and it always lifts
+    /// on the binding that received it.
+    @Option(help: "Require fresh observations to match this describe-ui screen JSON before coordinate input")
+    var expectedScreen: String?
+
     /// Rejected here rather than in `run()` so a malformed flag is not
     /// masked by the device lookup that used to precede it: `--display
     /// carply` against an absent udid reported `Device ... not found`,
@@ -23,9 +30,17 @@ struct InputCommand: AsyncParsableCommand {
     /// already fails it at the same point.
     mutating func validate() throws {
         do {
-            _ = try StreamDisplayPlan.from(cliFlag: display)
+            let plan = try StreamDisplayPlan.from(cliFlag: display)
+            if let expectedScreen {
+                guard plan.kind == .phone else {
+                    throw ValidationError("--expected-screen requires the phone display")
+                }
+                _ = try ExpectedScreen(json: expectedScreen)
+            }
         } catch let error as DisplayFlagError {
             throw ValidationError(error.message)
+        } catch let error as ExpectedScreen.Failure {
+            throw ValidationError(error.localizedDescription)
         }
     }
 
@@ -38,10 +53,18 @@ struct InputCommand: AsyncParsableCommand {
         // Gestures go to the planned plane's Input; pasteboard is a
         // device-level service and stays on the simulator itself.
         let plan: StreamDisplayPlan
-        let bound: (screen: any Screen, input: any Input)
+        let input: any Input
+        let screenGuard: InputScreenGuard?
         do {
             plan = try StreamDisplayPlan.from(cliFlag: display)
-            bound = try plan.bind(to: simulator)
+            if let expectedScreen {
+                let checked = try simulator.displays().phone.input(expected: ExpectedScreen(json: expectedScreen))
+                input = checked.input
+                screenGuard = checked.screenGuard
+            } else {
+                input = try plan.bind(to: simulator).input
+                screenGuard = nil
+            }
         } catch let error as DisplayFlagError {
             log(error.message)
             Foundation.exit(1)
@@ -52,9 +75,8 @@ struct InputCommand: AsyncParsableCommand {
             log("display bind failed: \(error)")
             Foundation.exit(1)
         }
-        let input = bound.input
         let pasteboard = simulator.pasteboard()
-        let dispatcher = GestureDispatcher(input: input)
+        let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
         // A long-lived session is worth one guest round-trip up front:
         // under Xcode 27, Device Hub can leave every gesture below
         // reporting ok while landing nowhere. Advise; the restart that

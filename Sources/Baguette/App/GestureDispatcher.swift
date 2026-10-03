@@ -13,10 +13,12 @@ import Foundation
 final class GestureDispatcher: @unchecked Sendable {
     private let input: any Input
     private let registry: GestureRegistry
+    private let screenGuard: InputScreenGuard?
 
-    init(input: any Input, registry: GestureRegistry = .standard) {
+    init(input: any Input, registry: GestureRegistry = .standard, screenGuard: InputScreenGuard? = nil) {
         self.input = input
         self.registry = registry
+        self.screenGuard = screenGuard
     }
 
     func dispatch(line: String) -> String {
@@ -28,10 +30,14 @@ final class GestureDispatcher: @unchecked Sendable {
         }
 
         do {
+            try screenGuard?.expected.validateEnvelope(dict)
             let gesture = try registry.parse(dict)
-            return ack(ok: gesture.execute(on: input))
+            let ok = gesture.execute(on: input)
+            return ack(ok: ok, error: ok ? nil : screenGuard?.errorDescription)
         } catch let error as GestureError {
             return ack(ok: false, error: error.message)
+        } catch let error as ExpectedScreen.Failure {
+            return ack(ok: false, error: error.localizedDescription)
         } catch {
             return ack(ok: false, error: "\(error)")
         }

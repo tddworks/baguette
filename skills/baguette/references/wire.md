@@ -28,7 +28,9 @@ A malformed line answers `invalid JSON`; a missing field `missing field: <name>`
 
 Every `x` / `y` / `startX` / `startY` / `endX` / `endY` / `x1` / `y1` / `x2` / `y2` / `cx` / `cy` is in **device points**, the same units as the `width` and `height` carried in the same envelope. Positional gestures (`tap`, `swipe`, `touch1-*`, `touch2-*`, `pinch`, `pan`) require `width` and `height`; the rest don't take them.
 
-- Take `width` / `height` from `baguette chrome layout --udid <UDID>`'s `screen.width` / `screen.height`. They are per device: 438×954 is iPhone 17 Pro Max only.
+- Take `width` / `height` from `baguette describe-ui --udid <UDID>`'s outer `screen.width` / `screen.height`. They are native panel points in the framebuffer's unrotated axes and are per device: 438×954 is iPhone 17 Pro Max only. The application root `frame` can be partial and must not supply gesture dimensions.
+- `input --expected-screen` accepts the complete observed `screen` JSON (including `target`) and pins coordinate input to that observation. A changed target rejects `down` and `move`; `up` still releases on the original binding. See [observed input](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md#workflow-find-it-then-tap-it).
+- AX frames already share the HID axes. `screen.orientation` reports the observed rotation; do not rotate AX coordinates a second time. A visually rotated preview must inverse-map pointer positions before sending them.
 - The wire is **not normalized**. The centre of a 438×954 screen is `x:219, y:478`; `x:0.5, y:0.5` taps the top-left corner.
 - Points, not pixels: pixels on a 3× device overshoot by 3×.
 

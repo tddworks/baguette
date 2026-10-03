@@ -91,18 +91,19 @@ enum IOHIDDigitizerDispatch {
         point: CGPoint, holdSeconds: Double,
         edge: Edge = .none, identifier: UInt32,
         target: UInt32 = IndigoHIDTouchTarget.phone,
+        screenGuard: InputScreenGuard? = nil,
         on client: AnyObject
     ) -> Bool {
         let pressed = send(
             point: point, identifier: identifier, phase: .down,
-            edge: edge, target: target, on: client)
+            edge: edge, target: target, screenGuard: screenGuard, on: client)
         if pressed {
             let holdUs = UInt32(max(0.02, holdSeconds) * 1_000_000)
             usleep(holdUs)
         }
         let released = send(
             point: point, identifier: identifier, phase: .up,
-            edge: edge, target: target, on: client)
+            edge: edge, target: target, screenGuard: screenGuard, on: client)
         return pressed && released
     }
 
@@ -116,11 +117,12 @@ enum IOHIDDigitizerDispatch {
         dwellMs: UInt32 = 0,
         edge: Edge = .none, identifier: UInt32,
         target: UInt32 = IndigoHIDTouchTarget.phone,
+        screenGuard: InputScreenGuard? = nil,
         on client: AnyObject
     ) -> Bool {
         var ok = send(
             point: start, identifier: identifier, phase: .down,
-            edge: edge, target: target, on: client)
+            edge: edge, target: target, screenGuard: screenGuard, on: client)
         var lastPoint = start
         if ok {
             for i in 1...steps {
@@ -131,7 +133,7 @@ enum IOHIDDigitizerDispatch {
                     y: start.y + (end.y - start.y) * t)
                 ok = send(
                     point: lastPoint, identifier: identifier, phase: .move,
-                    edge: edge, target: target, on: client)
+                    edge: edge, target: target, screenGuard: screenGuard, on: client)
                 if !ok { break }
             }
         }
@@ -140,7 +142,7 @@ enum IOHIDDigitizerDispatch {
             for _ in 0..<pulses {
                 ok = send(
                     point: lastPoint, identifier: identifier, phase: .move,
-                    edge: edge, target: target, on: client)
+                    edge: edge, target: target, screenGuard: screenGuard, on: client)
                 if !ok { break }
                 usleep(50_000)
             }
@@ -148,7 +150,7 @@ enum IOHIDDigitizerDispatch {
         if ok { usleep(stepMs * 1000) }
         let released = send(
             point: lastPoint, identifier: identifier, phase: .up,
-            edge: edge, target: target, on: client)
+            edge: edge, target: target, screenGuard: screenGuard, on: client)
         return ok && released
     }
 
@@ -161,9 +163,12 @@ enum IOHIDDigitizerDispatch {
         point: CGPoint, identifier: UInt32, phase: Phase,
         edge: Edge,
         target: UInt32 = IndigoHIDTouchTarget.phone,
+        screenGuard: InputScreenGuard? = nil,
         on client: AnyObject
     ) -> Bool {
-        guard ensureSymbols() else { return false }
+        guard screenGuard?.allows(phase == .up ? .up : .move) != false,
+            ensureSymbols()
+        else { return false }
         guard
             let parent = makeDigitizerEvent(
                 point: point,

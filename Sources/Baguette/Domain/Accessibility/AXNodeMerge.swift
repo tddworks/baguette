@@ -126,7 +126,7 @@ extension AXNode {
             role: role, subrole: subrole, label: label, value: value,
             identifier: identifier, title: title, help: help, frame: frame,
             enabled: enabled, focused: focused, hidden: hidden,
-            children: newChildren
+            children: newChildren, screen: screen
         )
     }
 }

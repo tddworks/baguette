@@ -213,7 +213,9 @@ Wired (use freely):
   `baguette describe-ui --udid <X> --x <px> --y <px>` (hit-test).
   Frames are in the same units as `tap` / `swipe` wire fields, so
   reading `frame.x + frame.width/2`, `frame.y + frame.height/2`
-  back into a `tap` envelope just works.
+  back into a `tap` envelope just works. Pass the result's outer
+  `screen` JSON to `baguette input --expected-screen` to have input
+  refused once the screen no longer matches that observation.
 - `interface` — the accessibility-display family: light / dark
   appearance, Increase Contrast, and content size (Dynamic Type,
   including the five accessibility sizes). CLI: `baguette interface

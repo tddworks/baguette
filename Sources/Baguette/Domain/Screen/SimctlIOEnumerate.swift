@@ -22,6 +22,7 @@ struct ConnectedScreenRecord: Sendable, Equatable {
     /// reports one. A foldable turns its unfolded panel to landscape by
     /// itself, and this is the only host-side word of it.
     let uiOrientation: DeviceOrientation?
+    let scale: Double?
 
     init(
         screenId: UInt32,
@@ -29,7 +30,8 @@ struct ConnectedScreenRecord: Sendable, Equatable {
         screenType: ScreenType,
         size: Size,
         deviceName: String = "",
-        uiOrientation: DeviceOrientation? = nil
+        uiOrientation: DeviceOrientation? = nil,
+        scale: Double? = nil
     ) {
         self.screenId = screenId
         self.name = name
@@ -37,6 +39,7 @@ struct ConnectedScreenRecord: Sendable, Equatable {
         self.size = size
         self.deviceName = deviceName
         self.uiOrientation = uiOrientation
+        self.scale = scale
     }
 
     var isExternal: Bool {
@@ -92,7 +95,8 @@ enum SimctlIOEnumerate {
                 screenType: screenType,
                 size: size,
                 deviceName: deviceName,
-                uiOrientation: uiOrientation
+                uiOrientation: uiOrientation,
+                scale: field(Double.self, named: "Preferred UI Scale", in: body)
             ))
         }
         return records

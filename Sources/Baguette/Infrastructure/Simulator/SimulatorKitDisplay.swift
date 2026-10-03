@@ -53,6 +53,64 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         return binding
     }
 
+    /// The panel an observation is read from, as a binding plus the
+    /// `AXScreen` that describes it. Reads the connected screens afresh
+    /// and, on a foldable, samples the guest hinge directly: a shared
+    /// hinge watch can hold a stale value, and an observation that
+    /// names the wrong panel would send input to the dark one.
+    private func observedBinding() throws -> (binding: DisplayBinding, screen: AXScreen, multiplePanels: Bool) {
+        guard kind == .phone, pinnedPanel == nil,
+            let device = host.resolveDevice(udid: udid)
+        else { throw ObservedScreenError.unavailable }
+        let ports = try SimulatorKitFramebufferPorts.sizedPorts(udid: udid, host: host)
+        let screens = SimctlIOEnumerate.connectedScreens(from: try enumerateIO())
+        let multiple = screens.filter { $0.screenType == .integrated }.count > 1
+        let angle = multiple ? DevicectlHinge(udid: udid).angle() : nil
+        let observed = try ConnectedScreens.observedPhone(ports: ports, screens: screens, angle: angle)
+        let binding = observed.binding
+        guard let points = binding.pointSize(scale: observed.scale) else {
+            throw ObservedScreenError.unavailable
+        }
+        let orientation = try SimulatorKitScreenOrientation.read(device: device, screenID: binding.connectedScreenId)
+        return (
+            binding,
+            AXScreen(
+                width: points.width, height: points.height, orientation: orientation,
+                target: ScreenTarget(
+                    screenId: binding.connectedScreenId, litPanel: binding.panel, pixelSize: binding.size)
+            ), observed.multiplePanels
+        )
+    }
+
+    func observedScreen() throws -> AXScreen { try observedBinding().screen }
+
+    /// Input pinned to the screen `expected` describes. The binding is
+    /// resolved once and never re-derived for a contact that is already
+    /// down; the guard decides before each `down` and `move` whether a
+    /// fresh observation still matches.
+    func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard) {
+        let observed = try observedBinding()
+        try expected.requireMatches(observed.screen)
+        let screenGuard = InputScreenGuard(expected: expected) { [self] in
+            // Only a foldable can light another panel, and only the full
+            // observation (hinge sample included) sees that happen.
+            if observed.multiplePanels { return try observedScreen() }
+            guard let device = host.resolveDevice(udid: udid) else { throw ObservedScreenError.unavailable }
+            // A single panel cannot change identity, so its live screen
+            // properties answer a move without a `simctl` round-trip.
+            return try SimulatorKitScreenOrientation.readScreen(
+                device: device, screenID: observed.binding.connectedScreenId, panel: observed.binding.panel)
+        }
+        let target =
+            observed.multiplePanels
+            ? IndigoHIDTouchTarget.panel(screenId: observed.binding.connectedScreenId)
+            : IndigoHIDTouchTarget.phone
+        let touches = IndigoHIDInput(
+            udid: udid, host: host, touchTarget: target, plane: kind, screenGuard: screenGuard)
+        guard observed.multiplePanels, let keys else { return (touches, screenGuard) }
+        return (FoldableInput(touches: touches, keys: keys), screenGuard)
+    }
+
     func screen() -> any Screen {
         // Prefer a fresh resolve; fall back to the last successful
         // binding so a transient probe miss after bind() doesn't open

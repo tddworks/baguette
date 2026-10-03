@@ -122,6 +122,21 @@ struct SimctlIOEnumerateTests {
         #expect(SimctlIOEnumerate.connectedScreens(from: phoneOnlySample)[0].uiOrientation == nil)
     }
 
+    @Test func `parses each screen's preferred UI scale when the runtime reports one`() {
+        let scaled = """
+            Connected Screens:
+            (1) Integrated:
+                Screen ID: 1
+                Screen Type: Integrated
+                Pixel Size: {1206, 2622}
+                Device Name: primary
+                UI Orientation: Portrait
+                Preferred UI Scale: 3.0
+            """
+        #expect(SimctlIOEnumerate.connectedScreens(from: scaled)[0].scale == 3)
+        #expect(SimctlIOEnumerate.connectedScreens(from: phoneOnlySample)[0].scale == nil)
+    }
+
     @Test func `maps the guest's orientation names`() {
         #expect(SimctlIOEnumerate.orientation(named: "Portrait") == .portrait)
         #expect(SimctlIOEnumerate.orientation(named: "Portrait Upside Down") == .portraitUpsideDown)

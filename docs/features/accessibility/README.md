@@ -24,11 +24,44 @@ baguette describe-ui --udid <UDID> --output tree.json
 
 ## Workflow: find it, then tap it
 
-A node's `frame` is in device points, **letterbox-corrected** for
-devices whose host-window aspect doesn't match their screen. Pipe
-`frame.x + frame.width / 2`, `frame.y + frame.height / 2` straight
-back into a `tap` and the touch lands. Re-read the tree after each
-gesture — it's a snapshot.
+A node's `frame` is in **native panel points**, the same space HID input
+and the unrotated framebuffer use. The outer result's `screen` reports
+`width`, `height` and the observed `orientation` (`portrait`,
+`portrait-upside-down`, `landscape-left`, `landscape-right`); take gesture
+envelope dimensions from there. Pipe `frame.x + frame.width / 2`,
+`frame.y + frame.height / 2` straight back into a `tap` and the touch
+lands; never rotate a frame a second time. The application root frame may
+cover only part of the screen. Re-read the tree after each gesture — it's
+a snapshot.
+
+`screen.target` records the connected `screenId`, the raw `pixelSize` and
+the `litPanel` (`primary`, `secondary`, or `null` on a single-panel
+device), so a later observation can be compared with this one. The
+geometry is read before and after the AX query; a rotation or panel change
+in between fails the query instead of returning frames for a screen that
+no longer exists. Missing or unknown geometry fails explicitly rather than
+assuming a phone-sized portrait panel. On a foldable the observation needs
+a fresh hinge sample, which `devicectl` cannot provide for a custom device
+set; `describe-ui` on a foldable there reports the display as unavailable
+instead of guessing the cover panel.
+
+`baguette input --expected-screen '<screen JSON>'` pins coordinate input to
+that observation. The whole `screen` object goes in, `target` included. The
+session fails to start when the live screen differs, and every `down` and
+`move` re-observes the screen first: different native points, rotation,
+pixels or lit panel reject the gesture with `"screen target changed; observe
+again before sending new input"`. An envelope that names `width` / `height`
+must name the observed native points. A foldable needs a fresh hinge sample
+and exactly one framebuffer of the lit panel's size; it never falls back to
+the cover panel when the observation fails.
+
+The input process keeps its original HID registration and contact ids. If
+the panel changes during a touch, the next `move` fails but `up` still
+releases the original contact, so keep the process alive long enough to
+read that acknowledgement. A single-panel device re-reads its live screen
+properties without spawning `simctl`; a foldable samples the guest hinge,
+which is slower. Observation and HID dispatch are separate operations, so
+this detects observed changes without making the pair atomic.
 
 ## HTTP / WebSocket
 

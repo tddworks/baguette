@@ -117,35 +117,13 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     }
 
     func accessibility() -> any Accessibility {
-        AXPTranslatorAccessibility(
+        // The observed phone panel supplies the point space, orientation
+        // and identity every AX result is expressed in.
+        let display = displays().phone
+        return AXPTranslatorAccessibility(
             udid: udid, host: host,
-            litPanelPointSize: { [udid, host, deviceSetPath] in
-                // Only a foldable has a panel to choose; a phone keeps the
-                // device type's `mainScreenSize` and pays no round-trip.
-                guard let sized = try? SimulatorKitFramebufferPorts.sizedPorts(udid: udid, host: host),
-                    IntegratedPanels.several(in: sized),
-                    let binding = try? SimulatorKitDisplays(
-                        udid: udid, host: host,
-                        hinge: SharedHinge.forDevice(udid) { DevicectlHinge(udid: udid) },
-                        deviceSetPath: deviceSetPath
-                    ).phone.resolve(),
-                    let scale = Self.mainScreenScale(udid: udid, host: host),
-                    let size = binding.pointSize(scale: scale)
-                else { return nil }
-                return CGSize(width: size.width, height: size.height)
-            }
+            displayGeometry: { try display.observedScreen() }
         )
-    }
-
-    /// `deviceType.mainScreenScale` — the same number for every panel
-    /// of a device (iPhone Duo is @3x on both).
-    private static func mainScreenScale(udid: String, host: any DeviceHost) -> Double? {
-        guard let device = host.resolveDevice(udid: udid),
-            let deviceType = device.value(forKey: "deviceType") as? NSObject,
-            let scale = (deviceType.value(forKey: "mainScreenScale") as? NSNumber)?.doubleValue,
-            scale > 0
-        else { return nil }
-        return scale
     }
 
     func logs() -> any LogStream {

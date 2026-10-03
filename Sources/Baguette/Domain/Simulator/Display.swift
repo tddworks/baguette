@@ -22,4 +22,23 @@ protocol Display: Sendable {
     /// Fresh Input whose digitizer target is derived from
     /// `binding.connectedScreenId` (never a hard-coded CarPlay constant).
     func input() -> any Input
+
+    /// The screen an observation describes right now: native panel
+    /// points, the observed interface orientation and the connected
+    /// screen's identity. An unknown panel selection or geometry fails
+    /// closed rather than guessing a phone-sized portrait panel.
+    func observedScreen() throws -> AXScreen
+
+    /// Input pinned to `expected`: the binding is resolved once, checked
+    /// against the expectation, and re-observed by the guard before each
+    /// contact goes down or moves. A contact always lifts on the binding
+    /// that received it.
+    func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard)
+}
+
+extension Display {
+    func observedScreen() throws -> AXScreen { throw ObservedScreenError.unavailable }
+    func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard) {
+        throw ObservedScreenError.unavailable
+    }
 }
