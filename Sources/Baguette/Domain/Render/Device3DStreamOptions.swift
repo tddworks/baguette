@@ -16,6 +16,11 @@ struct Device3DStreamOptions: Equatable, Sendable {
     /// identifier. `nil` keeps matching automatic; simulators never
     /// send it.
     var model: DeviceModelID?
+    /// `frameMetadata=1`: every WebSocket message binds the rendered
+    /// pixels to the geometry captured in the same render, and no
+    /// separate `screen_quad` text messages are sent. Off by default so
+    /// existing consumers keep the plain stream format.
+    var frameMetadata = false
 
     /// The largest frame the live path will encode, per axis. `size=` is
     /// held to it too, so a preset can't route around the bound `width=` /
@@ -60,6 +65,13 @@ struct Device3DStreamOptions: Equatable, Sendable {
             ?? Self.default.background
         let screenGlass = try query.single("screenGlass").map(parseBool)
             ?? Self.default.screenGlass
+        // `1` / `0`, not `true` / `false`: the flag is spelled as a
+        // query toggle in the docs and the page.
+        let frameMetadata =
+            try query.single("frameMetadata").map { value in
+                guard value == "1" || value == "0" else { throw DeviceModelError.invalidRenderOptions }
+                return value == "1"
+            } ?? false
 
         var variants: [String: String] = [:]
         for value in query["variant"] ?? [] {
@@ -88,7 +100,8 @@ struct Device3DStreamOptions: Equatable, Sendable {
             fit: fit,
             background: background,
             screenGlass: screenGlass,
-            model: model
+            model: model,
+            frameMetadata: frameMetadata
         )
     }
 

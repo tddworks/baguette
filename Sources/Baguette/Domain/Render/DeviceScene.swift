@@ -16,6 +16,10 @@ protocol DeviceScene: AnyObject, Sendable {
     /// return the composed scene, as `render(screen:)` does for a phone.
     func render(screens: FoldableScreens) throws -> IOSurface
 
+    /// Capture geometry inside the same render operation as its pixels.
+    func renderFrame(screen: IOSurface) throws -> DeviceFrame
+    func renderFrame(screens: FoldableScreens) throws -> DeviceFrame
+
     /// A foldable: pose the book at this hinge angle (`FoldPose`).
     func update(hingeDegrees: Double)
 

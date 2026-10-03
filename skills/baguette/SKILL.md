@@ -158,6 +158,9 @@ presentation surface; gestures still target the live 2D stream.
 ## What's wired vs what isn't
 
 Wired (use freely):
+- Live 3D MJPEG and AVCC accept `frameMetadata=1`, which binds hit geometry
+  to the exact rendered frame in every message; AVCC keeps every encoded
+  reference or closes explicitly on overload. See [atomic frames](https://github.com/tddworks/baguette/blob/main/docs/features/3d-rendering/frames.md).
 - `screenshot --metadata-output` writes capture geometry to a JSON sidecar;
   see [screenshot geometry](https://github.com/tddworks/baguette/blob/main/docs/features/screenshot/geometry.md).
 - `tap`, `swipe`, `touch1-{down,move,up}`, `touch2-{down,move,up}`,

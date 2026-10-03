@@ -12,6 +12,13 @@ For releases prior to this changelog, see the
 
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
+- `stream.3d.mjpeg` / `stream.3d.avcc` accept `frameMetadata=1`: every WebSocket message carries the rendered pixels together with the screen geometry captured in the same render, paced at 20 fps, so a page can map taps onto a moving model. → [docs](docs/features/3d-rendering/frames.md)
+
+### Changed
+- Streams are paced before encoding: when capture outruns `--fps` only the newest unencoded surface is kept, the last pending frame still goes out after the source goes quiet, and `set_fps` retunes H.264 without resetting timestamps or the reference chain. → [docs](docs/features/stream/README.md)
+
+### Fixed
+- An AVCC WebSocket no longer drops H.264 reference frames for a slow consumer; it keeps them in order and closes with an error past 32 MiB. An encoder failure or a rejected runtime codec property ends the stream with an error instead of a frozen picture. → [docs](docs/features/stream/README.md)
 
 ---
 

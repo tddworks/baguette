@@ -34,14 +34,17 @@ struct StreamCommand: AsyncParsableCommand {
             log("Device \(options.udid) not found")
             throw ExitCode.failure
         }
+        let termination = AsyncThrowingStream<Void, any Error>.makeStream()
+        let onFailure: @Sendable (any Error) -> Void = { error in
+            termination.continuation.finish(throwing: error)
+        }
         let stream = streamFormat.makeStream(
             config: StreamConfig(fps: fps, bitrateBps: bitrate, scale: scale),
-            sink: StdoutSink(),
+            sink: StdoutSink(onFailure: onFailure),
             quality: quality
         )
         // AsyncParsableCommand runs on the cooperative executor;
         // dispatchMain() requires the process's main thread.
-        let termination = AsyncStream<Void>.makeStream()
         let sources = [SIGINT, SIGTERM].map { number in
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
@@ -54,20 +57,21 @@ struct StreamCommand: AsyncParsableCommand {
             signal(SIGINT, SIG_DFL)
             signal(SIGTERM, SIG_DFL)
         }
-        try await Self.capture(stream, on: simulator.screen()) {
-            for await _ in termination.stream {}
+        try await Self.capture(stream, on: simulator.screen(), onFailure: onFailure) {
+            for try await _ in termination.stream {}
         }
     }
 
     static func capture(
         _ stream: any Stream,
         on screen: any Screen,
+        onFailure: @escaping @Sendable (any Error) -> Void = { _ in },
         until stopped: () async throws -> Void
     ) async throws {
         // start() can install some callbacks before reporting a failure.
         defer { stream.stop() }
         try stream.start(on: screen)
-        let control = ControlChannel(stream: stream)
+        let control = ControlChannel(stream: stream, onFailure: onFailure)
         control.start()
         defer { control.stop() }
         try await stopped()

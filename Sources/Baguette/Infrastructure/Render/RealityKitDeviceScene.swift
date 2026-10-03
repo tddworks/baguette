@@ -94,22 +94,47 @@ final class RealityKitDeviceScene: DeviceScene, @unchecked Sendable {
     }
 
     func render(screen surface: IOSurface) throws -> IOSurface {
-        try Self.onMain {
-            try self.paint(&self.screen, with: surface)
-            return try self.renderScene()
-        }
+        try renderFrame(screen: surface).surface
     }
 
     func render(screens: FoldableScreens) throws -> IOSurface {
+        try renderFrame(screens: screens).surface
+    }
+
+    func renderFrame(screen surface: IOSurface) throws -> DeviceFrame {
         try Self.onMain {
-            if let surface = screens.unfolded {
-                try self.paint(&self.screen, with: surface)
-            }
+            try self.paint(&self.screen, with: surface)
+            return try self.captureFrame()
+        }
+    }
+
+    func renderFrame(screens: FoldableScreens) throws -> DeviceFrame {
+        try Self.onMain {
+            if let surface = screens.unfolded { try self.paint(&self.screen, with: surface) }
             if let surface = screens.cover, self.coverScreen != nil {
                 try self.paint(&self.coverScreen!, with: surface)
             }
-            return try self.renderScene()
+            return try self.captureFrame()
         }
+    }
+
+    @MainActor
+    private func captureFrame() throws -> DeviceFrame {
+        let surface = try renderScene()
+        let slot = litPanel == .primary ? coverScreen : screen
+        guard let slot, let size = slot.sourceSize,
+            screenPieces != nil || screenQuad != nil
+        else {
+            return DeviceFrame(surface: surface, placement: nil)
+        }
+        return DeviceFrame(
+            surface: surface,
+            placement: DeviceFramePlacement(
+                quad: screenQuad, pieces: screenPieces, buttons: screenButtons ?? [],
+                litPanel: litPanel, hingeDegrees: litPanel == nil ? nil : hingeDegrees,
+                sourcePixelSize: size,
+                textureTransform: plan.fit.placement(source: size, target: slot.textureSize)
+            ))
     }
 
     /// Pose the book: the shutting clip at the angle's time, the whole

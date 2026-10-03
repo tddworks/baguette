@@ -2794,14 +2794,16 @@ struct Server: Sendable {
             return
         }
 
-        let sink = WebSocketFrameSink(outbound: outbound, format: format)
+        let sink = WebSocketFrameSink(
+            outbound: outbound, format: format, preservingDescriptions: !options.frameMetadata
+        )
         let stream = format.makeStream(
             config: .default.with(fps: 20),
             sink: sink,
             quality: 0.7
         )
         // 3D stays phone-only; ignore any display=carplay on these routes.
-        let screen: any Screen
+        let screen: any DeviceFrames
         let input: any Input
         let refresh: () -> Void
         var foldable: RenderedFoldable?
@@ -2814,10 +2816,11 @@ struct Server: Sendable {
             let box = Box()
             let book = RenderedFoldable(
                 unfolded: unfolded.screen(), cover: cover.screen(),
-                hinge: sim.hinge(), scene: scene,
+                hinge: sim.hinge(), scene: scene, fps: options.frameMetadata ? 20 : nil,
                 onPose: {
                     // The lit screen moved: tell the page where it is.
-                    if let json = screenPlacementJSON(scene, pose: box.book?.pose) {
+                    // Atomic frames carry the placement themselves.
+                    if !options.frameMetadata, let json = screenPlacementJSON(scene, pose: box.book?.pose) {
                         Task { try? await outbound.write(.text(json)) }
                     }
                 }
@@ -2837,15 +2840,48 @@ struct Server: Sendable {
                 ))
                 return
             }
-            let rendered = RenderedScreen(source: bound.screen, scene: scene)
+            let rendered = RenderedScreen(
+                source: bound.screen, scene: scene, fps: options.frameMetadata ? 20 : nil)
             screen = rendered
             input = bound.input
             refresh = { rendered.refresh() }
         }
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
+        // Atomic frames: a render or encode failure ends the stream with
+        // an error rather than leaving a page with stale hit geometry.
+        let frameFailure: @Sendable (any Error) -> Void = { error in
+            sink.stop()
+            screen.stop()
+            Task {
+                do {
+                    try await outbound.write(
+                        .text(#"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#))
+                    try await outbound.close(.unexpectedServerError, reason: "3D frame encoding failed")
+                } catch { log("3D stream error delivery failed: \(error)") }
+            }
+        }
+        let receiveFrame: @Sendable (Result<DeviceFrame, any Error>) -> Void
+        let stopFrames: () -> Void
+        if format == .avcc {
+            let encoder = DeviceAVCCEncoder(
+                config: .default.with(fps: 20), quality: 0.7,
+                deliver: { sink.writeMessage($0) }, onError: frameFailure)
+            receiveFrame = { encoder.receive($0) }
+            stopFrames = { encoder.stop() }
+        } else {
+            let jpeg = JPEGEncoder(quality: 0.7)
+            let encoder = DeviceFrameEncoder(
+                encode: { jpeg.encode($0) }, deliver: { sink.writeMessage($0) }, onError: frameFailure)
+            receiveFrame = { encoder.receive($0) }
+            stopFrames = { encoder.stop() }
+        }
         do {
-            try stream.start(on: screen)
+            if options.frameMetadata {
+                try screen.startFrames(onFrame: receiveFrame)
+            } else {
+                try stream.start(on: screen)
+            }
         } catch {
             try? await outbound.write(.text(
                 #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
@@ -2853,10 +2889,12 @@ struct Server: Sendable {
             return
         }
         defer {
-            stream.stop()
+            stopFrames()
+            sink.stop()
+            if options.frameMetadata { screen.stop() } else { stream.stop() }
         }
 
-        if let json = screenPlacementJSON(scene, pose: foldable?.pose) {
+        if !options.frameMetadata, let json = screenPlacementJSON(scene, pose: foldable?.pose) {
             try? await outbound.write(.text(json))
         }
 
@@ -2896,7 +2934,7 @@ struct Server: Sendable {
                         scene: scene
                     ) {
                         refresh()
-                        if let json = screenPlacementJSON(scene, pose: foldable?.pose) {
+                        if !options.frameMetadata, let json = screenPlacementJSON(scene, pose: foldable?.pose) {
                             try? await outbound.write(.text(json))
                         }
                         continue
@@ -2938,7 +2976,12 @@ struct Server: Sendable {
                     try? await outbound.write(.text(frame))
                     continue
                 }
-                await handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+                do {
+                    try await handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+                } catch {
+                    await sink.failAndClose(error)
+                    return
+                }
             }
         } catch {
             // socket closed; defer cleans up
@@ -3037,11 +3080,16 @@ struct Server: Sendable {
                     try? await outbound.write(.text(frame))
                     continue
                 }
-                await handleInbound(
-                    line: line,
-                    stream: stream,
-                    dispatcher: dispatcher
-                )
+                do {
+                    try await handleInbound(
+                        line: line,
+                        stream: stream,
+                        dispatcher: dispatcher
+                    )
+                } catch {
+                    await sink.failAndClose(error)
+                    return
+                }
             }
         } catch {
             // socket closed; defer cleans up
@@ -3507,14 +3555,17 @@ struct Server: Sendable {
     /// two-finger gestures actually ride, and it was dispatching raw.
     /// Only stream config and format verbs stay off the hop — they
     /// touch no AppKit state.
+    /// Throws when the stream rejects a retune; the route then reports
+    /// the error on the socket and closes it, because a codec that
+    /// refused its configuration cannot keep delivering valid frames.
     private static func handleInbound(
         line: String,
         stream: any Stream,
         dispatcher: GestureDispatcher
-    ) async {
+    ) async throws {
         let next = ReconfigParser.apply(line, to: stream.config)
         if next != stream.config {
-            stream.apply(next)
+            try stream.apply(next)
             return
         }
         if let data = line.data(using: .utf8),

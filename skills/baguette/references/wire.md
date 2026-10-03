@@ -143,7 +143,7 @@ These ride the same channels but belong to one feature; their shapes and replies
 | `paste`, `copy` → `paste_result`, `copy_result` | stdin, stream WS | [paste](https://github.com/tddworks/baguette/blob/main/docs/features/paste/README.md) |
 | `describe_ui` → `describe_ui_result` | stream WS | [accessibility](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md) |
 | `hinge` (server → page, foldables only) | stream WS | [hinge](https://github.com/tddworks/baguette/blob/main/docs/features/hinge/README.md) |
-| `set_3d_camera`, `screen_quad` | `stream.3d.*` WS | [3d-rendering](https://github.com/tddworks/baguette/blob/main/docs/features/3d-rendering/README.md) |
+| `set_3d_camera`, `screen_quad`, atomic `frameMetadata=1` | `stream.3d.*` WS | [3d-rendering](https://github.com/tddworks/baguette/blob/main/docs/features/3d-rendering/README.md) |
 | `log_started`, `log`, `log_stopped`, `stop` | logs WS | [logs](https://github.com/tddworks/baguette/blob/main/docs/features/logs/README.md) |
 | `camera_list`, `camera_start`, `camera_stop`, `camera_set_flags`, `camera_devices`, `camera_state` | camera WS | [camera](https://github.com/tddworks/baguette/blob/main/docs/features/camera/README.md) |
 | companion `hello` / `format` | `/devices/…` WS | [device-twin](https://github.com/tddworks/baguette/blob/main/docs/features/device-twin/README.md) |

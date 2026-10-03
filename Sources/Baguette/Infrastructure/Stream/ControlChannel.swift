@@ -20,9 +20,14 @@ final class ControlChannel: @unchecked Sendable {
     private weak var stream: AnyObject?
     private var buffer = Data()
     private let stdin = FileHandle.standardInput
+    private let onFailure: @Sendable (any Error) -> Void
 
-    init(stream: any Stream) {
+    init(
+        stream: any Stream,
+        onFailure: @escaping @Sendable (any Error) -> Void = { _ in }
+    ) {
         self.stream = stream as AnyObject
+        self.onFailure = onFailure
     }
 
     func start() {
@@ -60,33 +65,42 @@ final class ControlChannel: @unchecked Sendable {
             return
         }
 
-        switch cmd {
-        case "set_bitrate":
-            guard let bps = Self.numeric(dict["bps"]) else {
-                log("control: set_bitrate missing/invalid bps in \(raw)")
-                return
+        do {
+            switch cmd {
+            case "set_bitrate":
+                guard let bps = Self.numeric(dict["bps"]) else {
+                    log("control: set_bitrate missing/invalid bps in \(raw)")
+                    return
+                }
+                try stream.apply(stream.config.with(bitrateBps: Int(bps)))
+            case "set_fps":
+                guard let fps = Self.numeric(dict["fps"]) else {
+                    log("control: set_fps missing/invalid fps in \(raw)")
+                    return
+                }
+                try stream.apply(stream.config.with(fps: Int(fps)))
+            case "set_scale":
+                guard let scale = Self.numeric(dict["scale"]) else {
+                    log("control: set_scale missing/invalid scale in \(raw)")
+                    return
+                }
+                try stream.apply(stream.config.with(scale: Int(scale)))
+            case "force_idr":
+                stream.requestKeyframe()
+                log("control: force_idr")
+            case "snapshot":
+                stream.requestSnapshot()
+                log("control: snapshot")
+            default:
+                log("control: unknown cmd \(cmd) in \(raw)")
             }
-            stream.apply(stream.config.with(bitrateBps: Int(bps)))
-        case "set_fps":
-            guard let fps = Self.numeric(dict["fps"]) else {
-                log("control: set_fps missing/invalid fps in \(raw)")
-                return
-            }
-            stream.apply(stream.config.with(fps: Int(fps)))
-        case "set_scale":
-            guard let scale = Self.numeric(dict["scale"]) else {
-                log("control: set_scale missing/invalid scale in \(raw)")
-                return
-            }
-            stream.apply(stream.config.with(scale: Int(scale)))
-        case "force_idr":
-            stream.requestKeyframe()
-            log("control: force_idr")
-        case "snapshot":
-            stream.requestSnapshot()
-            log("control: snapshot")
-        default:
-            log("control: unknown cmd \(cmd) in \(raw)")
+        } catch {
+            log("control: \(cmd) failed: \(error)")
+            self.stream = nil
+            buffer.removeAll()
+            stop()
+            stream.stop()
+            onFailure(error)
         }
     }
 

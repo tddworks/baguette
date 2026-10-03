@@ -1,122 +1,114 @@
 import Foundation
 import IOSurface
 
-/// AVCC stream: H.264 NALs (length-prefixed AVCC chunks) preceded by a
-/// one-shot JPEG seed (tag 0x04) so consumers paint instantly on the
-/// first frame — VideoDecoder warm-up + first IDR can otherwise leave a
-/// blank canvas.
-///
-/// Driven by `screen` callbacks like MJPEG: every time SimulatorKit
-/// composites a frame, we encode it. This preserves the simulator's
-/// real cadence — pinch / scroll / animation stay smooth because no
-/// fixed-rate sampler decimates the stream.
+/// Pace raw surfaces before encoding. Once encoded, every reference frame reaches
+/// the sink in order; the idle repeat keeps browser decoder pipelines progressing.
 final class AVCCStream: Stream, @unchecked Sendable {
-    private(set) var config: StreamConfig
+    private let configLock = NSLock()
+    private var currentConfig: StreamConfig
+    var config: StreamConfig { configLock.withLock { currentConfig } }
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
     private let h264: H264Encoder
     private let scaler = VideoFrameScaler()
     private let queue = DispatchQueue(label: "baguette.avcc", qos: .userInteractive)
+    private lazy var pump = StreamFramePump<IOSurface>(
+        queue: queue, fps: config.fps, repeating: true
+    ) { [weak self] in self?.encode($0) }
 
     private var screen: (any Screen)?
-    private var lastSurface: IOSurface?
-    private var pump: DispatchSourceTimer?
+    private var running = false
+    private var generation = 0
     private var pendingForceKeyframe = true
-    /// Pre-armed at start so the first surface emits a JPEG seed; later
-    /// flips back on via `requestSnapshot()`.
     private var pendingSeedSnapshot = true
 
     init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
-        self.config = config
+        currentConfig = config
         self.sink = sink
-        self.jpeg = JPEGEncoder(quality: quality)
-        self.h264 = H264Encoder(fps: config.fps, bitrate: config.bitrateBps)
-        self.h264.onEncoded = { [weak self] in self?.write($0) }
+        jpeg = JPEGEncoder(quality: quality)
+        h264 = H264Encoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict)
     }
 
     func start(on screen: any Screen) throws {
         log("start: format=avcc fps=\(config.fps) bitrate=\(config.bitrateBps) scale=\(config.scale)")
         self.screen = screen
-        try screen.start { [weak self] surface in
-            self?.handle(surface)
+        queue.sync {
+            generation += 1
+            running = true
+            pendingForceKeyframe = true
+            pendingSeedSnapshot = true
+        }
+        pump.start()
+        do { try screen.start { [weak self] in self?.pump.offer($0) } } catch {
+            stop()
+            throw error
         }
     }
 
     func stop() {
-        pump?.cancel()
-        pump = nil
+        pump.stop()
         screen?.stop()
         screen = nil
-        lastSurface = nil
+        queue.sync { stopEncoding() }
     }
 
-    func apply(_ newConfig: StreamConfig) {
-        let old = config
-        config = newConfig
-        log("apply: fps \(old.fps)→\(newConfig.fps), bitrate \(old.bitrateBps)→\(newConfig.bitrateBps), scale \(old.scale)→\(newConfig.scale)")
-        if old.bitrateBps != newConfig.bitrateBps {
-            h264.setBitrate(newConfig.bitrateBps)
+    func apply(_ newConfig: StreamConfig) throws {
+        try queue.sync {
+            let old = config
+            if old.scale != newConfig.scale {
+                generation += 1
+                pendingForceKeyframe = true
+                pendingSeedSnapshot = true
+            }
+            if old.fps != newConfig.fps { try h264.setFrameRate(newConfig.fps) }
+            if old.bitrateBps != newConfig.bitrateBps { try h264.setBitrate(newConfig.bitrateBps) }
+            configLock.withLock { currentConfig = newConfig }
+            pump.apply(fps: newConfig.fps)
         }
     }
 
-    /// Re-arms the idle pump to fire `1/fps` from now. Called after every
-    /// encode — if screen callbacks keep flowing, the timer keeps getting
-    /// pushed back and never fires; only a real idle (no callback for
-    /// 1/fps) lets it tick.
-    private func armPump() {
-        pump?.cancel()
-        let interval = 1.0 / Double(max(1, config.fps))
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(2))
-        timer.setEventHandler { [weak self] in self?.pumpTick() }
-        timer.resume()
-        pump = timer
-    }
+    func requestKeyframe() { queue.sync { pendingForceKeyframe = true } }
+    func requestSnapshot() { queue.sync { pendingSeedSnapshot = true } }
 
-    private func pumpTick() {
-        // Already on queue. Re-encode the last surface so the decoder
-        // pipeline keeps flowing — without this, an idle simulator leaves
-        // the last delta stuck in the consumer's `VideoDecoder` queue and
-        // the canvas freezes on a stale frame.
-        guard let surface = lastSurface else { return }
-        encode(surface)
-    }
-
-    func requestKeyframe() { pendingForceKeyframe = true }
-    func requestSnapshot() { pendingSeedSnapshot = true }
-
-    private func handle(_ surface: IOSurface) {
-        queue.async { [weak self] in
-            self?.lastSurface = surface
-            self?.encode(surface)
-            self?.armPump()
-        }
+    /// Called only on the encode queue, including asynchronous VT completions.
+    private func stopEncoding() {
+        running = false
+        generation += 1
+        pump.stop()
+        h264.stop()
     }
 
     private func encode(_ surface: IOSurface) {
-        // Always copy via VideoFrameScaler before handing to VT: VT encodes async on
-        // its own thread and SimulatorKit recycles the framebuffer
-        // IOSurface in place — the bare ref races. At scale=1 the scaler
-        // produces a 1:1 GPU copy, the stable buffer VT needs.
+        guard running else { return }
+        // SimulatorKit recycles the IOSurface; VT must retain its own GPU copy.
         guard let pb = scaler.scale(surface, by: config.scale) else { return }
         if pendingSeedSnapshot {
             pendingSeedSnapshot = false
-            if let bytes = jpeg.encode(pb) {
-                sink.write(AVCCEnvelope.seed(jpeg: bytes))
-            }
+            if let bytes = jpeg.encode(pb) { sink.write(AVCCEnvelope.seed(jpeg: bytes)) }
         }
         let force = pendingForceKeyframe
         pendingForceKeyframe = false
-        h264.encode(pb, forceKeyframe: force)
+        let submittedGeneration = generation
+        h264.encode(pb, forceKeyframe: force) { [weak self] result in
+            guard let self else { return }
+            queue.async { [self] in
+                guard running, generation == submittedGeneration else { return }
+                switch result {
+                case .success(let encoded?): write(encoded)
+                case .success(nil): break
+                case .failure(let error):
+                    stopEncoding()
+                    sink.fail(error)
+                }
+            }
+        }
     }
 
     private func write(_ encoded: H264Encoder.Encoded) {
-        if let description = encoded.description {
-            sink.write(AVCCEnvelope.description(avcc: description))
-        }
+        if let description = encoded.description { sink.write(AVCCEnvelope.description(avcc: description)) }
         switch encoded.kind {
         case .keyframe: sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))
-        case .delta:    sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
+        case .delta: sink.write(AVCCEnvelope.delta(avcc: encoded.avcc))
         }
     }
 }

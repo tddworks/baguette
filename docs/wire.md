@@ -142,7 +142,7 @@ These ride the same channels but belong to one feature; their shapes and replies
 | `paste`, `copy` → `paste_result`, `copy_result` | stdin, stream WS | [paste](features/paste/README.md) |
 | `describe_ui` → `describe_ui_result` | stream WS | [accessibility](features/accessibility/README.md) |
 | `hinge` (server → page, foldables only) | stream WS | [hinge](features/hinge/README.md) |
-| `set_3d_camera`, `screen_quad` | `stream.3d.*` WS | [3d-rendering](features/3d-rendering/README.md) |
+| `set_3d_camera`, `screen_quad`, atomic `frameMetadata=1` | `stream.3d.*` WS | [3d-rendering](features/3d-rendering/README.md) |
 | `log_started`, `log`, `log_stopped`, `stop` | logs WS | [logs](features/logs/README.md) |
 | `camera_list`, `camera_start`, `camera_stop`, `camera_set_flags`, `camera_devices`, `camera_state` | camera WS | [camera](features/camera/README.md) |
 | companion `hello` / `format` | `/devices/…` WS | [device-twin](features/device-twin/README.md) |

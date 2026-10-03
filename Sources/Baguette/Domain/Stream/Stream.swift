@@ -18,8 +18,8 @@ protocol Stream: AnyObject {
 
     /// Apply a new runtime config. Implementations apply only the deltas
     /// that affect them (e.g. H.264 retunes VT bitrate; MJPEG just stores
-    /// scale for the next encode).
-    func apply(_ config: StreamConfig)
+    /// scale for the next encode). A rejected codec property ends the stream.
+    func apply(_ config: StreamConfig) throws
 
     /// Force the next encoded frame to be a keyframe (IDR). No-op for
     /// stateless formats like MJPEG.

@@ -9,7 +9,7 @@ import IOSurface
 /// each panel on its screen, the book posed at the latest angle. As in
 /// `RenderedScreen`, at most one composition is pending, so a slow model
 /// drops stale work instead of queueing it.
-final class RenderedFoldable: Screen, @unchecked Sendable {
+final class RenderedFoldable: DeviceFrames, @unchecked Sendable {
     private let unfolded: any Screen
     private let cover: any Screen
     private let hinge: any Hinge
@@ -19,8 +19,13 @@ final class RenderedFoldable: Screen, @unchecked Sendable {
         label: "com.baguette.rendered-foldable",
         qos: .userInteractive
     )
+    private let fps: Int?
+    private lazy var pump = fps.map { rate in
+        StreamFramePump<Void>(queue: queue, fps: rate, repeating: false) { [weak self] in self?.render() }
+    }
     private var delivery: (@Sendable (IOSurface) -> Void)?
     private var watch: (any HingeWatch)?
+    private var frameDelivery: (@Sendable (Result<DeviceFrame, any Error>) -> Void)?
     private var isRendering = false
     private var pending = false
     private var latest = FoldableScreens(unfolded: nil, cover: nil)
@@ -41,13 +46,19 @@ final class RenderedFoldable: Screen, @unchecked Sendable {
     /// `onPose` runs after each hinge sample has posed the scene.
     init(
         unfolded: any Screen, cover: any Screen, hinge: any Hinge, scene: any DeviceScene,
-        onPose: @escaping @Sendable () -> Void = {}
+        fps: Int? = nil, onPose: @escaping @Sendable () -> Void = {}
     ) {
         self.unfolded = unfolded
         self.cover = cover
         self.hinge = hinge
         self.scene = scene
+        self.fps = fps
         self.onPose = onPose
+    }
+
+    func startFrames(onFrame: @escaping @Sendable (Result<DeviceFrame, any Error>) -> Void) throws {
+        lock.withLock { frameDelivery = onFrame }
+        try start { _ in }
     }
 
     func start(onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
@@ -56,6 +67,7 @@ final class RenderedFoldable: Screen, @unchecked Sendable {
             isStopped = false
             isPosed = false
         }
+        pump?.start()
         // A silent hinge (the guest's motion stream can drop) still
         // gets a book: shut, as the device boots, until it speaks.
         let standing = hinge.angle()?.degrees ?? 0
@@ -94,9 +106,11 @@ final class RenderedFoldable: Screen, @unchecked Sendable {
             pending = false
             latest = FoldableScreens(unfolded: nil, cover: nil)
             delivery = nil
+            frameDelivery = nil
             defer { self.watch = nil }
             return self.watch
         }
+        pump?.stop(waitForDelivery: false)
         watch?.cancel()
         unfolded.stop()
         cover.stop()
@@ -112,6 +126,7 @@ final class RenderedFoldable: Screen, @unchecked Sendable {
             guard !isStopped else { return false }
             latest = update(latest)
             guard isPosed, latest.unfolded != nil || latest.cover != nil else { return false }
+            if fps != nil { return true }
             if isRendering {
                 pending = true
                 return false
@@ -120,17 +135,25 @@ final class RenderedFoldable: Screen, @unchecked Sendable {
             return true
         }
         guard shouldStart else { return }
-        queue.async { [weak self] in self?.render() }
+        if let pump { pump.offer(()) } else { queue.async { [weak self] in self?.render() } }
     }
 
     private func render() {
         while true {
             let screens = lock.withLock { latest }
             do {
-                let rendered = try scene.render(screens: screens)
-                let callback = lock.withLock { isStopped ? nil : delivery }
-                callback?(rendered)
+                if lock.withLock({ frameDelivery != nil }) {
+                    let rendered = try scene.renderFrame(screens: screens)
+                    let callback = lock.withLock { isStopped ? nil : frameDelivery }
+                    callback?(.success(rendered))
+                } else {
+                    let rendered = try scene.render(screens: screens)
+                    let callback = lock.withLock { isStopped ? nil : delivery }
+                    callback?(rendered)
+                }
             } catch {
+                let callback = lock.withLock { isStopped ? nil : frameDelivery }
+                callback?(.failure(error))
                 log("3D foldable frame skipped: \(error)")
             }
             let again = lock.withLock {

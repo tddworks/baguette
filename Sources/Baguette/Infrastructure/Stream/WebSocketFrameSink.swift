@@ -23,14 +23,16 @@ import NIOCore
 /// Async writes are serialised per-client: a single drain task owns
 /// the socket, so chunks arrive in order without blocking the encoder.
 /// A client that reads slower than the encoder produces cannot grow
-/// the server without bound — `FrameBacklog` discards the oldest
-/// frames once its byte budget is reached, because on a live stream the
-/// newest frame is the one worth delivering.
+/// the server without bound — `FrameBacklog` discards the oldest MJPEG
+/// frames once its byte budget is reached, while an AVCC backlog keeps
+/// every encoded reference and the socket closes with an error once the
+/// consumer falls `FrameBacklog.referenceByteBudget` behind.
 final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     private let outbound: WebSocketOutboundWriter
     private let format: StreamFormat
     private let lock = NSLock()
-    private var backlog = FrameBacklog()
+    private var backlog: FrameBacklog
+    private var stopped = false
     private var draining = false
 
     // Per-format parser state, lock-protected. The encoder calls
@@ -40,9 +42,13 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     private var mjpegHeaderSkipped = false
     private var avccBuffer = Data()
 
-    init(outbound: WebSocketOutboundWriter, format: StreamFormat) {
+    /// `preservingDescriptions` is off for `frameMetadata=1` streams,
+    /// whose packets are already framed and carry their own description
+    /// messages — see `FrameBacklog`.
+    init(outbound: WebSocketOutboundWriter, format: StreamFormat, preservingDescriptions: Bool = true) {
         self.outbound = outbound
         self.format = format
+        self.backlog = FrameBacklog(format: format, preservingDescriptions: preservingDescriptions)
     }
 
     func write(_ data: Data) {
@@ -53,6 +59,52 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
         }
     }
 
+    /// A message that is already framed (one metadata packet) goes to
+    /// the backlog as it is, bypassing the codec parser.
+    func writeMessage(_ data: Data) { enqueue(data) }
+
+    /// Drops whatever is queued and refuses further frames; the drain
+    /// task, if one is running, stops at its next read.
+    func stop() {
+        lock.withLock {
+            stopped = true
+            backlog = FrameBacklog()
+        }
+    }
+
+    /// Encoder-side failure: report once, then close. Later frames and
+    /// failures are ignored.
+    func fail(_ error: any Error) {
+        let firstFailure = lock.withLock {
+            guard !stopped else { return false }
+            stopped = true
+            backlog = FrameBacklog()
+            return true
+        }
+        if firstFailure { Task { await reportFailure(String(describing: error)) } }
+    }
+
+    /// The same report from a route that can await the close itself.
+    func failAndClose(_ error: any Error) async {
+        let firstFailure = lock.withLock {
+            guard !stopped else { return false }
+            stopped = true
+            backlog = FrameBacklog()
+            return true
+        }
+        if firstFailure { await reportFailure(String(describing: error)) }
+    }
+
+    private func reportFailure(_ message: String) async {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: ["ok": false, "error": message])
+            try await outbound.write(.text(String(decoding: data, as: UTF8.self)))
+        } catch { log("WebSocket stream error delivery failed: \(error)") }
+        do { try await outbound.close(.unexpectedServerError, reason: "Stream failed") } catch {
+            log("WebSocket stream close failed: \(error)")
+        }
+    }
+
     // MARK: - parsing (lock held)
 
     private func parse(_ chunk: Data) -> [Data] {
@@ -60,7 +112,7 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
         defer { lock.unlock() }
         switch format {
         case .mjpeg: return parseMJPEG(chunk)
-        case .avcc:  return parseAVCC(chunk)
+        case .avcc: return parseAVCC(chunk)
         }
     }
 
@@ -87,7 +139,7 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
             guard let soi = mjpegBuffer.firstRange(of: Data([0xFF, 0xD8])) else { break }
             let after = mjpegBuffer.index(soi.lowerBound, offsetBy: 2)
             guard after < mjpegBuffer.endIndex,
-                  let eoi = mjpegBuffer[after...].firstRange(of: Data([0xFF, 0xD9]))
+                let eoi = mjpegBuffer[after...].firstRange(of: Data([0xFF, 0xD9]))
             else { break }
             frames.append(Data(mjpegBuffer[soi.lowerBound..<eoi.upperBound]))
             mjpegBuffer = Data(mjpegBuffer[eoi.upperBound...])
@@ -102,14 +154,13 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
         var msgs: [Data] = []
         while avccBuffer.count >= 4 {
             let len =
-                Int(avccBuffer[avccBuffer.startIndex])     << 24 |
-                Int(avccBuffer[avccBuffer.startIndex + 1]) << 16 |
-                Int(avccBuffer[avccBuffer.startIndex + 2]) << 8  |
-                Int(avccBuffer[avccBuffer.startIndex + 3])
+                Int(avccBuffer[avccBuffer.startIndex]) << 24 | Int(avccBuffer[avccBuffer.startIndex + 1]) << 16 | Int(
+                    avccBuffer[avccBuffer.startIndex + 2]) << 8 | Int(avccBuffer[avccBuffer.startIndex + 3])
             guard len > 0, avccBuffer.count >= 4 + len else { break }
-            let body = Data(avccBuffer[
-                avccBuffer.startIndex + 4 ..< avccBuffer.startIndex + 4 + len
-            ])
+            let body = Data(
+                avccBuffer[
+                    avccBuffer.startIndex + 4..<avccBuffer.startIndex + 4 + len
+                ])
             avccBuffer = Data(avccBuffer[(avccBuffer.startIndex + 4 + len)...])
             msgs.append(body)
         }
@@ -119,12 +170,21 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     // MARK: - WS write serialisation
 
     /// Hand the frame to the backlog, then make sure exactly one drain
-    /// task is running. Ordering is preserved because a single task owns
-    /// the socket; memory stays bounded because the backlog discards
-    /// rather than queues when the client falls behind.
+    /// task is running. A single task owns frame ordering, while the codec's
+    /// backlog policy bounds memory without losing H.264 references.
     private func enqueue(_ data: Data) {
         lock.lock()
-        backlog.append(data)
+        guard !stopped else {
+            lock.unlock()
+            return
+        }
+        guard backlog.append(data) else {
+            stopped = true
+            backlog = FrameBacklog()
+            lock.unlock()
+            Task { await reportFailure("H.264 consumer fell \(FrameBacklog.referenceByteBudget) bytes behind") }
+            return
+        }
         let needsDrain = !draining
         if needsDrain { draining = true }
         lock.unlock()
@@ -138,7 +198,17 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
         let outbound = self.outbound
         Task { [weak self] in
             while let next = self?.nextFrame() {
-                try? await outbound.write(.binary(ByteBuffer(bytes: next)))
+                do {
+                    try await outbound.write(.binary(ByteBuffer(bytes: next)))
+                } catch {
+                    // A write can fail with the socket still open; report
+                    // and close rather than leave a client on a frozen
+                    // picture. On a socket that is already gone the report
+                    // and close fail too and are logged.
+                    log("WebSocket frame delivery failed: \(error)")
+                    await self?.failAndClose(error)
+                    return
+                }
             }
         }
     }
@@ -149,6 +219,10 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     private func nextFrame() -> Data? {
         lock.lock()
         defer { lock.unlock() }
+        guard !stopped else {
+            draining = false
+            return nil
+        }
         let next = backlog.popFirst()
         if next == nil { draining = false }
         return next

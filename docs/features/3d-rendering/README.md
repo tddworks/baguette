@@ -145,8 +145,8 @@ GET /simulators/:udid/stream.3d.<mjpeg|avcc>?rotation=-8,18,0&variant=finish:dee
 Upgrade: websocket
 ```
 
-`variant` is repeatable; everything is validated before the socket
-subscribes. `width`×`height` (default 960 × 960) is the *source box*
+`variant` is repeatable; validation precedes subscription. For interaction while
+moving the camera, use [atomic geometry/video frames](frames.md). `width`×`height` (default 960 × 960) is the *source box*
 `size=` resolves against, rounded up to even dimensions:
 `?size=appstore-6.9` yields 1290 × 2796, `?width=1280&height=720&size=square`
 yields 1280 × 1280. The first frame is slower while the model loads.

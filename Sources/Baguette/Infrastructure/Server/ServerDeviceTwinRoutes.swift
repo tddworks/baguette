@@ -396,10 +396,15 @@ extension Server {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
-                if !Self.handleTwinInbound(line: line, stream: stream) {
-                    try? await outbound.write(.text(
-                        Self.twinErrorFrame("device control is not wired yet")
-                    ))
+                do {
+                    if try !Self.handleTwinInbound(line: line, stream: stream) {
+                        try? await outbound.write(.text(
+                            Self.twinErrorFrame("device control is not wired yet")
+                        ))
+                    }
+                } catch {
+                    await sink.failAndClose(error)
+                    return
                 }
             }
         } catch {
@@ -411,10 +416,10 @@ extension Server {
     /// `force_idr`, `snapshot`. Returns `false` for anything else
     /// (gestures included) so the caller can reject it loudly instead
     /// of silently dropping input on a surface that cannot act on it.
-    private static func handleTwinInbound(line: String, stream: any Stream) -> Bool {
+    private static func handleTwinInbound(line: String, stream: any Stream) throws -> Bool {
         let next = ReconfigParser.apply(line, to: stream.config)
         if next != stream.config {
-            stream.apply(next)
+            try stream.apply(next)
             return true
         }
         guard let data = line.data(using: .utf8),
@@ -584,10 +589,15 @@ extension Server {
                     try? await outbound.write(.text(#"{"ok":false,"error":"invalid 3D camera"}"#))
                     continue
                 }
-                if !Self.handleTwinInbound(line: line, stream: stream) {
-                    try? await outbound.write(.text(
-                        Self.twinErrorFrame("device control is not wired yet")
-                    ))
+                do {
+                    if try !Self.handleTwinInbound(line: line, stream: stream) {
+                        try? await outbound.write(.text(
+                            Self.twinErrorFrame("device control is not wired yet")
+                        ))
+                    }
+                } catch {
+                    await sink.failAndClose(error)
+                    return
                 }
             }
         } catch {

@@ -22,6 +22,24 @@ struct RealityKitDeviceSceneTests {
         #expect(Self.bytes(blueFrame) != Self.bytes(redFrame))
     }
 
+    @Test func `render snapshots retain their own geometry after a later camera update`() throws {
+        let scratch = try Self.makeScratch("snapshot")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let scene = try RealityKitDeviceScene(plan: Self.plan(directory: scratch))
+        let source = try #require(Self.surface(red: 200, green: 30, blue: 30))
+        let before = try scene.renderFrame(screen: source)
+        let placement = try #require(before.placement)
+        let pixels = Self.bytes(before.surface)
+        scene.update(camera: Device3DCamera(rotation: DeviceRotation(x: 0, y: 40, z: 0), zoom: 1.4))
+        let after = try scene.renderFrame(screen: source)
+        #expect(before.placement == placement)
+        #expect(before.placement != after.placement)
+        #expect(Self.bytes(before.surface) == pixels)
+        #expect(Self.bytes(after.surface) != pixels)
+        #expect(placement.sourcePixelSize.width == IOSurfaceGetWidth(source))
+        #expect(placement.sourcePixelSize.height == IOSurfaceGetHeight(source))
+    }
+
     @Test func `camera updates change the next frame without rebuilding the scene`() throws {
         let scratch = try Self.makeScratch("camera")
         defer { try? FileManager.default.removeItem(at: scratch) }
