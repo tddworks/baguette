@@ -139,8 +139,8 @@ even Settings, and look for those lines.
 
 The dylib logs through `os_log`, never `NSLog`. It is loaded into *every*
 process launched while motion is armed — including the `launchctl` baguette
-spawns to read `DYLD_INSERT_LIBRARIES` — and a banner on stderr can come
-back as part of the value being read.
+spawns to read `DYLD_INSERT_LIBRARIES`. Diagnostics belong in the unified
+log rather than a command's output streams.
 
 ## Sharing `DYLD_INSERT_LIBRARIES`
 
@@ -151,10 +151,8 @@ entries by **dylib filename** because every release installs under a fresh
 sha-keyed directory. Starting motion while the camera is armed keeps both;
 stopping either leaves the other alone.
 
-`InjectedDylibs.parsing` keeps only absolute `.dylib` paths, and that
-filtering is load-bearing: a simulator's stdout channel carries leftover
-output from previously spawned processes, so the read can come back as log
-noise with the real value appended.
+Environment reads keep stdout separate from guest diagnostics and abort on
+unknown failures; see the [shared injection boundary](../camera/design.md#sharing-dyld_insert_libraries).
 
 ## Two capabilities refused on purpose
 

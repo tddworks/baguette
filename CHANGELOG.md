@@ -13,6 +13,9 @@ For releases prior to this changelog, see the
 ### Added
 - `list --json` and `/simulators.json` expose the installed device type, product family and runtime identity next to the editable name, so clients can filter and match devices after a rename. → [docs](docs/features/device-farm/README.md#catalog-identity)
 
+### Fixed
+- Injected dylibs no longer disarm each other: `DYLD_INSERT_LIBRARIES` is read with stdout and stderr kept apart, an unreadable environment fails the update instead of being overwritten; `network status` reports a failed query. → [docs](docs/features/camera/design.md#sharing-dyld_insert_libraries)
+
 ---
 
 ## [0.2.2] - 2026-10-03
