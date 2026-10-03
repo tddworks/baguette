@@ -68,7 +68,9 @@ struct HingeControlTests {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         let helper = scratch.appending(path: "HingeControl")
-        try Self.compile([Self.sources.appending(path: "HingeControl.m").path], to: helper)
+        // `frontmost` lives in its own translation unit; the helper links both.
+        try Self.compile(
+            ["HingeControl.m", "Frontmost.m"].map { Self.sources.appending(path: $0).path }, to: helper)
         let cases: [([String], Int32)] = [
             ([], 2),
             (["orientation"], 2),

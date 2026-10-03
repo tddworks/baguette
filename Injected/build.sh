@@ -37,4 +37,8 @@ for script in */build.sh; do
     # Staged where Package.swift `.copy`s it from.
     mkdir -p "../Sources/Baguette/Resources/$name"
     cp -f "$dylib" "../Sources/Baguette/Resources/$name/"
+    for license in "$name"/Sources/LICENSE*; do
+        [ -f "$license" ] || continue
+        cp -f "$license" "../Sources/Baguette/Resources/$name/"
+    done
 done

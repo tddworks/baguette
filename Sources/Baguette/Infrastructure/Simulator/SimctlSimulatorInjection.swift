@@ -20,36 +20,35 @@ import Foundation
 /// survives until the simulator reboots. Re-arming on boot is the caller's
 /// responsibility.
 ///
-/// The orchestration here is pure — argv assembly, stdout collection, the
-/// `Subprocess` exit handshake, and the merge — so this file is
-/// unit-covered end-to-end via `MockSubprocess`. The `Foundation.Process`
-/// plumbing lives in `HostSubprocess`.
-final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
-    private let subprocess: any Subprocess
+/// Bounded process capture keeps guest diagnostics out of the environment
+/// value and waits for complete stdout before modifying it.
+final class SimctlSimulatorInjection: SimulatorInjection, Sendable {
     private let xcrun: URL
 
     private static let variable = "DYLD_INSERT_LIBRARIES"
 
-    init(
-        subprocess: any Subprocess = HostSubprocess(),
-        xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")
-    ) {
-        self.subprocess = subprocess
+    init(xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")) {
         self.xcrun = xcrun
     }
 
     func arm(dylibPath: String, on simulator: any Simulator) async throws {
-        try await locked(simulator) {
-            let armed = await self.currentDylibs(on: simulator)
-            try await self.write(armed.adding(dylibPath), on: simulator)
-        }
+        let udid = simulator.udid
+        try await Task.detached {
+            try self.locked(udid) {
+                let armed = try self.currentDylibs(udid: udid)
+                try self.write(armed.adding(dylibPath), udid: udid)
+            }
+        }.value
     }
 
     func disarm(dylibPath: String, on simulator: any Simulator) async throws {
-        try await locked(simulator) {
-            let armed = await self.currentDylibs(on: simulator)
-            try await self.write(armed.removing(dylibPath), on: simulator)
-        }
+        let udid = simulator.udid
+        try await Task.detached {
+            try self.locked(udid) {
+                let armed = try self.currentDylibs(udid: udid)
+                try self.write(armed.removing(dylibPath), udid: udid)
+            }
+        }.value
     }
 
     /// Runs `body` holding an exclusive lock on this simulator's environment.
@@ -61,13 +60,15 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
     /// hands out a fresh `SimctlSimulatorInjection` per call and the CLI is a
     /// different process from the server entirely — an in-process lock would
     /// protect nothing.
-    private func locked<T>(_ simulator: any Simulator,
-                           _ body: () async throws -> T) async throws -> T {
+    private func locked<T>(
+        _ udid: String,
+        _ body: () throws -> T
+    ) throws -> T {
         let fm = FileManager.default
         let directory = URL(fileURLWithPath: InjectedDylibInstaller.defaultSupportDir)
             .appendingPathComponent("locks")
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        let lockPath = directory.appendingPathComponent("\(simulator.udid).inject.lock").path
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lockPath = directory.appendingPathComponent("\(udid).inject.lock").path
         let descriptor = open(lockPath, O_CREAT | O_RDWR, 0o644)
         // Running unlocked would silently reintroduce exactly the race this
         // guards, so a lock we cannot take fails the operation instead. That
@@ -84,7 +85,7 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
             }
         }
         defer { flock(descriptor, LOCK_UN) }
-        return try await body()
+        return try body()
     }
 
     /// Matches by **file name**, not by whole path. Every release installs
@@ -92,77 +93,56 @@ final class SimctlSimulatorInjection: SimulatorInjection, @unchecked Sendable {
     /// is almost never the path an earlier one did; comparing paths would
     /// report "not armed" for a dylib that is very much loaded. Same rule
     /// `InjectedDylibs` merges by.
-    func armed(dylibPath: String, on simulator: any Simulator) async -> Bool {
+    func armed(dylibPath: String, on simulator: any Simulator) async throws -> Bool {
+        let udid = simulator.udid
         let name = (dylibPath as NSString).lastPathComponent
-        return await currentDylibs(on: simulator).paths
-            .contains { ($0 as NSString).lastPathComponent == name }
+        return try await Task.detached {
+            try self.currentDylibs(udid: udid).paths
+                .contains { ($0 as NSString).lastPathComponent == name }
+        }.value
     }
 
-    /// Reads what's armed right now.
-    ///
-    /// A failed read is **not** an error: a simulator that never had the
-    /// variable set is the normal case on a fresh boot, and failing the arm
-    /// over it would make injection unusable. Either way the answer is
-    /// "nothing armed".
-    private func currentDylibs(on simulator: any Simulator) async -> InjectedDylibs {
-        let read = try? await spawn(arguments: [
-            "simctl", "spawn", simulator.udid,
-            "launchctl", "getenv", Self.variable,
-        ])
-        return InjectedDylibs.parsing(read)
+    /// Only launchctl's empty status-1 response confirms an unset variable.
+    /// Other failures leave the environment unknown and must prevent a write.
+    private func currentDylibs(udid: String) throws -> InjectedDylibs {
+        do {
+            let output = try spawn(udid: udid, arguments: ["getenv", Self.variable])
+            return InjectedDylibs.parsing(output.stdout)
+        } catch SimctlCapture.Failure.failed(_, 1, "") {
+            return InjectedDylibs.parsing(nil)
+        }
     }
 
-    private func write(_ dylibs: InjectedDylibs, on simulator: any Simulator) async throws {
+    private func write(_ dylibs: InjectedDylibs, udid: String) throws {
         // An empty value is not the same as no value — dyld reports an
         // empty entry as a library it failed to load — so the last dylib
         // leaving takes the whole variable with it.
-        let arguments = dylibs.isEmpty
-            ? ["launchctl", "unsetenv", Self.variable]
-            : ["launchctl", "setenv", Self.variable, dylibs.environmentValue]
-        _ = try await spawn(arguments: ["simctl", "spawn", simulator.udid] + arguments)
+        let arguments =
+            dylibs.isEmpty
+            ? ["unsetenv", Self.variable]
+            : ["setenv", Self.variable, dylibs.environmentValue]
+        _ = try spawn(udid: udid, arguments: arguments)
     }
 
-    /// Runs one `xcrun` invocation, returning whatever it wrote to stdout.
-    @discardableResult
-    private func spawn(arguments: [String]) async throws -> String {
-        final class Output: @unchecked Sendable {
-            var data = Data()
-        }
-        let output = Output()
-        return try await withCheckedThrowingContinuation { continuation in
-            do {
-                try subprocess.run(
-                    executable: xcrun,
-                    arguments: arguments,
-                    onBytes: { output.data.append($0) },
-                    onExit: { code in
-                        if code == 0 {
-                            continuation.resume(
-                                returning: String(decoding: output.data, as: UTF8.self))
-                        } else {
-                            continuation.resume(
-                                throwing: SimulatorInjectionError.simctlFailed(status: code))
-                        }
-                    }
-                )
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+    private func spawn(udid: String, arguments: [String]) throws -> SimctlCapture.Output {
+        try SimctlCapture.run(
+            udid: udid,
+            arguments: ["simctl", "spawn", udid, "launchctl"] + arguments,
+            xcrun: xcrun
+        )
     }
 }
 
-enum SimulatorInjectionError: Error, Equatable, CustomStringConvertible {
-    case simctlFailed(status: Int32)
+enum SimulatorInjectionError: LocalizedError, Equatable, CustomStringConvertible {
     /// The per-simulator lock guarding `DYLD_INSERT_LIBRARIES` couldn't be
     /// taken. Reported rather than skipped: proceeding unlocked would let a
     /// concurrent arm drop another feature's dylib, invisibly.
     case lockUnavailable(path: String)
 
+    var errorDescription: String? { description }
+
     var description: String {
         switch self {
-        case .simctlFailed(let status):
-            return "xcrun simctl exited \(status) while arming/disarming an injected dylib"
         case .lockUnavailable(let path):
             return "could not lock \(path) to update DYLD_INSERT_LIBRARIES"
         }

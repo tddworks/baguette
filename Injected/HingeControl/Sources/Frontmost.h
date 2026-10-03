@@ -1,0 +1,1 @@
+int printFrontmostApplication(void);

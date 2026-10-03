@@ -424,12 +424,16 @@ struct Server: Sendable {
                 udid: Self.udidParam(r), body: body, simulators: simulators
             ) {
             case .ok:
-                guard let json = await Self.networkStateJSON(
-                    udid: Self.udidParam(r), simulators: simulators
-                ) else {
-                    return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                do {
+                    guard let json = try await Self.networkStateJSON(
+                        udid: Self.udidParam(r), simulators: simulators
+                    ) else {
+                        return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                    }
+                    return Self.jsonResponse(json)
+                } catch {
+                    return errorJSON("network status failed: \(error)", status: .internalServerError)
                 }
-                return Self.jsonResponse(json)
             case .invalidBody:
                 return errorJSON(
                     "network body must name exactly one of: a profile "
@@ -450,12 +454,17 @@ struct Server: Sendable {
         // slow", so the UI has to be able to say plainly that one is on.
         router.get("/simulators/:udid/network") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            guard let json = await Self.networkStateJSON(
-                udid: Self.udidParam(r), simulators: simulators
-            ) else {
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+            do {
+                guard let json = try await Self.networkStateJSON(
+                    udid: Self.udidParam(r), simulators: simulators
+                ) else {
+                    return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                }
+                return Self.jsonResponse(json)
+            } catch {
+                // An unreadable injection state is not "no conditioning".
+                return errorJSON("network status failed: \(error)", status: .internalServerError)
             }
-            return Self.jsonResponse(json)
         }
         router.delete("/simulators/:udid/network") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -1633,12 +1642,12 @@ struct Server: Sendable {
             + #""litPanel":"\#(lit == .primary ? "primary" : "secondary")","orientation":\#(orientation)}"#
     }
 
-    static func networkStateJSON(udid: String, simulators: any Simulators) async -> String? {
+    static func networkStateJSON(udid: String, simulators: any Simulators) async throws -> String? {
         let profiles = NetworkProfile.allCases
             .map { "\"\($0.rawValue)\"" }
             .joined(separator: ",")
         guard let sim = simulators.find(udid: udid) else { return nil }
-        guard let condition = await sim.network().current(on: sim) else {
+        guard let condition = try await sim.network().current(on: sim) else {
             return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
         }
         let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"

@@ -1,11 +1,25 @@
 import Foundation
 
+/// Native panel points and the interface rotation observed for an AX result.
+struct AXScreen: Equatable, Sendable {
+    let width: Double
+    let height: Double
+    let orientation: DeviceOrientation
+    var target: ScreenTarget? = nil
+
+    var dictionary: [String: Any] {
+        var value: [String: Any] = ["width": width, "height": height, "orientation": orientation.wireName]
+        if let target { value["target"] = target.dictionary }
+        return value
+    }
+}
+
 /// One node in the simulator's on-screen UI tree. Mirrors the shape
 /// `AXPTranslator` exposes for a single `AXPMacPlatformElement` —
 /// role / label / value / frame plus traits — without leaking the
 /// private-API type at the domain boundary.
 ///
-/// `frame` is in **device points**, the same unit as gesture wire
+/// `frame` is in **native panel points**, the same unit as gesture wire
 /// coordinates (`x`, `y`, `width`, `height`). A caller can read
 /// `node.frame.origin` + half its `size` and feed it back into a
 /// `tap` envelope without unit conversion.
@@ -26,6 +40,7 @@ struct AXNode: Equatable, Sendable {
     let focused: Bool
     let hidden: Bool
     let children: [AXNode]
+    var screen: AXScreen?
 
     init(
         role: String,
@@ -39,7 +54,8 @@ struct AXNode: Equatable, Sendable {
         enabled: Bool = true,
         focused: Bool = false,
         hidden: Bool = false,
-        children: [AXNode] = []
+        children: [AXNode] = [],
+        screen: AXScreen? = nil
     ) {
         self.role = role
         self.subrole = subrole
@@ -53,6 +69,7 @@ struct AXNode: Equatable, Sendable {
         self.focused = focused
         self.hidden = hidden
         self.children = children
+        self.screen = screen
     }
 
     /// JSON projection used by the `describe-ui` CLI and the WS
@@ -98,7 +115,7 @@ struct AXNode: Equatable, Sendable {
     /// `dlopen` + `frontmostApplication` dance and hands the
     /// resulting root element here.
     ///
-    /// `transform` projects each node's mac-window frame into
+    /// `transform` rotates each node's UIKit screen frame into
     /// device-point space (`AXFrameTransform`).
     /// `depthCap` is a defensive bound (real iOS screens rarely
     /// exceed 20–30 levels; the cap prevents pathological cycles
@@ -171,7 +188,7 @@ struct AXNode: Equatable, Sendable {
     }
 
     fileprivate var dictionary: [String: Any] {
-        [
+        var result: [String: Any] = [
             "role": role,
             "subrole": subrole as Any? ?? NSNull(),
             "label": label as Any? ?? NSNull(),
@@ -190,5 +207,9 @@ struct AXNode: Equatable, Sendable {
             "hidden": hidden,
             "children": children.map(\.dictionary),
         ]
+        if let screen {
+            result["screen"] = screen.dictionary
+        }
+        return result
     }
 }

@@ -19,11 +19,10 @@ protocol SimulatorInjection: AnyObject, Sendable {
     /// Whether this simulator would load this dylib into the next app it
     /// launches.
     ///
-    /// Not throwing: a simulator that never had the variable set is the
-    /// normal case on a fresh boot, and the answer there is "no", not an
-    /// error. Callers use it to tell a condition that is *published* from
+    /// An unset variable reports false; an unreadable environment throws.
+    /// Callers use it to tell a condition that is *published* from
     /// one that is actually *applied* — a device can hold a state file it
     /// is no longer subject to, since a simulator reboot clears
     /// `DYLD_INSERT_LIBRARIES` and leaves the file behind.
-    func armed(dylibPath: String, on simulator: any Simulator) async -> Bool
+    func armed(dylibPath: String, on simulator: any Simulator) async throws -> Bool
 }

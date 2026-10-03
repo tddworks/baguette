@@ -165,10 +165,10 @@ struct NetworkRoutesTests {
 
     // MARK: - read-back
 
-    @Test func `networkStateJSON reports what the simulator is subject to`() async {
+    @Test func `networkStateJSON reports what the simulator is subject to`() async throws {
         let w = makeWiring(current: NetworkProfile.threeG.condition)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         #expect(json.contains(#""active":true"#))
         #expect(json.contains(#""latencyMs":200"#))
@@ -176,55 +176,71 @@ struct NetworkRoutesTests {
         #expect(json.contains(#""summary":"200 ms latency, 780 kbps""#))
     }
 
-    @Test func `networkStateJSON names the preset when one matches`() async {
+    @Test func `networkStateJSON names the preset when one matches`() async throws {
         // So the card can keep the pill the user pressed lit. It posts a
         // name and gets numbers back; without this it would have to hold
         // NLC's figures itself to recognise them, which is the duplication
         // the whole design avoids.
         let w = makeWiring(current: NetworkProfile.threeG.condition)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         #expect(json.contains(#""profile":"3g""#))
     }
 
-    @Test func `networkStateJSON names no preset for a hand-tuned condition`() async {
+    @Test func `networkStateJSON names no preset for a hand-tuned condition`() async throws {
         let w = makeWiring(
             current: NetworkCondition(latencyMs: 317, bandwidthKbps: 411, lossPercent: 3)!)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         #expect(json.contains(#""profile":null"#))
     }
 
-    @Test func `networkStateJSON reports an unconditioned simulator as inactive`() async {
+    @Test func `networkStateJSON reports an unconditioned simulator as inactive`() async throws {
         let w = makeWiring(current: nil)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         #expect(json.contains(#""active":false"#))
     }
 
-    @Test func `networkStateJSON names every preset so the card lists them`() async {
+    @Test func `networkStateJSON names every preset so the card lists them`() async throws {
         // The browser offers the presets by name and posts the name back.
         // Serving the list means adding a preset appears in the UI without
         // a second edit, and the figures behind each name stay in Swift.
         let w = makeWiring(current: nil)
 
-        let json = await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
 
         for profile in NetworkProfile.allCases {
             #expect(json.contains("\"\(profile.rawValue)\""), "\(profile.rawValue) missing")
         }
     }
 
-    @Test func `networkStateJSON refuses an unknown device rather than calling it unthrottled`() async {
+    @Test func `networkStateJSON refuses an unknown device rather than calling it unthrottled`() async throws {
         // "This device has no conditioning" and "there is no such device"
         // are different answers, and the first one reads as reassurance.
         // The route turns this nil into a 404, matching motion's read-back.
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(nil)
 
-        #expect(await Server.networkStateJSON(udid: "nope", simulators: simulators) == nil)
+        #expect(try await Server.networkStateJSON(udid: "nope", simulators: simulators) == nil)
+    }
+
+    @Test func `networkStateJSON propagates a failed injection query instead of reporting inactive`() async throws {
+        let fixture = try SimulatorInjectionFixture()
+        defer { fixture.remove() }
+        try fixture.output("", stderr: "simulator unavailable", status: 2)
+        let network = SharedFileNetwork(
+            fileURL: fixture.directory.appendingPathComponent("network.json"),
+            dylibPath: "/builds/current/VirtualNetwork.dylib", injection: fixture.injection)
+        let simulators = MockSimulators()
+        given(simulators).find(udid: .any).willReturn(fixture.simulator)
+        given(fixture.simulator).network().willReturn(network)
+
+        await #expect(throws: SimctlCapture.Failure.failed(udid: "U", status: 2, output: "simulator unavailable")) {
+            try await Server.networkStateJSON(udid: "U", simulators: simulators)
+        }
     }
 }

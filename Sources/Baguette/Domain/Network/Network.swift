@@ -27,7 +27,7 @@ protocol Network: AnyObject, Sendable {
     func clear(on simulator: any Simulator) async throws
 
     /// What this simulator's apps are actually subject to, or `nil` when
-    /// nothing is.
+    /// nothing is. Throws when the injection state cannot be determined.
     ///
     /// This exists for one reason: a throttle nobody remembers arming does
     /// not announce itself, it just makes the app feel slow — so "is
@@ -38,7 +38,7 @@ protocol Network: AnyObject, Sendable {
     /// shared file, so a second simulator can see the same bytes without
     /// having the dylib armed; reporting a condition there would be a false
     /// alarm, and a badge that cries wolf stops being read.
-    func current(on simulator: any Simulator) async -> NetworkCondition?
+    func current(on simulator: any Simulator) async throws -> NetworkCondition?
 }
 
 /// Failure modes the network surface surfaces. Maps to a CLI exit message /

@@ -167,7 +167,7 @@ struct NetworkCommand: ParsableCommand {
 
         func run() async throws {
             let simulator = try NetworkCommand.resolve(options)
-            guard let applied = await simulator.network().current(on: simulator) else {
+            guard let applied = try await simulator.network().current(on: simulator) else {
                 log("\(simulator.name): no network conditioning applied.")
                 return
             }

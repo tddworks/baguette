@@ -24,7 +24,7 @@ build_slice() {
         -Wall \
         -Wl,-adhoc_codesign \
         -o "${OUT}.${arch}" \
-        Sources/HingeControl.m
+        Sources/HingeControl.m Sources/Frontmost.m
 }
 
 ARCHS=${BAGUETTE_INJECTED_ARCHS:-"arm64 x86_64"}

@@ -48,6 +48,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <mach/mach_time.h>
+#import "Frontmost.h"
 
 typedef void *IOHIDEventRef;
 static IOHIDEventRef (*IOHIDEventCreateVendorDefinedEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t, uint8_t *, CFIndex, uint32_t);
@@ -112,6 +113,9 @@ static NSData *orientationPayload(const char *value) {
 
 int main(int argc, char **argv) {
   @autoreleasepool {
+    // A read-only AX query: answered before any HID framework is loaded
+    // or an input service registered, so it leaves the guest untouched.
+    if (argc == 2 && strcmp(argv[1], "frontmost") == 0) return printFrontmostApplication();
     int first = 1;
     double deadline = INFINITY;
     if (argc > 1 && strcmp(argv[1], "--deadline") == 0) {
@@ -121,7 +125,7 @@ int main(int argc, char **argv) {
       }
       first = 3;
     }
-    if (argc - first < 1) { fprintf(stderr, "usage: HingeControl [--deadline <unix-seconds>] angle <deg> | sweep <from> <to> <ms> | orientation <portrait|pud|landscape-left|landscape-right> | button <page> <usage> <ms> | serve\n"); return 2; }
+    if (argc - first < 1) { fprintf(stderr, "usage: HingeControl frontmost | [--deadline <unix-seconds>] angle <deg> | sweep <from> <to> <ms> | orientation <portrait|pud|landscape-left|landscape-right> | button <page> <usage> <ms> | serve\n"); return 2; }
     if (strcmp(argv[first], "orientation") == 0 &&
         (argc - first != 2 || !isHingeOrientation(@(argv[first + 1])))) {
       fprintf(stderr, "orientation requires portrait, pud, landscape-left or landscape-right\n");

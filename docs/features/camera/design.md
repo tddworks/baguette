@@ -130,6 +130,16 @@ domain, and baguette has more than one feature that injects into apps
 it reads the current value, adds or removes **its own** entry, and writes
 the join back. `InjectedDylibs` is the pure value that does the merge.
 
+The `launchctl` that reads the value also loads the injected dylibs. On an
+iOS 26 simulator its stdout carries the environment value while the camera
+constructor writes its hook diagnostics to stderr; combining the two streams
+drops the first library during parsing. The injection adapter therefore
+captures them separately, waits for process exit and both EOFs, and parses
+only stdout. Only an exit status of 1 with both streams empty means the
+variable is unset; any other read failure aborts the update instead of
+writing a guessed value back. Capture and the simulator lock run off the
+main actor so a slow query does not freeze camera controls.
+
 Three consequences worth knowing:
 
 - Starting the camera while motion is armed keeps both loaded; stopping

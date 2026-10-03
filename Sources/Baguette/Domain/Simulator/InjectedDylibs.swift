@@ -29,17 +29,9 @@ struct InjectedDylibs: Equatable, Sendable {
     /// Reads an existing `DYLD_INSERT_LIBRARIES` value, keeping only
     /// segments that are actually absolute dylib paths.
     ///
-    /// The filtering is not fussiness. Reading this value means running
-    /// `simctl spawn <udid> launchctl getenv`, and a simulator's stdout
-    /// channel carries **leftover output from previously spawned
-    /// processes** — including lines truncated mid-word. Any dylib already
-    /// injected logs a banner as it loads, so the read can come back as log
-    /// noise with the real value appended. Writing that back would fill
-    /// `DYLD_INSERT_LIBRARIES` with junk dyld then fails to load, and it
-    /// would grow on every arm.
-    ///
-    /// Also tolerates what `launchctl getenv` legitimately returns: a
-    /// trailing newline, surrounding whitespace, and empty segments.
+    /// The injection adapter supplies stdout only. Empty colon segments
+    /// and surrounding whitespace are omitted; malformed segments are not
+    /// written back as library paths.
     static func parsing(_ environmentValue: String?) -> InjectedDylibs {
         let paths = (environmentValue ?? "")
             .split(separator: ":")

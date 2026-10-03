@@ -1,6 +1,7 @@
-import Testing
-import Foundation
 import CoreGraphics
+import Foundation
+import Testing
+
 @testable import Baguette
 
 /// Walk-tree-into-AXNode tests against `FakeAXTreeElement` —
@@ -26,8 +27,7 @@ struct AXNodeWalkTests {
         let node = AXNode.walk(
             from: leaf,
             transform: AXFrameTransform(
-                rootFrame: CGRect(x: 0, y: 0, width: 1, height: 1),
-                pointSize: CGSize(width: 1, height: 1)
+                pointSize: CGSize(width: 1, height: 1), orientation: .portrait
             )
         )
         #expect(node.role == "AXButton")
@@ -106,7 +106,7 @@ struct AXNodeWalkTests {
         #expect(node.role == "AXApplication")
         #expect(node.children.count == 1)
         #expect(node.children[0].role == "AXGroup")  // c1
-        #expect(node.children[0].children.isEmpty)   // c2 dropped at the cap
+        #expect(node.children[0].children.isEmpty)  // c2 dropped at the cap
     }
 
     @Test func `deadline in the past short-circuits child traversal`() {
@@ -135,14 +135,28 @@ struct AXNodeWalkTests {
             children: [leaf],
             macFrame: CGRect(x: 0, y: 0, width: 786, height: 1704)
         )
-        // 2:1 scale → halves coordinates and dimensions.
         let transform = AXFrameTransform(
-            rootFrame: CGRect(x: 0, y: 0, width: 786, height: 1704),
-            pointSize: CGSize(width: 393, height: 852)
+            pointSize: CGSize(width: 393, height: 852), orientation: .landscapeLeft
         )
         let node = AXNode.walk(from: root, transform: transform)
-        #expect(node.children[0].frame.origin == Point(x: 100, y: 200))
-        #expect(node.children[0].frame.size == Size(width: 50, height: 40))
+        #expect(node.children[0].frame.origin == Point(x: 400, y: 552))
+        #expect(node.children[0].frame.size == Size(width: 80, height: 100))
+    }
+
+    @Test(arguments: [CGRect.zero, CGRect(x: 20, y: 40, width: 300, height: 600)])
+    func `application bounds do not scale or offset guest screen coordinates`(bounds: CGRect) {
+        let raw = CGRect(x: 50, y: 80, width: 84, height: 48)
+        let root = FakeAXTreeElement(
+            role: "AXApplication",
+            children: [FakeAXTreeElement(role: "AXButton", macFrame: raw)],
+            macFrame: bounds
+        )
+        let transform = AXFrameTransform(
+            pointSize: CGSize(width: 402, height: 874), orientation: .portrait
+        )
+        let node = AXNode.walk(from: root, transform: transform)
+        #expect(node.children[0].frame.origin == Point(x: raw.minX, y: raw.minY))
+        #expect(node.children[0].frame.size == Size(width: raw.width, height: raw.height))
     }
 
     // MARK: - resilience
@@ -167,8 +181,7 @@ struct AXNodeWalkTests {
 
 private func identityTransform() -> AXFrameTransform {
     AXFrameTransform(
-        rootFrame: CGRect(x: 0, y: 0, width: 1, height: 1),
-        pointSize: CGSize(width: 1, height: 1)
+        pointSize: CGSize(width: 1, height: 1), orientation: .portrait
     )
 }
 
@@ -201,13 +214,13 @@ final class FakeAXTreeElement: NSObject {
         macFrame: CGRect = CGRect(x: 0, y: 0, width: 0, height: 0)
     ) {
         var s: [String: String] = [:]
-        if let role       { s["accessibilityRole"]       = role }
-        if let subrole    { s["accessibilitySubrole"]    = subrole }
-        if let label      { s["accessibilityLabel"]      = label }
-        if let value      { s["accessibilityValue"]      = value }
+        if let role { s["accessibilityRole"] = role }
+        if let subrole { s["accessibilitySubrole"] = subrole }
+        if let label { s["accessibilityLabel"] = label }
+        if let value { s["accessibilityValue"] = value }
         if let identifier { s["accessibilityIdentifier"] = identifier }
-        if let title      { s["accessibilityTitle"]      = title }
-        if let help       { s["accessibilityHelp"]       = help }
+        if let title { s["accessibilityTitle"] = title }
+        if let help { s["accessibilityHelp"] = help }
         self.strings = s
         self.booleans = booleans
         self.numberValue = numberValue

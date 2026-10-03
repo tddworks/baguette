@@ -14,25 +14,29 @@ import CoreGraphics
 ///
 /// Recipe (per call):
 ///
-///   1. Generate a fresh UUID token; register it → SimDevice in the
-///      shared dispatcher.
-///   2. Call `-frontmostApplicationWithDisplayId:bridgeDelegateToken:`.
-///      The translator stores the token internally and, on every XPC
-///      request, asks the dispatcher "what device for this token?".
-///   3. Set the same token as `bridgeDelegateToken` on the returned
-///      translation object — children inherit it, but the translator
-///      re-reads it for every sub-request, so missing this means
-///      child element reads silently fail.
+///   1. Ask the guest window server for its frontmost PID through a
+///      fresh `HingeControl frontmost` process (`GuestFrontmost`). On
+///      iOS 26.5 the bridge's own frontmost request can answer empty
+///      while its application-by-PID requests work.
+///   2. Request that application's translation from the SimDevice
+///      directly (`TokenDispatcher.application(pid:…)`).
+///   3. Generate a fresh UUID token; register it → SimDevice in the
+///      shared dispatcher, and set it as `bridgeDelegateToken` on the
+///      translation — children inherit it, but the translator re-reads
+///      it for every sub-request, so missing this means child element
+///      reads silently fail.
 ///   4. Convert translation → `AXPMacPlatformElement` and walk
 ///      `accessibilityChildren`, propagating the token onto every
 ///      sub-translation.
 ///   5. Unregister on exit.
 ///
-/// Coordinates: AXP frames come back in **macOS host-window**
-/// coordinates. We project to device points using the simulator's
-/// `mainScreenSize` / `mainScreenScale` so callers can pipe values
-/// straight back into baguette's gesture wire (which is also in
-/// device points).
+/// Coordinates: the bridge delegate leaves guest frames unchanged, so
+/// AXP reports UIKit screen points. The observed display geometry
+/// (native panel points plus the interface orientation) rotates them
+/// into the native panel space that raw pixels and HID input share, so
+/// callers can pipe values straight back into baguette's gesture wire.
+/// The application root's bounds define neither the screen size nor a
+/// scale: a hosted app can report a partial window.
 ///
 /// Cribbed from cameroncooke/AXe + Silbercue/SilbercueSwift's
 /// `AXPBridge.swift` — the only Swift implementations of the iOS-26
@@ -40,6 +44,7 @@ import CoreGraphics
 final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
+    private let deviceSetPath: String?
 
     /// Cap on tree-walk recursion depth. Real iOS screens rarely
     /// exceed 20–30 levels; the cap prevents pathological cycles.
@@ -50,21 +55,34 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// hung simulator doesn't pin our caller.
     private static let xpcTimeoutSeconds: Double = 5.0
 
-    /// `litPanelPointSize` answers the point space of the panel the
-    /// phone plane is bound to, when the device has more than one;
-    /// `nil` for every single-panel device, which then uses the device
-    /// type's `mainScreenSize` as it always has. Pluggable so tests can
-    /// drive the transform without a display resolve.
-    private let litPanelPointSize: @Sendable () -> CGSize?
+    typealias DisplayGeometry = AXScreen
+
+    /// The screen every result is expressed in: native panel points, the
+    /// observed interface orientation and the connected screen's
+    /// identity. Read before and after each query; a geometry that
+    /// cannot be observed fails the query instead of guessing a phone
+    /// size. Pluggable so tests can drive the transform without a
+    /// display resolve.
+    private let displayGeometry: @Sendable () throws -> DisplayGeometry
+
+    /// The guest's current frontmost PID for a udid and device set;
+    /// `GuestFrontmost.pid` in production, a stub in tests.
+    private let frontmostPID: @Sendable (String, String?) throws -> Int32
 
     init(
         udid: String,
         host: any DeviceHost,
-        litPanelPointSize: @escaping @Sendable () -> CGSize? = { nil }
+        deviceSetPath: String? = nil,
+        frontmostPID: @escaping @Sendable (String, String?) throws -> Int32 = {
+            try GuestFrontmost.pid(udid: $0, deviceSetPath: $1)
+        },
+        displayGeometry: @escaping @Sendable () throws -> DisplayGeometry
     ) {
         self.udid = udid
         self.host = host
-        self.litPanelPointSize = litPanelPointSize
+        self.deviceSetPath = deviceSetPath
+        self.frontmostPID = frontmostPID
+        self.displayGeometry = displayGeometry
     }
 
     private func resolveDevice() -> NSObject? {
@@ -99,15 +117,17 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             return hit
         }
         guard let tree = try fetchTree(hitTest: point) else { return nil }
-        return tree.hitTest(point) ?? tree
+        var result = tree.hitTest(point) ?? tree
+        result.screen = tree.screen
+        return result
     }
 
     // MARK: - tree fetch
 
     /// The pieces every AXP entry point needs: a working translator,
-    /// a registered token, the frontmost app's root element (which
-    /// carries the host-window frame), an `AXFrameTransform` for
-    /// projecting/unprojecting coordinates, and the per-call deadline.
+    /// a registered token, the frontmost app's root element, an
+    /// `AXFrameTransform` for rotating UIKit points into native panel
+    /// points and back, and the per-call deadline.
     /// Held together inside the closure passed to
     /// `withAXPContext(_:)`, which owns the dispatcher register +
     /// unregister around it.
@@ -122,13 +142,15 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// Run `body` inside a fully-prepared AXP context. Handles the
     /// dispatcher token lifecycle (register on entry, unregister on
     /// exit), translator + frontmost-app resolution, and the
-    /// host-coord ↔ device-point `AXFrameTransform` setup. Returns
-    /// `nil` if any setup step fails (framework not loaded, device
-    /// missing, frontmost app not resolvable, etc.) — same nil
-    /// semantics each entry point had pre-refactor.
-    private func withAXPContext<T>(
-        _ body: (AXPContext) throws -> T?
-    ) throws -> T? {
+    /// UIKit-point → native-panel-point `AXFrameTransform` setup.
+    /// Returns `nil` if any setup step fails (framework not loaded,
+    /// device missing, no platform element for the translation); throws
+    /// when the display geometry cannot be observed or changes during
+    /// the read, and when the guest frontmost query or the application
+    /// lookup fails, because those name a cause the caller can act on.
+    private func withAXPContext(
+        _ body: (AXPContext) throws -> AXNode?
+    ) throws -> AXNode? {
         guard Self.isAvailable else {
             logErr("[ax] framework / dispatcher not available")
             return nil
@@ -137,7 +159,13 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             logErr("[ax] device not found: \(udid)")
             return nil
         }
-
+        let geometry = try displayGeometry()
+        let pid = try frontmostPID(udid, deviceSetPath)
+        let translation = try Self.sharedDispatcher.application(
+            pid: pid, on: device, udid: udid, timeout: Self.xpcTimeoutSeconds
+        )
+        // Discovery has its own bounded lifetime; the tree's deadline
+        // starts once the root translation is in hand.
         let token = UUID().uuidString
         let deadline = Date().addingTimeInterval(Self.xpcTimeoutSeconds)
         Self.sharedDispatcher.register(device: device, token: token, deadline: deadline)
@@ -145,12 +173,6 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
         guard let translator = Self.sharedTranslator else { return nil }
 
-        guard let translation = Self.frontmostApplication(
-            translator: translator, token: token
-        ) else {
-            log("[ax] no frontmost application for udid=\(udid)")
-            return nil
-        }
         Self.stamp(token: token, on: translation)
 
         guard let frontmostRoot = Self.macPlatformElement(
@@ -159,19 +181,37 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             log("[ax] no mac platform element from translation")
             return nil
         }
-        // A foldable's AX space is the lit panel's, which the hinge
-        // moves; every other device's is its one screen.
-        let pointSize = litPanelPointSize() ?? Self.devicePointSize(for: device)
-        let rootFrame = AXElementReader.frame(of: frontmostRoot)
-        let transform = AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
+        let transform = AXFrameTransform(
+            pointSize: CGSize(width: geometry.width, height: geometry.height),
+            orientation: geometry.orientation
+        )
 
-        return try body(AXPContext(
+        var result = try body(AXPContext(
             translator: translator,
             token: token,
             frontmostRoot: frontmostRoot,
             transform: transform,
             deadline: deadline
         ))
+        try Self.requireUnchanged(geometry, try displayGeometry())
+        result?.screen = geometry
+        return result
+    }
+
+    /// A rotation or panel change during the read means the frames no
+    /// longer describe the screen the result names. Matching endpoints
+    /// do not make the guest's tree an atomic snapshot; they only rule
+    /// out a transition the host could observe.
+    static func requireUnchanged(_ before: DisplayGeometry, _ after: DisplayGeometry) throws {
+        guard before == after else { throw Failure.displayChanged }
+    }
+
+    enum Failure: LocalizedError, Equatable {
+        case displayChanged
+
+        var errorDescription: String? {
+            "The display changed while reading accessibility; discard the result and observe again."
+        }
     }
 
     /// Grid step / point cap for the hit-test sweep. 32 pt is fine
@@ -356,19 +396,6 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
     // MARK: - AXPTranslator entry points
 
-    private static func frontmostApplication(
-        translator: NSObject, token: String
-    ) -> NSObject? {
-        let sel = NSSelectorFromString("frontmostApplicationWithDisplayId:bridgeDelegateToken:")
-        guard translator.responds(to: sel),
-              let imp = class_getMethodImplementation(type(of: translator), sel) else {
-            logErr("[ax] -frontmostApplicationWithDisplayId:bridgeDelegateToken: not found")
-            return nil
-        }
-        typealias Fn = @convention(c) (AnyObject, Selector, UInt32, AnyObject) -> AnyObject?
-        return unsafeBitCast(imp, to: Fn.self)(translator, sel, 0, token as NSString) as? NSObject
-    }
-
     private static func macPlatformElement(
         translator: NSObject, translation: NSObject
     ) -> NSObject? {
@@ -447,34 +474,6 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             stamp(token: token, on: trans)
         }
     }
-
-    // MARK: - device → screen size
-
-    /// Resolve the simulator's logical-point size from its
-    /// `deviceType.mainScreenSize` (pixels) / `mainScreenScale`.
-    /// Falls back to a sensible iPhone-15-Pro size when the
-    /// runtime doesn't expose the values (unlikely on iOS 26).
-    /// Internal so unit tests can drive it against a fake device.
-    static func devicePointSize(for device: NSObject) -> CGSize {
-        let fallback = CGSize(width: 393, height: 852)
-        guard let deviceType = device.value(forKey: "deviceType") as? NSObject else {
-            return fallback
-        }
-        let pixelSize: CGSize
-        if let raw = deviceType.value(forKey: "mainScreenSize") as? CGSize {
-            pixelSize = raw
-        } else if let nsv = deviceType.value(forKey: "mainScreenSize") as? NSValue {
-            pixelSize = nsv.sizeValue
-        } else {
-            return fallback
-        }
-        let scale = (deviceType.value(forKey: "mainScreenScale") as? NSNumber)?.doubleValue ?? 3.0
-        guard scale > 0 else { return fallback }
-        return CGSize(
-            width: pixelSize.width / scale,
-            height: pixelSize.height / scale
-        )
-    }
 }
 
 // MARK: - TokenDispatcher
@@ -541,6 +540,46 @@ final class TokenDispatcher: NSObject, @unchecked Sendable {
         _ token: NSString
     ) -> AnyObject? {
         nil
+    }
+
+    /// The translation of one guest application, requested from its
+    /// SimDevice directly. AXPTranslator's own PID convenience sends an
+    /// empty bridge token, which cannot tell concurrent devices apart.
+    func application(
+        pid: Int32, on device: NSObject, udid: String, timeout: Double,
+        request: (Int32) -> NSObject? = TokenDispatcher.applicationRequest
+    ) throws -> NSObject {
+        guard let request = request(pid) else {
+            throw ApplicationFailure(udid: udid, pid: pid, cause: "AXPTranslatorRequest is unavailable")
+        }
+        guard let response = sendAccessibilityRequest(request, to: device, timeout: timeout) as? NSObject,
+            let translation = response.value(forKey: "translationResponse") as? NSObject
+        else {
+            throw ApplicationFailure(udid: udid, pid: pid, cause: "the device returned no application translation")
+        }
+        return translation
+    }
+
+    /// AXP's application-by-PID request, as observed on the iOS 26 wire;
+    /// `nil` when the framework's request class is not loaded.
+    static func applicationRequest(pid: Int32) -> NSObject? {
+        let selector = NSSelectorFromString("new")
+        guard let cls = NSClassFromString("AXPTranslatorRequest"),
+            let meta = object_getClass(cls),
+            let imp = class_getMethodImplementation(meta, selector)
+        else { return nil }
+        typealias New = @convention(c) (AnyClass, Selector) -> Unmanaged<NSObject>
+        let request = unsafeBitCast(imp, to: New.self)(cls, selector).takeRetainedValue()
+        request.setValue(1, forKey: "requestType")
+        request.setValue(["pid": pid], forKey: "parameters")
+        return request
+    }
+
+    private struct ApplicationFailure: LocalizedError {
+        let udid: String
+        let pid: Int32
+        let cause: String
+        var errorDescription: String? { "AX application lookup for \(udid) (PID \(pid)) failed: \(cause)" }
     }
 
     /// Synchronous wrapper around `SimDevice.sendAccessibilityRequestAsync:`.
