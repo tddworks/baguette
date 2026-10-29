@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.12] - 2026-10-29
+
 ### Fixed
 - `POST /simulators/:udid/hinge` and the 3D socket's `set_pose` fold iPhone Duo's live 3D book at 60 Hz, then settle on the hinge's reading, instead of moving only as fast as the guest's readings came back (~9/s on a loaded host). → [docs](docs/features/hinge/README.md#http--websocket) ([#128](https://github.com/tddworks/baguette/pull/128))
 - `baguette hinge --duration`, `POST /simulators/:udid/hinge` and `set_pose` reject a sweep longer than 60 s, instead of a huge one stopping `serve`. A refused `set_pose` names what was wrong, not `invalid 3D camera`. → [docs](docs/features/hinge/README.md#http--websocket) ([#128](https://github.com/tddworks/baguette/pull/128))
@@ -158,7 +162,8 @@ For releases prior to this changelog, see the
 
 [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.11...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.12...HEAD
+[0.2.12]: https://github.com/tddworks/baguette/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/tddworks/baguette/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/tddworks/baguette/compare/v0.2.9...v0.2.10
 [0.2.9]: https://github.com/tddworks/baguette/compare/v0.2.8...v0.2.9
