@@ -72,6 +72,25 @@ size in points (`baguette chrome layout --udid <UDID>` tells you). For a
 long-lived session, pipe JSON gestures into `baguette input` — see the
 [wire protocol](docs/wire.md).
 
+## Sponsors
+
+Apps that use and support Baguette development:
+
+<table>
+  <tbody>
+    <tr>
+      <td width="160" align="center">
+        <a href="https://air.build" target="_blank">
+          <img width="64" src="https://air.build/images/products/airbuild.svg" alt="AirBuild"/>
+          <br>
+          <b>AirBuild</b>
+        </a>
+      </td>
+      <td>Your idea. Your AI team. A working native iOS app. Build the app. AirBuild handles App Review. Specialized agents submit, respond, fix, and resubmit—automatically.</td>
+    </tr>
+  </tbody>
+</table>
+
 ## What it covers
 
 | Area | What you can do |
