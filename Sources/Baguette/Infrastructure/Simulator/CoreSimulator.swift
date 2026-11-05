@@ -122,6 +122,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         let display = displays().phone
         return AXPTranslatorAccessibility(
             udid: udid, host: host, deviceSetPath: deviceSetPath,
+            recheckGeometry: { try display.recheckedScreen() },
             displayGeometry: { try display.observedScreen() }
         )
     }

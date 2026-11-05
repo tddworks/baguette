@@ -10,6 +10,12 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- `baguette input` answers `describe_ui`, so one long-lived session can both read the screen and act without paying startup per call. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
+
+### Changed
+- `describe-ui` reads about three times faster on Maps: it asks the host bridge for the frontmost app first and runs the guest helper only when the bridge can't read the app. → [docs](docs/features/accessibility/design.md#fresh-guest-frontmost-discovery)
+
 ---
 
 ## [0.2.12] - 2026-10-29

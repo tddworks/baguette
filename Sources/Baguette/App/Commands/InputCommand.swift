@@ -82,6 +82,7 @@ struct InputCommand: AsyncParsableCommand {
             Foundation.exit(1)
         }
         let pasteboard = simulator.pasteboard()
+        let accessibility = simulator.accessibility()
         let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
         // A long-lived session is worth one guest round-trip up front:
         // under Xcode 27, Device Hub can leave every gesture below
@@ -97,7 +98,9 @@ struct InputCommand: AsyncParsableCommand {
             // they are intercepted ahead of the sync gesture pipeline
             // — same shape as `describe_ui` on the WS path. Awaiting
             // in-line preserves the one-line-in/one-ack-out order.
-            if let ack = await PasteDispatch.dispatch(
+            if let result = DescribeUIDispatch.dispatch(line: line, accessibility: accessibility) {
+                print(result)
+            } else if let ack = await PasteDispatch.dispatch(
                 line: line, pasteboard: pasteboard, input: input
             ).ackJSON {
                 print(ack)

@@ -14,10 +14,13 @@ import CoreGraphics
 ///
 /// Recipe (per call):
 ///
-///   1. Ask the guest window server for its frontmost PID through a
-///      fresh `HingeControl frontmost` process (`GuestFrontmost`). On
-///      iOS 26.5 the bridge's own frontmost request can answer empty
-///      while its application-by-PID requests work.
+///   1. Find the frontmost PID. `describeAll` asks the bridge first and
+///      falls back to a fresh `HingeControl frontmost` process
+///      (`GuestFrontmost`) when the bridge can't read the app
+///      (`AXFrontmostRead`): on iOS 26.5 its frontmost request can answer
+///      empty, and a freshly launched app shows it an empty tree until a
+///      guest accessibility client has connected. Point queries always
+///      use the guest process.
 ///   2. Request that application's translation from the SimDevice
 ///      directly (`TokenDispatcher.application(pid:…)`).
 ///   3. Generate a fresh UUID token; register it → SimDevice in the
@@ -65,6 +68,10 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// display resolve.
     private let displayGeometry: @Sendable () throws -> DisplayGeometry
 
+    /// The geometry read again after a query, to reject a result whose
+    /// frames describe a screen that has since changed.
+    private let recheckGeometry: @Sendable () throws -> DisplayGeometry
+
     /// The guest's current frontmost PID for a udid and device set;
     /// `GuestFrontmost.pid` in production, a stub in tests.
     private let frontmostPID: @Sendable (String, String?) throws -> Int32
@@ -76,6 +83,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         frontmostPID: @escaping @Sendable (String, String?) throws -> Int32 = {
             try GuestFrontmost.pid(udid: $0, deviceSetPath: $1)
         },
+        recheckGeometry: (@Sendable () throws -> DisplayGeometry)? = nil,
         displayGeometry: @escaping @Sendable () throws -> DisplayGeometry
     ) {
         self.udid = udid
@@ -83,6 +91,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         self.deviceSetPath = deviceSetPath
         self.frontmostPID = frontmostPID
         self.displayGeometry = displayGeometry
+        self.recheckGeometry = recheckGeometry ?? displayGeometry
     }
 
     private func resolveDevice() -> NSObject? {
@@ -92,7 +101,30 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     // MARK: - Accessibility
 
     func describeAll() throws -> AXNode? {
-        try fetchTree(hitTest: nil)
+        guard Self.isAvailable else {
+            logErr("[ax] framework / dispatcher not available")
+            return nil
+        }
+        guard let device = resolveDevice() else {
+            logErr("[ax] device not found: \(udid)")
+            return nil
+        }
+        // A long-lived session already knows its panel, so only the first
+        // read pays for listing the connected screens.
+        let geometry = try recheckGeometry()
+        return try AXFrontmostRead.read(
+            bridge: { Self.bridgeFrontmostPID(device: device) },
+            guest: { try frontmostPID(udid, deviceSetPath) },
+            tree: { pid, source in
+                try withAXPContext(known: (geometry, pid)) { ctx in
+                    let base = walkFrontmost(ctx)
+                    // An empty walk through the bridge is an app not yet
+                    // awake, so the guest route reads it again: sweeping
+                    // here would hide that behind the status bar's nodes.
+                    if source == .bridge, base.children.isEmpty { return base }
+                    return Self.supportsServerSideHitTest ? hitTestSweep(base: base, ctx: ctx) : base
+                }
+            })
     }
 
     func describeAt(point: Point) throws -> AXNode? {
@@ -149,6 +181,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// the read, and when the guest frontmost query or the application
     /// lookup fails, because those name a cause the caller can act on.
     private func withAXPContext(
+        known: (geometry: DisplayGeometry, pid: Int32)? = nil,
         _ body: (AXPContext) throws -> AXNode?
     ) throws -> AXNode? {
         guard Self.isAvailable else {
@@ -159,8 +192,8 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             logErr("[ax] device not found: \(udid)")
             return nil
         }
-        let geometry = try displayGeometry()
-        let pid = try frontmostPID(udid, deviceSetPath)
+        let geometry = try known?.geometry ?? displayGeometry()
+        let pid = try known?.pid ?? frontmostPID(udid, deviceSetPath)
         let translation = try Self.sharedDispatcher.application(
             pid: pid, on: device, udid: udid, timeout: Self.xpcTimeoutSeconds
         )
@@ -193,7 +226,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             transform: transform,
             deadline: deadline
         ))
-        try Self.requireUnchanged(geometry, try displayGeometry())
+        try Self.requireUnchanged(geometry, try recheckGeometry())
         result?.screen = geometry
         return result
     }
@@ -232,19 +265,41 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
     private func fetchTree(hitTest: Point?) throws -> AXNode? {
         try withAXPContext { ctx in
-            Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
-            Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
-            let base = AXNode.walk(
-                from: ctx.frontmostRoot,
-                transform: ctx.transform,
-                depthCap: Self.maxDepth,
-                deadline: ctx.deadline
-            )
             // Only `describeAll` augments the walk with the sweep; the
             // `describeAt` fallback just needs the raw tree.
-            guard hitTest == nil, Self.supportsServerSideHitTest else { return base }
-            return hitTestSweep(base: base, ctx: ctx)
+            walkFrontmost(ctx)
         }
+    }
+
+    private func walkFrontmost(_ ctx: AXPContext) -> AXNode {
+        Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
+        Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
+        return AXNode.walk(
+            from: ctx.frontmostRoot,
+            transform: ctx.transform,
+            depthCap: Self.maxDepth,
+            deadline: ctx.deadline
+        )
+    }
+
+    /// The bridge's own answer to "which app is frontmost?", or `nil` when
+    /// it has none. Queried afresh on every read; `AXFrontmostRead` decides
+    /// what an empty answer means.
+    private static func bridgeFrontmostPID(device: NSObject) -> Int32? {
+        let send = NSSelectorFromString("sendAccessibilityRequestAsync:completionQueue:completionHandler:")
+        let frontmost = NSSelectorFromString("frontmostApplicationWithDisplayId:bridgeDelegateToken:")
+        guard device.responds(to: send),
+            let translator = sharedTranslator, translator.responds(to: frontmost),
+            let imp = class_getMethodImplementation(type(of: translator), frontmost)
+        else { return nil }
+        let token = UUID().uuidString
+        sharedDispatcher.register(device: device, token: token, deadline: Date().addingTimeInterval(xpcTimeoutSeconds))
+        defer { sharedDispatcher.unregister(token: token) }
+        typealias Fn = @convention(c) (AnyObject, Selector, UInt32, AnyObject) -> AnyObject?
+        guard let translation = unsafeBitCast(imp, to: Fn.self)(translator, frontmost, 0, token as NSString) as? NSObject,
+            translation.responds(to: NSSelectorFromString("pid"))
+        else { return nil }
+        return (translation.value(forKey: "pid") as? NSNumber)?.int32Value
     }
 
     /// Recover elements the process-scoped recursive walk can't reach

@@ -29,6 +29,10 @@ protocol Display: Sendable {
     /// closed rather than guessing a phone-sized portrait panel.
     func observedScreen() throws -> AXScreen
 
+    /// The screen read again after an observation, to check a result
+    /// still describes it. Cheaper than `observedScreen` where it can be.
+    func recheckedScreen() throws -> AXScreen
+
     /// Input pinned to `expected`: the binding is resolved once, checked
     /// against the expectation, and re-observed by the guard before each
     /// contact goes down or moves. A contact always lifts on the binding
@@ -38,6 +42,7 @@ protocol Display: Sendable {
 
 extension Display {
     func observedScreen() throws -> AXScreen { throw ObservedScreenError.unavailable }
+    func recheckedScreen() throws -> AXScreen { try observedScreen() }
     func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard) {
         throw ObservedScreenError.unavailable
     }

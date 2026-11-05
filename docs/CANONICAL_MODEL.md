@@ -120,6 +120,7 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | every coordinate is in device points, with the plane's `width` / `height` beside it; the adapter divides by size, the domain never normalizes | `Point` · `Size` · `IndigoHIDInput.sendMouse` |
 | a display's screen and input come from one binding, so a framebuffer never pairs with another plane's digitizer | `Display` · `DisplayBinding` |
 | a HID target is a registration, never computed from a screen id; an unregistered one kills backboardd. The phone plane uses its bound panel's `0x40000000 \| screenId`, else `0x32`; CarPlay its own `1` | `IndigoHIDTouchTarget` · `DisplayTouchTarget.resolve` |
+| a read of the frontmost app asks the bridge first and runs the guest helper only when the bridge can't read it; no PID outlives its query | `AXFrontmostRead` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
 | an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |

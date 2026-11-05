@@ -62,6 +62,24 @@ properties without spawning `simctl`; a foldable samples the guest hinge,
 which is slower. Observation and HID dispatch are separate operations, so
 this detects observed changes without making the pair atomic.
 
+## Read and act in one session
+
+A `baguette input` process answers `describe_ui` as well as gestures, in line:
+
+```json
+{"type":"describe_ui"}
+{"type":"describe_ui_result","ok":true,"tree":{…}}
+{"type":"tap","x":201,"y":319,"width":402,"height":874}
+{"ok":true}
+```
+
+Add `x` and `y` for the element at a point. Keep the session open for a loop
+of many steps: it skips process startup, the HID warm-up and listing the
+connected screens, so taps take about 0.06 s rather than 0.25 s and reads take
+0.15–0.5 s rather than 0.6–0.9 s, depending on how much of the screen the
+hit-test sweep has to probe. The first read of a freshly launched app still
+takes about a second.
+
 ## HTTP / WebSocket
 
 On the stream WebSocket (`/simulators/<udid>/stream`, framing in
