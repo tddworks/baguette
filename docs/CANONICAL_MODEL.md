@@ -123,7 +123,8 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | a read of the frontmost app asks the bridge first and runs the guest helper only when the bridge can't read it; no PID outlives its query | `AXFrontmostRead` |
 | the sweep always looks where the walk can't see, and sweeps the gaps in full only when a scout finds something the walk didn't know | `AXSweep` |
 | a gesture asked to describe the UI compares against the screen before it, and reports the screen only once it has held still | `AXSettle` |
-| an element offers only what works now: a disabled, off-screen or hidden element offers no tap | `AXAffordance` |
+| a control offers a tap only when one should work now; disabled, covered and off-screen ones are listed apart | `AXAffordance` |
+| a tap by name never guesses between matches and never retries, because the app may have acted without changing its tree | `AXTarget` · `LabelTap` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
 | an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |

@@ -73,7 +73,7 @@ baguette launch --udid <udid> --bundle-id <bundle-id> [--relaunch] [--then-descr
 | `--udid` | yes |  | Simulator UDID |
 | `--bundle-id` | yes |  | Bundle id of an installed app |
 | `--relaunch` |  |  | Quit the app first, so it starts fresh. |
-| `--then-describe-ui` |  |  | Wait for the app's first screen, then answer with whether the screen changed and its accessibility tree. |
+| `--then-describe-ui` |  |  | Wait for the app's first screen, then answer with what can be done next and what the screen says. |
 
 ## baguette input
 
@@ -112,19 +112,20 @@ baguette stream --udid <udid> [--format <format>] [--fps <fps>] [--quality <qual
 Single tap at a point
 
 ```
-baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--duration <duration>] [--edge <edge>] [--then-describe-ui]
+baguette tap --udid <udid> [--label <label>] [--x <x>] [--y <y>] [--width <width>] [--height <height>] [--duration <duration>] [--edge <edge>] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
 | `--udid` | yes |  | Simulator UDID |
-| `--x` | yes |  |  |
-| `--y` | yes |  |  |
-| `--width` | yes |  |  |
-| `--height` | yes |  |  |
+| `--label` |  |  | The element to tap, by its label, part of its label, or identifier. Replaces --x, --y, --width and --height. |
+| `--x` |  |  |  |
+| `--y` |  |  |  |
+| `--width` |  |  |  |
+| `--height` |  |  |  |
 | `--duration` |  | `0.05` | Hold duration in seconds |
 | `--edge` |  |  | Screen edge the tap lands on: left \| top \| right \| bottom. Omit for an interior tap. |
-| `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed and its accessibility tree. |
+| `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says. |
 
 ## baguette double-tap
 

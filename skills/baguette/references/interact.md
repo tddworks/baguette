@@ -23,6 +23,13 @@ system gesture: `bottom` drives the home indicator (live home / app switcher),
 Notification Center). Omit `edge` for ordinary touches. For pinches use
 `touch2-*`; a `touch1-*` pinch reads as a pan.
 
+## Tap by name
+
+`baguette tap --udid <X> --label "Search flights"`, or `{"type":"tap","label":"Search flights"}`
+on `input`. It matches the exact label or identifier first, then part of one, and
+never guesses: a wrong, ambiguous, disabled, covered or off-screen name taps nothing
+and says why. A tap that changes nothing is reported, not retried.
+
 ## See what a tap did
 
 `baguette tap … --then-describe-ui` waits for the screen to settle, then answers with

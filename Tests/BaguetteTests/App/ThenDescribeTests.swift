@@ -44,7 +44,7 @@ struct ThenDescribeTests {
         #expect(sent == line)
         #expect(result["ok"] as? Bool == true)
         #expect(result["changed"] as? Bool == true)
-        #expect((result["tree"] as? [String: Any])?["label"] as? String == "General")
+        #expect(result["affordances"] != nil)
     }
 
     @Test func `should say nothing changed when the gesture left the screen alone`() throws {
@@ -166,15 +166,14 @@ struct ThenDescribeTests {
         #expect((result["try"] as? [String: Any])?["x"] as? Double == 56)
     }
 
-    @Test func `should put the next steps at the top of the answer`() throws {
-        let json = ThenDescribe.perform(
+    @Test func `should answer with what can be done and what the screen says, not the whole tree`() throws {
+        let result = try parsed(ThenDescribe.perform(
             action: "tap", at: Point(x: 56, y: 550), accessibility: axShowing(Self.screenTree),
-            affordances: Self.cli, timing: Self.immediate, act: { true })
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
 
-        let result = try parsed(json)
         #expect((result["affordances"] as? [String: Any])?["home"] != nil)
-        #expect((result["tree"] as? [String: Any])?["affordances"] == nil)
-        #expect(try #require(json.range(of: #""affordances""#)).lowerBound < (try #require(json.range(of: #""tree""#))).lowerBound)
+        #expect(result["screen"] != nil)
+        #expect(result["tree"] == nil)
     }
 
     @Test func `should name the action for a command line caller`() throws {

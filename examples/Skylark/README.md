@@ -27,5 +27,5 @@ last screen says so.
 | Seat map | 120 small targets, and the front window seats are mostly taken |
 | Saved card | Not preselected |
 
-The blank row centre is deliberate to keep: a frame's centre isn't always
-tappable, and an agent has to notice when a tap changes nothing.
+The blank row centre is deliberate to keep: a frame's centre isn't always tappable.
+`tap --label` allows for it; a tap by coordinates there reports `changed:false`.

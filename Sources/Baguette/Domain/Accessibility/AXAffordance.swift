@@ -1,17 +1,15 @@
 import Foundation
 
-/// A next step on this screen, ready to run. `describe-ui` has already
-/// found everything, so it can hand over the finished command, and no second
-/// read is needed to act on it. State-aware: an element offers only what will
-/// work right now, so a disabled button or an off-screen row offers no tap.
-///
-/// They're gathered in one map at the top of the output, because an agent
-/// filters a long tree to read it, and offers on the elements get filtered away.
+/// A next step on this screen, ready to run. `describe-ui` has already found
+/// everything, so it can hand over what to do without a second read. State-aware:
+/// a control offers a tap only when one should work right now, and the rest are
+/// listed apart with the reason, so a missing button isn't a mystery.
 ///
 /// One value renders two ways, because a one-shot CLI caller and a
 /// `baguette input` session act through different surfaces.
 enum AXAffordance: Equatable {
     case tap(Point, Size)
+    case tapByName
     case type
     case home
     case screenshot
@@ -32,6 +30,7 @@ enum AXAffordance: Equatable {
                 let position = "--x \(Self.whole(point.x)) --y \(Self.whole(point.y))"
                 let screen = "--width \(Self.whole(size.width)) --height \(Self.whole(size.height))"
                 return "\(program) tap \(device) \(position) \(screen) --then-describe-ui"
+            case .tapByName: return #"\#(program) tap \#(device) --label "<name>" --then-describe-ui"#
             case .type: return #"\#(program) type \#(device) --text "<text>""#
             case .home: return "\(program) press \(device) --button home"
             case .screenshot: return "\(program) screenshot \(device) --output /tmp/baguette-screen.jpg"
@@ -43,6 +42,7 @@ enum AXAffordance: Equatable {
                     "type": Tap.wireType, "x": Double(Self.whole(point.x)), "y": Double(Self.whole(point.y)),
                     "width": size.width, "height": size.height, "then_describe_ui": true,
                 ] as [String: Any]
+            case .tapByName: return ["type": Tap.wireType, "label": "<name>", "then_describe_ui": true] as [String: Any]
             case .type: return ["type": TypeText.wireType, "text": "<text>"]
             case .home: return ["type": Press.wireType, "button": "home"]
             case .screenshot: return nil
@@ -62,9 +62,8 @@ enum AXAffordance: Equatable {
 
 extension AXNode {
     /// Roles that respond to a tap by definition. Text and images can too, but
-    /// nothing in the tree says so, and offering a tap on every heading would
-    /// claim they all respond.
-    private static let controlRoles: Set<String> = [
+    /// nothing in the tree says so; `--label` still reaches them.
+    static let controlRoles: Set<String> = [
         "AXButton", "AXLink", "AXTextField", "AXTextArea", "AXSecureTextField",
         "AXCheckBox", "AXRadioButton", "AXSwitch", "AXSlider", "AXStepper",
         "AXPopUpButton", "AXMenuItem", "AXMenuButton", "AXDisclosureTriangle",
@@ -75,37 +74,100 @@ extension AXNode {
     private static let leadingInset = 40.0
     /// Narrower than this, an element's centre is on what it draws.
     private static let wideRow = 200.0
+    /// The status bar's reach, which isn't what the screen says.
+    private static let statusBarTop = 50.0
+    private static let statusBarBottom = 64.0
 
-    /// Every next step under this node, keyed by what it does, like
-    /// `tap Search flights`. Controls that share a name are numbered.
+    /// What an agent needs after each step: what it can do and what the screen
+    /// says. Small on purpose. Agents filter a long answer to read it, and lose
+    /// whatever the filter drops, so the whole tree stays one `describe-ui` away.
+    func agentSummary(_ style: AXAffordance.Style) -> [String: Any] {
+        var summary: [String: Any] = ["affordances": affordanceMap(style)]
+        if let screen { summary["screen"] = ["width": screen.width, "height": screen.height] }
+        var text: [String] = []
+        var values: [String: String] = [:]
+        for node in preorder() where node.frame.size.width > 0 && !node.hidden {
+            let isControl = Self.controlRoles.contains(node.role)
+            if isControl {
+                if let value = node.value, !value.isEmpty, node.isVisible(on: screen) { values[node.offerName] = value }
+            } else if node.role != "AXApplication", node.role != "AXGroup", let label = node.spokenLabel,
+                node.isVisible(on: screen), !node.isInStatusBar, !text.contains(label)
+            {
+                text.append(label)
+            }
+        }
+        if !text.isEmpty { summary["text"] = text }
+        if !values.isEmpty { summary["values"] = values }
+        return summary
+    }
+
+    /// The summary's fields as JSON, to sit beside a gesture's own.
+    func agentSummaryFields(_ style: AXAffordance.Style) -> String {
+        String(AXAffordance.json(agentSummary(style)).dropFirst().dropLast())
+    }
+
+    /// What can be done on this screen, keyed by what it does. Named controls
+    /// share one command, which keeps a screen of a hundred controls small; ones
+    /// no name can reach get their own coordinates.
     func affordanceMap(_ style: AXAffordance.Style) -> [String: Any] {
         var map: [String: Any] = [:]
         if let home = AXAffordance.home.rendered(style) { map["home"] = home }
         if let shot = AXAffordance.screenshot.rendered(style) { map["screenshot"] = shot }
-        var uses: [String: Int] = [:]
-        func add(_ verb: String, _ name: String, _ offer: AXAffordance) {
-            guard let rendered = offer.rendered(style) else { return }
-            let key = "\(verb) \(name)"
-            uses[key, default: 0] += 1
-            map[uses[key] == 1 ? key : "\(key) #\(uses[key]!)"] = rendered
-        }
-        func walk(_ node: AXNode) {
-            if let screen, !node.hidden, node.enabled, Self.controlRoles.contains(node.role),
-                let visible = node.visibleFrame(on: screen)
-            {
-                let name = node.offerName
-                add("tap", name, .tap(node.tapPoint(in: visible), Size(width: screen.width, height: screen.height)))
-                if node.focused, Self.textRoles.contains(node.role) { add("type", name, .type) }
+        guard let screen else { return map }
+
+        let nodes = preorder()
+        let controls = nodes.filter { !$0.hidden && Self.controlRoles.contains($0.role) && $0.hasSize }
+        let usable = controls.filter { $0.enabled && $0.isVisible(on: screen) && !isCovered($0, on: screen) }
+        let counts = Dictionary(usable.map { ($0.offerName, 1) }, uniquingKeysWith: +)
+
+        var names: [String] = []
+        var numbered: [String: Int] = [:]
+        for control in usable {
+            let name = control.offerName
+            if counts[name] == 1, control.isNameable {
+                names.append(name)
+            } else if let rendered = control.coordinateTap(on: screen)?.rendered(style) {
+                numbered[name, default: 0] += 1
+                let suffix = numbered[name] == 1 ? "" : " #\(numbered[name]!)"
+                map["tap \(name)\(suffix)"] = rendered
             }
-            node.children.forEach(walk)
+            if control.focused, Self.textRoles.contains(control.role),
+                let type = AXAffordance.type.rendered(style)
+            {
+                map["type \(name)"] = type
+            }
         }
-        walk(self)
+        if !names.isEmpty {
+            map["tap"] = AXAffordance.tapByName.rendered(style)
+            map["tap_names"] = names
+        }
+        func list(_ key: String, _ nodes: [AXNode]) {
+            if !nodes.isEmpty { map[key] = nodes.map(\.offerName) }
+        }
+        list("disabled", controls.filter { !$0.enabled && $0.isVisible(on: screen) })
+        list("covered", controls.filter { $0.enabled && $0.isVisible(on: screen) && isCovered($0, on: screen) })
+        list("off_screen", controls.filter { $0.enabled && !$0.isVisible(on: screen) })
         return map
     }
 
-    /// The map on its own, for an answer that carries it beside the tree.
+    /// The map on its own.
     func affordancesJSON(_ style: AXAffordance.Style) -> String {
         AXAffordance.json(affordanceMap(style))
+    }
+
+    /// Whether something drawn later sits over `node`'s tap point. A later control
+    /// or a bar counts; what's inside `node` itself doesn't. The tree lists floating
+    /// bars after the content they float over.
+    func isCovered(_ node: AXNode, on screen: AXScreen) -> Bool {
+        // A tab sits in its bar, wherever the tree happens to list the bar.
+        guard node.subrole != "AXTabButton", let visible = node.visibleFrame(on: screen) else { return false }
+        let point = node.tapPoint(in: visible)
+        let nodes = preorder()
+        guard let index = nodes.firstIndex(of: node) else { return false }
+        let inside = node.preorder().count
+        return nodes.dropFirst(index + inside).contains { later in
+            !later.hidden && later.hasSize && later.isOccluder && later.frame.containsPoint(point)
+        }
     }
 
     /// What to tell a caller whose tap at `point` changed nothing: what's there,
@@ -115,7 +177,11 @@ extension AXNode {
     func missedTap(at point: Point, style: AXAffordance.Style) -> (hint: String, next: Any?)? {
         guard let screen else { return nil }
         let where_ = "(\(Int(point.x.rounded())), \(Int(point.y.rounded())))"
-        guard let control = controlAt(point, on: screen), let visible = control.visibleFrame(on: screen) else {
+        let hit = preorder().last {
+            !$0.hidden && $0.enabled && Self.controlRoles.contains($0.role) && $0.isVisible(on: screen)
+                && $0.frame.containsPoint(point)
+        }
+        guard let control = hit, let visible = control.visibleFrame(on: screen) else {
             return ("Nothing changed: there's no control at \(where_). Choose from affordances.", nil)
         }
         let name = control.offerName
@@ -129,34 +195,10 @@ extension AXNode {
         return ("Nothing changed: \(where_) is on \"\(name)\", but that spot may be blank. Try this instead.", tap.rendered(style))
     }
 
-    private func controlAt(_ point: Point, on screen: AXScreen) -> AXNode? {
-        var found: AXNode?
-        func walk(_ node: AXNode) {
-            if !node.hidden, node.enabled, Self.controlRoles.contains(node.role),
-                let visible = node.visibleFrame(on: screen),
-                point.x >= visible.origin.x, point.x < visible.origin.x + visible.size.width,
-                point.y >= visible.origin.y, point.y < visible.origin.y + visible.size.height
-            {
-                found = node
-            }
-            node.children.forEach(walk)
-        }
-        walk(self)
-        return found
-    }
-
-    private var offerName: String {
-        let label = (label ?? "").split(whereSeparator: \.isNewline).joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
-        if !label.isEmpty { return label }
-        if let identifier, !identifier.isEmpty { return identifier }
-        return String(role.trimmingPrefix("AX"))
-    }
-
     /// The centre of what's on screen, or near the left of a wide row whose
     /// label has several parts: a name on the left and a price on the right
     /// leave its centre blank, and the app ignores a tap there.
-    private func tapPoint(in visible: Rect) -> Point {
+    func tapPoint(in visible: Rect) -> Point {
         let y = visible.origin.y + visible.size.height / 2
         if (label ?? "").contains(", "), visible.size.width >= Self.wideRow {
             return Point(x: visible.origin.x + Self.leadingInset, y: y)
@@ -164,12 +206,59 @@ extension AXNode {
         return Point(x: visible.origin.x + visible.size.width / 2, y: y)
     }
 
-    private func visibleFrame(on screen: AXScreen) -> Rect? {
+    func visibleFrame(on screen: AXScreen) -> Rect? {
+        guard hasSize else { return nil }
         let minX = max(frame.origin.x, 0)
         let minY = max(frame.origin.y, 0)
         let maxX = min(frame.origin.x + frame.size.width, screen.width)
         let maxY = min(frame.origin.y + frame.size.height, screen.height)
         guard maxX > minX, maxY > minY else { return nil }
         return Rect(origin: Point(x: minX, y: minY), size: Size(width: maxX - minX, height: maxY - minY))
+    }
+
+    func preorder() -> [AXNode] {
+        [self] + children.flatMap { $0.preorder() }
+    }
+
+    private var hasSize: Bool { frame.size.width > 0 && frame.size.height > 0 }
+
+    private func isVisible(on screen: AXScreen?) -> Bool {
+        guard let screen else { return true }
+        return visibleFrame(on: screen) != nil
+    }
+
+    private var isOccluder: Bool {
+        Self.controlRoles.contains(role) || (role == "AXGroup" && (label ?? "").localizedCaseInsensitiveContains("bar"))
+    }
+
+    private var isInStatusBar: Bool {
+        frame.origin.y < Self.statusBarTop && frame.origin.y + frame.size.height <= Self.statusBarBottom
+    }
+
+    private var spokenLabel: String? {
+        let flat = (label ?? "").split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return flat.isEmpty ? nil : flat
+    }
+
+    private var isNameable: Bool { spokenLabel != nil || !(identifier ?? "").isEmpty }
+
+    private var offerName: String {
+        if let spokenLabel { return spokenLabel }
+        if let identifier, !identifier.isEmpty { return identifier }
+        return String(role.trimmingPrefix("AX"))
+    }
+
+    private func coordinateTap(on screen: AXScreen) -> AXAffordance? {
+        visibleFrame(on: screen).map {
+            .tap(tapPoint(in: $0), Size(width: screen.width, height: screen.height))
+        }
+    }
+}
+
+extension Rect {
+    fileprivate func containsPoint(_ point: Point) -> Bool {
+        point.x >= origin.x && point.x < origin.x + size.width
+            && point.y >= origin.y && point.y < origin.y + size.height
     }
 }

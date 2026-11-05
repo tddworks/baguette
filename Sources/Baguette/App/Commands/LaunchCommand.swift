@@ -20,7 +20,7 @@ struct LaunchCommand: AsyncParsableCommand {
     @Flag(help: "Quit the app first, so it starts fresh.")
     var relaunch = false
 
-    @Flag(help: "Wait for the app's first screen, then answer with whether the screen changed and its accessibility tree.")
+    @Flag(help: "Wait for the app's first screen, then answer with what can be done next and what the screen says.")
     var thenDescribeUI = false
 
     func run() async throws {

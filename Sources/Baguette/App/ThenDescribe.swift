@@ -12,6 +12,7 @@ enum ThenDescribe {
         line: String,
         accessibility: any Accessibility,
         gesture: (String) -> String,
+        affordances: AXAffordance.Style = .wire,
         timing: AXSettle.Timing = AXSettle.Timing()
     ) -> String? {
         guard let data = line.data(using: .utf8),
@@ -22,7 +23,7 @@ enum ThenDescribe {
 
         var ack = ""
         let point = (dict["x"] as? Double).flatMap { x in (dict["y"] as? Double).map { Point(x: x, y: $0) } }
-        let result = perform(at: point, accessibility: accessibility, timing: timing) {
+        let result = perform(at: point, accessibility: accessibility, affordances: affordances, timing: timing) {
             ack = gesture(line)
             return ack.contains(#""ok":true"#)
         }
@@ -51,14 +52,14 @@ enum ThenDescribe {
             guard let outcome else { return #"{"ok":false\#(named)}"# }
             changed = outcome.changed
             guard let tree = outcome.tree else {
-                return #"{"ok":true\#(named),"changed":\#(changed),"tree":null}"#
+                return #"{"ok":true\#(named),"changed":\#(changed)}"#
             }
             var guidance = ""
             if !changed, let point, let miss = tree.missedTap(at: point, style: affordances) {
                 guidance = #","hint":"\#(GestureDispatcher.jsonEscape(miss.hint))""#
                 if let next = miss.next { guidance += #","try":\#(AXAffordance.json(next))"# }
             }
-            return #"{"ok":true\#(named),"changed":\#(changed)\#(guidance),"affordances":\#(tree.affordancesJSON(affordances)),"tree":\#(tree.json)}"#
+            return #"{"ok":true\#(named),"changed":\#(changed)\#(guidance),\#(tree.agentSummaryFields(affordances))}"#
         } catch {
             let message = GestureDispatcher.jsonEscape(error.localizedDescription)
             return #"{"ok":\#(acted)\#(named),"error":"\#(message)"}"#

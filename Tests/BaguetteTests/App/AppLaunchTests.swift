@@ -36,7 +36,8 @@ struct AppLaunchTests {
         #expect(result["ok"] as? Bool == true)
         #expect(result["action"] as? String == "launch")
         #expect(result["changed"] as? Bool == true)
-        #expect((result["tree"] as? [String: Any])?["label"] as? String == "Skylark")
+        #expect(result["affordances"] != nil)
+        #expect(result["tree"] == nil)
         verify(apps).launch(bundleID: .value("dev.example")).called(1)
         verify(apps).terminate(bundleID: .any).called(0)
     }

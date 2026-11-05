@@ -47,53 +47,46 @@ other time, use `baguette describe-ui --udid <X>`.
 **2. Think.** Which element does the task need next? Read the values, don't
 assume: the first row is rarely the fastest, and `Search flights` may be disabled.
 
-**3. Run an offered command.** Every result starts with `affordances`: what you can
-do right now, each one finished and ready to run. Pick one and run it as written.
-Don't work out a tap from a frame: the offered point allows for things a frame can't
-show, like a row whose centre is blank.
+**3. Tap by name.** Every answer is short, and says what you can do next and what
+the screen says:
 
 ```json
-{"affordances":{
-  "home":"baguette press --udid X --button home",
-  "screenshot":"baguette screenshot --udid X --output /tmp/baguette-screen.jpg",
-  "tap Orbit 3, 10h 10m, $1,240":"baguette tap --udid X --x 56 --y 550 --width 402 --height 874 --then-describe-ui"
-},"children":[…]}
+{"ok":true,"changed":true,"tapped":"Search flights","screen":{"width":402,"height":874},
+ "affordances":{
+   "home":"baguette press --udid X --button home",
+   "screenshot":"baguette screenshot --udid X --output /tmp/baguette-screen.jpg",
+   "tap":"baguette tap --udid X --label \"<name>\" --then-describe-ui",
+   "tap_names":["Back","Orbit 3, 10h 10m, $1,240"],
+   "disabled":["Pay $1,240"],"covered":["Seat 15A"],"off_screen":["Seat 20A"]},
+ "text":["SFO to HND"],"values":{"Explore":"1"}}
 ```
 
-A tap waits for the screen to settle, so don't add a `sleep`, and answers with
-`changed`, the next `affordances`, and the new screen under `tree`.
+Run the `tap` command with one of the `tap_names`. baguette finds the element, waits
+for it, picks where to tap, and waits for the screen to settle, so don't add a `sleep`.
 
-A control with no offer won't work now: it's disabled, or off screen and needs a
-scroll. Plain text and images offer nothing because their role doesn't say they
-respond, though some do, like a `See all` link: tap those at their frame's centre.
-A focused text field also offers `type`.
+- **`disabled`** can't be tapped yet. **`covered`** and **`off_screen`** need a scroll
+  first, with `swipe`.
+- **`text`** can be tapped by name too, when it looks tappable, like `See all`.
+- **The full tree** is one `baguette describe-ui --udid <X>` away, if you need frames.
+
+If the name is wrong or matches several, nothing is tapped, and the answer says why
+and lists `visible` or `matches`.
 
 **4. Check it worked.** Is this the screen you expected? Then go back to step 2.
 
-**Several clicks you're already sure of** can go in one call. Each waits for the
-screen before the next, so this saves a turn, and `tail -1` keeps only the last screen:
+**Several clicks you're already sure of** go in one call. Each waits for its element,
+so you can name what the next screen will show, if the task already tells you:
 
 ```bash
 baguette input --udid <X> 2>/dev/null <<'EOF' | tail -1
-{"type":"tap","x":201,"y":314,"width":402,"height":874,"then_describe_ui":true}
-{"type":"tap","x":201,"y":351,"width":402,"height":874,"then_describe_ui":true}
+{"type":"tap","label":"To, Where to?","then_describe_ui":true}
+{"type":"tap","label":"Tokyo Haneda","then_describe_ui":true}
+{"type":"tap","label":"Search flights","then_describe_ui":true}
 EOF
 ```
 
-Only batch what the screen you've read already shows, or what can't depend on
-anything new. When the next choice depends on what appears, read first.
-
-**To read a result without the long tree,** keep the offers and the text. Add this to
-any `tap` or `launch`:
-
-```bash
-| jq '{changed, hint, try, offers: (.affordances | keys), text: [.tree | .. | objects | select(.label? and .frame.y >= 50 and .role == "AXStaticText") | .label]}'
-```
-
-Then read the command for the one you want with
-`jq -r '.affordances["tap Search flights"]'` on the same output, or print the whole
-map with `jq .affordances`. After a plain `describe-ui`, the labels are at the top
-instead of under `.tree`, and there's no `changed`. Don't write `.changed // "n/a"`: `//` treats `false` as missing.
+Stop wherever the next choice depends on what appears. A failed click doesn't stop
+the ones after it, so put anything you can't undo, like `Pay`, in its own call.
 
 ## When a tap does nothing
 
@@ -103,8 +96,8 @@ element somewhere else, `try` has the command: run it rather than repeating the 
 or re-reading the screen.
 
 1. **Look.** With no `try`, take a screenshot and read it: `baguette screenshot --udid <X> --output /tmp/s.jpg`.
-2. **Tap what's drawn.** A frame can be wider than what responds, so an offered point
-   can land on blank space. Tap the drawn text by coordinates instead.
+2. **Tap what's drawn.** If `try` didn't help, a screenshot shows where the text
+   is: tap there by coordinates, with the `screen` size from the answer.
 3. **Check it's enabled**, and whether something covers it. A hit-test
    (`describe-ui --x --y`) names the element at a point, but it can't tell you
    the app will respond there.

@@ -73,8 +73,7 @@ A `baguette input` process answers `describe_ui` as well as gestures, in line:
 {"ok":true}
 ```
 
-Add `x` and `y` for the element at a point. Keep the session open for a loop
-of many steps: it skips process startup, the HID warm-up and listing the
+Add `x` and `y` for the element at a point. Keep the session open for a loop of many steps: it skips process startup, the HID warm-up and listing the
 connected screens, so taps take about 0.06 s rather than 0.25 s, and a read of
 Settings about 0.3 s rather than 0.55 s. The first read of a freshly launched
 app still takes about a second.
@@ -89,9 +88,10 @@ One call replaces two to four reads, though the first screen still takes about 4
 5 s, mostly iOS switching apps. An app already in front gets five seconds'
 patience, so use `--relaunch` for a fresh start.
 
-## Run what an element offers
+## Tap by name, from a short answer
 
-The CLI's JSON starts with an `affordances` map of every usable control's next command, like `tap Search flights`, with the point worked out. A disabled, off-screen or hidden element offers none. A `baguette input` session gets the wire envelope; HTTP and the WebSocket don't carry them.
+`baguette tap --udid <UDID> --label "Search flights" --then-describe-ui` finds the element and the point ([wire.md](../../wire.md#tap)), then answers with what can be done next (`affordances`) and what the screen says (`text`). `describe-ui` keeps the full tree, with the same map at the top.
+
 ## See what a tap did
 
 ```bash
@@ -99,7 +99,7 @@ baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --then-descr
 ```
 
 ```json
-{"ok":true,"action":"tap","changed":true,"tree":{…}}
+{"ok":true,"action":"tap","changed":true,"affordances":{…},"text":[…]}
 ```
 
 On a `baguette input` session, add `"then_describe_ui":true` to any gesture. It replaces
