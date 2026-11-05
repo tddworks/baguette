@@ -28,8 +28,9 @@ Notification Center). Omit `edge` for ordinary touches. For pinches use
 `baguette tap --udid <X> --label 'Sign In'`, or `{"type":"tap","label":"Sign In"}`
 on `input`. It matches an exact name first, then part of a label, and never guesses:
 a wrong, ambiguous or disabled name taps nothing and says why. It presses through
-accessibility, so it reaches a control wherever it is. `--touch` (`"touch":true`) uses a
-real finger instead, and refuses what's off screen. A tap that changes nothing is
+accessibility, so it reaches a control wherever it is, and touches when it can't find it
+(`"used":"touch"`). `--touch` (`"touch":true`) asks for a real finger, and refuses what's
+off screen. A press can't set a slider, so drag it with `swipe`. A tap that changes nothing is
 reported, not retried.
 
 ## See what a tap did

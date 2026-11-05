@@ -90,8 +90,25 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         self.host = host
         self.deviceSetPath = deviceSetPath
         self.frontmostPID = frontmostPID
-        self.displayGeometry = displayGeometry
-        self.recheckGeometry = recheckGeometry ?? displayGeometry
+        self.displayGeometry = Self.retrying(displayGeometry)
+        self.recheckGeometry = Self.retrying(recheckGeometry ?? displayGeometry)
+    }
+
+    /// The simulator sometimes can't report the screen for a moment, on a screen
+    /// that reads fine right after, so a read gets a few tries before it fails.
+    private static func retrying(
+        _ read: @escaping @Sendable () throws -> DisplayGeometry
+    ) -> @Sendable () throws -> DisplayGeometry {
+        {
+            var attempt = 1
+            while true {
+                do { return try read() } catch {
+                    if attempt >= 4 { throw error }
+                    attempt += 1
+                    Thread.sleep(forTimeInterval: 0.15)
+                }
+            }
+        }
     }
 
     private func resolveDevice() -> NSObject? {
@@ -147,7 +164,10 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         _ = try withAXPContext(known: (geometry, pid)) { ctx in
             Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
             Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
-            if let element = Self.element(matching: node, under: ctx.frontmostRoot, ctx: ctx, depth: 0)
+            var found: [(node: AXNode, element: NSObject)] = []
+            Self.collectElements(under: ctx.frontmostRoot, ctx: ctx, depth: 0, into: &found)
+            let match = node.bestMatch(among: found.map(\.node))
+            if let element = found.first(where: { $0.node == match })?.element
                 ?? hitElement(matching: node, screen: geometry, ctx: ctx)
             {
                 pressed = Self.performPress(on: element)
@@ -157,15 +177,16 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         return pressed
     }
 
-    /// The live element for `node`, from the walk. Identity is the same key the
-    /// sweep merges on, so a node read a moment ago finds its element.
-    private static func element(matching node: AXNode, under element: NSObject, ctx: AXPContext, depth: Int) -> NSObject? {
-        guard depth < maxDepth else { return nil }
-        if AXNode.walk(from: element, transform: ctx.transform, depthCap: 0).dedupKey == node.dedupKey { return element }
+    /// Every live element beside the node it reads as, so `bestMatch` can find the
+    /// one that was asked for.
+    private static func collectElements(
+        under element: NSObject, ctx: AXPContext, depth: Int, into found: inout [(node: AXNode, element: NSObject)]
+    ) {
+        guard depth < maxDepth else { return }
+        found.append((AXNode.walk(from: element, transform: ctx.transform, depthCap: 0), element))
         for child in AXElementReader.children(of: element) {
-            if let found = Self.element(matching: node, under: child, ctx: ctx, depth: depth + 1) { return found }
+            collectElements(under: child, ctx: ctx, depth: depth + 1, into: &found)
         }
-        return nil
     }
 
     /// What only the sweep can reach, like a tab in a childless bar, found by
@@ -179,7 +200,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         guard let element = Self.macPlatformElement(translator: ctx.translator, translation: translation) else { return nil }
         Self.stampElementTranslation(token: ctx.token, on: element)
         let hit = AXNode.walk(from: element, transform: ctx.transform, depthCap: 0, deadline: ctx.deadline)
-        return hit.dedupKey == node.dedupKey ? element : nil
+        return node.bestMatch(among: [hit]) == nil ? nil : element
     }
 
     /// Returns a Bool, not an object, so it needs a typed call.

@@ -93,6 +93,19 @@ struct AXFirstScreenTests {
         #expect(timeline.time < 1.2)
     }
 
+    @Test func `should not wait out the limit for an app with a pulsing glow`() throws {
+        func pulsing(_ x: Double) -> AXNode {
+            AXNode(
+                role: "AXApplication", label: "Skylark", frame: Self.frame,
+                children: [AXNode(role: "AXButton", label: "Go", frame: Rect(origin: Point(x: x, y: 0), size: Self.frame.size))])
+        }
+        let frames = (0..<60).map { pulsing($0 % 2 == 0 ? 0 : 2) }
+        let timeline = Timeline(frames)
+        _ = try run(timeline, before: screen("Home"))
+
+        #expect(timeline.time < 1)
+    }
+
     @Test func `should stop waiting at the limit`() throws {
         let timeline = Timeline([screen("Skylark", nil)])
         let outcome = try run(timeline, before: screen("Home"))

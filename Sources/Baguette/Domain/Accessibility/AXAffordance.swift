@@ -16,7 +16,10 @@ enum AXAffordance {
     /// How to act, for a caller that hasn't yet. An answer to a tap leaves it out,
     /// because the caller just ran it.
     static func how(_ style: Style, screen: AXScreen?) -> [String: Any] {
-        var how: [String: Any] = ["tap": tapByName("<name>", style)]
+        var how: [String: Any] = [
+            "tap": tapByName("<name>", style),
+            "adjust": "A press can't set a value. Drag a slider with swipe: describe-ui has its frame.",
+        ]
         if case .commandLine(let program, _, _) = style {
             let size = screen.map { " --width \(Int($0.width.rounded())) --height \(Int($0.height.rounded()))" } ?? ""
             how["swipe"] = "\(program) swipe \(device(style)) --start-x <x> --start-y <y> --end-x <x> --end-y <y>\(size) --then-describe-ui"
@@ -101,8 +104,10 @@ extension AXNode {
         let controls = preorder().filter { !$0.hidden && $0.hasSize && Self.controlRoles.contains($0.role) }
         let enabled = controls.filter(\.enabled)
         var affordances: [String: Any] = [:]
-        let names = numberedNames(enabled)
+        let names = numberedNames(enabled.filter { $0.role != "AXSlider" })
         if !names.isEmpty { affordances["tap"] = names }
+        let sliders = numberedNames(enabled.filter { $0.role == "AXSlider" })
+        if !sliders.isEmpty { affordances["adjust"] = sliders }
         let typeable = enabled.filter { $0.focused && Self.textRoles.contains($0.role) }.map(\.offerName)
         if !typeable.isEmpty { affordances["type"] = typeable }
 
@@ -196,5 +201,38 @@ extension Rect {
     fileprivate func holds(_ point: Point) -> Bool {
         point.x >= origin.x && point.x < origin.x + size.width
             && point.y >= origin.y && point.y < origin.y + size.height
+    }
+}
+
+extension AXNode {
+    /// How far a nameless element can move and still be taken for the same one.
+    private static let sameSpot = 30.0
+    /// Movement this small is a pulse or a glow, not a change of screen. A scroll
+    /// or a page sliding moves much further.
+    private static let pulse = 4.0
+
+    /// Which of `candidates` is this element, read a moment ago. A control can have
+    /// moved a little since, so identity is what it's called, and position only
+    /// separates several with the same name. A nameless element has only its
+    /// position to go on, so it must still be close.
+    func bestMatch(among candidates: [AXNode]) -> AXNode? {
+        let same = candidates.filter { $0.role == role && $0.label == label && $0.identifier == identifier }
+        guard let nearest = same.min(by: { distance(to: $0) < distance(to: $1) }) else { return nil }
+        if label == nil, identifier == nil, distance(to: nearest) > Self.sameSpot { return nil }
+        return nearest
+    }
+
+    /// Whether two reads show the same screen, allowing for a pulse. What it says
+    /// and how it's built must match exactly.
+    func looksSame(as other: AXNode) -> Bool {
+        guard role == other.role, label == other.label, value == other.value, identifier == other.identifier,
+            enabled == other.enabled, hidden == other.hidden, focused == other.focused,
+            children.count == other.children.count, distance(to: other) <= Self.pulse
+        else { return false }
+        return zip(children, other.children).allSatisfy { $0.looksSame(as: $1) }
+    }
+
+    private func distance(to other: AXNode) -> Double {
+        max(abs(frame.origin.x - other.frame.origin.x), abs(frame.origin.y - other.frame.origin.y))
     }
 }
