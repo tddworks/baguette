@@ -27,7 +27,7 @@ or a flow, use the `baguette-test-app` skill.
 baguette list --json                                    # 1. a booted UDID
 baguette boot --udid <UDID>                             #    (if none is running)
 baguette describe-ui --udid <UDID> | jq .screen        # 2. its size in points
-baguette tap --udid <UDID> --label "Search flights" --then-describe-ui   # 3. act by name, and read the new screen
+baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui   # 3. act by name, and read the new screen
 baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look, when you need the pixels
 ```
 
