@@ -12,7 +12,7 @@ For releases prior to this changelog, see the
 
 ### Added
 - `baguette input` answers `describe_ui`, so one long-lived session can read the screen and act without paying startup per call. On a Maps flow, reads take 0.34 s against 0.77 s one-shot, and taps 0.055 s against 0.25 s. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
-- `baguette tap --then-describe-ui`, and `"then_describe_ui":true` on a session gesture, wait for the screen to settle and answer with whether it changed and the new tree, and say what to try when nothing changed. → [docs](docs/features/accessibility/README.md#see-what-a-tap-did)
+- `--then-describe-ui` on `tap` and `swipe`, and `"then_describe_ui":true` on a session gesture, wait for the screen to settle and answer with whether it changed and the new tree, and say what to try when nothing changed. → [docs](docs/features/accessibility/README.md#see-what-a-tap-did)
 - `baguette launch --then-describe-ui` opens an app and answers with its first real screen in one call, instead of a sleep and repeated reads of a launching app. → [docs](docs/features/accessibility/README.md#open-an-app-and-read-it)
 - `baguette tap --label "Search flights"`, and `"label"` on a session tap, name the element instead of giving coordinates. A wrong, ambiguous, disabled, covered or off-screen name taps nothing and says why. → [docs](docs/wire.md#tap)
 - `describe-ui`'s JSON starts with an `affordances` map of what can be done next, and `--then-describe-ui` answers with that and the screen's text, not the whole tree. → [docs](docs/features/accessibility/README.md#tap-by-name-from-a-short-answer)

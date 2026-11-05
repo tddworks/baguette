@@ -65,7 +65,10 @@ Run the `tap` command with one of the `tap_names`. baguette finds the element, w
 for it, picks where to tap, and waits for the screen to settle, so don't add a `sleep`.
 
 - **`disabled`** can't be tapped yet. **`covered`** and **`off_screen`** need a scroll
-  first, with `swipe`.
+  first: `baguette swipe --udid <X> --start-x 201 --start-y 600 --end-x 201 --end-y 200
+  --width 402 --height 874 --then-describe-ui`. `changed:false` means nothing moved,
+  which usually means you've reached the end. Long lists load rows as they scroll, so
+  empty lists here don't prove there's nothing below: one swipe does.
 - **`text`** can be tapped by name too, when it looks tappable, like `See all`.
 - **The full tree** is one `baguette describe-ui --udid <X>` away, if you need frames.
 

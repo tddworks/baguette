@@ -36,7 +36,8 @@ and says why. A tap that changes nothing is reported, not retried.
 `changed` and the new tree. On a session, add `"then_describe_ui":true` to any gesture.
 `changed:false` means the app's own tree didn't move, and the answer adds a `hint`,
 and a `try` command when another point on that element might work. A change inside a
-web page may not count.
+web page may not count. `swipe` takes the flag too, where `changed:false` means nothing
+moved, usually the end of the list.
 
 ## Many gestures: stream them
 

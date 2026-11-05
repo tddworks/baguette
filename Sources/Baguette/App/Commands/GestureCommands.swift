@@ -168,6 +168,8 @@ struct SwipeCommand: ParsableCommand {
     @Option var width: Double
     @Option var height: Double
     @Option var duration: Double = 0.25
+    @Flag(help: "Wait for the screen to settle, then answer with whether it moved, what can be done next and what the screen says.")
+    var thenDescribeUI = false
 
     func run() {
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
@@ -177,6 +179,17 @@ struct SwipeCommand: ParsableCommand {
             size: Size(width: width, height: height),
             duration: duration
         )
+        if thenDescribeUI {
+            let input = sim.input()
+            let result = ThenDescribe.perform(
+                action: "swipe", unchangedHint: ThenDescribe.swipeUnchanged, accessibility: sim.accessibility(),
+                affordances: options.affordanceStyle
+            ) {
+                gesture.execute(on: input)
+            }
+            print(result)
+            Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
+        }
         runOrExit(gesture.execute(on: sim.input()), action: "swipe")
     }
 }

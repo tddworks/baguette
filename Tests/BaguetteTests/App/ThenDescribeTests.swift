@@ -176,6 +176,50 @@ struct ThenDescribeTests {
         #expect(result["tree"] == nil)
     }
 
+    @Test func `should say a swipe that moved nothing may have reached the end`() throws {
+        let result = try parsed(ThenDescribe.perform(
+            action: "swipe", unchangedHint: ThenDescribe.swipeUnchanged, accessibility: axShowing(Self.screenTree),
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
+
+        #expect(result["action"] as? String == "swipe")
+        #expect(result["changed"] as? Bool == false)
+        #expect((result["hint"] as? String)?.contains("end") == true)
+    }
+
+    @Test func `should give a session the same hint for a swipe`() throws {
+        let line = #"{"type":"swipe","startX":201,"startY":700,"endX":201,"endY":200,"width":402,"height":874,"then_describe_ui":true}"#
+
+        let result = try parsed(ThenDescribe.dispatch(
+            line: line, accessibility: axShowing(Self.screenTree),
+            gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
+
+        #expect((result["hint"] as? String)?.contains("end") == true)
+    }
+
+    @Test func `should give no hint when a swipe moved the screen`() throws {
+        let scrolled = AXNode(role: "AXApplication", label: "Scrolled", frame: Self.screenTree.frame, screen: Self.screenTree.screen)
+        let ax = MockAccessibility()
+        var glances = [Self.screenTree, scrolled]
+        given(ax).glance().willProduce { glances.count > 1 ? glances.removeFirst() : glances[0] }
+        given(ax).describeAll().willReturn(scrolled)
+
+        let result = try parsed(ThenDescribe.perform(
+            action: "swipe", unchangedHint: ThenDescribe.swipeUnchanged, accessibility: ax,
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
+
+        #expect(result["changed"] as? Bool == true)
+        #expect(result["hint"] == nil)
+    }
+
+    @Test func `should accept the flag on the swipe command`() throws {
+        let swipe = try SwipeCommand.parse([
+            "--udid", "X", "--start-x", "201", "--start-y", "700", "--end-x", "201", "--end-y", "200",
+            "--width", "402", "--height", "874", "--then-describe-ui",
+        ])
+
+        #expect(swipe.thenDescribeUI)
+    }
+
     @Test func `should name the action for a command line caller`() throws {
         let ax = accessibility([Self.node])
 

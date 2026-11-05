@@ -150,7 +150,7 @@ baguette double-tap --udid <udid> --x <x> --y <y> --width <width> --height <heig
 One-finger drag from start to end
 
 ```
-baguette swipe --udid <udid> --start-x <start-x> --start-y <start-y> --end-x <end-x> --end-y <end-y> --width <width> --height <height> [--duration <duration>]
+baguette swipe --udid <udid> --start-x <start-x> --start-y <start-y> --end-x <end-x> --end-y <end-y> --width <width> --height <height> [--duration <duration>] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
@@ -163,6 +163,7 @@ baguette swipe --udid <udid> --start-x <start-x> --start-y <start-y> --end-x <en
 | `--width` | yes |  |  |
 | `--height` | yes |  |  |
 | `--duration` |  | `0.25` |  |
+| `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it moved, what can be done next and what the screen says. |
 
 ## baguette pinch
 
