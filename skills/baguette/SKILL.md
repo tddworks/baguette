@@ -20,19 +20,28 @@ wants to watch or play along should be pointed at `baguette serve` and
 
 ## The loop
 
-Almost every job is: get a device, act, look, repeat.
+Almost every job is: get a device, read the screen, act, repeat. To test an app
+or a flow, use the `baguette-test-app` skill.
 
 ```bash
 baguette list --json                                    # 1. a booted UDID
 baguette boot --udid <UDID>                             #    (if none is running)
 baguette describe-ui --udid <UDID> | jq .screen        # 2. its size in points
-baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954   # 3. act
-baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look
+baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui   # 3. act by name, and read the new screen
+baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look, when you need the pixels
 ```
 
-Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
+`--then-describe-ui` waits for the screen to settle, so no `sleep`, and `"changed":false`
+says nothing moved. Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
 happens, run `baguette heal --udid <UDID>` (Xcode 27's Device Hub took the
 input surface; see `references/devices.md`).
+
+## Tap by name when you can
+
+`--label` takes a name, part of a label, or an identifier, and presses that element
+through accessibility, so there's no point to get wrong. A wrong or ambiguous name
+taps nothing and says why. With `--then-describe-ui`, the short answer lists what can
+be tapped next. It isn't a real finger: add `--touch` to test what a user can reach.
 
 ## Coordinates are device points (read this)
 
@@ -54,7 +63,7 @@ Read only the reference for the job at hand.
 | act like a user: touch, drag, press buttons, type, paste | `references/interact.md` | `tap` `double-tap` `swipe` `pinch` `pan` `input` `press` `type` `key` `paste` `clipboard` |
 | check what happened: see it, find an element, read logs, record | `references/observe.md` | `screenshot` `describe-ui` `logs` `record` `stream` `render-3d` |
 | set the conditions the app runs under | `references/environment.md` | `location` `motion` `network` `interface` `status-bar` `notify` `shake`, camera (WebSocket only) |
-| put an app and its data in place, launch it | `references/apps.md` | `install` `add-media` `openurl` `schemes` `defaults`, `simctl launch` |
+| put an app and its data in place, launch it | `references/apps.md` | `install` `launch` `add-media` `openurl` `schemes` `defaults` |
 
 Two more, generated from the binary by `make docs` (never edit them here).
 `references/commands.md` has every subcommand, flag and exit code; it's long,
@@ -70,7 +79,7 @@ setup (~50–100 ms). For drags, choreography or many steps, open
 `baguette input --udid <UDID>` once and write one JSON gesture per line
 (`references/interact.md`). It answers `{"type":"describe_ui"}` too, so one
 session can look and act without paying startup on every call. Either way `ok:true` means *sent*, not that the
-screen reacted: verify with a screenshot.
+screen reacted: use `--then-describe-ui` (`"then_describe_ui":true`) or a screenshot to check.
 
 ## Limits to state, not discover
 

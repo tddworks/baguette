@@ -16,7 +16,7 @@ struct CommandParsingTests {
         #expect(cfg.commandName == "baguette")
         let names = cfg.subcommands.map { $0.configuration.commandName }
         #expect(Set(names) == [
-            "list", "boot", "shutdown", "input", "stream",
+            "list", "boot", "shutdown", "launch", "input", "stream",
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type", "paste", "clipboard",
             "chrome", "screenshot", "record", "render-3d", "describe-ui", "logs", "serve",

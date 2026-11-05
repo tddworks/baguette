@@ -25,15 +25,30 @@ struct TapCommand: ParsableCommand {
     )
 
     @OptionGroup var options: DeviceOption
-    @Option var x: Double
-    @Option var y: Double
-    @Option var width: Double
-    @Option var height: Double
+    @Option(help: "The element to press, by its name from the answer's affordances, part of its label, or identifier. Replaces --x, --y, --width and --height.")
+    var label: String?
+    @Option var x: Double?
+    @Option var y: Double?
+    @Option var width: Double?
+    @Option var height: Double?
     @Option(help: "Hold duration in seconds") var duration: Double = 0.05
     @Option(help: "Screen edge the tap lands on: \(DeviceEdge.allowed). Omit for an interior tap.")
     var edge: String?
+    @Flag(help: "With --label, use a real touch at the element instead of pressing it through accessibility.")
+    var touch = false
+    @Flag(help: "Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says.")
+    var thenDescribeUI = false
+
+    func validate() throws {
+        guard label == nil else { return }
+        guard x != nil, y != nil, width != nil, height != nil else {
+            throw ValidationError("Name an element with --label, or give --x, --y, --width and --height.")
+        }
+    }
 
     func run() {
+        if let label { return runByLabel(label) }
+        guard let x, let y, let width, let height else { Foundation.exit(1) }
         var landing: DeviceEdge?
         if let edge {
             guard let parsed = DeviceEdge(rawValue: edge) else {
@@ -45,7 +60,36 @@ struct TapCommand: ParsableCommand {
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
         let gesture = Tap(at: Point(x: x, y: y), size: Size(width: width, height: height),
                           duration: duration, edge: landing)
+        if thenDescribeUI {
+            let input = sim.input()
+            let result = ThenDescribe.perform(
+                action: "tap", at: Point(x: x, y: y), accessibility: sim.accessibility(),
+                affordances: options.affordanceStyle
+            ) {
+                gesture.execute(on: input)
+            }
+            print(result)
+            Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
+        }
         runOrExit(gesture.execute(on: sim.input()), action: "tap")
+    }
+
+    private func runByLabel(_ label: String) {
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        var envelope: [String: Any] = ["type": Tap.wireType, "label": label, "duration": duration]
+        if let edge { envelope["edge"] = edge }
+        if thenDescribeUI { envelope["then_describe_ui"] = true }
+        if touch { envelope["touch"] = true }
+        let bytes = (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
+        let dispatcher = GestureDispatcher(input: sim.input())
+        let result = LabelTap.dispatch(
+            line: String(decoding: bytes, as: UTF8.self),
+            accessibility: sim.accessibility(),
+            gesture: { dispatcher.dispatch(line: $0) },
+            affordances: options.affordanceStyle
+        ) ?? #"{"ok":false}"#
+        print(result)
+        Foundation.exit(result.contains(#""ok":true"#) ? 0 : 1)
     }
 }
 
@@ -127,6 +171,8 @@ struct SwipeCommand: ParsableCommand {
     @Option var width: Double
     @Option var height: Double
     @Option var duration: Double = 0.25
+    @Flag(help: "Wait for the screen to settle, then answer with whether it moved, what can be done next and what the screen says.")
+    var thenDescribeUI = false
 
     func run() {
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
@@ -136,6 +182,17 @@ struct SwipeCommand: ParsableCommand {
             size: Size(width: width, height: height),
             duration: duration
         )
+        if thenDescribeUI {
+            let input = sim.input()
+            let result = ThenDescribe.perform(
+                action: "swipe", unchangedHint: ThenDescribe.swipeUnchanged, accessibility: sim.accessibility(),
+                affordances: options.affordanceStyle
+            ) {
+                gesture.execute(on: input)
+            }
+            print(result)
+            Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
+        }
         runOrExit(gesture.execute(on: sim.input()), action: "swipe")
     }
 }

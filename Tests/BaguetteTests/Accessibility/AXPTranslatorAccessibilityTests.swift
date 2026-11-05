@@ -63,6 +63,16 @@ struct AXPTranslatorAccessibilityErrorTests {
         #expect(try ax.describeAll() == nil)
     }
 
+    @Test func `should see nothing at a glance when no device matches the udid`() throws {
+        let host = MockDeviceHost()
+        given(host).resolveDevice(udid: .any).willReturn(nil)
+        let ax = AXPTranslatorAccessibility(udid: "ghost", host: host) {
+            throw ObservedScreenError.unavailable
+        }
+
+        #expect(try ax.glance() == nil)
+    }
+
     @Test func `should describe no element at a point when no device matches the udid`() throws {
         let host = MockDeviceHost()
         given(host).resolveDevice(udid: .any).willReturn(nil)
@@ -106,6 +116,20 @@ struct AXPTranslatorFrontmostTests {
         ) { Self.screen }
 
         #expect(throws: LiveReadFailed()) { try ax.describeAll() }
+    }
+
+    @Test func `should wake the frontmost app through the guest helper`() throws {
+        final class Runs: @unchecked Sendable { var count = 0 }
+        let runs = Runs()
+        let host = MockDeviceHost()
+        let ax = AXPTranslatorAccessibility(
+            udid: "ghost", host: host, deviceSetPath: nil,
+            frontmostPID: { _, _ in runs.count += 1; return 7 }
+        ) { Self.screen }
+
+        try ax.wake()
+
+        #expect(runs.count == 1)
     }
 
     @Test func `should look up the app with the answer the device gives`() throws {

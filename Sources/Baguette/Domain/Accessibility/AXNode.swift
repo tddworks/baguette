@@ -187,6 +187,12 @@ struct AXNode: Equatable, Sendable {
         )
     }
 
+    /// The same projection with what can be done added at the top, so it's the
+    /// first thing a reader sees. The tree's own fields stay as they are.
+    func json(affordances style: AXAffordance.Style) -> String {
+        "{" + offersFields(style) + "," + String(json.dropFirst())
+    }
+
     fileprivate var dictionary: [String: Any] {
         var result: [String: Any] = [
             "role": role,

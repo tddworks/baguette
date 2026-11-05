@@ -23,6 +23,24 @@ system gesture: `bottom` drives the home indicator (live home / app switcher),
 Notification Center). Omit `edge` for ordinary touches. For pinches use
 `touch2-*`; a `touch1-*` pinch reads as a pan.
 
+## Tap by name
+
+`baguette tap --udid <X> --label 'Sign In'`, or `{"type":"tap","label":"Sign In"}`
+on `input`. It matches an exact name first, then part of a label, and never guesses:
+a wrong, ambiguous or disabled name taps nothing and says why. It presses through
+accessibility, so it reaches a control wherever it is. `--touch` (`"touch":true`) uses a
+real finger instead, and refuses what's off screen. A tap that changes nothing is
+reported, not retried.
+
+## See what a tap did
+
+`baguette tap … --then-describe-ui` waits for the screen to settle, then answers with
+`changed` and the new tree. On a session, add `"then_describe_ui":true` to any gesture.
+`changed:false` means the app's own tree didn't move, and the answer adds a `hint`,
+and a `try` command when another point on that element might work. A change inside a
+web page may not count. `swipe` takes the flag too, where `changed:false` means nothing
+moved, usually the end of the list.
+
 ## Many gestures: stream them
 
 `baguette input --udid <X>` reads one JSON gesture per stdin line and acks

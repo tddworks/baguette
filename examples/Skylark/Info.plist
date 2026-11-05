@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>dev.baguette.skylark</string>
+<key>CFBundleName</key><string>Skylark</string><key>CFBundleDisplayName</key><string>Skylark</string><key>CFBundleExecutable</key><string>Skylark</string>
+<key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string><key>CFBundleShortVersionString</key><string>1</string>
+<key>UIDeviceFamily</key><array><integer>1</integer></array><key>MinimumOSVersion</key><string>17.0</string>
+<key>UILaunchScreen</key><dict/><key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
+</dict></plist>

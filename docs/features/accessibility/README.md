@@ -73,11 +73,47 @@ A `baguette input` process answers `describe_ui` as well as gestures, in line:
 {"ok":true}
 ```
 
-Add `x` and `y` for the element at a point. Keep the session open for a loop
-of many steps: it skips process startup, the HID warm-up and listing the
+Add `x` and `y` for the element at a point. Keep the session open for a loop of many steps: it skips process startup, the HID warm-up and listing the
 connected screens, so taps take about 0.06 s rather than 0.25 s, and a read of
 Settings about 0.3 s rather than 0.55 s. The first read of a freshly launched
 app still takes about a second.
+
+## Open an app and read it
+
+```bash
+baguette launch --udid <UDID> --bundle-id com.example.app --relaunch --then-describe-ui
+```
+
+One call replaces two to four reads, though the first screen still takes about 4 to
+5 s, mostly iOS switching apps. An app already in front gets five seconds'
+patience, so use `--relaunch` for a fresh start.
+
+## Tap by name, from a short answer
+
+`baguette tap --udid <UDID> --label 'Search flights' --then-describe-ui` presses the element through accessibility, as VoiceOver does ([wire.md](../../wire.md#tap)), so it needs no point. It answers with what can be tapped next (`affordances`), what can't yet (`disabled`) and what the screen says (`text`). `--touch` uses a real finger, because a press can reach what a finger can't. `describe-ui` keeps the full tree, with the same lists first.
+
+## See what a tap did
+
+```bash
+baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --then-describe-ui
+```
+
+```json
+{"ok":true,"action":"tap","changed":true,"affordances":{…},"text":[…]}
+```
+
+On a `baguette input` session, add `"then_describe_ui":true` to any gesture. It replaces
+a guessed sleep and a separate read: it polls the app's own tree until it has
+held still, and takes one full read at the end. That takes about 1.6 s a step one-shot,
+against about 2 s for a tap, a one-second sleep and a read. In a session a short
+fixed sleep can be quicker (about 1 s against 1.2 s), but it's a guess, and it
+can't say whether the tap did anything. A screen that doesn't change gets
+a second's patience, and one that never stops moving gets three.
+
+`changed:false` means the app's own tree didn't move, and the answer adds a `hint`, plus a `try` command when another point on that element might work. It never retries. A frame can be wider than
+what responds, so a tap at a row's centre can land on blank space that the app
+ignores, while a hit-test there still names the row. Web content isn't in that
+tree: a link that loads a page still shows up, but a change inside a page may not.
 
 ## HTTP / WebSocket
 

@@ -8,7 +8,7 @@ Every `baguette` command and flag, generated from the binary. For how to use a f
 
 **Exit codes:** `0` on success, `1` on any error, `3` when an iPhone Duo `orientation` or `hinge` change is unconfirmed: its guest helper timed out, so the change may have landed and will not land later. Errors print `{"ok":false,"error":"…"}`, so parse stdout, not just the exit code.
 
-**Commands:** [list](#baguette-list) · [boot](#baguette-boot) · [shutdown](#baguette-shutdown) · [lifetime](#baguette-lifetime) · [input](#baguette-input) · [stream](#baguette-stream) · [tap](#baguette-tap) · [double-tap](#baguette-double-tap) · [swipe](#baguette-swipe) · [pinch](#baguette-pinch) · [pan](#baguette-pan) · [press](#baguette-press) · [key](#baguette-key) · [type](#baguette-type) · [paste](#baguette-paste) · [clipboard](#baguette-clipboard) · [chrome](#baguette-chrome) · [screenshot](#baguette-screenshot) · [record](#baguette-record) · [render-3d](#baguette-render-3d) · [describe-ui](#baguette-describe-ui) · [logs](#baguette-logs) · [serve](#baguette-serve) · [orientation](#baguette-orientation) · [hinge](#baguette-hinge) · [shake](#baguette-shake) · [status-bar](#baguette-status-bar) · [interface](#baguette-interface) · [location](#baguette-location) · [motion](#baguette-motion) · [network](#baguette-network) · [install](#baguette-install) · [add-media](#baguette-add-media) · [openurl](#baguette-openurl) · [notify](#baguette-notify) · [schemes](#baguette-schemes) · [plugin](#baguette-plugin) · [bakery](#baguette-bakery) · [diag-digitizer-trackpad](#baguette-diag-digitizer-trackpad) · [heal](#baguette-heal) · [defaults](#baguette-defaults)
+**Commands:** [list](#baguette-list) · [boot](#baguette-boot) · [shutdown](#baguette-shutdown) · [lifetime](#baguette-lifetime) · [launch](#baguette-launch) · [input](#baguette-input) · [stream](#baguette-stream) · [tap](#baguette-tap) · [double-tap](#baguette-double-tap) · [swipe](#baguette-swipe) · [pinch](#baguette-pinch) · [pan](#baguette-pan) · [press](#baguette-press) · [key](#baguette-key) · [type](#baguette-type) · [paste](#baguette-paste) · [clipboard](#baguette-clipboard) · [chrome](#baguette-chrome) · [screenshot](#baguette-screenshot) · [record](#baguette-record) · [render-3d](#baguette-render-3d) · [describe-ui](#baguette-describe-ui) · [logs](#baguette-logs) · [serve](#baguette-serve) · [orientation](#baguette-orientation) · [hinge](#baguette-hinge) · [shake](#baguette-shake) · [status-bar](#baguette-status-bar) · [interface](#baguette-interface) · [location](#baguette-location) · [motion](#baguette-motion) · [network](#baguette-network) · [install](#baguette-install) · [add-media](#baguette-add-media) · [openurl](#baguette-openurl) · [notify](#baguette-notify) · [schemes](#baguette-schemes) · [plugin](#baguette-plugin) · [bakery](#baguette-bakery) · [diag-digitizer-trackpad](#baguette-diag-digitizer-trackpad) · [heal](#baguette-heal) · [defaults](#baguette-defaults)
 
 ## baguette list
 
@@ -60,6 +60,21 @@ baguette lifetime [--detach] [--shutdown]
 | `--detach` |  |  | Leave devices booted when a window closes or Simulator.app quits. |
 | `--shutdown` |  |  | Restore Apple's default: closing a window or quitting shuts the device down. |
 
+## baguette launch
+
+Launch an installed app, optionally answering with its first screen
+
+```
+baguette launch --udid <udid> --bundle-id <bundle-id> [--relaunch] [--then-describe-ui]
+```
+
+| Flag | Required | Default | Description |
+|---|---|---|---|
+| `--udid` | yes |  | Simulator UDID |
+| `--bundle-id` | yes |  | Bundle id of an installed app |
+| `--relaunch` |  |  | Quit the app first, so it starts fresh. |
+| `--then-describe-ui` |  |  | Wait for the app's first screen, then answer with what can be done next and what the screen says. |
+
 ## baguette input
 
 Read newline-delimited JSON gestures from stdin, ack each on stdout
@@ -97,18 +112,21 @@ baguette stream --udid <udid> [--format <format>] [--fps <fps>] [--quality <qual
 Single tap at a point
 
 ```
-baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--duration <duration>] [--edge <edge>]
+baguette tap --udid <udid> [--label <label>] [--x <x>] [--y <y>] [--width <width>] [--height <height>] [--duration <duration>] [--edge <edge>] [--touch] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
 | `--udid` | yes |  | Simulator UDID |
-| `--x` | yes |  |  |
-| `--y` | yes |  |  |
-| `--width` | yes |  |  |
-| `--height` | yes |  |  |
+| `--label` |  |  | The element to press, by its name from the answer's affordances, part of its label, or identifier. Replaces --x, --y, --width and --height. |
+| `--x` |  |  |  |
+| `--y` |  |  |  |
+| `--width` |  |  |  |
+| `--height` |  |  |  |
 | `--duration` |  | `0.05` | Hold duration in seconds |
 | `--edge` |  |  | Screen edge the tap lands on: left \| top \| right \| bottom. Omit for an interior tap. |
+| `--touch` |  |  | With --label, use a real touch at the element instead of pressing it through accessibility. |
+| `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says. |
 
 ## baguette double-tap
 
@@ -133,7 +151,7 @@ baguette double-tap --udid <udid> --x <x> --y <y> --width <width> --height <heig
 One-finger drag from start to end
 
 ```
-baguette swipe --udid <udid> --start-x <start-x> --start-y <start-y> --end-x <end-x> --end-y <end-y> --width <width> --height <height> [--duration <duration>]
+baguette swipe --udid <udid> --start-x <start-x> --start-y <start-y> --end-x <end-x> --end-y <end-y> --width <width> --height <height> [--duration <duration>] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
@@ -146,6 +164,7 @@ baguette swipe --udid <udid> --start-x <start-x> --start-y <start-y> --end-x <en
 | `--width` | yes |  |  |
 | `--height` | yes |  |  |
 | `--duration` |  | `0.25` |  |
+| `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it moved, what can be done next and what the screen says. |
 
 ## baguette pinch
 

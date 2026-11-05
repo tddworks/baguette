@@ -11,6 +11,10 @@ struct DescribeUIDispatchTests {
         role: "AXButton", label: "General",
         frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 40, height: 40)))
 
+    private static let withScreen = AXNode(
+        role: "AXApplication", frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 402, height: 874)),
+        children: [node], screen: AXScreen(width: 402, height: 874, orientation: .portrait))
+
     private func result(_ ack: String?) throws -> [String: Any] {
         let data = Data(try #require(ack).utf8)
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -32,6 +36,15 @@ struct DescribeUIDispatchTests {
         #expect(ack["type"] as? String == "describe_ui_result")
         #expect(ack["ok"] as? Bool == true)
         #expect((ack["tree"] as? [String: Any])?["label"] as? String == "General")
+    }
+
+    @Test func `should offer the next gestures in the wire form`() throws {
+        let ax = MockAccessibility()
+        given(ax).describeAll().willReturn(Self.withScreen)
+
+        let ack = try result(DescribeUIDispatch.dispatch(line: #"{"type":"describe_ui"}"#, accessibility: ax))
+
+        #expect(ack["affordances"] != nil)
     }
 
     @Test func `should describe the element at a point`() throws {

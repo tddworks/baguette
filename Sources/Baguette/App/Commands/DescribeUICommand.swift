@@ -50,7 +50,7 @@ struct DescribeUICommand: AsyncParsableCommand {
             log("describe-ui: no accessibility data (sim not booted, or no frontmost app)")
             throw ExitCode.failure
         }
-        let bytes = Data(tree.json.utf8)
+        let bytes = Data(tree.json(affordances: options.affordanceStyle).utf8)
         if let output {
             try bytes.write(to: URL(fileURLWithPath: output))
         } else {

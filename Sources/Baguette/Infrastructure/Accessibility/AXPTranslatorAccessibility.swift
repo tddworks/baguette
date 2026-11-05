@@ -127,6 +127,71 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             })
     }
 
+    func glance() throws -> AXNode? {
+        guard Self.isAvailable, let device = resolveDevice() else { return nil }
+        let geometry = try recheckGeometry()
+        guard let pid = Self.bridgeFrontmostPID(device: device), pid > 0 else { return nil }
+        return try withAXPContext(known: (geometry, pid)) { walkFrontmost($0) }
+    }
+
+    func wake() throws {
+        _ = try frontmostPID(udid, deviceSetPath)
+    }
+
+    func press(_ node: AXNode) throws -> Bool {
+        guard Self.isAvailable, let device = resolveDevice() else { return false }
+        let geometry = try recheckGeometry()
+        let bridged = Self.bridgeFrontmostPID(device: device).flatMap { $0 > 0 ? $0 : nil }
+        let pid = try bridged ?? frontmostPID(udid, deviceSetPath)
+        var pressed = false
+        _ = try withAXPContext(known: (geometry, pid)) { ctx in
+            Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
+            Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
+            if let element = Self.element(matching: node, under: ctx.frontmostRoot, ctx: ctx, depth: 0)
+                ?? hitElement(matching: node, screen: geometry, ctx: ctx)
+            {
+                pressed = Self.performPress(on: element)
+            }
+            return nil
+        }
+        return pressed
+    }
+
+    /// The live element for `node`, from the walk. Identity is the same key the
+    /// sweep merges on, so a node read a moment ago finds its element.
+    private static func element(matching node: AXNode, under element: NSObject, ctx: AXPContext, depth: Int) -> NSObject? {
+        guard depth < maxDepth else { return nil }
+        if AXNode.walk(from: element, transform: ctx.transform, depthCap: 0).dedupKey == node.dedupKey { return element }
+        for child in AXElementReader.children(of: element) {
+            if let found = Self.element(matching: node, under: child, ctx: ctx, depth: depth + 1) { return found }
+        }
+        return nil
+    }
+
+    /// What only the sweep can reach, like a tab in a childless bar, found by
+    /// position and checked to be the same element.
+    private func hitElement(matching node: AXNode, screen: AXScreen, ctx: AXPContext) -> NSObject? {
+        guard let point = node.touchPoint(on: screen) else { return nil }
+        let hostPoint = ctx.transform.unmap(CGPoint(x: point.x, y: point.y))
+        guard let translation = Self.objectAtPoint(translator: ctx.translator, point: hostPoint, displayId: 0, token: ctx.token)
+        else { return nil }
+        Self.stamp(token: ctx.token, on: translation)
+        guard let element = Self.macPlatformElement(translator: ctx.translator, translation: translation) else { return nil }
+        Self.stampElementTranslation(token: ctx.token, on: element)
+        let hit = AXNode.walk(from: element, transform: ctx.transform, depthCap: 0, deadline: ctx.deadline)
+        return hit.dedupKey == node.dedupKey ? element : nil
+    }
+
+    /// Returns a Bool, not an object, so it needs a typed call.
+    private static func performPress(on element: NSObject) -> Bool {
+        let selector = NSSelectorFromString("accessibilityPerformPress")
+        guard element.responds(to: selector),
+            let imp = class_getMethodImplementation(type(of: element), selector)
+        else { return false }
+        typealias Press = @convention(c) (AnyObject, Selector) -> Bool
+        return unsafeBitCast(imp, to: Press.self)(element, selector)
+    }
+
     func describeAt(point: Point) throws -> AXNode? {
         // Prefer the server-side hit-test. `AXPTranslator` exposes
         // `objectAtPoint:displayId:bridgeDelegateToken:` — the
