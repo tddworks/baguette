@@ -1,9 +1,12 @@
 import Foundation
 
-/// A next step an element offers, ready to run. `describe-ui` has already
+/// A next step on this screen, ready to run. `describe-ui` has already
 /// found everything, so it can hand over the finished command, and no second
 /// read is needed to act on it. State-aware: an element offers only what will
 /// work right now, so a disabled button or an off-screen row offers no tap.
+///
+/// They're gathered in one map at the top of the output, because an agent
+/// filters a long tree to read it, and offers on the elements get filtered away.
 ///
 /// One value renders two ways, because a one-shot CLI caller and a
 /// `baguette input` session act through different surfaces.
@@ -16,15 +19,6 @@ enum AXAffordance: Equatable {
     enum Style: Equatable, Sendable {
         case commandLine(program: String, udid: String, deviceSet: String?)
         case wire
-    }
-
-    var key: String {
-        switch self {
-        case .tap: "tap"
-        case .type: "type"
-        case .home: "home"
-        case .screenshot: "screenshot"
-        }
     }
 
     /// A string to run, or a wire envelope to send. `nil` when the style has
@@ -75,16 +69,39 @@ extension AXNode {
     /// Narrower than this, an element's centre is on what it draws.
     private static let wideRow = 200.0
 
-    /// What this node offers on `screen`. The root also offers what isn't
-    /// about any one element.
-    func affordances(on screen: AXScreen?, isRoot: Bool) -> [AXAffordance] {
-        var offers: [AXAffordance] = isRoot ? [.home, .screenshot] : []
-        guard let screen, !hidden, enabled, Self.controlRoles.contains(role),
-            let visible = visibleFrame(on: screen)
-        else { return offers }
-        offers.append(.tap(tapPoint(in: visible), Size(width: screen.width, height: screen.height)))
-        if focused, Self.textRoles.contains(role) { offers.append(.type) }
-        return offers
+    /// Every next step under this node, keyed by what it does, like
+    /// `tap Search flights`. Controls that share a name are numbered.
+    func affordanceMap(_ style: AXAffordance.Style) -> [String: Any] {
+        var map: [String: Any] = [:]
+        if let home = AXAffordance.home.rendered(style) { map["home"] = home }
+        if let shot = AXAffordance.screenshot.rendered(style) { map["screenshot"] = shot }
+        var uses: [String: Int] = [:]
+        func add(_ verb: String, _ name: String, _ offer: AXAffordance) {
+            guard let rendered = offer.rendered(style) else { return }
+            let key = "\(verb) \(name)"
+            uses[key, default: 0] += 1
+            map[uses[key] == 1 ? key : "\(key) #\(uses[key]!)"] = rendered
+        }
+        func walk(_ node: AXNode) {
+            if let screen, !node.hidden, node.enabled, Self.controlRoles.contains(node.role),
+                let visible = node.visibleFrame(on: screen)
+            {
+                let name = node.offerName
+                add("tap", name, .tap(node.tapPoint(in: visible), Size(width: screen.width, height: screen.height)))
+                if node.focused, Self.textRoles.contains(node.role) { add("type", name, .type) }
+            }
+            node.children.forEach(walk)
+        }
+        walk(self)
+        return map
+    }
+
+    private var offerName: String {
+        let label = (label ?? "").split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if !label.isEmpty { return label }
+        if let identifier, !identifier.isEmpty { return identifier }
+        return String(role.trimmingPrefix("AX"))
     }
 
     /// The centre of what's on screen, or near the left of a wide row whose

@@ -91,7 +91,7 @@ patience, so use `--relaunch` for a fresh start.
 
 ## Run what an element offers
 
-The CLI's JSON gives each usable control its next command in `affordances`, with the point worked out. A disabled, off-screen or hidden element offers none. A `baguette input` session gets the wire envelope; HTTP and the WebSocket don't carry them.
+The CLI's JSON starts with an `affordances` map of every usable control's next command, like `tap Search flights`, with the point worked out. A disabled, off-screen or hidden element offers none. A `baguette input` session gets the wire envelope; HTTP and the WebSocket don't carry them.
 ## See what a tap did
 
 ```bash

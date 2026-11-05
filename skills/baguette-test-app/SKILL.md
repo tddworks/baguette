@@ -47,25 +47,26 @@ other time, use `baguette describe-ui --udid <X>`.
 **2. Think.** Which element does the task need next? Read the values, don't
 assume: the first row is rarely the fastest, and `Search flights` may be disabled.
 
-**3. Run what the element offers.** Every control you can use now carries its
-finished command in `affordances`, so there's nothing to work out:
+**3. Run an offered command.** Every result starts with `affordances`: what you can
+do right now, each one finished and ready to run. Pick one and run it as written.
+Don't work out a tap from a frame: the offered point allows for things a frame can't
+show, like a row whose centre is blank.
 
 ```json
-{"role":"AXButton","label":"Search flights","enabled":true,
- "affordances":{"tap":"baguette tap --udid X --x 201 --y 450 --width 402 --height 874 --then-describe-ui"}}
+{"affordances":{
+  "home":"baguette press --udid X --button home",
+  "screenshot":"baguette screenshot --udid X --output /tmp/baguette-screen.jpg",
+  "tap Orbit 3, 10h 10m, $1,240":"baguette tap --udid X --x 56 --y 550 --width 402 --height 874 --then-describe-ui"
+},"children":[…]}
 ```
 
-Run it as written. It waits for the screen to settle, so don't add a `sleep`, and
-answers with the new screen and its offers:
+A tap waits for the screen to settle, so don't add a `sleep`, and answers with
+`changed` and the new screen, with its offers under `.tree.affordances`.
 
-```json
-{"ok":true,"action":"tap","changed":true,"tree":{…}}
-```
-
-No `tap` on a control means it won't work now: it's disabled, or off screen and
-needs a scroll. Plain text and images offer nothing because their role doesn't say
-they respond, though some do, like a `See all` link: tap those at their frame's
-centre. A focused text field also offers `type`.
+A control with no offer won't work now: it's disabled, or off screen and needs a
+scroll. Plain text and images offer nothing because their role doesn't say they
+respond, though some do, like a `See all` link: tap those at their frame's centre.
+A focused text field also offers `type`.
 
 **4. Check it worked.** Is this the screen you expected? Then go back to step 2.
 
@@ -82,23 +83,17 @@ EOF
 Only batch what the screen you've read already shows, or what can't depend on
 anything new. When the next choice depends on what appears, read first.
 
-**The tree is long.** To read it, hide the logs and pick the fields you need:
+**To read a result without the long tree,** keep the offers and the text. Add this to
+any `tap` or `launch`:
 
 ```bash
-baguette describe-ui --udid <X> 2>/dev/null | jq -r '.. | objects
-  | select(.label? and .frame.width > 0 and .frame.y >= 50)
-  | "\(.role[2:]) \"\(.label)\"\(if .value then " value=\(.value)" else "" end)\(if .enabled then "" else " DISABLED" end) (\(.frame.x|floor),\(.frame.y|floor),\(.frame.width|floor),\(.frame.height|floor))"'
+| jq '{changed, offers: (.tree.affordances | keys), text: [.tree | .. | objects | select(.label? and .frame.y >= 50 and .role == "AXStaticText") | .label]}'
 ```
 
-After a tap or launch, keep `changed` and the screen size by starting the filter
-like this, and closing it with one more `)` after the last quote:
-
-```bash
-jq -r '"changed=\(.changed) screen=\(.tree.screen.width)x\(.tree.screen.height)", (.tree | .. | objects
-```
-
-Don't write `.changed // "n/a"`: `//` treats `false` as missing, which hides a
-missed tap. The filter is only for viewing: the decisions are still yours.
+Then read the command for the one you want with
+`jq -r '.tree.affordances["tap Search flights"]'` on the same output, or print the
+whole map with `jq .tree.affordances`. After a plain `describe-ui`, drop `.tree` and
+`changed`. Don't write `.changed // "n/a"`: `//` treats `false` as missing.
 
 ## When a tap does nothing
 
