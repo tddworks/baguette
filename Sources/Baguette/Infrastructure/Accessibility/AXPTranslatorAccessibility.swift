@@ -252,6 +252,12 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// exploding the XPC count.
     private static let gridStep: Double = 32
     private static let gridCap: Int = 600
+    /// Spacing of the coarse look at the gaps between known elements: fine
+    /// enough to land on a block of web text, a quarter of the fine probes.
+    private static let scoutStep: Double = 64
+    /// How far down the status bar reaches: two grid rows, clear of the
+    /// Dynamic Island's 49 pt.
+    private static let statusStripHeight: CGFloat = 64
     /// The sweep can issue hundreds of XPC round-trips; bound its
     /// wall-clock so `describe-ui` stays responsive. The recursive
     /// walk already produced a usable tree — this only caps the
@@ -303,41 +309,33 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     }
 
     /// Recover elements the process-scoped recursive walk can't reach
-    /// — SpringBoard's status bar and the contents of childless
-    /// containers (tab bars, nav bars, toolbars) — by hit-testing an
-    /// `AXHitTestGrid` across the screen, then merging the discoveries
-    /// into `base`.
-    ///
-    /// The grid skips only points inside genuine *content leaves*
-    /// (`AXNode.contentLeafFrames`), never childless containers: an
-    /// empty `AXGroup "Tab Bar"` is exactly where hit-test-only
-    /// children live, so probing must continue inside it. Each hit-test
-    /// is shallow (depth 0) so the full screen is covered fast, and the
-    /// merge grafts every discovery under the deepest container that
-    /// holds it — so a recovered tab-bar button is selectable rather
-    /// than shadowed by its group.
+    /// — SpringBoard's status bar, the contents of childless containers
+    /// (tab bars, nav bars, toolbars) and web content — by hit-testing
+    /// where `AXSweep` says to look, then merging the discoveries into
+    /// `base`. Each hit-test is shallow (depth 0) so the regions are
+    /// covered fast, and the merge grafts every discovery under the
+    /// deepest container that holds it — so a recovered tab-bar button is
+    /// selectable rather than shadowed by its group.
     private func hitTestSweep(base: AXNode, ctx: AXPContext) -> AXNode {
         let pointSize = ctx.transform.pointSize
         let deadline = min(
             ctx.deadline,
             Date().addingTimeInterval(Self.sweepBudgetSeconds)
         )
-        let grid = AXHitTestGrid(
-            size: Size(width: pointSize.width, height: pointSize.height),
-            step: Self.gridStep, cap: Self.gridCap
+        let size = Size(width: pointSize.width, height: pointSize.height)
+        let strip = ctx.transform.topStrip(height: Self.statusStripHeight)
+        let sweep = AXSweep.run(
+            base: base,
+            fine: AXHitTestGrid(size: size, step: Self.gridStep, cap: Self.gridCap),
+            scout: AXHitTestGrid(size: size, step: Self.scoutStep, cap: Self.gridCap),
+            statusStrip: Rect(
+                origin: Point(x: Double(strip.origin.x), y: Double(strip.origin.y)),
+                size: Size(width: Double(strip.size.width), height: Double(strip.size.height))),
+            keepGoing: { Date() < deadline },
+            probe: { discover(at: $0, ctx: ctx, depthCap: Self.sweepDepth) }
         )
-        var discovered: [AXNode] = []
-        var probed = 0
-        for point in grid.samplePoints(covered: base.contentLeafFrames()) {
-            if Date() >= deadline { break }
-            probed += 1
-            if let node = discover(at: point, ctx: ctx, depthCap: Self.sweepDepth) {
-                discovered.append(node)
-            }
-        }
-        let merged = base.merging(discovered: discovered)
-        log("[ax] hit-test sweep: probed=\(probed) discovered=\(discovered.count)")
-        return merged
+        log("[ax] hit-test sweep: probed=\(sweep.probed) discovered=\(sweep.discovered.count)")
+        return base.merging(discovered: sweep.discovered)
     }
 
     /// Resolve the deepest accessibility element at a single

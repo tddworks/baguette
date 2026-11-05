@@ -14,7 +14,11 @@ For releases prior to this changelog, see the
 - `baguette input` answers `describe_ui`, so one long-lived session can both read the screen and act without paying startup per call. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
 
 ### Changed
-- `describe-ui` reads about three times faster on Maps: it asks the host bridge for the frontmost app first and runs the guest helper only when the bridge can't read the app. → [docs](docs/features/accessibility/design.md#fresh-guest-frontmost-discovery)
+- `describe-ui` is faster: it asks the host bridge for the frontmost app first and runs the guest helper only when the bridge can't read the app. → [docs](docs/features/accessibility/design.md#fresh-guest-frontmost-discovery)
+- `describe-ui` sends about half the hit-test probes on most screens, and the Home Screen reads in under half the time. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
+
+### Fixed
+- `describe-ui` finds tab bar buttons over a list, and controls on screens with a full-screen image like Maps. The sweep used to skip any point above a known element. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
 
 ---
 

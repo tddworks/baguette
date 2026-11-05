@@ -23,11 +23,9 @@ import Foundation
 ///
 /// Points are emitted **row-major from the top** so the status-bar
 /// strip is hit-tested first — even if the per-call XPC deadline cuts
-/// the sweep short, the status bar is already captured. Points inside
-/// a `covered` rect are dropped (the walk already fully described
-/// those elements, so re-hitting them only costs a redundant XPC),
-/// and the total is capped so a large screen can't explode the
-/// hit-test count.
+/// the sweep short, the status bar is already captured. `AXSweep` picks
+/// which regions are worth a probe, and the total is capped so a large
+/// screen can't explode the hit-test count.
 struct AXHitTestGrid: Equatable, Sendable {
     let size: Size
     let step: Double
@@ -41,9 +39,10 @@ struct AXHitTestGrid: Equatable, Sendable {
 
     /// Cell-centred grid points (offset half a step from the top-left
     /// so samples land in cell interiors rather than on element
-    /// borders), row-major from the top, dropping any point inside a
-    /// `covered` rect and truncating to `cap`.
-    func samplePoints(covered: [Rect] = []) -> [Point] {
+    /// borders), row-major from the top, truncated to `cap`. `within`
+    /// keeps only the points inside those rects, and leaving it out keeps
+    /// the whole screen; `covered` then drops the points inside its rects.
+    func samplePoints(within regions: [Rect]? = nil, covered: [Rect] = []) -> [Point] {
         guard size.width > 0, size.height > 0, step > 0 else { return [] }
         var points: [Point] = []
         var y = step / 2
@@ -51,7 +50,9 @@ struct AXHitTestGrid: Equatable, Sendable {
             var x = step / 2
             while x < size.width {
                 let p = Point(x: x, y: y)
-                if !covered.contains(where: { Self.contains($0, p) }) {
+                if regions?.contains(where: { Self.contains($0, p) }) ?? true,
+                    !covered.contains(where: { Self.contains($0, p) })
+                {
                     points.append(p)
                     if points.count >= cap { return points }
                 }

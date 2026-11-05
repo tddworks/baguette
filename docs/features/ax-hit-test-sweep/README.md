@@ -31,8 +31,8 @@ group that would otherwise shadow it.
 [ax] hit-test sweep: probed=259 discovered=255
 ```
 
-- **probed (259)** — grid points actually hit-tested = full grid minus
-  the points skipped because a content leaf already covers them.
+- **probed (259)** — grid points actually hit-tested. See
+  [where the sweep looks](design.md#where-the-sweep-looks).
 - **discovered (255)** — probes that returned an element; the rest
   landed in genuine empty gaps.
 - These are **mostly duplicates** — a 100 pt-wide tab button gets ~3
@@ -42,8 +42,9 @@ group that would otherwise shadow it.
 
 ## Gotchas
 
-- **Latency.** The sweep adds hundreds of XPC round-trips, so
-  `describe-ui` runs ~1.5–2 s versus near-instant for the bare walk.
+- **Latency.** The sweep usually sends 50–200 XPC round-trips. A page of web
+  content needs a full look and sends about 400, so Safari reads in about 2 s
+  against about 0.6 s for Settings.
 - **Tiny isolated elements can be missed.** "Finds everything" means
   every element of normal interactive size (≥ ~32 pt both ways). An
   element *smaller* than the 32 pt grid step that sits entirely between

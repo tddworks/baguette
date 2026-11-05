@@ -75,10 +75,9 @@ A `baguette input` process answers `describe_ui` as well as gestures, in line:
 
 Add `x` and `y` for the element at a point. Keep the session open for a loop
 of many steps: it skips process startup, the HID warm-up and listing the
-connected screens, so taps take about 0.06 s rather than 0.25 s and reads take
-0.15–0.5 s rather than 0.6–0.9 s, depending on how much of the screen the
-hit-test sweep has to probe. The first read of a freshly launched app still
-takes about a second.
+connected screens, so taps take about 0.06 s rather than 0.25 s, and a read of
+Settings about 0.3 s rather than 0.55 s. The first read of a freshly launched
+app still takes about a second.
 
 ## HTTP / WebSocket
 

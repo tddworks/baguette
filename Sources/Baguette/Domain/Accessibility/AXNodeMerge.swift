@@ -8,16 +8,16 @@ import Foundation
 /// and the contents of containers that report empty children but
 /// still answer positional hit-tests (tab bars, nav bars, toolbars).
 /// The adapter recovers them with an `objectAtPoint` grid sweep; this
-/// extension decides *which screen regions the sweep may skip* and
+/// extension decides *which screen regions the sweep must look at* and
 /// *where each discovery belongs in the tree*.
 extension AXNode {
 
     /// Roles that fully describe themselves as a single element. A
     /// childless node with one of these roles is a genuine leaf — the
-    /// grid sweep can skip its interior. Everything else (groups,
+    /// grid sweep has nothing to find inside it. Everything else (groups,
     /// scroll areas, toolbars, unknowns) is treated as a *container*:
     /// even when the recursive walk reports it childless it may hide
-    /// hit-testable children, so the sweep must keep probing inside it.
+    /// hit-testable children, so the sweep probes inside it.
     static let contentLeafRoles: Set<String> = [
         "AXStaticText", "AXButton", "AXImage", "AXTextField", "AXTextArea",
         "AXSecureTextField", "AXLink", "AXCheckBox", "AXRadioButton",
@@ -38,12 +38,8 @@ extension AXNode {
               y: frame.origin.y + frame.size.height / 2)
     }
 
-    /// Frames the grid sweep may skip — *only* genuine content leaves,
-    /// never childless containers (whose interior may hold tab-bar /
-    /// nav-bar items the recursive walk couldn't reach). This is the
-    /// leaf-vs-container distinction that keeps the sweep both cheap
-    /// (real leaves aren't re-probed) and complete (containers stay
-    /// probeable).
+    /// Frames of every content leaf in the tree: gaps between them are
+    /// what the sweep's scouts look at.
     func contentLeafFrames() -> [Rect] {
         var out: [Rect] = []
         collectContentLeaves(into: &out)
@@ -53,6 +49,17 @@ extension AXNode {
     private func collectContentLeaves(into out: inout [Rect]) {
         if isContentLeaf { out.append(frame); return }
         for child in children { child.collectContentLeaves(into: &out) }
+    }
+
+    /// Where the walk couldn't see, so the sweep has to look: every
+    /// childless node that isn't a self-describing leaf. A leaf lying
+    /// beneath one doesn't count, because a floating tab bar sits over the
+    /// rows of the list under it. A node with children was described by
+    /// the walk, so nothing around it needs a probe.
+    func unseenRegions() -> [Rect] {
+        if !children.isEmpty { return children.flatMap { $0.unseenRegions() } }
+        guard !isContentLeaf, frame.size.width > 0, frame.size.height > 0 else { return [] }
+        return [frame]
     }
 
     /// Stable de-duplication identity: role + identifier + label +
