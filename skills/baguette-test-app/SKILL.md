@@ -42,7 +42,7 @@ baguette launch --udid <X> --bundle-id <id> --relaunch --describe-ui
 ```
 
 It waits for the first real screen, usually 4 to 5 seconds. Take
-`screen.width` and `screen.height` from the tree. To read at any other time, use
+the size from `.tree.screen.width` and `.tree.screen.height`. To read at any other time, use
 `baguette describe-ui --udid <X>`.
 
 **2. Think.** Which element does the task need next? Read the values, don't
@@ -84,8 +84,15 @@ baguette describe-ui --udid <X> 2>/dev/null | jq -r '.. | objects
   | "\(.role[2:]) \"\(.label)\"\(if .value then " value=\(.value)" else "" end)\(if .enabled then "" else " DISABLED" end) (\(.frame.x|floor),\(.frame.y|floor),\(.frame.width|floor),\(.frame.height|floor))"'
 ```
 
-After a tap or launch, start the filter with `.tree | ..` instead of `..`. That's
-only for viewing: the decisions are still yours.
+After a tap or launch, keep `changed` and the screen size by starting the filter
+like this, and closing it with one more `)` after the last quote:
+
+```bash
+jq -r '"changed=\(.changed) screen=\(.tree.screen.width)x\(.tree.screen.height)", (.tree | .. | objects
+```
+
+Don't write `.changed // "n/a"`: `//` treats `false` as missing, which hides a
+missed tap. The filter is only for viewing: the decisions are still yours.
 
 ## When a tap does nothing
 
@@ -95,8 +102,8 @@ didn't change, so don't assume it worked:
 1. **Look.** Take a screenshot and read it: `baguette screenshot --udid <X> --output /tmp/s.jpg`.
 2. **Tap what's drawn.** A frame can be wider than what responds, so a row's centre
    may be blank while its label sits at the left. Tap about 40 points in from the
-   frame's left edge. Centres usually work, so try them first and use this after a
-   `changed:false`.
+   frame's left edge. Centres usually work, but go straight to the label on a row
+   with text at both ends, like a name on the left and a price on the right.
 3. **Check it's enabled**, and whether something covers it. A hit-test
    (`describe-ui --x --y`) names the element at a point, but it can't tell you
    the app will respond there.
