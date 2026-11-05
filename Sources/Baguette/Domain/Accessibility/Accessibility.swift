@@ -23,6 +23,10 @@ protocol Accessibility: AnyObject, Sendable {
     /// what only a sweep finds. `nil` when no app is known to be frontmost.
     func glance() throws -> AXNode?
 
+    /// Connects a guest accessibility client, which a freshly launched app
+    /// needs before its tree is readable from the host.
+    func wake() throws
+
     /// Hit-test the topmost accessibility element at `point`
     /// (device-point coordinates, same units as gesture wire input).
     /// Returns `nil` when the point falls outside any accessible

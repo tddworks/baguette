@@ -24,7 +24,6 @@ for; you can notice that the price is wrong.
 baguette list --json                                            # a booted UDID
 baguette boot --udid <X>                                        # if none is running
 xcrun simctl install <X> path/to/App.app                        # if it isn't installed
-xcrun simctl launch --terminate-running-process <X> <bundle id>
 ```
 
 If the user wants to watch, start `baguette serve` and give them
@@ -36,14 +35,15 @@ saved card".
 
 ## The loop
 
-**1. Read the screen.**
+**1. Open the app and read the screen, in one call.**
 
 ```bash
-baguette describe-ui --udid <X>
+baguette launch --udid <X> --bundle-id <id> --relaunch --describe-ui
 ```
 
-Take `screen.width` and `screen.height` from the result. If there's nothing but
-the status bar, the app is still launching: read again.
+It waits for the first real screen, usually 4 to 5 seconds. Take
+`screen.width` and `screen.height` from the tree. To read at any other time, use
+`baguette describe-ui --udid <X>`.
 
 **2. Think.** Which element does the task need next? Read the values, don't
 assume: the first row is rarely the fastest, and `Search flights` may be disabled.
@@ -51,7 +51,7 @@ assume: the first row is rarely the fastest, and `Search flights` may be disable
 **3. Click and read, in one call.**
 
 ```bash
-baguette tap --udid <X> --x 201 --y 314 --width 402 --height 874 --then-read
+baguette tap --udid <X> --x 201 --y 314 --width 402 --height 874 --describe-ui
 ```
 
 It waits for the screen to settle, so don't add a `sleep`, and answers with the
@@ -67,7 +67,7 @@ For many steps, keep one session open, which is about a quarter faster:
 
 ```bash
 baguette input --udid <X>
-{"type":"tap","x":201,"y":314,"width":402,"height":874,"then_read":true}
+{"type":"tap","x":201,"y":314,"width":402,"height":874,"describe_ui":true}
 ```
 
 ## When a tap does nothing

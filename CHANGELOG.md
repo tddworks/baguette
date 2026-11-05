@@ -12,7 +12,8 @@ For releases prior to this changelog, see the
 
 ### Added
 - `baguette input` answers `describe_ui`, so one long-lived session can read the screen and act without paying startup per call. On a Maps flow, reads take 0.34 s against 0.77 s one-shot, and taps 0.055 s against 0.25 s. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
-- `baguette tap --then-read`, and `"then_read":true` on a session gesture, wait for the screen to settle and answer with whether it changed and the new tree, so a tap that did nothing says so. → [docs](docs/features/accessibility/README.md#see-what-a-tap-did)
+- `baguette tap --describe-ui`, and `"describe_ui":true` on a session gesture, wait for the screen to settle and answer with whether it changed and the new tree, so a tap that did nothing says so. → [docs](docs/features/accessibility/README.md#see-what-a-tap-did)
+- `baguette launch --describe-ui` opens an app and answers with its first real screen in one call, instead of a sleep and repeated reads of a launching app. → [docs](docs/features/accessibility/README.md#open-an-app-and-read-it)
 - The `baguette-test-app` skill tests an app by reading the screen, deciding what's next, clicking and checking. `examples/Skylark` is a flight-booking app to practise on. → [docs](examples/Skylark/README.md)
 
 ### Changed

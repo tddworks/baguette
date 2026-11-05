@@ -3,9 +3,9 @@ import Foundation
 /// A gesture that answers with what it did and the screen it left, so an
 /// agent spends one call per screen: no guessed sleep, no separate read, and
 /// a tap that changed nothing says so.
-enum ThenRead {
+enum ThenDescribe {
     /// Ahead of the gesture pipeline on a `baguette input` session: the
-    /// result line for an envelope with `"then_read":true`, else `nil`.
+    /// result line for an envelope with `"describe_ui":true`, else `nil`.
     static func dispatch(
         line: String,
         accessibility: any Accessibility,
@@ -15,7 +15,7 @@ enum ThenRead {
         guard let data = line.data(using: .utf8),
             let object = try? JSONSerialization.jsonObject(with: data),
             let dict = object as? [String: Any],
-            dict["then_read"] as? Bool == true
+            dict["describe_ui"] as? Bool == true
         else { return nil }
 
         var ack = ""

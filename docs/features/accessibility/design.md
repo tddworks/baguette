@@ -91,6 +91,11 @@ connected. Observed on iOS 27.0, on Settings stuck at 7 nodes through eight
 reads and at 22 after one helper run. We don't know the mechanism, only that
 the helper ends it, and that later bridge reads then keep working.
 
+Without a helper run the tree never appears: a launch left alone for ten
+seconds was still empty. Waking at launch doesn't help, because a cold launch can
+take two seconds to become frontmost and the helper wakes whatever is frontmost.
+`AXFirstScreen` wakes the app when it shows up empty.
+
 So `describeAll` asks the bridge first, which takes about 2 ms against about
 500 ms for the helper, and `AXFrontmostRead` falls back when the bridge names
 no app, its read fails, or its walk comes back empty. The empty check runs

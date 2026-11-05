@@ -3,10 +3,10 @@ import Foundation
 import Mockable
 @testable import Baguette
 
-/// `then_read` on a gesture answers with what the gesture did and the
+/// `describe_ui` on a gesture answers with what the gesture did and the
 /// screen it left, so an agent gets one call per screen.
-@Suite("ThenRead")
-struct ThenReadTests {
+@Suite("ThenDescribe")
+struct ThenDescribeTests {
     private static let frame = Rect(origin: Point(x: 0, y: 0), size: Size(width: 10, height: 10))
     private static let node = AXNode(role: "AXButton", label: "General", frame: frame)
     private static let immediate = AXSettle.Timing(quiet: 0, patience: 0, limit: 0, poll: 0)
@@ -27,8 +27,8 @@ struct ThenReadTests {
 
     @Test func `should leave a gesture that did not ask to read for the gesture pipeline`() {
         let ax = accessibility([nil])
-        for line in [#"{"type":"tap","x":1,"y":2}"#, "not json", #"{"type":"tap","then_read":false}"#] {
-            #expect(ThenRead.dispatch(line: line, accessibility: ax, gesture: { _ in "unused" }, timing: Self.immediate) == nil)
+        for line in [#"{"type":"tap","x":1,"y":2}"#, "not json", #"{"type":"tap","describe_ui":false}"#] {
+            #expect(ThenDescribe.dispatch(line: line, accessibility: ax, gesture: { _ in "unused" }, timing: Self.immediate) == nil)
         }
     }
 
@@ -36,9 +36,9 @@ struct ThenReadTests {
         let other = AXNode(role: "AXButton", label: "Other", frame: Self.frame)
         let ax = accessibility([Self.node, other])
         var sent: String?
-        let line = #"{"type":"tap","x":1,"y":2,"width":3,"height":4,"then_read":true}"#
+        let line = #"{"type":"tap","x":1,"y":2,"width":3,"height":4,"describe_ui":true}"#
 
-        let result = try parsed(ThenRead.dispatch(
+        let result = try parsed(ThenDescribe.dispatch(
             line: line, accessibility: ax, gesture: { sent = $0; return #"{"ok":true}"# }, timing: Self.immediate))
 
         #expect(sent == line)
@@ -50,8 +50,8 @@ struct ThenReadTests {
     @Test func `should say nothing changed when the gesture left the screen alone`() throws {
         let ax = accessibility([Self.node])
 
-        let result = try parsed(ThenRead.dispatch(
-            line: #"{"type":"tap","then_read":true}"#, accessibility: ax,
+        let result = try parsed(ThenDescribe.dispatch(
+            line: #"{"type":"tap","describe_ui":true}"#, accessibility: ax,
             gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
 
         #expect(result["changed"] as? Bool == false)
@@ -61,8 +61,8 @@ struct ThenReadTests {
         let ax = accessibility([Self.node])
         let refused = #"{"ok":false,"error":"missing x"}"#
 
-        let result = ThenRead.dispatch(
-            line: #"{"type":"tap","then_read":true}"#, accessibility: ax, gesture: { _ in refused }, timing: Self.immediate)
+        let result = ThenDescribe.dispatch(
+            line: #"{"type":"tap","describe_ui":true}"#, accessibility: ax, gesture: { _ in refused }, timing: Self.immediate)
 
         #expect(result == refused)
         verify(ax).describeAll().called(0)
@@ -73,8 +73,8 @@ struct ThenReadTests {
         given(ax).glance().willReturn(Self.node)
         given(ax).describeAll().willThrow(AXPTranslatorAccessibility.Failure.displayChanged)
 
-        let result = try parsed(ThenRead.dispatch(
-            line: #"{"type":"tap","then_read":true}"#, accessibility: ax,
+        let result = try parsed(ThenDescribe.dispatch(
+            line: #"{"type":"tap","describe_ui":true}"#, accessibility: ax,
             gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
 
         #expect(result["ok"] as? Bool == true)
@@ -84,16 +84,16 @@ struct ThenReadTests {
     @Test func `should name the action for a command line caller`() throws {
         let ax = accessibility([Self.node])
 
-        let json = ThenRead.perform(action: "tap", accessibility: ax, timing: Self.immediate, act: { true })
+        let json = ThenDescribe.perform(action: "tap", accessibility: ax, timing: Self.immediate, act: { true })
 
         #expect(try parsed(json)["action"] as? String == "tap")
     }
 
     @Test func `should accept the flag on the tap command`() throws {
         let tap = try TapCommand.parse([
-            "--udid", "X", "--x", "1", "--y", "2", "--width", "3", "--height", "4", "--then-read",
+            "--udid", "X", "--x", "1", "--y", "2", "--width", "3", "--height", "4", "--describe-ui",
         ])
 
-        #expect(tap.thenRead)
+        #expect(tap.describeUI)
     }
 }

@@ -11,6 +11,7 @@ struct Baguette: AsyncParsableCommand {
             BootCommand.self,
             ShutdownCommand.self,
             LifetimeCommand.self,
+            LaunchCommand.self,
             InputCommand.self,
             StreamCommand.self,
             TapCommand.self,

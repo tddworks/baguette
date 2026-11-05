@@ -79,17 +79,27 @@ connected screens, so taps take about 0.06 s rather than 0.25 s, and a read of
 Settings about 0.3 s rather than 0.55 s. The first read of a freshly launched
 app still takes about a second.
 
+## Open an app and read it
+
+```bash
+baguette launch --udid <UDID> --bundle-id com.example.app --relaunch --describe-ui
+```
+
+One call replaces two to four reads, though the first screen still takes about 4 to
+5 s, mostly iOS switching apps. An app already in front gets five seconds'
+patience, so use `--relaunch` for a fresh start.
+
 ## See what a tap did
 
 ```bash
-baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --then-read
+baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --describe-ui
 ```
 
 ```json
 {"ok":true,"action":"tap","changed":true,"tree":{…}}
 ```
 
-On a `baguette input` session, add `"then_read":true` to any gesture. It replaces
+On a `baguette input` session, add `"describe_ui":true` to any gesture. It replaces
 a guessed sleep and a separate read: it polls the app's own tree until it has
 held still, and takes one full read at the end. That takes about 1.6 s a step one-shot,
 against about 2 s for a tap, a one-second sleep and a read. In a session a short

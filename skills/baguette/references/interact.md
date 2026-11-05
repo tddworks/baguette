@@ -25,8 +25,8 @@ Notification Center). Omit `edge` for ordinary touches. For pinches use
 
 ## See what a tap did
 
-`baguette tap … --then-read` waits for the screen to settle, then answers with
-`changed` and the new tree. On a session, add `"then_read":true` to any gesture.
+`baguette tap … --describe-ui` waits for the screen to settle, then answers with
+`changed` and the new tree. On a session, add `"describe_ui":true` to any gesture.
 `changed:false` means the app's own tree didn't move: the tap may have hit blank
 space, so tap the element's text or icon instead. A change inside a web page
 may not count.

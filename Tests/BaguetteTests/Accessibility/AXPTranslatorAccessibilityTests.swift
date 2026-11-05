@@ -118,6 +118,20 @@ struct AXPTranslatorFrontmostTests {
         #expect(throws: LiveReadFailed()) { try ax.describeAll() }
     }
 
+    @Test func `should wake the frontmost app through the guest helper`() throws {
+        final class Runs: @unchecked Sendable { var count = 0 }
+        let runs = Runs()
+        let host = MockDeviceHost()
+        let ax = AXPTranslatorAccessibility(
+            udid: "ghost", host: host, deviceSetPath: nil,
+            frontmostPID: { _, _ in runs.count += 1; return 7 }
+        ) { Self.screen }
+
+        try ax.wake()
+
+        #expect(runs.count == 1)
+    }
+
     @Test func `should look up the app with the answer the device gives`() throws {
         let translation = NSObject()
         let device = AnsweringDevice(answer: TranslationResponse(translation))

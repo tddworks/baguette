@@ -134,6 +134,10 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         return try withAXPContext(known: (geometry, pid)) { walkFrontmost($0) }
     }
 
+    func wake() throws {
+        _ = try frontmostPID(udid, deviceSetPath)
+    }
+
     func describeAt(point: Point) throws -> AXNode? {
         // Prefer the server-side hit-test. `AXPTranslator` exposes
         // `objectAtPoint:displayId:bridgeDelegateToken:` — the

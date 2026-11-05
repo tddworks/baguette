@@ -35,7 +35,7 @@ baguette describe-ui --udid <X>                  # whole accessibility tree
 baguette describe-ui --udid <X> --x 200 --y 400  # the element at a point
 ```
 
-After a tap, `tap --then-read` returns this same tree once the screen settles,
+After a tap, `tap --describe-ui` returns this same tree once the screen settles,
 so you rarely need a separate read.
 
 The root is the frontmost app's node; every node has the same fields, and

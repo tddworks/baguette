@@ -17,16 +17,14 @@ extract and install, media → Photos); anything else is `415`. See
 
 ## Launch and relaunch
 
-baguette has no launch verb; use `simctl`:
-
 ```bash
-xcrun simctl launch <X> com.example.app                                 # start it
-xcrun simctl launch --terminate-running-process <X> com.example.app     # restart it
+baguette launch --udid <X> --bundle-id com.example.app --describe-ui              # open it, answer with its first screen
+baguette launch --udid <X> --bundle-id com.example.app --relaunch --describe-ui   # start it fresh
 ```
 
-Write settings (below) before the first launch and the app starts from
-them; no relaunch flag is needed. Give it a moment to draw before
-`describe-ui` or a tap: input during the launch animation can miss.
+`--describe-ui` replaces a sleep and polling: it waits for the app's first real
+screen, usually 4 to 5 seconds, most of it iOS. Write settings (below)
+before the first launch and the app starts from them; no relaunch flag is needed.
 
 ## Deep links
 
