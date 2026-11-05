@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.13] - 2026-11-05
+
 ### Added
 - `baguette input` answers `describe_ui`, so one long-lived session can read the screen and act without paying startup per call. On a Maps flow, reads take 0.34 s against 0.77 s one-shot, and taps 0.055 s against 0.25 s. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
 - `--then-describe-ui` on `tap` and `swipe`, and `"then_describe_ui":true` on a session gesture, wait for the screen to settle and answer with whether it changed and the new tree, and say what to try when nothing changed. → [docs](docs/features/accessibility/README.md#see-what-a-tap-did)
@@ -180,7 +184,8 @@ For releases prior to this changelog, see the
 
 [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.12...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.13...HEAD
+[0.2.13]: https://github.com/tddworks/baguette/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/tddworks/baguette/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/tddworks/baguette/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/tddworks/baguette/compare/v0.2.9...v0.2.10
