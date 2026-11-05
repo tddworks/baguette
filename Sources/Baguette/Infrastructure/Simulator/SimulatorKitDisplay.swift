@@ -7,6 +7,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
     private let deviceSetPath: String?
     private let host: any DeviceHost
     private let enumerateIO: () throws -> String
+    private var lastObservation: (binding: DisplayBinding, multiplePanels: Bool)?
     private let hinge: any Hinge
     /// A foldable's hardware keys, when the guest tool is there to
     /// press them; see `FoldableInput`.
@@ -85,7 +86,31 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         )
     }
 
-    func observedScreen() throws -> AXScreen { try observedBinding().screen }
+    func observedScreen() throws -> AXScreen {
+        let observed = try observedBinding()
+        lock.lock()
+        lastObservation = (observed.binding, observed.multiplePanels)
+        lock.unlock()
+        return observed.screen
+    }
+
+    /// The screen read again after an observation, for the check that a
+    /// result still describes it. Falls back to a full observation when
+    /// there is none to compare with.
+    func recheckedScreen() throws -> AXScreen {
+        lock.lock()
+        let last = lastObservation
+        lock.unlock()
+        guard let last else { return try observedScreen() }
+        return try ScreenRecheck.read(
+            multiplePanels: last.multiplePanels,
+            observe: { try observedScreen() },
+            live: {
+                guard let device = host.resolveDevice(udid: udid) else { throw ObservedScreenError.unavailable }
+                return try SimulatorKitScreenOrientation.readScreen(
+                    device: device, screenID: last.binding.connectedScreenId, panel: last.binding.panel)
+            })
+    }
 
     /// Input pinned to the screen `expected` describes. The binding is
     /// resolved once and never re-derived for a contact that is already

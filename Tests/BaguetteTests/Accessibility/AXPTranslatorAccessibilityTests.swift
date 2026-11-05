@@ -96,6 +96,18 @@ struct AXPTranslatorFrontmostTests {
         #expect(throws: GuestDown()) { try ax.describeAll() }
     }
 
+    @Test func `should read a screen it has already observed without observing it in full again`() throws {
+        struct LiveReadFailed: Error, Equatable {}
+        let host = MockDeviceHost()
+        given(host).resolveDevice(udid: .any).willReturn(NSObject())
+        let ax = AXPTranslatorAccessibility(
+            udid: "ghost", host: host,
+            recheckGeometry: { throw LiveReadFailed() }
+        ) { Self.screen }
+
+        #expect(throws: LiveReadFailed()) { try ax.describeAll() }
+    }
+
     @Test func `should look up the app with the answer the device gives`() throws {
         let translation = NSObject()
         let device = AnsweringDevice(answer: TranslationResponse(translation))

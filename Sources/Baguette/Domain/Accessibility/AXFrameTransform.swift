@@ -30,6 +30,15 @@ struct AXFrameTransform: Equatable, Sendable {
         }
     }
 
+    /// The strip along the top of the interface, where the status bar
+    /// lives, in native panel points. UIKit's width is the panel's height
+    /// once the interface is rotated sideways.
+    func topStrip(height: CGFloat) -> CGRect {
+        let sideways = orientation == .landscapeLeft || orientation == .landscapeRight
+        let width = sideways ? pointSize.height : pointSize.width
+        return map(CGRect(x: 0, y: 0, width: width, height: height))
+    }
+
     /// AXP hit testing accepts UIKit screen points, so invert the same
     /// rotation used for every element returned from that request.
     func unmap(_ point: CGPoint) -> CGPoint {

@@ -10,6 +10,17 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- `baguette input` answers `describe_ui`, so one long-lived session can read the screen and act without paying startup per call. On a Maps flow, reads take 0.34 s against 0.77 s one-shot, and taps 0.055 s against 0.25 s. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
+
+### Changed
+- `describe-ui` reads about twice as fast on a Maps flow, 0.77 s against 1.60 s: it asks the host bridge for the frontmost app first and runs the guest helper only when the bridge can't read the app. → [docs](docs/features/accessibility/design.md#fresh-guest-frontmost-discovery)
+- `describe-ui` sends about half the hit-test probes on most screens. The Home Screen reads in 0.8 s against 2.0 s, and Settings in 0.55 s against 0.68 s. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
+
+### Fixed
+- `describe-ui` finds tab bar buttons over a SwiftUI list, and the lower sidebar rows of Settings on a 13-inch iPad, which it used to miss. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
+- `describe-ui` finds the Places card, recent searches and status bar in Maps, 13 more elements, which takes a read from 0.34 s to 0.85 s. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
+
 ---
 
 ## [0.2.12] - 2026-10-29

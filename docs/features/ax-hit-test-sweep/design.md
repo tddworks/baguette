@@ -8,8 +8,8 @@ description: The describe-ui pipeline — a recursive walk of the frontmost app 
 
 `describeAll()` → ① `AXNode.walk` of the frontmost app + ②
 `AXHitTestGrid` sample points → `objectAtPoint:displayId:bridgeDelegateToken:`
-(the XPC call, integration-only) → ③ `merging(discovered:)`
-(`contentLeafFrames`, `dedupKey`, graft).
+(the XPC call, integration-only), at the points `AXSweep` picks → ③
+`merging(discovered:)` (`dedupKey`, graft).
 
 ## The pipeline
 
@@ -31,11 +31,11 @@ description: The describe-ui pipeline — a recursive walk of the frontmost app 
                │                                            │
                ▼                                            ▼
    ┌────────────────────────┐                  ┌──────────────────────────┐
-   │  base tree             │                  │  skip points already     │
-   │  (precise, deep,       │   contentLeaf-   │  inside a CONTENT LEAF   │
-   │   but process-scoped)  │──Frames()───────▶│  (walk already has it)   │
-   │                        │                  │  KEEP points inside      │
-   │  • all app content     │                  │  empty CONTAINERS        │
+   │  base tree             │                  │  look where AXSweep says │
+   │  (precise, deep,       │   unseen-        │  status strip, childless │
+   │   but process-scoped)  │──Regions()──────▶│  containers, then scouts │
+   │                        │                  │  (full look if a scout   │
+   │  • all app content     │                  │  finds something new)    │
    │  • tab bar = empty     │                  └────────────┬─────────────┘
    │    AXGroup (childless) │                               │
    │  • NO status bar       │                               ▼
@@ -140,10 +140,30 @@ interactive size."
 
 The grid is only the **gap-filler**. The walk supplies the bulk
 precisely (no sampling); the sweep adds only what the walk structurally
-can't reach. To avoid wasting probes, the sweep **skips points already
-inside a known content leaf** (`contentLeafFrames`) but **keeps points
-inside empty containers** — an empty `AXGroup "Tab Bar"` is exactly
-where hit-test-only children live.
+can't reach.
+
+## Where the sweep looks
+
+`AXSweep` looks in three stages, because every probe is an XPC round-trip:
+
+1. **Always, on the fine grid:** the status strip and every childless
+   non-leaf node (`unseenRegions`). A leaf lying beneath one doesn't exempt it:
+   list rows run under a floating tab bar, and skipping points above known
+   leaves is what used to hide the tab buttons. A full-screen map image hid
+   Maps' controls the same way.
+2. **Scouts:** a 64 pt grid over the gaps between known leaves.
+3. **In full:** the 32 pt grid over those gaps, only when a scout found
+   something the walk didn't know. Web content is why this stage exists: it
+   lives in another process, so the walk reports nothing there, not even a
+   childless container. A hit on a bare group doesn't count.
+
+A walk that found nothing gets the fine grid everywhere.
+
+The stages cost a known risk: a small element alone in a gap, with nothing else
+new for a scout to land on, is found only if a 64 pt scout hits it. We compared
+15 screens against the previous sweep, on iOS 27.0 (SwiftUI tabs, an alert and
+a sheet; Settings, Files, Reminders, Contacts, Health, Photos, Maps, Safari and
+the Home Screen). Nothing that said anything was lost.
 
 ## Why discoveries are grafted under a container
 
@@ -156,13 +176,13 @@ otherwise shadow it.
 
 ## Tuning constants
 
-The sweep adds latency (hundreds of XPC round-trips), so `describe-ui`
-runs ~1.5–2 s versus near-instant for the bare walk. Bounding constants
-live in `AXPTranslatorAccessibility`:
+The sweep adds latency (50–400 XPC round-trips). Bounding constants live
+in `AXPTranslatorAccessibility`:
 
 | Constant              | Default | Role                                            |
 | --------------------- | ------- | ----------------------------------------------- |
 | `gridStep`            | 32 pt   | sample spacing — smaller = more complete, slower |
+| `scoutStep`           | 64 pt   | spacing of the coarse look at the gaps           |
 | `gridCap`             | 600     | hard ceiling on probe count                     |
 | `sweepBudgetSeconds`  | 2.5 s   | wall-clock budget; top-down sampling captures the status bar first even if cut short |
 | `sweepDepth`          | 0       | each probe reads one element, not a deep subtree (keeps each hit-test cheap) |

@@ -84,8 +84,21 @@ silently fails.
 On iOS 26.5 the CoreSimulatorBridge frontmost request
 (`-frontmostApplicationWithDisplayId:bridgeDelegateToken:`) can return an
 empty `AXPTranslatorResponse` even while its application-by-PID requests
-work, and `describe-ui` answered `null` for a visibly running app. Each
-query therefore asks the guest window server for the current frontmost PID
+work, and `describe-ui` answered `null` for a visibly running app. A freshly
+launched app has a second failure: the bridge names it correctly, but its
+tree stays empty on every read until a guest accessibility client has
+connected. Observed on iOS 27.0, on Settings stuck at 7 nodes through eight
+reads and at 22 after one helper run. We don't know the mechanism, only that
+the helper ends it, and that later bridge reads then keep working.
+
+So `describeAll` asks the bridge first, which takes about 2 ms against about
+500 ms for the helper, and `AXFrontmostRead` falls back when the bridge names
+no app, its read fails, or its walk comes back empty. The empty check runs
+before the hit-test sweep, because the status bar's nodes would hide it. An
+app with genuinely nothing to show pays for the helper on each read, which
+is what every read used to cost. Point queries still always use the helper.
+
+The fallback asks the guest window server for the current frontmost PID
 in a fresh `HingeControl frontmost` process: inside the guest, the AX
 translator routes requests to its own `processTranslatorRequest:`, and no
 HID framework is loaded or input service registered. The implementation

@@ -68,7 +68,8 @@ so read one command's section, not the file:
 One command per gesture is right for a handful of steps; each pays the HID
 setup (~50–100 ms). For drags, choreography or many steps, open
 `baguette input --udid <UDID>` once and write one JSON gesture per line
-(`references/interact.md`). Either way `ok:true` means *sent*, not that the
+(`references/interact.md`). It answers `{"type":"describe_ui"}` too, so one
+session can look and act without paying startup on every call. Either way `ok:true` means *sent*, not that the
 screen reacted: verify with a screenshot.
 
 ## Limits to state, not discover
