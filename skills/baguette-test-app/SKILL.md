@@ -57,6 +57,8 @@ commands to use from here. Answers to a tap leave it out, because you just ran o
 
 - **`affordances.tap`:** the controls you can tap, by name.
 - **`affordances.type`:** a focused text field you can type into.
+- **`affordances.adjust`:** a slider. A press can't set a value, so drag it with `swipe`,
+  using its frame from `describe-ui`.
 - **`disabled`:** controls that can't be used yet. Do what they're waiting for first.
 - **`text`:** what the screen says. Some of it can be tapped too, like a `Show more` link.
 - **`values`:** a control's value, like a switch's `1` or the selected tab's.
@@ -82,7 +84,8 @@ screen to settle, so don't add a `sleep`. The answer is the next screen, so go b
 to step 2.
 
 If the name is wrong or matches several, nothing is tapped, and the answer says why
-and lists `visible` or `matches`.
+and lists `visible` or `matches`. `"used":"touch"` means baguette couldn't find the
+element to press, so it touched it instead.
 
 **4. Check it worked.** Is this the screen you expected? Selections don't always show
 in the answer, so look for their effect: a button that now says `Continue with Groceries`,
@@ -114,8 +117,8 @@ the ones after it, so put anything you can't undo, like `Delete Account`, in its
 finger can't, like a row under a tab bar or off screen. That's right for
 getting through a task, but it can hide a bug where users can't reach something.
 
-**To test that a user can really tap something,** add `--touch`, which uses a real
-touch at the element:
+**Use `--touch` for a real finger** when you're testing that a user can tap something,
+or when a press had no effect but the control looks live:
 
 ```bash
 baguette tap --udid <X> --label 'New List' --touch --then-describe-ui
@@ -127,8 +130,12 @@ just a blank spot in a wide row: check with a screenshot.
 ## When a tap does nothing
 
 `"changed":false` means the app's own tree didn't change, and the answer says what it
-knows in `hint`. baguette never retries for you, because the app may have acted
-anyway: check before tapping `Delete Account` a second time.
+knows in `hint`, plus a `try` command if it has a better way. baguette never retries for
+you, because the app may have acted anyway: check before tapping `Delete Account` a
+second time.
+
+`"changed":true` doesn't prove the tap did what you wanted either. It only means the
+screen is different, so check the result. For what matters, take a screenshot.
 
 1. **Look.** `baguette screenshot --udid <X> --output /tmp/s.jpg`, then read it.
 2. **Check it's the right element**, and that it isn't waiting on something else.
@@ -142,6 +149,7 @@ up, but a change inside a page may not.
 
 - **Not everything is a named control.** Text and images aren't listed under `tap`,
   because their role doesn't say they respond. Try them by name if they look tappable.
+  Some controls have no useful name, like `RadioButton #3`: a screenshot shows which is which.
 - **Not everything is in the tree.** For a control with no accessibility element, take
   a screenshot and tap by coordinates: `points = image pixels × screen.width ÷ image
   width`. `baguette describe-ui --udid <X>` has `screen`, every frame and the full tree.

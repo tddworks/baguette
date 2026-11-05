@@ -40,16 +40,22 @@ enum AXSettle {
         while true {
             let current = glance()
             let time = now()
-            if current != latest {
+            if !same(current, latest) {
                 latest = current
                 movedAt = time
             }
-            let changed = latest != before
+            let changed = !same(latest, before)
             if changed && time - movedAt >= timing.quiet { break }
             if !changed && time - start >= timing.patience { break }
             if time - start >= timing.limit { break }
             sleep(timing.poll)
         }
-        return Outcome(changed: latest != before, tree: try read())
+        return Outcome(changed: !same(latest, before), tree: try read())
+    }
+
+    /// A pulsing glow keeps a tree moving forever, without the screen changing.
+    static func same(_ one: AXNode?, _ other: AXNode?) -> Bool {
+        guard let one, let other else { return one == nil && other == nil }
+        return one.looksSame(as: other)
     }
 }

@@ -21,7 +21,8 @@ private func runOrExit(_ ok: Bool, action: String) {
 struct TapCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tap",
-        abstract: "Single tap at a point"
+        abstract: "Press an element by name, or tap a point",
+        discussion: "--label presses through accessibility and reaches a control wherever it is. --touch uses a real finger, to test what a user can reach. Giving a point needs all of --x, --y, --width and --height."
     )
 
     @OptionGroup var options: DeviceOption
@@ -34,7 +35,7 @@ struct TapCommand: ParsableCommand {
     @Option(help: "Hold duration in seconds") var duration: Double = 0.05
     @Option(help: "Screen edge the tap lands on: \(DeviceEdge.allowed). Omit for an interior tap.")
     var edge: String?
-    @Flag(help: "With --label, use a real touch at the element instead of pressing it through accessibility.")
+    @Flag(help: "With --label, use a real finger at the element, to test what a user can reach, or when a press has no effect.")
     var touch = false
     @Flag(help: "Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says.")
     var thenDescribeUI = false

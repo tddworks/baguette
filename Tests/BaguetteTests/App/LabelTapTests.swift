@@ -57,13 +57,6 @@ struct LabelTapTests {
         #expect(result["tree"] == nil)
     }
 
-    @Test func `should not repeat the same advice when a press changes nothing`() throws {
-        let result = try parsed(dispatch(#"{"type":"tap","label":"Search flights","then_describe_ui":true}"#, ax()))
-
-        #expect((result["hint"] as? String)?.contains("Take a screenshot") == true)
-        #expect(result["try"] == nil)
-    }
-
     @Test func `should use a real touch at the element's centre when asked`() throws {
         let accessibility = ax()
         var sent: [String: Any] = [:]
@@ -100,11 +93,57 @@ struct LabelTapTests {
         #expect(try parsed(dispatch(#"{"type":"tap","label":"Seat 20A"}"#, ax(tree)))["ok"] as? Bool == true)
     }
 
-    @Test func `should say so when the element can't be pressed`() throws {
-        let result = try parsed(dispatch(#"{"type":"tap","label":"Search flights"}"#, ax(pressed: false)))
+    @Test func `should touch the element when a press can't find it, because nothing has happened yet`() throws {
+        var sent: [String: Any] = [:]
+
+        let result = try parsed(dispatch(
+            #"{"type":"tap","label":"Search flights"}"#, ax(pressed: false),
+            gesture: { sent = (try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]) ?? [:]; return #"{"ok":true}"# }))
+
+        #expect(result["ok"] as? Bool == true)
+        #expect(result["tapped"] as? String == "Search flights")
+        #expect(result["used"] as? String == "touch")
+        #expect(sent["x"] as? Double == 201)
+        #expect(sent["y"] as? Double == 450)
+    }
+
+    @Test func `should touch and answer with the new screen when a press can't find it`() throws {
+        var gestures = 0
+
+        let result = try parsed(dispatch(
+            #"{"type":"tap","label":"Search flights","then_describe_ui":true}"#, ax(pressed: false),
+            gesture: { _ in gestures += 1; return #"{"ok":true}"# }))
+
+        #expect(gestures == 1)
+        #expect(result["ok"] as? Bool == true)
+        #expect(result["used"] as? String == "touch")
+        #expect(result["affordances"] != nil)
+    }
+
+    @Test func `should not touch as well when a press worked`() throws {
+        var gestures = 0
+
+        _ = dispatch(#"{"type":"tap","label":"Search flights","then_describe_ui":true}"#, ax(), gesture: { _ in gestures += 1; return #"{"ok":true}"# })
+
+        #expect(gestures == 0)
+    }
+
+    @Test func `should say so when an element off screen can't be pressed, because a finger can't reach it either`() throws {
+        let seat = AXNode(role: "AXButton", label: "Seat 20A", frame: Rect(origin: Point(x: 0, y: 1000), size: Size(width: 40, height: 40)))
+        let tree = AXNode(role: "AXApplication", frame: Self.full, children: [seat], screen: Self.screen)
+        var gestures = 0
+
+        let result = try parsed(dispatch(#"{"type":"tap","label":"Seat 20A"}"#, ax(tree, pressed: false), gesture: { _ in gestures += 1; return "" }))
 
         #expect(result["ok"] as? Bool == false)
-        #expect((result["error"] as? String)?.contains("Search flights") == true)
+        #expect((result["error"] as? String)?.contains("Seat 20A") == true)
+        #expect(gestures == 0)
+    }
+
+    @Test func `should suggest a real touch when a press changes nothing`() throws {
+        let result = try parsed(dispatch(#"{"type":"tap","label":"Search flights","then_describe_ui":true}"#, ax()))
+
+        #expect((result["hint"] as? String)?.contains("--touch") == true)
     }
 
     @Test func `should name what is on screen when nothing matches`() throws {

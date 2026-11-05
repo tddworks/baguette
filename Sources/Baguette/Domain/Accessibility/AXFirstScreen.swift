@@ -44,7 +44,8 @@ enum AXFirstScreen {
         while true {
             let current = glance()
             let time = now()
-            if current != latest {
+            // A pulsing glow never holds exactly still, so a pulse doesn't count as moving.
+            if !AXSettle.same(current, latest) {
                 latest = current
                 movedAt = time
             }

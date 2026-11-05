@@ -23,6 +23,8 @@ For releases prior to this changelog, see the
 - `describe-ui` sends about half the hit-test probes on most screens. The Home Screen reads in 0.8 s against 2.0 s, and Settings in 0.55 s against 0.68 s. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
 
 ### Fixed
+- `tap --label` no longer fails on a control that's moving, like one with a pulsing glow, and touches it if it can't find it. A small pulse doesn't count as the screen changing, and a slider is listed under `adjust`, because a press can't set it. → [docs](docs/wire.md#tap)
+- `describe-ui` tries again when the simulator briefly can't report the screen's orientation. → [docs](docs/features/accessibility/README.md)
 - `describe-ui` finds tab bar buttons over a SwiftUI list, and the lower sidebar rows of Settings on a 13-inch iPad, which it used to miss. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
 - `describe-ui` finds the Places card, recent searches and status bar in Maps, 13 more elements, which takes a read from 0.34 s to 0.85 s. → [docs](docs/features/ax-hit-test-sweep/design.md#where-the-sweep-looks)
 

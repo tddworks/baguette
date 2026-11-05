@@ -106,6 +106,25 @@ struct AXPTranslatorFrontmostTests {
         #expect(throws: GuestDown()) { try ax.describeAll() }
     }
 
+    @Test func `should read the screen again when reading it fails briefly`() throws {
+        struct GuestDown: Error, Equatable {}
+        final class Reads: @unchecked Sendable { var count = 0 }
+        let reads = Reads()
+        let host = MockDeviceHost()
+        given(host).resolveDevice(udid: .any).willReturn(NSObject())
+        let ax = AXPTranslatorAccessibility(
+            udid: "ghost", host: host, frontmostPID: { _, _ in throw GuestDown() }
+        ) {
+            reads.count += 1
+            if reads.count < 3 { throw ObservedScreenError.unavailable }
+            return Self.screen
+        }
+
+        // Getting as far as the frontmost query means the screen was read.
+        #expect(throws: GuestDown()) { try ax.describeAll() }
+        #expect(reads.count == 3)
+    }
+
     @Test func `should read a screen it has already observed without observing it in full again`() throws {
         struct LiveReadFailed: Error, Equatable {}
         let host = MockDeviceHost()

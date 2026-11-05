@@ -39,7 +39,7 @@ enum LabelTap {
             if envelope["touch"] as? Bool == true {
                 return touch(node, envelope, screen: found.screen, accessibility, gesture, affordances, timing)
             }
-            return press(node, describing: envelope["then_describe_ui"] as? Bool == true, accessibility, affordances, timing)
+            return press(node, envelope, screen: found.screen, accessibility, gesture, affordances, timing)
         case .ambiguous(let nodes):
             return failure("more than one element matches \(name)", ["matches": nodes.map(\.offerName)])
         case .disabled(let node):
@@ -51,21 +51,35 @@ enum LabelTap {
         }
     }
 
+    /// Presses, and touches when the press can't find the element. That's safe
+    /// because nothing has happened yet; a press that was delivered is never followed
+    /// by a touch, even if it seems to have done nothing.
     private static func press(
-        _ node: AXNode, describing: Bool, _ accessibility: any Accessibility,
-        _ affordances: AXAffordance.Style, _ timing: Timing
+        _ node: AXNode, _ envelope: [String: Any], screen: AXScreen?, _ accessibility: any Accessibility,
+        _ gesture: (String) -> String, _ affordances: AXAffordance.Style, _ timing: Timing
     ) -> String {
         let name = node.offerName
         let refused = failure("couldn't press \(name): it may have moved, so read the screen again")
-        guard describing else {
-            return (try? accessibility.press(node)) == true ? tapped(#"{"ok":true}"#, name) : refused
+        // The answer comes from here, so the fallback touch only needs to touch.
+        var bare = envelope
+        bare["then_describe_ui"] = nil
+        let fallback = screen.flatMap { touchLine(node, bare, screen: $0) }
+        var used: String?
+        func act() -> Bool {
+            if (try? accessibility.press(node)) == true { return true }
+            guard let fallback else { return false }
+            used = "touch"
+            return gesture(fallback).contains(#""ok":true"#)
+        }
+        guard envelope["then_describe_ui"] as? Bool == true else {
+            return act() ? tapped(#"{"ok":true}"#, name, used: used) : refused
         }
         let unchanged = "Nothing changed: \"\(name)\" may not respond, or the app acted without changing the screen. "
-            + "Take a screenshot before tapping again."
+            + "Take a screenshot before tapping again, or try it with --touch."
         let result = ThenDescribe.perform(
-            unchangedHint: unchanged, accessibility: accessibility, affordances: affordances, timing: timing.settle
-        ) { (try? accessibility.press(node)) == true }
-        return result.hasPrefix(#"{"ok":true"#) ? tapped(result, name) : refused
+            unchangedHint: unchanged, accessibility: accessibility, affordances: affordances, timing: timing.settle,
+            act: act)
+        return result.hasPrefix(#"{"ok":true"#) ? tapped(result, name, used: used) : refused
     }
 
     private static func touch(
@@ -73,9 +87,18 @@ enum LabelTap {
         _ gesture: (String) -> String, _ affordances: AXAffordance.Style, _ timing: Timing
     ) -> String {
         let name = node.offerName
-        guard let screen, let point = node.touchPoint(on: screen) else {
+        guard let screen, let line = touchLine(node, envelope, screen: screen) else {
             return failure("\(name) is off screen, where a finger can't reach: scroll to it first")
         }
+        let result = ThenDescribe.dispatch(
+            line: line, accessibility: accessibility, gesture: gesture, affordances: affordances, timing: timing.settle
+        ) ?? gesture(line)
+        return tapped(result, name)
+    }
+
+    /// The same request as a real touch, or `nil` when the element is off screen.
+    private static func touchLine(_ node: AXNode, _ envelope: [String: Any], screen: AXScreen) -> String? {
+        guard let point = node.touchPoint(on: screen) else { return nil }
         var touch = envelope
         touch["label"] = nil
         touch["touch"] = nil
@@ -83,19 +106,13 @@ enum LabelTap {
         touch["y"] = point.y
         touch["width"] = screen.width
         touch["height"] = screen.height
-        guard let bytes = try? JSONSerialization.data(withJSONObject: touch) else {
-            return failure("could not build a touch for \(name)")
-        }
-        let line = String(decoding: bytes, as: UTF8.self)
-        let result = ThenDescribe.dispatch(
-            line: line, accessibility: accessibility, gesture: gesture, affordances: affordances, timing: timing.settle
-        ) ?? gesture(line)
-        return tapped(result, name)
+        return (try? JSONSerialization.data(withJSONObject: touch)).map { String(decoding: $0, as: UTF8.self) }
     }
 
-    private static func tapped(_ result: String, _ name: String) -> String {
-        result.replacingOccurrences(
-            of: #"{"ok":true"#, with: #"{"ok":true,"tapped":"\#(GestureDispatcher.jsonEscape(name))""#,
+    private static func tapped(_ result: String, _ name: String, used: String? = nil) -> String {
+        let how = used.map { #","used":"\#($0)""# } ?? ""
+        return result.replacingOccurrences(
+            of: #"{"ok":true"#, with: #"{"ok":true,"tapped":"\#(GestureDispatcher.jsonEscape(name))"\#(how)"#,
             options: .anchored)
     }
 
