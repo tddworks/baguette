@@ -23,6 +23,14 @@ system gesture: `bottom` drives the home indicator (live home / app switcher),
 Notification Center). Omit `edge` for ordinary touches. For pinches use
 `touch2-*`; a `touch1-*` pinch reads as a pan.
 
+## See what a tap did
+
+`baguette tap … --then-read` waits for the screen to settle, then answers with
+`changed` and the new tree. On a session, add `"then_read":true` to any gesture.
+`changed:false` means the app's own tree didn't move: the tap may have hit blank
+space, so tap the element's text or icon instead. A change inside a web page
+may not count.
+
 ## Many gestures: stream them
 
 `baguette input --udid <X>` reads one JSON gesture per stdin line and acks

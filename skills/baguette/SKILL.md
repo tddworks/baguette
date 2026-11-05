@@ -20,17 +20,19 @@ wants to watch or play along should be pointed at `baguette serve` and
 
 ## The loop
 
-Almost every job is: get a device, act, look, repeat.
+Almost every job is: get a device, read the screen, act, repeat. To test an app
+or a flow, use the `baguette-test-app` skill.
 
 ```bash
 baguette list --json                                    # 1. a booted UDID
 baguette boot --udid <UDID>                             #    (if none is running)
 baguette describe-ui --udid <UDID> | jq .screen        # 2. its size in points
-baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954   # 3. act
-baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look
+baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954 --then-read   # 3. act, and read the new screen
+baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look, when you need the pixels
 ```
 
-Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
+`--then-read` waits for the screen to settle, so no `sleep`, and `"changed":false`
+says the tap did nothing. Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
 happens, run `baguette heal --udid <UDID>` (Xcode 27's Device Hub took the
 input surface; see `references/devices.md`).
 
@@ -70,7 +72,7 @@ setup (~50–100 ms). For drags, choreography or many steps, open
 `baguette input --udid <UDID>` once and write one JSON gesture per line
 (`references/interact.md`). It answers `{"type":"describe_ui"}` too, so one
 session can look and act without paying startup on every call. Either way `ok:true` means *sent*, not that the
-screen reacted: verify with a screenshot.
+screen reacted: use `--then-read` (`"then_read":true`) or a screenshot to check.
 
 ## Limits to state, not discover
 
