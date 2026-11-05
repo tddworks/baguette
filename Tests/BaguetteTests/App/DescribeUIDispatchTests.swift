@@ -44,8 +44,7 @@ struct DescribeUIDispatchTests {
 
         let ack = try result(DescribeUIDispatch.dispatch(line: #"{"type":"describe_ui"}"#, accessibility: ax))
 
-        let tree = try #require(ack["tree"] as? [String: Any])
-        #expect(tree["affordances"] != nil)
+        #expect(ack["affordances"] != nil)
     }
 
     @Test func `should describe the element at a point`() throws {

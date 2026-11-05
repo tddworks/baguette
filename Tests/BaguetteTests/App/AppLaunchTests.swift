@@ -56,8 +56,7 @@ struct AppLaunchTests {
             bundleID: "dev.example", relaunch: false, thenDescribeUI: true, apps: apps, accessibility: ax,
             affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil), timing: Self.immediate))
 
-        let tree = try #require(result["tree"] as? [String: Any])
-        #expect(tree["affordances"] != nil)
+        #expect(result["affordances"] != nil)
     }
 
     @Test func `should only launch when no read was asked for`() async throws {

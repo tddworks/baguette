@@ -50,7 +50,8 @@ struct TapCommand: ParsableCommand {
         if thenDescribeUI {
             let input = sim.input()
             let result = ThenDescribe.perform(
-                action: "tap", accessibility: sim.accessibility(), affordances: options.affordanceStyle
+                action: "tap", at: Point(x: x, y: y), accessibility: sim.accessibility(),
+                affordances: options.affordanceStyle
             ) {
                 gesture.execute(on: input)
             }

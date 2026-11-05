@@ -94,8 +94,87 @@ struct ThenDescribeTests {
             affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil),
             timing: Self.immediate, act: { true })
 
-        let root = try #require(try parsed(json)["tree"] as? [String: Any])
-        #expect((root["affordances"] as? [String: Any])?["home"] as? String == "baguette press --udid X --button home")
+        #expect((try parsed(json)["affordances"] as? [String: Any])?["home"] as? String == "baguette press --udid X --button home")
+    }
+
+    private static let cli = AXAffordance.Style.commandLine(program: "baguette", udid: "X", deviceSet: nil)
+    private static let row = AXNode(
+        role: "AXButton", label: "Orbit 3, 10h 10m, $1,240",
+        frame: Rect(origin: Point(x: 16, y: 514), size: Size(width: 370, height: 72)))
+    private static let screenTree = AXNode(
+        role: "AXApplication", frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 402, height: 874)),
+        children: [row], screen: AXScreen(width: 402, height: 874, orientation: .portrait))
+
+    private func axShowing(_ tree: AXNode) -> MockAccessibility {
+        let ax = MockAccessibility()
+        given(ax).glance().willReturn(tree)
+        given(ax).describeAll().willReturn(tree)
+        return ax
+    }
+
+    @Test func `should offer the element's own command when a tap on it changes nothing`() throws {
+        let result = try parsed(ThenDescribe.perform(
+            action: "tap", at: Point(x: 200, y: 550), accessibility: axShowing(Self.screenTree),
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
+
+        #expect(result["changed"] as? Bool == false)
+        #expect(result["try"] as? String
+            == "baguette tap --udid X --x 56 --y 550 --width 402 --height 874 --then-describe-ui")
+        #expect((result["hint"] as? String)?.contains("Orbit 3") == true)
+    }
+
+    @Test func `should not repeat the same point when that is what was already tapped`() throws {
+        let result = try parsed(ThenDescribe.perform(
+            action: "tap", at: Point(x: 56, y: 550), accessibility: axShowing(Self.screenTree),
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
+
+        #expect(result["changed"] as? Bool == false)
+        #expect(result["try"] == nil)
+        #expect((result["hint"] as? String)?.contains("may not respond") == true)
+    }
+
+    @Test func `should say nothing was there when a tap on empty space changes nothing`() throws {
+        let result = try parsed(ThenDescribe.perform(
+            action: "tap", at: Point(x: 200, y: 100), accessibility: axShowing(Self.screenTree),
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
+
+        #expect(result["try"] == nil)
+        #expect((result["hint"] as? String)?.contains("no control") == true)
+    }
+
+    @Test func `should give no hint when the tap changed the screen`() throws {
+        let other = AXNode(role: "AXApplication", label: "Other", frame: Self.screenTree.frame, screen: Self.screenTree.screen)
+        let ax = MockAccessibility()
+        var glances = [Self.screenTree, other]
+        given(ax).glance().willProduce { glances.count > 1 ? glances.removeFirst() : glances[0] }
+        given(ax).describeAll().willReturn(other)
+
+        let result = try parsed(ThenDescribe.perform(
+            action: "tap", at: Point(x: 200, y: 550), accessibility: ax,
+            affordances: Self.cli, timing: Self.immediate, act: { true }))
+
+        #expect(result["changed"] as? Bool == true)
+        #expect(result["hint"] == nil)
+        #expect(result["try"] == nil)
+    }
+
+    @Test func `should give a session the same hint for the point in its envelope`() throws {
+        let result = try parsed(ThenDescribe.dispatch(
+            line: #"{"type":"tap","x":200,"y":550,"width":402,"height":874,"then_describe_ui":true}"#,
+            accessibility: axShowing(Self.screenTree), gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
+
+        #expect((result["try"] as? [String: Any])?["x"] as? Double == 56)
+    }
+
+    @Test func `should put the next steps at the top of the answer`() throws {
+        let json = ThenDescribe.perform(
+            action: "tap", at: Point(x: 56, y: 550), accessibility: axShowing(Self.screenTree),
+            affordances: Self.cli, timing: Self.immediate, act: { true })
+
+        let result = try parsed(json)
+        #expect((result["affordances"] as? [String: Any])?["home"] != nil)
+        #expect((result["tree"] as? [String: Any])?["affordances"] == nil)
+        #expect(try #require(json.range(of: #""affordances""#)).lowerBound < (try #require(json.range(of: #""tree""#))).lowerBound)
     }
 
     @Test func `should name the action for a command line caller`() throws {

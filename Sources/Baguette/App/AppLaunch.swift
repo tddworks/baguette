@@ -26,7 +26,8 @@ enum AppLaunch {
                 wake: { try? accessibility.wake() },
                 read: { try accessibility.describeAll() },
                 timing: timing)
-            return #"{"ok":true,"action":"launch","changed":\#(outcome.changed),"tree":\#(outcome.tree?.json(affordances: affordances) ?? "null")}"#
+            let offers = outcome.tree?.affordancesJSON(affordances) ?? "{}"
+            return #"{"ok":true,"action":"launch","changed":\#(outcome.changed),"affordances":\#(offers),"tree":\#(outcome.tree?.json ?? "null")}"#
         } catch {
             return #"{"ok":false,"action":"launch","error":"\#(GestureDispatcher.jsonEscape(String(describing: error)))"}"#
         }

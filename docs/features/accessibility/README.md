@@ -110,7 +110,7 @@ fixed sleep can be quicker (about 1 s against 1.2 s), but it's a guess, and it
 can't say whether the tap did anything. A screen that doesn't change gets
 a second's patience, and one that never stops moving gets three.
 
-`changed:false` means the app's own tree didn't move. A frame can be wider than
+`changed:false` means the app's own tree didn't move, and the answer adds a `hint`, plus a `try` command when another point on that element might work. It never retries. A frame can be wider than
 what responds, so a tap at a row's centre can land on blank space that the app
 ignores, while a hit-test there still names the row. Web content isn't in that
 tree: a link that loads a page still shows up, but a change inside a page may not.

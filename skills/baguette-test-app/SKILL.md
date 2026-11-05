@@ -61,7 +61,7 @@ show, like a row whose centre is blank.
 ```
 
 A tap waits for the screen to settle, so don't add a `sleep`, and answers with
-`changed` and the new screen, with its offers under `.tree.affordances`.
+`changed`, the next `affordances`, and the new screen under `tree`.
 
 A control with no offer won't work now: it's disabled, or off screen and needs a
 scroll. Plain text and images offer nothing because their role doesn't say they
@@ -87,20 +87,22 @@ anything new. When the next choice depends on what appears, read first.
 any `tap` or `launch`:
 
 ```bash
-| jq '{changed, offers: (.tree.affordances | keys), text: [.tree | .. | objects | select(.label? and .frame.y >= 50 and .role == "AXStaticText") | .label]}'
+| jq '{changed, hint, try, offers: (.affordances | keys), text: [.tree | .. | objects | select(.label? and .frame.y >= 50 and .role == "AXStaticText") | .label]}'
 ```
 
 Then read the command for the one you want with
-`jq -r '.tree.affordances["tap Search flights"]'` on the same output, or print the
-whole map with `jq .tree.affordances`. After a plain `describe-ui`, drop `.tree` and
-`changed`. Don't write `.changed // "n/a"`: `//` treats `false` as missing.
+`jq -r '.affordances["tap Search flights"]'` on the same output, or print the whole
+map with `jq .affordances`. After a plain `describe-ui`, the labels are at the top
+instead of under `.tree`, and there's no `changed`. Don't write `.changed // "n/a"`: `//` treats `false` as missing.
 
 ## When a tap does nothing
 
 `ok:true` means the touch was sent. `"changed":false` means the app's own tree
-didn't change, so don't assume it worked:
+didn't change, and the answer says what's there in `hint`. If baguette would tap that
+element somewhere else, `try` has the command: run it rather than repeating the point
+or re-reading the screen.
 
-1. **Look.** Take a screenshot and read it: `baguette screenshot --udid <X> --output /tmp/s.jpg`.
+1. **Look.** With no `try`, take a screenshot and read it: `baguette screenshot --udid <X> --output /tmp/s.jpg`.
 2. **Tap what's drawn.** A frame can be wider than what responds, so an offered point
    can land on blank space. Tap the drawn text by coordinates instead.
 3. **Check it's enabled**, and whether something covers it. A hit-test

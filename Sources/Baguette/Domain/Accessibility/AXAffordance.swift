@@ -51,6 +51,13 @@ enum AXAffordance: Equatable {
     }
 
     private static func whole(_ value: Double) -> Int { Int(value.rounded()) }
+
+    /// A rendered value as JSON: a command string or a wire envelope.
+    static func json(_ rendered: Any) -> String {
+        let options: JSONSerialization.WritingOptions = [.sortedKeys, .withoutEscapingSlashes, .fragmentsAllowed]
+        let data = (try? JSONSerialization.data(withJSONObject: rendered, options: options)) ?? Data("null".utf8)
+        return String(decoding: data, as: UTF8.self)
+    }
 }
 
 extension AXNode {
@@ -94,6 +101,48 @@ extension AXNode {
         }
         walk(self)
         return map
+    }
+
+    /// The map on its own, for an answer that carries it beside the tree.
+    func affordancesJSON(_ style: AXAffordance.Style) -> String {
+        AXAffordance.json(affordanceMap(style))
+    }
+
+    /// What to tell a caller whose tap at `point` changed nothing: what's there,
+    /// and the point baguette would use if that's a different one. A hit-test
+    /// can't say the app will respond, so this suggests, and never retries: the
+    /// app may have acted without changing its tree.
+    func missedTap(at point: Point, style: AXAffordance.Style) -> (hint: String, next: Any?)? {
+        guard let screen else { return nil }
+        let where_ = "(\(Int(point.x.rounded())), \(Int(point.y.rounded())))"
+        guard let control = controlAt(point, on: screen), let visible = control.visibleFrame(on: screen) else {
+            return ("Nothing changed: there's no control at \(where_). Choose from affordances.", nil)
+        }
+        let name = control.offerName
+        let offered = control.tapPoint(in: visible)
+        if offered.x.rounded() == point.x.rounded(), offered.y.rounded() == point.y.rounded() {
+            return (
+                "Nothing changed: \"\(name)\" may not respond here, or the app acted without changing the screen. "
+                    + "Take a screenshot before tapping again.", nil)
+        }
+        let tap = AXAffordance.tap(offered, Size(width: screen.width, height: screen.height))
+        return ("Nothing changed: \(where_) is on \"\(name)\", but that spot may be blank. Try this instead.", tap.rendered(style))
+    }
+
+    private func controlAt(_ point: Point, on screen: AXScreen) -> AXNode? {
+        var found: AXNode?
+        func walk(_ node: AXNode) {
+            if !node.hidden, node.enabled, Self.controlRoles.contains(node.role),
+                let visible = node.visibleFrame(on: screen),
+                point.x >= visible.origin.x, point.x < visible.origin.x + visible.size.width,
+                point.y >= visible.origin.y, point.y < visible.origin.y + visible.size.height
+            {
+                found = node
+            }
+            node.children.forEach(walk)
+        }
+        walk(self)
+        return found
     }
 
     private var offerName: String {
