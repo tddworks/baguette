@@ -28,4 +28,5 @@ last screen says so.
 | Saved card | Not preselected |
 
 The blank row centre is deliberate to keep: a frame's centre isn't always tappable.
-`tap --label` allows for it; a tap by coordinates there reports `changed:false`.
+`tap --label` presses the row, so it doesn't matter there. `--touch` and coordinates
+land on the blank spot and report `changed:false`.

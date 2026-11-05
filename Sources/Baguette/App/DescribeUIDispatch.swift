@@ -22,7 +22,7 @@ enum DescribeUIDispatch {
                 node = try accessibility.describeAll()
             }
             guard let node else { return failure("no accessibility data") }
-            return #"{"type":"describe_ui_result","ok":true,"affordances":\#(node.affordancesJSON(.wire)),"tree":\#(node.json)}"#
+            return #"{"type":"describe_ui_result","ok":true,\#(node.offersFields(.wire)),"tree":\#(node.json)}"#
         } catch {
             return failure(error.localizedDescription)
         }

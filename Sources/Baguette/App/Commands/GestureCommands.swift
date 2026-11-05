@@ -25,7 +25,7 @@ struct TapCommand: ParsableCommand {
     )
 
     @OptionGroup var options: DeviceOption
-    @Option(help: "The element to tap, by its label, part of its label, or identifier. Replaces --x, --y, --width and --height.")
+    @Option(help: "The element to press, by its name from the answer's affordances, part of its label, or identifier. Replaces --x, --y, --width and --height.")
     var label: String?
     @Option var x: Double?
     @Option var y: Double?
@@ -34,6 +34,8 @@ struct TapCommand: ParsableCommand {
     @Option(help: "Hold duration in seconds") var duration: Double = 0.05
     @Option(help: "Screen edge the tap lands on: \(DeviceEdge.allowed). Omit for an interior tap.")
     var edge: String?
+    @Flag(help: "With --label, use a real touch at the element instead of pressing it through accessibility.")
+    var touch = false
     @Flag(help: "Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says.")
     var thenDescribeUI = false
 
@@ -77,6 +79,7 @@ struct TapCommand: ParsableCommand {
         var envelope: [String: Any] = ["type": Tap.wireType, "label": label, "duration": duration]
         if let edge { envelope["edge"] = edge }
         if thenDescribeUI { envelope["then_describe_ui"] = true }
+        if touch { envelope["touch"] = true }
         let bytes = (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
         let dispatcher = GestureDispatcher(input: sim.input())
         let result = LabelTap.dispatch(

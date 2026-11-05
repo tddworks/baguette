@@ -112,19 +112,20 @@ baguette stream --udid <udid> [--format <format>] [--fps <fps>] [--quality <qual
 Single tap at a point
 
 ```
-baguette tap --udid <udid> [--label <label>] [--x <x>] [--y <y>] [--width <width>] [--height <height>] [--duration <duration>] [--edge <edge>] [--then-describe-ui]
+baguette tap --udid <udid> [--label <label>] [--x <x>] [--y <y>] [--width <width>] [--height <height>] [--duration <duration>] [--edge <edge>] [--touch] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
 | `--udid` | yes |  | Simulator UDID |
-| `--label` |  |  | The element to tap, by its label, part of its label, or identifier. Replaces --x, --y, --width and --height. |
+| `--label` |  |  | The element to press, by its name from the answer's affordances, part of its label, or identifier. Replaces --x, --y, --width and --height. |
 | `--x` |  |  |  |
 | `--y` |  |  |  |
 | `--width` |  |  |  |
 | `--height` |  |  |  |
 | `--duration` |  | `0.05` | Hold duration in seconds |
 | `--edge` |  |  | Screen edge the tap lands on: left \| top \| right \| bottom. Omit for an interior tap. |
+| `--touch` |  |  | With --label, use a real touch at the element instead of pressing it through accessibility. |
 | `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says. |
 
 ## baguette double-tap

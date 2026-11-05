@@ -27,6 +27,11 @@ protocol Accessibility: AnyObject, Sendable {
     /// needs before its tree is readable from the host.
     func wake() throws
 
+    /// Activates `node` through accessibility, as VoiceOver does, without touching
+    /// the screen. `false` when it's no longer there. `true` doesn't mean the app
+    /// responded: iOS says so for a plain heading too.
+    func press(_ node: AXNode) throws -> Bool
+
     /// Hit-test the topmost accessibility element at `point`
     /// (device-point coordinates, same units as gesture wire input).
     /// Returns `nil` when the point falls outside any accessible

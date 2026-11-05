@@ -90,7 +90,7 @@ patience, so use `--relaunch` for a fresh start.
 
 ## Tap by name, from a short answer
 
-`baguette tap --udid <UDID> --label "Search flights" --then-describe-ui` finds the element and the point ([wire.md](../../wire.md#tap)), then answers with what can be done next (`affordances`) and what the screen says (`text`). `describe-ui` keeps the full tree, with the same map at the top.
+`baguette tap --udid <UDID> --label 'Search flights' --then-describe-ui` presses the element through accessibility, as VoiceOver does ([wire.md](../../wire.md#tap)), so it needs no point. It answers with what can be tapped next (`affordances`), what can't yet (`disabled`) and what the screen says (`text`). `--touch` uses a real finger, because a press can reach what a finger can't. `describe-ui` keeps the full tree, with the same lists first.
 
 ## See what a tap did
 

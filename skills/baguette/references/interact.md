@@ -25,10 +25,12 @@ Notification Center). Omit `edge` for ordinary touches. For pinches use
 
 ## Tap by name
 
-`baguette tap --udid <X> --label "Search flights"`, or `{"type":"tap","label":"Search flights"}`
-on `input`. It matches the exact label or identifier first, then part of one, and
-never guesses: a wrong, ambiguous, disabled, covered or off-screen name taps nothing
-and says why. A tap that changes nothing is reported, not retried.
+`baguette tap --udid <X> --label 'Search flights'`, or `{"type":"tap","label":"Search flights"}`
+on `input`. It matches an exact name first, then part of a label, and never guesses:
+a wrong, ambiguous or disabled name taps nothing and says why. It presses through
+accessibility, so it reaches a control wherever it is. `--touch` (`"touch":true`) uses a
+real finger instead, and refuses what's off screen. A tap that changes nothing is
+reported, not retried.
 
 ## See what a tap did
 

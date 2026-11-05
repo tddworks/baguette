@@ -187,14 +187,10 @@ struct AXNode: Equatable, Sendable {
         )
     }
 
-    /// The same projection with one `affordances` map added at the top: every
-    /// next step on this screen, keyed by what it does. It sorts first, so it's
-    /// the first thing a reader sees without filtering the long tree below.
+    /// The same projection with what can be done added at the top, so it's the
+    /// first thing a reader sees. The tree's own fields stay as they are.
     func json(affordances style: AXAffordance.Style) -> String {
-        var object = dictionary
-        object["affordances"] = affordanceMap(style)
-        let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
-        return String(decoding: data, as: UTF8.self)
+        "{" + offersFields(style) + "," + String(json.dropFirst())
     }
 
     fileprivate var dictionary: [String: Any] {

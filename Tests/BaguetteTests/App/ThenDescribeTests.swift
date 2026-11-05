@@ -94,7 +94,7 @@ struct ThenDescribeTests {
             affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil),
             timing: Self.immediate, act: { true })
 
-        #expect((try parsed(json)["affordances"] as? [String: Any])?["home"] as? String == "baguette press --udid X --button home")
+        #expect((try parsed(json)["affordances"] as? [String: Any])?["tap"] as? [String] == ["General"])
     }
 
     private static let cli = AXAffordance.Style.commandLine(program: "baguette", udid: "X", deviceSet: nil)
@@ -112,25 +112,14 @@ struct ThenDescribeTests {
         return ax
     }
 
-    @Test func `should offer the element's own command when a tap on it changes nothing`() throws {
+    @Test func `should offer to tap by name when a tap at a point on an element changes nothing`() throws {
         let result = try parsed(ThenDescribe.perform(
             action: "tap", at: Point(x: 200, y: 550), accessibility: axShowing(Self.screenTree),
             affordances: Self.cli, timing: Self.immediate, act: { true }))
 
         #expect(result["changed"] as? Bool == false)
-        #expect(result["try"] as? String
-            == "baguette tap --udid X --x 56 --y 550 --width 402 --height 874 --then-describe-ui")
+        #expect(result["try"] as? String == "baguette tap --udid X --label 'Orbit 3, 10h 10m, $1,240' --then-describe-ui")
         #expect((result["hint"] as? String)?.contains("Orbit 3") == true)
-    }
-
-    @Test func `should not repeat the same point when that is what was already tapped`() throws {
-        let result = try parsed(ThenDescribe.perform(
-            action: "tap", at: Point(x: 56, y: 550), accessibility: axShowing(Self.screenTree),
-            affordances: Self.cli, timing: Self.immediate, act: { true }))
-
-        #expect(result["changed"] as? Bool == false)
-        #expect(result["try"] == nil)
-        #expect((result["hint"] as? String)?.contains("may not respond") == true)
     }
 
     @Test func `should say nothing was there when a tap on empty space changes nothing`() throws {
@@ -163,7 +152,7 @@ struct ThenDescribeTests {
             line: #"{"type":"tap","x":200,"y":550,"width":402,"height":874,"then_describe_ui":true}"#,
             accessibility: axShowing(Self.screenTree), gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
 
-        #expect((result["try"] as? [String: Any])?["x"] as? Double == 56)
+        #expect((result["try"] as? [String: Any])?["label"] as? String == "Orbit 3, 10h 10m, $1,240")
     }
 
     @Test func `should answer with what can be done and what the screen says, not the whole tree`() throws {
@@ -171,8 +160,8 @@ struct ThenDescribeTests {
             action: "tap", at: Point(x: 56, y: 550), accessibility: axShowing(Self.screenTree),
             affordances: Self.cli, timing: Self.immediate, act: { true }))
 
-        #expect((result["affordances"] as? [String: Any])?["home"] != nil)
-        #expect(result["screen"] != nil)
+        #expect((result["affordances"] as? [String: Any])?["tap"] != nil)
+        #expect(result["how"] == nil)
         #expect(result["tree"] == nil)
     }
 

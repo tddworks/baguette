@@ -32,16 +32,16 @@ baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look,
 ```
 
 `--then-describe-ui` waits for the screen to settle, so no `sleep`, and `"changed":false`
-says the tap did nothing. Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
+says nothing moved. Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
 happens, run `baguette heal --udid <UDID>` (Xcode 27's Device Hub took the
 input surface; see `references/devices.md`).
 
 ## Tap by name when you can
 
-`--label` takes an element's label, part of it, or its identifier, waits for it, and
-picks the point. A wrong or ambiguous name taps nothing and says why. With
-`--then-describe-ui` the short answer lists what can be tapped next. Coordinates are
-for what has no name.
+`--label` takes a name, part of a label, or an identifier, and presses that element
+through accessibility, so there's no point to get wrong. A wrong or ambiguous name
+taps nothing and says why. With `--then-describe-ui`, the short answer lists what can
+be tapped next. It isn't a real finger: add `--touch` to test what a user can reach.
 
 ## Coordinates are device points (read this)
 

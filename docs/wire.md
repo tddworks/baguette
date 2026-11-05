@@ -48,7 +48,7 @@ Every gesture in `GestureRegistry.standard`, one example each. Durations are sec
 `duration` defaults to `0.05`. Optional `edge` (`left` / `top` / `right` / `bottom`) builds the same message a streamed touch in that edge band sends; an unknown value is an error, not an interior tap. There is no `double-tap` envelope — send two `touch1-down`/`touch1-up` pairs on one connection, see [double-tap](features/double-tap/README.md).
 
 
-Name the element instead of giving coordinates on `baguette input`: `{"type":"tap","label":"Search flights"}`. It takes a label, part of one, or an identifier, and waits up to 5 s for the element to appear and be enabled. The ack adds `tapped`. A wrong, ambiguous, disabled, covered or off-screen name taps nothing, and answers with `error` and, where it helps, `visible` or `matches`. A tap that changes nothing is never retried, because the app may have acted anyway.
+Name the element instead of giving coordinates on `baguette input`: `{"type":"tap","label":"Search flights"}`. It takes a name from `affordances`, part of a label, or an identifier, and waits up to 5 s for the element to appear and be enabled. It presses through accessibility, so it needs no point on screen; `"touch":true` uses a real touch instead, and refuses what's off screen. The ack adds `tapped`. A wrong, ambiguous or disabled name taps nothing, and answers with `error` and, where it helps, `visible` or `matches`. A tap that changes nothing is never retried, because the app may have acted anyway.
 
 ### `swipe`
 
@@ -146,7 +146,7 @@ These ride the same channels but belong to one feature; their shapes and replies
 |---|---|---|
 | `paste`, `copy` → `paste_result`, `copy_result` | stdin, stream WS | [paste](features/paste/README.md) |
 | `describe_ui` → `describe_ui_result` | `baguette input` stdin, stream WS | [accessibility](features/accessibility/README.md) |
-| `"then_describe_ui":true` on a gesture → `{"ok","changed","affordances","text"}` | `baguette input` stdin | [accessibility](features/accessibility/README.md#see-what-a-tap-did) |
+| `"then_describe_ui":true` on a gesture → `{"ok","changed","affordances","disabled","text","values"}` | `baguette input` stdin | [accessibility](features/accessibility/README.md#see-what-a-tap-did) |
 | `hinge` (server → page, foldables only) | stream WS | [hinge](features/hinge/README.md) |
 | `set_3d_camera`, `screen_quad`, atomic `frameMetadata=1` | `stream.3d.*` WS | [3d-rendering](features/3d-rendering/README.md) |
 | `log_started`, `log`, `log_stopped`, `stop` | logs WS | [logs](features/logs/README.md) |
