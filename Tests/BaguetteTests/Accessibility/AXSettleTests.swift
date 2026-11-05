@@ -74,6 +74,20 @@ struct AXSettleTests {
         #expect(outcome?.changed == false)
     }
 
+    @Test func `should not mistake a pulsing control for a change`() throws {
+        let frame = Self.frame
+        func app(_ x: Double) -> AXNode {
+            AXNode(
+                role: "AXApplication", label: "A", frame: frame,
+                children: [AXNode(role: "AXButton", label: "Go", frame: Rect(origin: Point(x: x, y: 0), size: frame.size))])
+        }
+        let timeline = Timeline([app(0), app(2), app(0), app(2), app(0), app(2), app(0), app(2), app(0), app(2), app(0), app(2)])
+        let outcome = try run(timeline)
+
+        #expect(outcome?.changed == false)
+        #expect(timeline.time < 1.3)
+    }
+
     @Test func `should stop watching a screen that never stops moving`() throws {
         let frames = (0..<100).map { screen("frame \($0)") }
         let timeline = Timeline(frames)

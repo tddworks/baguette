@@ -109,7 +109,7 @@ baguette stream --udid <udid> [--format <format>] [--fps <fps>] [--quality <qual
 
 ## baguette tap
 
-Single tap at a point
+Press an element by name, or tap a point
 
 ```
 baguette tap --udid <udid> [--label <label>] [--x <x>] [--y <y>] [--width <width>] [--height <height>] [--duration <duration>] [--edge <edge>] [--touch] [--then-describe-ui]
@@ -125,7 +125,7 @@ baguette tap --udid <udid> [--label <label>] [--x <x>] [--y <y>] [--width <width
 | `--height` |  |  |  |
 | `--duration` |  | `0.05` | Hold duration in seconds |
 | `--edge` |  |  | Screen edge the tap lands on: left \| top \| right \| bottom. Omit for an interior tap. |
-| `--touch` |  |  | With --label, use a real touch at the element instead of pressing it through accessibility. |
+| `--touch` |  |  | With --label, use a real finger at the element, to test what a user can reach, or when a press has no effect. |
 | `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed, what can be done next and what the screen says. |
 
 ## baguette double-tap

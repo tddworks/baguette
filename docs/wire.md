@@ -48,7 +48,7 @@ Every gesture in `GestureRegistry.standard`, one example each. Durations are sec
 `duration` defaults to `0.05`. Optional `edge` (`left` / `top` / `right` / `bottom`) builds the same message a streamed touch in that edge band sends; an unknown value is an error, not an interior tap. There is no `double-tap` envelope — send two `touch1-down`/`touch1-up` pairs on one connection, see [double-tap](features/double-tap/README.md).
 
 
-Name the element instead of giving coordinates on `baguette input`: `{"type":"tap","label":"Search flights"}`. It takes a name from `affordances`, part of a label, or an identifier, and waits up to 5 s for the element to appear and be enabled. It presses through accessibility, so it needs no point on screen; `"touch":true` uses a real touch instead, and refuses what's off screen. The ack adds `tapped`. A wrong, ambiguous or disabled name taps nothing, and answers with `error` and, where it helps, `visible` or `matches`. A tap that changes nothing is never retried, because the app may have acted anyway.
+Name the element instead of giving coordinates on `baguette input`: `{"type":"tap","label":"Search flights"}`. It takes a name from `affordances`, part of a label, or an identifier, and waits up to 5 s for the element to appear and be enabled. It presses through accessibility, so it needs no point on screen; if it can't find the element, it touches instead and the ack adds `"used":"touch"`. `"touch":true` asks for a real touch, and refuses what's off screen. The ack adds `tapped`. A wrong, ambiguous or disabled name taps nothing, and answers with `error` and, where it helps, `visible` or `matches`. A tap that changes nothing is never retried, because the app may have acted anyway.
 
 ### `swipe`
 

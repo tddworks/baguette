@@ -67,6 +67,20 @@ struct AXAffordanceTests {
         #expect(tappable(tree(button("One\nTwo"))) == ["One Two"])
     }
 
+    @Test func `should list a slider as something to adjust, because a press can't set a value`() {
+        let slider = AXNode(role: "AXSlider", value: "50%", identifier: "DYNAMIC_TYPE_SLIDER", frame: rect(20, 760, 360, 40))
+        let map = tree(slider, button("Done")).agentSummary(Self.cli)["affordances"] as? [String: Any]
+
+        #expect(map?["adjust"] as? [String] == ["DYNAMIC_TYPE_SLIDER"])
+        #expect(map?["tap"] as? [String] == ["Done"])
+    }
+
+    @Test func `should say how to adjust a slider`() {
+        let how = tree().agentSummary(Self.cli, withHow: true)["how"] as? [String: Any]
+
+        #expect((how?["adjust"] as? String)?.contains("swipe") == true)
+    }
+
     @Test func `should offer typing only when a text field is focused`() {
         let focused = AXNode(role: "AXTextField", label: "City", frame: rect(16, 132, 370, 44), focused: true)
         let idle = AXNode(role: "AXTextField", label: "Name", frame: rect(16, 232, 370, 44))
