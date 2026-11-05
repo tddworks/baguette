@@ -127,6 +127,13 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             })
     }
 
+    func glance() throws -> AXNode? {
+        guard Self.isAvailable, let device = resolveDevice() else { return nil }
+        let geometry = try recheckGeometry()
+        guard let pid = Self.bridgeFrontmostPID(device: device), pid > 0 else { return nil }
+        return try withAXPContext(known: (geometry, pid)) { walkFrontmost($0) }
+    }
+
     func describeAt(point: Point) throws -> AXNode? {
         // Prefer the server-side hit-test. `AXPTranslator` exposes
         // `objectAtPoint:displayId:bridgeDelegateToken:` — the

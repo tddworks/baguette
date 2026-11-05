@@ -97,7 +97,7 @@ baguette stream --udid <udid> [--format <format>] [--fps <fps>] [--quality <qual
 Single tap at a point
 
 ```
-baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--duration <duration>] [--edge <edge>]
+baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--duration <duration>] [--edge <edge>] [--then-read]
 ```
 
 | Flag | Required | Default | Description |
@@ -109,6 +109,7 @@ baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--
 | `--height` | yes |  |  |
 | `--duration` |  | `0.05` | Hold duration in seconds |
 | `--edge` |  |  | Screen edge the tap lands on: left \| top \| right \| bottom. Omit for an interior tap. |
+| `--then-read` |  |  | Wait for the screen to settle, then answer with whether it changed and its accessibility tree. |
 
 ## baguette double-tap
 

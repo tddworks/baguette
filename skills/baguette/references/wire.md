@@ -144,6 +144,7 @@ These ride the same channels but belong to one feature; their shapes and replies
 |---|---|---|
 | `paste`, `copy` → `paste_result`, `copy_result` | stdin, stream WS | [paste](https://github.com/tddworks/baguette/blob/main/docs/features/paste/README.md) |
 | `describe_ui` → `describe_ui_result` | `baguette input` stdin, stream WS | [accessibility](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md) |
+| `"then_read":true` on a gesture → `{"ok","changed","tree"}` | `baguette input` stdin | [accessibility](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md#see-what-a-tap-did) |
 | `hinge` (server → page, foldables only) | stream WS | [hinge](https://github.com/tddworks/baguette/blob/main/docs/features/hinge/README.md) |
 | `set_3d_camera`, `screen_quad`, atomic `frameMetadata=1` | `stream.3d.*` WS | [3d-rendering](https://github.com/tddworks/baguette/blob/main/docs/features/3d-rendering/README.md) |
 | `log_started`, `log`, `log_stopped`, `stop` | logs WS | [logs](https://github.com/tddworks/baguette/blob/main/docs/features/logs/README.md) |

@@ -18,6 +18,11 @@ protocol Accessibility: AnyObject, Sendable {
     /// Returns `nil` when no app is focused (e.g. SpringBoard idle).
     func describeAll() throws -> AXNode?
 
+    /// The frontmost app's own tree, without the hit-test sweep: cheap
+    /// enough to poll while waiting for a screen to settle, but blind to
+    /// what only a sweep finds. `nil` when no app is known to be frontmost.
+    func glance() throws -> AXNode?
+
     /// Hit-test the topmost accessibility element at `point`
     /// (device-point coordinates, same units as gesture wire input).
     /// Returns `nil` when the point falls outside any accessible

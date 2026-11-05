@@ -63,6 +63,16 @@ struct AXPTranslatorAccessibilityErrorTests {
         #expect(try ax.describeAll() == nil)
     }
 
+    @Test func `should see nothing at a glance when no device matches the udid`() throws {
+        let host = MockDeviceHost()
+        given(host).resolveDevice(udid: .any).willReturn(nil)
+        let ax = AXPTranslatorAccessibility(udid: "ghost", host: host) {
+            throw ObservedScreenError.unavailable
+        }
+
+        #expect(try ax.glance() == nil)
+    }
+
     @Test func `should describe no element at a point when no device matches the udid`() throws {
         let host = MockDeviceHost()
         given(host).resolveDevice(udid: .any).willReturn(nil)

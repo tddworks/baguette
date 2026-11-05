@@ -100,6 +100,10 @@ struct InputCommand: AsyncParsableCommand {
             // in-line preserves the one-line-in/one-ack-out order.
             if let result = DescribeUIDispatch.dispatch(line: line, accessibility: accessibility) {
                 print(result)
+            } else if let result = ThenRead.dispatch(
+                line: line, accessibility: accessibility, gesture: { dispatcher.dispatch(line: $0) }
+            ) {
+                print(result)
             } else if let ack = await PasteDispatch.dispatch(
                 line: line, pasteboard: pasteboard, input: input
             ).ackJSON {
