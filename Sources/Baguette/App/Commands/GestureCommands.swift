@@ -33,7 +33,7 @@ struct TapCommand: ParsableCommand {
     @Option(help: "Screen edge the tap lands on: \(DeviceEdge.allowed). Omit for an interior tap.")
     var edge: String?
     @Flag(help: "Wait for the screen to settle, then answer with whether it changed and its accessibility tree.")
-    var describeUI = false
+    var thenDescribeUI = false
 
     func run() {
         var landing: DeviceEdge?
@@ -47,9 +47,11 @@ struct TapCommand: ParsableCommand {
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
         let gesture = Tap(at: Point(x: x, y: y), size: Size(width: width, height: height),
                           duration: duration, edge: landing)
-        if describeUI {
+        if thenDescribeUI {
             let input = sim.input()
-            let result = ThenDescribe.perform(action: "tap", accessibility: sim.accessibility()) {
+            let result = ThenDescribe.perform(
+                action: "tap", accessibility: sim.accessibility(), affordances: options.affordanceStyle
+            ) {
                 gesture.execute(on: input)
             }
             print(result)

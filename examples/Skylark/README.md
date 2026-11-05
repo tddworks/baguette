@@ -5,7 +5,7 @@ baguette. It makes no network calls and takes no real payment.
 
 ```bash
 ./build.sh <UDID>
-baguette launch --udid <UDID> --bundle-id dev.baguette.skylark --relaunch --describe-ui
+baguette launch --udid <UDID> --bundle-id dev.baguette.skylark --relaunch --then-describe-ui
 ```
 
 Give an agent this task:

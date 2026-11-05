@@ -30,7 +30,7 @@ struct AppLaunchTests {
         given(apps).launch(bundleID: .any).willReturn(())
 
         let result = try parsed(await AppLaunch.perform(
-            bundleID: "dev.example", relaunch: false, describeUI: true, apps: apps,
+            bundleID: "dev.example", relaunch: false, thenDescribeUI: true, apps: apps,
             accessibility: accessibility(), timing: Self.immediate))
 
         #expect(result["ok"] as? Bool == true)
@@ -41,13 +41,32 @@ struct AppLaunchTests {
         verify(apps).terminate(bundleID: .any).called(0)
     }
 
+    @Test func `should offer the next commands with the first screen`() async throws {
+        let apps = MockApps()
+        given(apps).launch(bundleID: .any).willReturn(())
+        let screen = AXScreen(width: 402, height: 874, orientation: .portrait)
+        let ax = MockAccessibility()
+        given(ax).glance().willReturn(Self.home)
+        given(ax).describeAll().willReturn(AXNode(
+            role: "AXApplication", label: "Skylark", frame: Self.frame,
+            children: [AXNode(role: "AXButton", label: "Go", frame: Self.frame)], screen: screen))
+        given(ax).wake().willReturn(())
+
+        let result = try parsed(await AppLaunch.perform(
+            bundleID: "dev.example", relaunch: false, thenDescribeUI: true, apps: apps, accessibility: ax,
+            affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil), timing: Self.immediate))
+
+        let tree = try #require(result["tree"] as? [String: Any])
+        #expect(tree["affordances"] != nil)
+    }
+
     @Test func `should only launch when no read was asked for`() async throws {
         let apps = MockApps()
         given(apps).launch(bundleID: .any).willReturn(())
         let ax = MockAccessibility()
 
         let result = try parsed(await AppLaunch.perform(
-            bundleID: "dev.example", relaunch: false, describeUI: false, apps: apps,
+            bundleID: "dev.example", relaunch: false, thenDescribeUI: false, apps: apps,
             accessibility: ax, timing: Self.immediate))
 
         #expect(result["ok"] as? Bool == true)
@@ -61,7 +80,7 @@ struct AppLaunchTests {
         given(apps).launch(bundleID: .any).willReturn(())
 
         _ = await AppLaunch.perform(
-            bundleID: "dev.example", relaunch: true, describeUI: false, apps: apps,
+            bundleID: "dev.example", relaunch: true, thenDescribeUI: false, apps: apps,
             accessibility: MockAccessibility(), timing: Self.immediate)
 
         verify(apps).terminate(bundleID: .value("dev.example")).called(1)
@@ -74,7 +93,7 @@ struct AppLaunchTests {
         given(ax).glance().willReturn(Self.home)
 
         let result = try parsed(await AppLaunch.perform(
-            bundleID: "dev.example", relaunch: false, describeUI: true, apps: apps,
+            bundleID: "dev.example", relaunch: false, thenDescribeUI: true, apps: apps,
             accessibility: ax, timing: Self.immediate))
 
         #expect(result["ok"] as? Bool == false)
@@ -84,11 +103,11 @@ struct AppLaunchTests {
 
     @Test func `should accept the bundle id and flags on the command line`() throws {
         let command = try LaunchCommand.parse([
-            "--udid", "X", "--bundle-id", "dev.example", "--relaunch", "--describe-ui",
+            "--udid", "X", "--bundle-id", "dev.example", "--relaunch", "--then-describe-ui",
         ])
 
         #expect(command.bundleId == "dev.example")
         #expect(command.relaunch)
-        #expect(command.describeUI)
+        #expect(command.thenDescribeUI)
     }
 }

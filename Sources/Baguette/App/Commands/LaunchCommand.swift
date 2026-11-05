@@ -1,9 +1,9 @@
 import ArgumentParser
 import Foundation
 
-/// `baguette launch --udid <UDID> --bundle-id <ID> [--relaunch] [--describe-ui]`
+/// `baguette launch --udid <UDID> --bundle-id <ID> [--relaunch] [--then-describe-ui]`
 ///
-/// Opens an installed app. `--describe-ui` waits for its first real screen and
+/// Opens an installed app. `--then-describe-ui` waits for its first real screen and
 /// answers with it, replacing a guessed sleep and the empty reads a launching
 /// app gives.
 struct LaunchCommand: AsyncParsableCommand {
@@ -21,7 +21,7 @@ struct LaunchCommand: AsyncParsableCommand {
     var relaunch = false
 
     @Flag(help: "Wait for the app's first screen, then answer with whether the screen changed and its accessibility tree.")
-    var describeUI = false
+    var thenDescribeUI = false
 
     func run() async throws {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
@@ -30,8 +30,9 @@ struct LaunchCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
         let result = await AppLaunch.perform(
-            bundleID: bundleId, relaunch: relaunch, describeUI: describeUI,
-            apps: simulator.apps(), accessibility: simulator.accessibility())
+            bundleID: bundleId, relaunch: relaunch, thenDescribeUI: thenDescribeUI,
+            apps: simulator.apps(), accessibility: simulator.accessibility(),
+            affordances: options.affordanceStyle)
         print(result)
         if !result.hasPrefix(#"{"ok":true"#) { throw ExitCode.failure }
     }

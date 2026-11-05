@@ -18,11 +18,11 @@ extract and install, media → Photos); anything else is `415`. See
 ## Launch and relaunch
 
 ```bash
-baguette launch --udid <X> --bundle-id com.example.app --describe-ui              # open it, answer with its first screen
-baguette launch --udid <X> --bundle-id com.example.app --relaunch --describe-ui   # start it fresh
+baguette launch --udid <X> --bundle-id com.example.app --then-describe-ui              # open it, answer with its first screen
+baguette launch --udid <X> --bundle-id com.example.app --relaunch --then-describe-ui   # start it fresh
 ```
 
-`--describe-ui` replaces a sleep and polling: it waits for the app's first real
+`--then-describe-ui` replaces a sleep and polling: it waits for the app's first real
 screen, usually 4 to 5 seconds, most of it iOS. Write settings (below)
 before the first launch and the app starts from them; no relaunch flag is needed.
 

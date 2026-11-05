@@ -187,6 +187,25 @@ struct AXNode: Equatable, Sendable {
         )
     }
 
+    /// The same projection with each node's next steps added, for an agent
+    /// to act on directly.
+    func json(affordances style: AXAffordance.Style) -> String {
+        let object = dictionary(offering: style, on: screen, isRoot: true)
+        let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func dictionary(offering style: AXAffordance.Style, on screen: AXScreen?, isRoot: Bool) -> [String: Any] {
+        var result = dictionary
+        result["children"] = children.map { $0.dictionary(offering: style, on: screen, isRoot: false) }
+        var offers: [String: Any] = [:]
+        for offer in affordances(on: screen, isRoot: isRoot) {
+            if let rendered = offer.rendered(style) { offers[offer.key] = rendered }
+        }
+        if !offers.isEmpty { result["affordances"] = offers }
+        return result
+    }
+
     fileprivate var dictionary: [String: Any] {
         var result: [String: Any] = [
             "role": role,

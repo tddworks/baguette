@@ -82,24 +82,27 @@ app still takes about a second.
 ## Open an app and read it
 
 ```bash
-baguette launch --udid <UDID> --bundle-id com.example.app --relaunch --describe-ui
+baguette launch --udid <UDID> --bundle-id com.example.app --relaunch --then-describe-ui
 ```
 
 One call replaces two to four reads, though the first screen still takes about 4 to
 5 s, mostly iOS switching apps. An app already in front gets five seconds'
 patience, so use `--relaunch` for a fresh start.
 
+## Run what an element offers
+
+The CLI's JSON gives each usable control its next command in `affordances`, with the point worked out. A disabled, off-screen or hidden element offers none. A `baguette input` session gets the wire envelope; HTTP and the WebSocket don't carry them.
 ## See what a tap did
 
 ```bash
-baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --describe-ui
+baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --then-describe-ui
 ```
 
 ```json
 {"ok":true,"action":"tap","changed":true,"tree":{…}}
 ```
 
-On a `baguette input` session, add `"describe_ui":true` to any gesture. It replaces
+On a `baguette input` session, add `"then_describe_ui":true` to any gesture. It replaces
 a guessed sleep and a separate read: it polls the app's own tree until it has
 held still, and takes one full read at the end. That takes about 1.6 s a step one-shot,
 against about 2 s for a tap, a one-second sleep and a read. In a session a short

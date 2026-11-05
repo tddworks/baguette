@@ -38,28 +38,34 @@ saved card".
 **1. Open the app and read the screen, in one call.**
 
 ```bash
-baguette launch --udid <X> --bundle-id <id> --relaunch --describe-ui
+baguette launch --udid <X> --bundle-id <id> --relaunch --then-describe-ui
 ```
 
-It waits for the first real screen, usually 4 to 5 seconds. Take
-the size from `.tree.screen.width` and `.tree.screen.height`. To read at any other time, use
-`baguette describe-ui --udid <X>`.
+It waits for the first real screen, usually 4 to 5 seconds. To read at any
+other time, use `baguette describe-ui --udid <X>`.
 
 **2. Think.** Which element does the task need next? Read the values, don't
 assume: the first row is rarely the fastest, and `Search flights` may be disabled.
 
-**3. Click and read, in one call.**
+**3. Run what the element offers.** Every control you can use now carries its
+finished command in `affordances`, so there's nothing to work out:
 
-```bash
-baguette tap --udid <X> --x 201 --y 314 --width 402 --height 874 --describe-ui
+```json
+{"role":"AXButton","label":"Search flights","enabled":true,
+ "affordances":{"tap":"baguette tap --udid X --x 201 --y 450 --width 402 --height 874 --then-describe-ui"}}
 ```
 
-It waits for the screen to settle, so don't add a `sleep`, and answers with the
-new screen:
+Run it as written. It waits for the screen to settle, so don't add a `sleep`, and
+answers with the new screen and its offers:
 
 ```json
 {"ok":true,"action":"tap","changed":true,"tree":{…}}
 ```
+
+No `tap` on a control means it won't work now: it's disabled, or off screen and
+needs a scroll. Plain text and images offer nothing because their role doesn't say
+they respond, though some do, like a `See all` link: tap those at their frame's
+centre. A focused text field also offers `type`.
 
 **4. Check it worked.** Is this the screen you expected? Then go back to step 2.
 
@@ -68,8 +74,8 @@ screen before the next, so this saves a turn, and `tail -1` keeps only the last 
 
 ```bash
 baguette input --udid <X> 2>/dev/null <<'EOF' | tail -1
-{"type":"tap","x":201,"y":314,"width":402,"height":874,"describe_ui":true}
-{"type":"tap","x":201,"y":351,"width":402,"height":874,"describe_ui":true}
+{"type":"tap","x":201,"y":314,"width":402,"height":874,"then_describe_ui":true}
+{"type":"tap","x":201,"y":351,"width":402,"height":874,"then_describe_ui":true}
 EOF
 ```
 
@@ -100,10 +106,8 @@ missed tap. The filter is only for viewing: the decisions are still yours.
 didn't change, so don't assume it worked:
 
 1. **Look.** Take a screenshot and read it: `baguette screenshot --udid <X> --output /tmp/s.jpg`.
-2. **Tap what's drawn.** A frame can be wider than what responds, so a row's centre
-   may be blank while its label sits at the left. Tap about 40 points in from the
-   frame's left edge. Centres usually work, but go straight to the label on a row
-   with text at both ends, like a name on the left and a price on the right.
+2. **Tap what's drawn.** A frame can be wider than what responds, so an offered point
+   can land on blank space. Tap the drawn text by coordinates instead.
 3. **Check it's enabled**, and whether something covers it. A hit-test
    (`describe-ui --x --y`) names the element at a point, but it can't tell you
    the app will respond there.

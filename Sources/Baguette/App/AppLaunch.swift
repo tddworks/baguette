@@ -6,14 +6,15 @@ enum AppLaunch {
     static func perform(
         bundleID: String,
         relaunch: Bool,
-        describeUI: Bool,
+        thenDescribeUI: Bool,
         apps: any Apps,
         accessibility: any Accessibility,
+        affordances: AXAffordance.Style = .wire,
         timing: AXFirstScreen.Timing = AXFirstScreen.Timing()
     ) async -> String {
         do {
             if relaunch { try await apps.terminate(bundleID: bundleID) }
-            guard describeUI else {
+            guard thenDescribeUI else {
                 try await apps.launch(bundleID: bundleID)
                 return #"{"ok":true,"action":"launch"}"#
             }
@@ -25,7 +26,7 @@ enum AppLaunch {
                 wake: { try? accessibility.wake() },
                 read: { try accessibility.describeAll() },
                 timing: timing)
-            return #"{"ok":true,"action":"launch","changed":\#(outcome.changed),"tree":\#(outcome.tree?.json ?? "null")}"#
+            return #"{"ok":true,"action":"launch","changed":\#(outcome.changed),"tree":\#(outcome.tree?.json(affordances: affordances) ?? "null")}"#
         } catch {
             return #"{"ok":false,"action":"launch","error":"\#(GestureDispatcher.jsonEscape(String(describing: error)))"}"#
         }

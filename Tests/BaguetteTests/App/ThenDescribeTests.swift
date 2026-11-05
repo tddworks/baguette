@@ -36,7 +36,7 @@ struct ThenDescribeTests {
         let other = AXNode(role: "AXButton", label: "Other", frame: Self.frame)
         let ax = accessibility([Self.node, other])
         var sent: String?
-        let line = #"{"type":"tap","x":1,"y":2,"width":3,"height":4,"describe_ui":true}"#
+        let line = #"{"type":"tap","x":1,"y":2,"width":3,"height":4,"then_describe_ui":true}"#
 
         let result = try parsed(ThenDescribe.dispatch(
             line: line, accessibility: ax, gesture: { sent = $0; return #"{"ok":true}"# }, timing: Self.immediate))
@@ -51,7 +51,7 @@ struct ThenDescribeTests {
         let ax = accessibility([Self.node])
 
         let result = try parsed(ThenDescribe.dispatch(
-            line: #"{"type":"tap","describe_ui":true}"#, accessibility: ax,
+            line: #"{"type":"tap","then_describe_ui":true}"#, accessibility: ax,
             gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
 
         #expect(result["changed"] as? Bool == false)
@@ -62,7 +62,7 @@ struct ThenDescribeTests {
         let refused = #"{"ok":false,"error":"missing x"}"#
 
         let result = ThenDescribe.dispatch(
-            line: #"{"type":"tap","describe_ui":true}"#, accessibility: ax, gesture: { _ in refused }, timing: Self.immediate)
+            line: #"{"type":"tap","then_describe_ui":true}"#, accessibility: ax, gesture: { _ in refused }, timing: Self.immediate)
 
         #expect(result == refused)
         verify(ax).describeAll().called(0)
@@ -74,11 +74,28 @@ struct ThenDescribeTests {
         given(ax).describeAll().willThrow(AXPTranslatorAccessibility.Failure.displayChanged)
 
         let result = try parsed(ThenDescribe.dispatch(
-            line: #"{"type":"tap","describe_ui":true}"#, accessibility: ax,
+            line: #"{"type":"tap","then_describe_ui":true}"#, accessibility: ax,
             gesture: { _ in #"{"ok":true}"# }, timing: Self.immediate))
 
         #expect(result["ok"] as? Bool == true)
         #expect((result["error"] as? String)?.contains("observe again") == true)
+    }
+
+    @Test func `should offer the next commands to a command line caller`() throws {
+        let tree = AXNode(
+            role: "AXApplication", frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 402, height: 874)),
+            children: [Self.node], screen: AXScreen(width: 402, height: 874, orientation: .portrait))
+        let ax = MockAccessibility()
+        given(ax).glance().willReturn(tree)
+        given(ax).describeAll().willReturn(tree)
+
+        let json = ThenDescribe.perform(
+            action: "tap", accessibility: ax,
+            affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil),
+            timing: Self.immediate, act: { true })
+
+        let root = try #require(try parsed(json)["tree"] as? [String: Any])
+        #expect((root["affordances"] as? [String: Any])?["home"] as? String == "baguette press --udid X --button home")
     }
 
     @Test func `should name the action for a command line caller`() throws {
@@ -91,9 +108,9 @@ struct ThenDescribeTests {
 
     @Test func `should accept the flag on the tap command`() throws {
         let tap = try TapCommand.parse([
-            "--udid", "X", "--x", "1", "--y", "2", "--width", "3", "--height", "4", "--describe-ui",
+            "--udid", "X", "--x", "1", "--y", "2", "--width", "3", "--height", "4", "--then-describe-ui",
         ])
 
-        #expect(tap.describeUI)
+        #expect(tap.thenDescribeUI)
     }
 }

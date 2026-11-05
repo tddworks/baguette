@@ -27,11 +27,11 @@ or a flow, use the `baguette-test-app` skill.
 baguette list --json                                    # 1. a booted UDID
 baguette boot --udid <UDID>                             #    (if none is running)
 baguette describe-ui --udid <UDID> | jq .screen        # 2. its size in points
-baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954 --describe-ui   # 3. act, and read the new screen
+baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954 --then-describe-ui   # 3. act, and read the new screen
 baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look, when you need the pixels
 ```
 
-`--describe-ui` waits for the screen to settle, so no `sleep`, and `"changed":false`
+`--then-describe-ui` waits for the screen to settle, so no `sleep`, and `"changed":false`
 says the tap did nothing. Then `Read /tmp/frame.jpg`. If taps answer `{"ok":true}` but nothing
 happens, run `baguette heal --udid <UDID>` (Xcode 27's Device Hub took the
 input surface; see `references/devices.md`).
@@ -72,7 +72,7 @@ setup (~50–100 ms). For drags, choreography or many steps, open
 `baguette input --udid <UDID>` once and write one JSON gesture per line
 (`references/interact.md`). It answers `{"type":"describe_ui"}` too, so one
 session can look and act without paying startup on every call. Either way `ok:true` means *sent*, not that the
-screen reacted: use `--describe-ui` (`"describe_ui":true`) or a screenshot to check.
+screen reacted: use `--then-describe-ui` (`"then_describe_ui":true`) or a screenshot to check.
 
 ## Limits to state, not discover
 

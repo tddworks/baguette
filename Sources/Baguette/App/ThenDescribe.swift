@@ -5,7 +5,7 @@ import Foundation
 /// a tap that changed nothing says so.
 enum ThenDescribe {
     /// Ahead of the gesture pipeline on a `baguette input` session: the
-    /// result line for an envelope with `"describe_ui":true`, else `nil`.
+    /// result line for an envelope with `"then_describe_ui":true`, else `nil`.
     static func dispatch(
         line: String,
         accessibility: any Accessibility,
@@ -15,7 +15,7 @@ enum ThenDescribe {
         guard let data = line.data(using: .utf8),
             let object = try? JSONSerialization.jsonObject(with: data),
             let dict = object as? [String: Any],
-            dict["describe_ui"] as? Bool == true
+            dict["then_describe_ui"] as? Bool == true
         else { return nil }
 
         var ack = ""
@@ -31,6 +31,7 @@ enum ThenDescribe {
     static func perform(
         action: String? = nil,
         accessibility: any Accessibility,
+        affordances: AXAffordance.Style = .wire,
         timing: AXSettle.Timing = AXSettle.Timing(),
         act: () -> Bool
     ) -> String {
@@ -45,7 +46,7 @@ enum ThenDescribe {
                 timing: timing)
             guard let outcome else { return #"{"ok":false\#(named)}"# }
             changed = outcome.changed
-            let tree = outcome.tree?.json ?? "null"
+            let tree = outcome.tree?.json(affordances: affordances) ?? "null"
             return #"{"ok":true\#(named),"changed":\#(changed),"tree":\#(tree)}"#
         } catch {
             let message = GestureDispatcher.jsonEscape(error.localizedDescription)

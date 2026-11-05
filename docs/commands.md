@@ -65,7 +65,7 @@ baguette lifetime [--detach] [--shutdown]
 Launch an installed app, optionally answering with its first screen
 
 ```
-baguette launch --udid <udid> --bundle-id <bundle-id> [--relaunch] [--describe-ui]
+baguette launch --udid <udid> --bundle-id <bundle-id> [--relaunch] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
@@ -73,7 +73,7 @@ baguette launch --udid <udid> --bundle-id <bundle-id> [--relaunch] [--describe-u
 | `--udid` | yes |  | Simulator UDID |
 | `--bundle-id` | yes |  | Bundle id of an installed app |
 | `--relaunch` |  |  | Quit the app first, so it starts fresh. |
-| `--describe-ui` |  |  | Wait for the app's first screen, then answer with whether the screen changed and its accessibility tree. |
+| `--then-describe-ui` |  |  | Wait for the app's first screen, then answer with whether the screen changed and its accessibility tree. |
 
 ## baguette input
 
@@ -112,7 +112,7 @@ baguette stream --udid <udid> [--format <format>] [--fps <fps>] [--quality <qual
 Single tap at a point
 
 ```
-baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--duration <duration>] [--edge <edge>] [--describe-ui]
+baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--duration <duration>] [--edge <edge>] [--then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
@@ -124,7 +124,7 @@ baguette tap --udid <udid> --x <x> --y <y> --width <width> --height <height> [--
 | `--height` | yes |  |  |
 | `--duration` |  | `0.05` | Hold duration in seconds |
 | `--edge` |  |  | Screen edge the tap lands on: left \| top \| right \| bottom. Omit for an interior tap. |
-| `--describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed and its accessibility tree. |
+| `--then-describe-ui` |  |  | Wait for the screen to settle, then answer with whether it changed and its accessibility tree. |
 
 ## baguette double-tap
 
