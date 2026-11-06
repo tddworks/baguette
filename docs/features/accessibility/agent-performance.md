@@ -357,7 +357,7 @@ A finished command per control was built and measured first, and dropped:
 | Short read of the sign-in form | 53 | 197 | 112 |
 | Sign-in | 219 | 1,127 | 726 |
 | Seat map | about 470 | about 3,400 | about 490 |
-| Skylark booking, with skills, median cost | $0.063 | $0.083 | see section 13 |
+| Skylark booking, with skills, median cost | $0.063 | $0.083 | $0.052 |
 
 Most of the sign-in's rise from 219 is that `fill` now answers with what's next; `--no-then-describe-ui` leaves it out.
 
@@ -382,4 +382,19 @@ Six more fresh agents, set up as in section 10, on the benchmark's form: "Sign i
 - **Agents trim the offers.** All three without skills chose `--no-then-describe-ui` on their fills, and two with skills filtered the tap's answer down with `jq`, dropping `affordances`.
 - **Nobody opened a `baguette input` session,** in these six or the previous six.
 - **Four of six took a screenshot** to confirm the result the answer already gave.
+
+## 13 · Skylark, across the three shapes
+
+Three agents with the skills and three without, for each shape, set up as in section 10. Every booking was correct, 18 of 18, and no command failed.
+
+| Median | Names and `how` | A command per control | A command per verb |
+|---|---|---|---|
+| Cost, with skills | $0.063 | $0.083 | **$0.052** |
+| Cost, without | $0.062 | $0.094 | **$0.051** |
+| Characters of tool output, with skills | 6,546 | 20,869 | 7,336 |
+| Characters of tool output, without | 18,625 | 29,822 | 12,765 |
+| Commands, with skills | 9 | 8 | 9 |
+| Commands, without | 11 | 11 | 11 |
+
+Three runs each can't separate the first and last columns on cost; individual runs ranged from $0.047 to $0.078 across them. The middle column is clearly dearer. No agent ran `<name>` literally, and none lost `Continue with 3F`. With the skills, one of the three filtered one answer, where all three had filtered several with a command per control. The skill text differed between the runs, and this task never needs `fill`.
 
