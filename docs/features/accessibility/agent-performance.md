@@ -321,3 +321,41 @@ Booking on `examples/Skylark` with `fill` and `--short` completed first time, an
 
 - **An answer could mix two screens.** UIKit puts a pushed page at its final position as the slide starts, and removes the old page about half a second later, so the tree looks still while both are in it. 5 of 5 answers after a push held the old screen's text. Traced per kind of change: pushes had 4–9 elements across the left edge, and pops, tab switches, sheets and value changes had none; a closing sheet left the tree empty for about 0.4 s. `AXSettle` now waits out those two shapes, up to 1 s, so other changes keep their speed.
 - **An unnamed field wasn't in `visible`.** `AXTarget.visibleNames` listed only labelled elements, so a fill by a placeholder failed without naming the field. Now it lists text fields too. A placeholder isn't a name, because a field with text no longer shows it.
+
+## 10 · With and without the skills
+
+Six fresh agents booked on `examples/Skylark`, 3 with `baguette` and `baguette-test-app` and 3 with only the CLI, on Sonnet 5.5, from a folder outside the repo, given only the task sentence. Correct bookings were read from the simulator afterwards.
+
+| | With skills | Without |
+|---|---|---|
+| Booked correctly | 3 of 3 | 3 of 3 |
+| Time, median | 49 s | 52 s |
+| Commands, median | 9 | 11 |
+| Cost, median | $0.063 | $0.062 |
+| Characters of tool output, median | 6,546, plus 7,532 of skill | 18,625 |
+| Learned the CLI from | the skill | `--help`, 2–3 calls |
+
+Three runs is too few to separate small differences. What the transcripts show plainly:
+
+- **Nobody used `--short`, `fill` or `baguette input`.** `launch` and `tap --then-describe-ui` already answer in short form, and the search bar can be skipped by choosing from the list, so this task doesn't exercise `fill`.
+- **Every with-skill agent loaded only `baguette-test-app`.** So the session advice in `baguette`'s SKILL.md was never read, and this run says nothing about it.
+- **The answers teach the tool.** Without a skill, agents reached `tap --label … --then-describe-ui` from `--help` and `how`, and then used it the same way.
+- **A long answer can lose the next step.** Two agents cut the seat map at 1,500 characters and lost `Continue with 3F`, last in `tap`, then spent another read finding it.
+
+## 11 · What can be done next
+
+Every answer says what can be done next, ready to run: `"tap Sign In":"baguette tap --udid U --label 'Sign In' --then-describe-ui"`, the shape `asc-cli` uses. This replaces the names and the separate `how` from `0189949d`, and sections above that mention `how` or `visible` describe the earlier shape.
+
+It costs tokens, measured with the benchmark harness, 3 runs, with the program as `baguette`:
+
+| | Names and `how` | Finished commands |
+|---|---|---|
+| Short read of the sign-in form | 53 | 197 |
+| Sign-in | 219 | 1,127 (685 with `--no-then-describe-ui` on each fill) |
+| Sign-in time | 5.14 s | 6.54 s, because a fill now reads the screen too |
+| Skylark's seat map | about 470 | about 3,400 |
+
+That moves the sign-in from 2nd to 4th of 9 on tokens, and undoes the seat map's budget of 2,500 bytes from `86012430`. Both are accepted for answers that need nothing beyond themselves. Keys sort alphabetically, so a filter on the key finds a control wherever it is.
+
+Not done: `tap`, `swipe`, `type` and `press` without `--then-describe-ui` still answer only `ok`, and a screen with nothing but scrolling offers no `swipe`. A drag offered for a slider starts from its value and hasn't been run on a real slider.
+

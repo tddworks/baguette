@@ -36,7 +36,7 @@ enum LabelTap {
 
         guard case .found(let node) = found.lookup else {
             let refusal = found.refusal(of: name)
-            return failure(refusal?.message ?? "nothing matches \(name)", refusal?.details ?? [:])
+            return failure(refusal?.message ?? "nothing matches \(name)", refusal?.fields(affordances) ?? [:])
         }
         if envelope["touch"] as? Bool == true {
             return touch(node, envelope, screen: found.screen, accessibility, gesture, affordances, timing)
@@ -109,7 +109,7 @@ enum LabelTap {
             options: .anchored)
     }
 
-    private static func failure(_ message: String, _ extra: [String: [String]] = [:]) -> String {
+    private static func failure(_ message: String, _ extra: [String: Any] = [:]) -> String {
         var fields: [String: Any] = ["ok": false, "error": message]
         extra.forEach { fields[$0.key] = $0.value }
         let data = (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()

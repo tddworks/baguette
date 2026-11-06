@@ -253,7 +253,7 @@ baguette type --udid <udid> --text <text>
 Make a named text field hold this text, and answer with what it shows
 
 ```
-baguette fill --udid <udid> --label <label> --text <text>
+baguette fill --udid <udid> --label <label> --text <text> [--then-describe-ui] [--no-then-describe-ui]
 ```
 
 | Flag | Required | Default | Description |
@@ -261,6 +261,8 @@ baguette fill --udid <udid> --label <label> --text <text>
 | `--udid` | yes |  | Simulator UDID |
 | `--label` | yes |  | The text field, by its name from the answer's affordances, part of its label, or identifier. |
 | `--text` | yes |  | The text it should hold, in any language. Empty clears it. |
+| `--then-describe-ui` |  | `--then-describe-ui` | Answer with what can be done next and what the screen says, too. |
+| `--no-then-describe-ui` |  |  | Answer with what can be done next and what the screen says, too. |
 
 ## baguette paste
 

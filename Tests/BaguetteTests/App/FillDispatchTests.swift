@@ -20,8 +20,10 @@ struct FillDispatchTests {
         given(ax).describeAll().willReturn(Self.tree)
         let input = MockInput()
         given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let pasteboard = MockPasteboard()
+        given(pasteboard).setText(.any).willReturn()
         return await FillDispatch.dispatch(
-            line: line, accessibility: ax, pasteboard: MockPasteboard(), input: input, timing: Self.instant)
+            line: line, accessibility: ax, pasteboard: pasteboard, input: input, timing: Self.instant)
     }
 
     @Test func `should leave a line that isn't a fill for its own pipeline`() async {
@@ -32,7 +34,34 @@ struct FillDispatchTests {
 
     @Test func `should answer a fill with what the field shows`() async {
         let answer = await dispatch(#"{"type":"fill","label":"email","text":"gary"}"#)
-        #expect(answer == #"{"filled":"email","ok":true,"value":"gary"}"#)
+        #expect(answer?.contains(#""filled":"email""#) == true)
+        #expect(answer?.contains(#""value":"gary""#) == true)
+    }
+
+    private func object(_ answer: String?) throws -> [String: Any] {
+        let text = try #require(answer)
+        return try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+    }
+
+    @Test func `should answer a fill with what's next`() async throws {
+        let answer = try object(await dispatch(#"{"type":"fill","label":"email","text":"gary"}"#))
+
+        #expect(answer["filled"] as? String == "email")
+        #expect((answer["affordances"] as? [String: Any])?["fill email"] != nil)
+    }
+
+    @Test func `should leave what's next out when asked`() async throws {
+        let answer = try object(await dispatch(#"{"type":"fill","label":"email","text":"gary","then_describe_ui":false}"#))
+
+        #expect(answer["filled"] as? String == "email")
+        #expect(answer["affordances"] == nil)
+    }
+
+    @Test func `should answer a fill that didn't land with what's next too`() async throws {
+        let answer = try object(await dispatch(#"{"type":"fill","label":"email","text":"something else"}"#))
+
+        #expect(answer["ok"] as? Bool == false)
+        #expect((answer["affordances"] as? [String: Any])?["fill email"] != nil)
     }
 
     @Test func `should answer a fill with no text as a refusal`() async throws {

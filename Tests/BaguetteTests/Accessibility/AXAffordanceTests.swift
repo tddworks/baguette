@@ -23,9 +23,17 @@ struct AXAffordanceTests {
         AXNode(role: "AXButton", label: label, frame: frame, enabled: enabled)
     }
 
-    private func tappable(_ tree: AXNode) -> [String]? {
-        (tree.agentSummary(Self.cli)["affordances"] as? [String: Any])?["tap"] as? [String]
+    private func commands(_ tree: AXNode, _ style: AXAffordance.Style = cli) -> [String: Any] {
+        tree.agentSummary(style)["affordances"] as? [String: Any] ?? [:]
     }
+
+    /// The names a verb is offered for, `nil` when it's offered for none.
+    private func offered(_ tree: AXNode, _ verb: String) -> Set<String>? {
+        let names = commands(tree).keys.filter { $0.hasPrefix(verb + " ") }.map { String($0.dropFirst(verb.count + 1)) }
+        return names.isEmpty ? nil : Set(names)
+    }
+
+    private func tappable(_ tree: AXNode) -> Set<String>? { offered(tree, "tap") }
 
     @Test func `should list every enabled control as tappable by name`() {
         #expect(tappable(tree(button("Search flights"))) == ["Search flights"])
@@ -42,7 +50,7 @@ struct AXAffordanceTests {
     @Test func `should list a disabled control apart, not as something to do`() {
         let summary = tree(button("Pay $1,240", enabled: false)).agentSummary(Self.cli)
 
-        #expect((summary["affordances"] as? [String: Any])?["tap"] == nil)
+        #expect((summary["affordances"] as? [String: Any])?.isEmpty == true)
         #expect(summary["disabled"] as? [String] == ["Pay $1,240"])
     }
 
@@ -60,33 +68,125 @@ struct AXAffordanceTests {
         let identified = AXNode(role: "AXTextField", identifier: "MapsSearchTextField", frame: rect(0, 100, 40, 40))
         let bare = AXNode(role: "AXButton", frame: rect(0, 200, 40, 40))
 
-        #expect(tappable(tree(identified, bare)) == ["MapsSearchTextField", "Button"])
+        #expect(offered(tree(identified, bare), "fill") == ["MapsSearchTextField"])
+        #expect(tappable(tree(identified, bare)) == ["Button"])
     }
 
     @Test func `should keep a name on one line`() {
         #expect(tappable(tree(button("One\nTwo"))) == ["One Two"])
     }
 
-    @Test func `should list a slider as something to adjust, because a press can't set a value`() {
+    @Test func `should offer a slider as a drag from where it is now, because a press can't set a value`() {
         let slider = AXNode(role: "AXSlider", value: "50%", identifier: "DYNAMIC_TYPE_SLIDER", frame: rect(20, 760, 360, 40))
-        let map = tree(slider, button("Done")).agentSummary(Self.cli)["affordances"] as? [String: Any]
+        let offers = commands(tree(slider, button("Done")))
 
-        #expect(map?["adjust"] as? [String] == ["DYNAMIC_TYPE_SLIDER"])
-        #expect(map?["tap"] as? [String] == ["Done"])
+        #expect(offers["swipe DYNAMIC_TYPE_SLIDER"] as? String
+            == "baguette swipe --udid U --start-x 200 --start-y 780 --end-x <x> --end-y 780 --width 402 --height 874 --then-describe-ui")
+        #expect(offers["tap Done"] != nil)
+        #expect(offers["adjust DYNAMIC_TYPE_SLIDER"] == nil)
     }
 
-    @Test func `should say how to adjust a slider`() {
-        let how = tree().agentSummary(Self.cli, withHow: true)["how"] as? [String: Any]
+    // MARK: - the verb a control takes
 
-        #expect((how?["adjust"] as? String)?.contains("swipe") == true)
+    private func field(_ label: String, role: String = "AXTextField", focused: Bool = false) -> AXNode {
+        AXNode(role: role, label: label, frame: rect(16, 132, 370, 44), focused: focused)
+    }
+
+    @Test func `should offer a text field to fill, not to tap`() {
+        let screen = tree(field("Email"), button("Sign In"))
+
+        #expect(offered(screen, "fill") == ["Email"])
+        #expect(offered(screen, "tap") == ["Sign In"])
+    }
+
+    @Test func `should offer a secure field to fill`() {
+        let secure = AXNode(role: "AXTextField", subrole: "AXSecureTextField", identifier: "password", frame: rect(16, 232, 370, 44))
+
+        #expect(offered(tree(secure), "fill") == ["password"])
+    }
+
+    @Test func `should offer nothing to fill when the screen has no text field`() {
+        #expect(offered(tree(button("Sign In")), "fill") == nil)
+    }
+
+    @Test func `should not offer to fill a disabled field`() {
+        let disabled = AXNode(role: "AXTextField", label: "Email", frame: rect(16, 132, 370, 44), enabled: false)
+
+        #expect(offered(tree(disabled), "fill") == nil)
+    }
+
+    @Test func `should offer a focused field to fill and to type`() {
+        let screen = tree(field("City", focused: true))
+
+        #expect(offered(screen, "fill") == ["City"])
+        #expect(offered(screen, "type") == ["City"])
+    }
+
+    @Test func `should number a field and a button that share a name so each name reaches one`() {
+        let name = field("Name")
+        let action = button("Name")
+        let screen = tree(name, action)
+
+        #expect(offered(screen, "fill") == ["Name #1"])
+        #expect(offered(screen, "tap") == ["Name #2"])
+        #expect(AXTarget.find("Name #1", in: screen) == .found(name))
+        #expect(AXTarget.find("Name #2", in: screen) == .found(action))
+    }
+
+    // MARK: - a finished command for each
+
+    @Test func `should offer a finished command to fill a field`() {
+        #expect(commands(tree(field("email")))["fill email"] as? String
+            == "baguette fill --udid U --label email --text <text>")
+    }
+
+    @Test func `should offer a finished command to tap a control`() {
+        #expect(commands(tree(button("Sign In")))["tap Sign In"] as? String
+            == "baguette tap --udid U --label 'Sign In' --then-describe-ui")
+    }
+
+    @Test func `should offer a finished command to type into a focused field`() {
+        #expect(commands(tree(field("City", focused: true)))["type City"] as? String
+            == "baguette type --udid U --text <text>")
+    }
+
+    @Test func `should quote a name so the shell can't expand it`() {
+        #expect(commands(tree(button("Pay $1,240")))["tap Pay $1,240"] as? String
+            == "baguette tap --udid U --label 'Pay $1,240' --then-describe-ui")
+        #expect(commands(tree(button("It's on")))["tap It's on"] as? String
+            == #"baguette tap --udid U --label 'It'\''s on' --then-describe-ui"#)
+    }
+
+    @Test func `should offer the program as it was run and a custom device set`() {
+        let style = AXAffordance.Style.commandLine(program: "/opt/baguette", udid: "U", deviceSet: "/my set")
+
+        #expect(commands(tree(button("A")), style)["tap A"] as? String
+            == #"/opt/baguette tap --udid U --device-set "/my set" --label A --then-describe-ui"#)
+    }
+
+    @Test func `should offer a session the envelope, not a command`() {
+        let offers = commands(tree(field("email"), button("Sign In")), .wire)
+        let tap = offers["tap Sign In"] as? [String: Any]
+        let fill = offers["fill email"] as? [String: Any]
+
+        #expect(tap?["type"] as? String == "tap")
+        #expect(tap?["label"] as? String == "Sign In")
+        #expect(tap?["then_describe_ui"] as? Bool == true)
+        #expect(fill?["type"] as? String == "fill")
+        #expect(fill?["label"] as? String == "email")
+        #expect(fill?["text"] as? String == "<text>")
+    }
+
+    @Test func `should have no separate section on how to act`() {
+        #expect(tree(button("A")).agentSummary(Self.cli)["how"] == nil)
     }
 
     @Test func `should offer typing only when a text field is focused`() {
         let focused = AXNode(role: "AXTextField", label: "City", frame: rect(16, 132, 370, 44), focused: true)
         let idle = AXNode(role: "AXTextField", label: "Name", frame: rect(16, 232, 370, 44))
 
-        #expect((tree(focused).agentSummary(Self.cli)["affordances"] as? [String: Any])?["type"] as? [String] == ["City"])
-        #expect((tree(idle).agentSummary(Self.cli)["affordances"] as? [String: Any])?["type"] == nil)
+        #expect(offered(tree(focused), "type") == ["City"])
+        #expect(offered(tree(idle), "type") == nil)
     }
 
     @Test func `should say what the screen says, without the status bar or what's off screen`() {
@@ -108,50 +208,8 @@ struct AXAffordanceTests {
         #expect(tree(toggle).agentSummary(Self.cli)["values"] as? [String: String] == ["Bold Text": "0"])
     }
 
-    @Test func `should not repeat what never changes in the answer to a tap`() throws {
-        let summary = tree(button("A")).agentSummary(Self.cli)
-        let text = String(decoding: try JSONSerialization.data(withJSONObject: summary), as: UTF8.self)
-
-        #expect(!text.contains("--udid"))
-        #expect(summary["how"] == nil)
-        #expect(summary["screen"] == nil)
-    }
-
-    @Test func `should say how to act once, for a caller that hasn't yet`() {
-        let how = tree(button("A")).agentSummary(Self.cli, withHow: true)["how"] as? [String: Any]
-
-        #expect(how?["tap"] as? String == "baguette tap --udid U --label '<name>' --then-describe-ui")
-        #expect(how?["swipe"] as? String
-            == "baguette swipe --udid U --start-x <x> --start-y <y> --end-x <x> --end-y <y> --width 402 --height 874 --then-describe-ui")
-    }
-
-    @Test func `should say how with the program as it was run and a custom device set`() {
-        let style = AXAffordance.Style.commandLine(program: "/opt/baguette", udid: "U", deviceSet: "/my set")
-        let how = tree().agentSummary(style, withHow: true)["how"] as? [String: Any]
-
-        #expect(how?["tap"] as? String == #"/opt/baguette tap --udid U --device-set "/my set" --label '<name>' --then-describe-ui"#)
-    }
-
-    @Test func `should say how in the wire form to a session`() {
-        let how = tree().agentSummary(.wire, withHow: true)["how"] as? [String: Any]
-        let tap = how?["tap"] as? [String: Any]
-
-        #expect(tap?["type"] as? String == "tap")
-        #expect(tap?["label"] as? String == "<name>")
-        #expect(tap?["then_describe_ui"] as? Bool == true)
-    }
-
-    @Test func `should stay small on a screen with many controls`() throws {
-        let seats = (1...20).flatMap { row in
-            ["A", "B", "C", "D", "E", "F"].enumerated().map { column, letter in
-                button("Seat \(row)\(letter)", rect(48 + Double(column) * 52, 90 + Double(row) * 46, 46, 40))
-            }
-        }
-        let big = AXNode(
-            role: "AXApplication", frame: rect(0, 0, 402, 874), children: seats,
-            screen: AXScreen(width: 402, height: 874, orientation: .portrait))
-
-        #expect(try JSONSerialization.data(withJSONObject: big.agentSummary(Self.cli)).count < 2500)
+    @Test func `should not repeat the screen's size in an answer`() {
+        #expect(tree(button("A")).agentSummary(Self.cli)["screen"] == nil)
     }
 
     @Test func `should leave the plain JSON for scripts unchanged`() {
@@ -164,7 +222,7 @@ struct AXAffordanceTests {
         #expect(json.hasPrefix(#"{"affordances":"#))
         let object = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         #expect((object["children"] as? [[String: Any]])?.count == 1)
-        #expect(object["how"] != nil)
+        #expect(object["how"] == nil)
         #expect(object["role"] as? String == "AXApplication")
     }
 }

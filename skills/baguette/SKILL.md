@@ -46,7 +46,8 @@ be tapped next. It isn't a real finger: add `--touch` to test what a user can re
 
 Use `fill` for a field, not `tap` then `type`: it clears the field first, takes any
 language, and `"ok":true` means the field shows the text. Use the full `describe-ui`
-only for what the short answer leaves out: `screen`, frames and roles.
+only for what the short answer leaves out: `screen`, frames and roles. Each answer's
+`affordances` gives what you can do next, with the command to run.
 
 ## Coordinates are device points (read this)
 

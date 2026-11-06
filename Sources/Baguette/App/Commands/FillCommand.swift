@@ -19,6 +19,9 @@ struct FillCommand: AsyncParsableCommand {
     @Option(help: "The text it should hold, in any language. Empty clears it.")
     var text: String
 
+    @Flag(inversion: .prefixedNo, help: "Answer with what can be done next and what the screen says, too.")
+    var thenDescribeUI = true
+
     func run() async throws {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
         guard let simulator = simulators.find(udid: options.udid) else {
@@ -28,7 +31,8 @@ struct FillCommand: AsyncParsableCommand {
         let outcome = await Fill(label: label, text: text).execute(
             accessibility: simulator.accessibility(), pasteboard: simulator.pasteboard(), input: simulator.input(),
             inputTaken: { await SimctlInputSurface().shadowed(on: simulator) })
-        print(AXAffordance.json(outcome.answer))
+        print(FillDispatch.answer(
+            outcome, thenDescribe: thenDescribeUI, accessibility: simulator.accessibility(), style: options.affordanceStyle))
         if !outcome.isOK { throw ExitCode.failure }
     }
 }

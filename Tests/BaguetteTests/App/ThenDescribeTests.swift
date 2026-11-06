@@ -94,7 +94,8 @@ struct ThenDescribeTests {
             affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil),
             timing: Self.immediate, act: { true })
 
-        #expect((try parsed(json)["affordances"] as? [String: Any])?["tap"] as? [String] == ["General"])
+        #expect((try parsed(json)["affordances"] as? [String: Any])?["tap General"] as? String
+            == "baguette tap --udid X --label General --then-describe-ui")
     }
 
     private static let cli = AXAffordance.Style.commandLine(program: "baguette", udid: "X", deviceSet: nil)
@@ -160,7 +161,7 @@ struct ThenDescribeTests {
             action: "tap", at: Point(x: 56, y: 550), accessibility: axShowing(Self.screenTree),
             affordances: Self.cli, timing: Self.immediate, act: { true }))
 
-        #expect((result["affordances"] as? [String: Any])?["tap"] != nil)
+        #expect((result["affordances"] as? [String: Any])?.isEmpty == false)
         #expect(result["how"] == nil)
         #expect(result["tree"] == nil)
     }

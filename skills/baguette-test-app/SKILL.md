@@ -42,34 +42,35 @@ baguette launch --udid <X> --bundle-id <id> --relaunch --then-describe-ui
 ```
 
 It waits for the first real screen, usually 4 to 5 seconds. Baguette logs to stderr,
-so add `2>/dev/null` if you only want the answer. This first answer also has `how`, the
-commands to use from here. Answers to a tap leave it out, because you just ran one.
+so add `2>/dev/null` if you only want the answer.
 
-**2. Read the answer and think.** It's short, and says what you can do:
+**2. Read the answer and think.** It says what you can do next, each with the command
+to run:
 
 ```json
 {"ok":true,"changed":true,
- "affordances":{"tap":["Back","Groceries, 3 items","Holiday, 12 items","New List"]},
+ "affordances":{"fill Name":"baguette fill --udid X --label Name --text <text>",
+                "tap Back":"baguette tap --udid X --label Back --then-describe-ui",
+                "tap New List":"baguette tap --udid X --label 'New List' --then-describe-ui"},
  "disabled":["Share List"],
  "text":["My Lists"],
  "values":{"Home":"1"}}
 ```
 
-- **`affordances.tap`:** the controls you can tap, by name.
-- **`affordances.type`:** a focused text field you can type into.
-- **`affordances.adjust`:** a slider. A press can't set a value, so drag it with `swipe`,
-  using its frame from `describe-ui`.
+- **`affordances`:** what you can do next. Run the command as it's written, filling in
+  anything like `<text>`. `fill` is for a text field, `type` for one that has focus, and
+  `swipe` for a slider, because a press can't set its value.
 - **`disabled`:** controls that can't be used yet. Do what they're waiting for first.
 - **`text`:** what the screen says. Some of it can be tapped too, like a `Show more` link.
 - **`values`:** a control's value, like a switch's `1` or the selected tab's.
 
 Read what's there before choosing: the first row is rarely the one the task means.
 
-**A long answer** can list over a hundred names. To find one, or see what's new, filter
-for that part, and keep the rest of the answer in mind:
+**A long answer** can offer over a hundred actions, so filter it by what you're after
+instead of cutting it off, because what you need next may be anywhere in it:
 
 ```bash
-... 2>/dev/null | jq -r '.affordances.tap[] | select(test("New List|Continue"))'
+... 2>/dev/null | jq -r '.affordances | to_entries[] | select(.key | test("New List|Continue")) | .value'
 ```
 
 **3. Tap by name, and read, in one call.**
@@ -130,7 +131,7 @@ just a blank spot in a wide row: check with a screenshot.
 ## When a tap does nothing
 
 `"changed":false` means the app's own tree didn't change, and the answer says what it
-knows in `hint`, plus a `try` command if it has a better way. baguette never retries for
+knows in `hint`, plus a `try` with a better way if it has one. baguette never retries for
 you, because the app may have acted anyway: check before tapping `Delete Account` a
 second time.
 

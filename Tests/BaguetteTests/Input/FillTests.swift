@@ -115,7 +115,11 @@ struct FillTests {
 
         let outcome = await stage.fill("gary")
 
-        #expect(outcome == .notATextField(name: "email"))
+        guard case .notATextField(let name, _) = outcome else {
+            Issue.record("expected notATextField, got \(outcome)")
+            return
+        }
+        #expect(name == "email")
         #expect(stage.events.isEmpty)
     }
 
@@ -344,7 +348,7 @@ struct FillTests {
     }
 
     @Test func `should say how to take the input back when Device Hub has it`() {
-        let answer = FillOutcome.inputTaken(name: "email").answer
+        let answer = FillOutcome.inputTaken(name: "email").answer()
         #expect(answer["ok"] as? Bool == false)
         #expect((answer["error"] as? String)?.contains("baguette heal") == true)
     }
@@ -352,35 +356,58 @@ struct FillTests {
     private func text(_ answer: [String: Any]) -> String { AXAffordance.json(answer) }
 
     @Test func `should answer a filled field with its name and what it shows`() {
-        #expect(text(FillOutcome.filled(name: "email", shows: "gary").answer) == #"{"filled":"email","ok":true,"value":"gary"}"#)
+        #expect(text(FillOutcome.filled(name: "email", shows: "gary").answer()) == #"{"filled":"email","ok":true,"value":"gary"}"#)
     }
 
     @Test func `should answer a cleared field as empty`() {
-        #expect(text(FillOutcome.cleared(name: "email").answer) == #"{"filled":"email","ok":true,"value":""}"#)
+        #expect(text(FillOutcome.cleared(name: "email").answer()) == #"{"filled":"email","ok":true,"value":""}"#)
     }
 
     @Test func `should answer a field that differs with what it shows`() {
-        let answer = FillOutcome.differs(name: "email", shows: "gar", wanted: #""gary""#).answer
+        let answer = FillOutcome.differs(name: "email", shows: "gar", wanted: #""gary""#).answer()
         #expect(answer["ok"] as? Bool == false)
         #expect(answer["value"] as? String == "gar")
         #expect(answer["error"] as? String == #"email shows "gar", not "gary""#)
     }
 
     @Test func `should say nothing was typed when the element isn't a text field`() {
-        let answer = FillOutcome.notATextField(name: "Remember me").answer
+        let answer = FillOutcome.notATextField(name: "Remember me", screen: nil).answer()
         #expect(answer["error"] as? String == "Remember me isn't a text field, so nothing was typed")
     }
 
     @Test func `should say nothing was typed when a field never takes focus`() {
-        let answer = FillOutcome.neverFocused(name: "email").answer
+        let answer = FillOutcome.neverFocused(name: "email").answer()
         #expect(answer["error"] as? String == "email never took focus, so nothing was typed")
     }
 
-    @Test func `should carry the names on screen when a name reached nothing`() {
-        let refusal = AXTarget.Refusal(message: "nothing matches x", details: ["visible": ["Pay"]])
-        let answer = FillOutcome.unreachable(refusal).answer
+    @Test func `should answer a name that reached nothing with what the screen offers`() {
+        let tree = AXNode(
+            role: "AXApplication", frame: Stage.full,
+            children: [AXNode(role: "AXButton", label: "Pay", frame: Stage.full)])
+        let answer = FillOutcome.unreachable(AXTarget.Refusal(message: "nothing matches x", screen: tree)).answer()
+
+        #expect(answer["ok"] as? Bool == false)
         #expect(answer["error"] as? String == "nothing matches x")
-        #expect(answer["visible"] as? [String] == ["Pay"])
+        #expect((answer["affordances"] as? [String: Any])?["tap Pay"] != nil)
+        #expect(answer["visible"] == nil)
+    }
+
+    @Test func `should answer an element that isn't a text field with what the screen offers`() async {
+        let stage = Stage()
+        stage.role = "AXSwitch"
+
+        let answer = await stage.fill("gary").answer()
+
+        #expect((answer["affordances"] as? [String: Any])?["tap email"] != nil)
+    }
+
+    @Test func `should offer the finished command to take the input back`() {
+        let style = AXAffordance.Style.commandLine(program: "baguette", udid: "U", deviceSet: nil)
+        #expect(FillOutcome.inputTaken(name: "email").answer(style)["try"] as? String == "baguette heal --udid U")
+    }
+
+    @Test func `should offer the way to take the input back when Device Hub has it`() {
+        #expect(FillOutcome.inputTaken(name: "email").answer()["try"] as? String == "baguette heal --udid <udid>")
     }
 
     @Test func `should say ok only when the field shows the text`() {
@@ -388,6 +415,6 @@ struct FillTests {
         #expect(FillOutcome.cleared(name: "e").isOK)
         #expect(!FillOutcome.differs(name: "e", shows: "x", wanted: "y").isOK)
         #expect(!FillOutcome.neverFocused(name: "e").isOK)
-        #expect(!FillOutcome.notATextField(name: "e").isOK)
+        #expect(!FillOutcome.notATextField(name: "e", screen: nil).isOK)
     }
 }

@@ -13,8 +13,11 @@ baguette fill --udid <UDID> --label email --text 'gary@example.com'
 ```
 
 ```json
-{"filled":"email","ok":true,"value":"gary@example.com"}
+{"affordances":{"tap Sign In":"baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui", …},
+ "filled":"email","ok":true,"text":[…],"value":"gary@example.com","values":{…}}
 ```
+
+Like any answer, it says what can be done next. `--no-then-describe-ui` (`"then_describe_ui":false`) leaves that out, for a script or a step you're already sure of.
 
 `--label` takes a name from `affordances`, part of a label, or an identifier, as [`tap --label`](../../commands.md#baguette-tap) does. An empty `--text` clears the field.
 
@@ -39,7 +42,7 @@ A form is one session, and one answer per line:
 |---|---|
 | `"ok":true` | the field shows the text; `value` is what's there, with other punctuation if the field reformatted it |
 | `"ok":false` and `value` | something was entered, and the field shows something else |
-| `"ok":false` without `value` | nothing was typed; `error` says why, with the names on screen when a name matched nothing |
+| `"ok":false` without `value` | nothing was typed; `error` says why |
 
 A secure field's `value` is its dots, and an error gives only the expected length, never the password.
 

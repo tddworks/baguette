@@ -1,10 +1,9 @@
 import Foundation
 
-/// An affordance is what an agent can do on this screen right now, so everything
-/// here depends on the screen. What's always true, like the device's UDID or how to
-/// go home, isn't an affordance and isn't repeated. Baguette presses a control
-/// through accessibility, by name, so where a control is doesn't matter: only
-/// whether it's enabled, which iOS reports directly.
+/// An affordance is what an agent can do next on this screen, ready to run, so it
+/// needs nothing beyond the answer: no command tree to remember, no form to fill in
+/// from an earlier one. Baguette presses a control through accessibility, by name, so
+/// where a control is doesn't matter: only whether it's enabled, which iOS reports directly.
 enum AXAffordance {
     /// How a next step is spelled: as a command for a one-shot caller, or as an
     /// envelope for a `baguette input` session.
@@ -13,29 +12,76 @@ enum AXAffordance {
         case wire
     }
 
-    /// How to act, for a caller that hasn't yet. An answer to a tap leaves it out,
-    /// because the caller just ran it.
-    static func how(_ style: Style, screen: AXScreen?) -> [String: Any] {
-        var how: [String: Any] = [
-            "tap": tapByName("<name>", style),
-            "adjust": "A press can't set a value. Drag a slider with swipe: describe-ui has its frame.",
-        ]
-        if case .commandLine(let program, _, _) = style {
-            let size = screen.map { " --width \(Int($0.width.rounded())) --height \(Int($0.height.rounded()))" } ?? ""
-            how["swipe"] = "\(program) swipe \(device(style)) --start-x <x> --start-y <y> --end-x <x> --end-y <y>\(size) --then-describe-ui"
-        }
-        return how
-    }
+    /// One thing that can be done next. It says what it is once, and each caller gets
+    /// it in its own spelling.
+    enum Action: Equatable, Sendable {
+        case tap(String)
+        case fill(String)
+        case type(String)
+        /// A slider: a press can't set a value, so a drag starts from where it is now.
+        case drag(String, from: Point, size: Size)
+        case heal
 
-    /// A tap on one element by name. Single quotes keep a name like `Pay $1,240`
-    /// from being expanded by the shell.
-    static func tapByName(_ name: String, _ style: Style) -> Any {
-        switch style {
-        case .commandLine(let program, _, _):
-            let quoted = name.replacingOccurrences(of: "'", with: #"'\''"#)
-            return "\(program) tap \(device(style)) --label '\(quoted)' --then-describe-ui"
-        case .wire:
-            return ["type": Tap.wireType, "label": name, "then_describe_ui": true] as [String: Any]
+        var key: String {
+            switch self {
+            case .tap(let name): return "\(Tap.wireType) \(name)"
+            case .fill(let name): return "\(Fill.wireType) \(name)"
+            case .type(let name): return "\(TypeText.wireType) \(name)"
+            case .drag(let name, _, _): return "\(Swipe.wireType) \(name)"
+            case .heal: return "heal"
+            }
+        }
+
+        func spelled(_ style: Style) -> Any {
+            switch style {
+            case .commandLine(let program, _, _): return command(program, style)
+            case .wire: return envelope
+            }
+        }
+
+        private func command(_ program: String, _ style: Style) -> String {
+            let device = AXAffordance.device(style)
+            switch self {
+            case .tap(let name):
+                return "\(program) tap \(device) --label \(Self.quoted(name)) --then-describe-ui"
+            case .fill(let name):
+                return "\(program) fill \(device) --label \(Self.quoted(name)) --text <text>"
+            case .type:
+                return "\(program) type \(device) --text <text>"
+            case .drag(_, let from, let size):
+                let (x, y) = (Int(from.x.rounded()), Int(from.y.rounded()))
+                return "\(program) swipe \(device) --start-x \(x) --start-y \(y) --end-x <x> --end-y \(y)"
+                    + " --width \(Int(size.width.rounded())) --height \(Int(size.height.rounded())) --then-describe-ui"
+            case .heal:
+                return "\(program) heal \(device)"
+            }
+        }
+
+        private var envelope: Any {
+            switch self {
+            case .tap(let name):
+                return ["type": Tap.wireType, "label": name, "then_describe_ui": true] as [String: Any]
+            case .fill(let name):
+                return ["type": Fill.wireType, "label": name, "text": "<text>"]
+            case .type:
+                return ["type": TypeText.wireType, "text": "<text>"]
+            case .drag(_, let from, let size):
+                return [
+                    "type": Swipe.wireType, "startX": from.x, "startY": from.y, "endX": "<x>", "endY": from.y,
+                    "width": size.width, "height": size.height, "then_describe_ui": true,
+                ] as [String: Any]
+            case .heal:
+                // Not a gesture: a session can't heal itself, so it stays a command.
+                return "baguette heal --udid <udid>"
+            }
+        }
+
+        /// Single quotes keep a name like `Pay $1,240` from being expanded by the shell.
+        private static func quoted(_ name: String) -> String {
+            let plain = name.unicodeScalars.allSatisfy {
+                CharacterSet.alphanumerics.contains($0) || "_-.@".unicodeScalars.contains($0)
+            }
+            return plain && !name.isEmpty ? name : "'" + name.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
         }
     }
 
@@ -46,11 +92,13 @@ enum AXAffordance {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private static func device(_ style: Style) -> String {
+    fileprivate static func device(_ style: Style) -> String {
         guard case .commandLine(_, let udid, let deviceSet) = style else { return "" }
         return "--udid \(udid)" + (deviceSet.map { #" --device-set "\#($0)""# } ?? "")
     }
 }
+
+
 
 extension AXNode {
     /// Roles that respond to a tap by definition. Text and images can too, but
@@ -69,8 +117,8 @@ extension AXNode {
     /// what the screen says. Small on purpose: agents filter a long answer to read
     /// it, and lose whatever the filter drops. The whole tree is one `describe-ui`
     /// away.
-    func agentSummary(_ style: AXAffordance.Style, withHow: Bool = false) -> [String: Any] {
-        var summary = offers(style, withHow: withHow)
+    func agentSummary(_ style: AXAffordance.Style) -> [String: Any] {
+        var summary = offers(style)
         var text: [String] = []
         var values: [String: String] = [:]
         for node in preorder() where node.hasSize && !node.hidden {
@@ -89,32 +137,50 @@ extension AXNode {
     }
 
     /// The summary's fields as JSON, to sit beside a gesture's own.
-    func agentSummaryFields(_ style: AXAffordance.Style, withHow: Bool = false) -> String {
-        String(AXAffordance.json(agentSummary(style, withHow: withHow)).dropFirst().dropLast())
+    func agentSummaryFields(_ style: AXAffordance.Style) -> String {
+        String(AXAffordance.json(agentSummary(style)).dropFirst().dropLast())
     }
 
     /// What can be done and what can't yet, without the text: the tree beside it
     /// already says that.
     func offersFields(_ style: AXAffordance.Style) -> String {
-        String(AXAffordance.json(offers(style, withHow: true)).dropFirst().dropLast())
+        String(AXAffordance.json(offers(style)).dropFirst().dropLast())
     }
 
-    private func offers(_ style: AXAffordance.Style, withHow: Bool) -> [String: Any] {
+    private func offers(_ style: AXAffordance.Style) -> [String: Any] {
         let controls = preorder().filter { !$0.hidden && $0.hasSize && Self.controlRoles.contains($0.role) }
         let enabled = controls.filter(\.enabled)
-        var affordances: [String: Any] = [:]
-        let names = numberedNames(enabled.filter { $0.role != "AXSlider" })
-        if !names.isEmpty { affordances["tap"] = names }
-        let sliders = numberedNames(enabled.filter { $0.role == "AXSlider" })
-        if !sliders.isEmpty { affordances["adjust"] = sliders }
-        let typeable = enabled.filter { $0.textField?.isFocused == true }.map(\.offerName)
-        if !typeable.isEmpty { affordances["type"] = typeable }
-
-        var result: [String: Any] = ["affordances": affordances]
+        var result: [String: Any] = [
+            "affordances": Dictionary(actions(enabled).map { ($0.key, $0.spelled(style)) }) { first, _ in first }
+        ]
         let disabled = numberedNames(controls.filter { !$0.enabled })
         if !disabled.isEmpty { result["disabled"] = disabled }
-        if withHow { result["how"] = AXAffordance.how(style, screen: screen) }
         return result
+    }
+
+    /// What each enabled control offers. Named together, because a name reaches one
+    /// control whichever verb it's under.
+    private func actions(_ enabled: [AXNode]) -> [AXAffordance.Action] {
+        let pressable = enabled.filter { $0.role != "AXSlider" }
+        var actions: [AXAffordance.Action] = zip(pressable, numberedNames(pressable)).map { node, name in
+            node.textField == nil ? .tap(name) : .fill(name)
+        }
+        actions += enabled.filter { $0.textField?.isFocused == true }.map { .type($0.offerName) }
+        if let screen {
+            let sliders = enabled.filter { $0.role == "AXSlider" }
+            actions += zip(sliders, numberedNames(sliders)).map { node, name in
+                .drag(name, from: node.thumb, size: Size(width: screen.width, height: screen.height))
+            }
+        }
+        return actions
+    }
+
+    /// Where a slider's thumb is, going by its value: `50%` or `0.5`, else its middle.
+    private var thumb: Point {
+        let text = (value ?? "").trimmingCharacters(in: .whitespaces)
+        let fraction = text.hasSuffix("%") ? Double(text.dropLast()).map { $0 / 100 } : Double(text)
+        let along = fraction.flatMap { (0...1).contains($0) ? $0 : nil } ?? 0.5
+        return Point(x: frame.origin.x + frame.size.width * along, y: frame.origin.y + frame.size.height / 2)
     }
 
     /// Each control's name, numbered when several share it, so every name in the
@@ -146,7 +212,7 @@ extension AXNode {
         let name = control.offerName
         return (
             "Nothing changed: \(place) is on \"\(name)\", but that spot may be blank. Try it by name.",
-            AXAffordance.tapByName(name, style)
+            AXAffordance.Action.tap(name).spelled(style)
         )
     }
 

@@ -58,7 +58,7 @@ struct DescribeUITests {
     @Test func `should answer a short read with what can be done and what the screen says`() throws {
         let answer = try object(DescribeUI.short.json(of: Self.tree, style: .wire))
 
-        #expect((answer["affordances"] as? [String: Any])?["tap"] as? [String] == ["Sign In"])
+        #expect((answer["affordances"] as? [String: Any])?["tap Sign In"] != nil)
         #expect(answer["text"] as? [String] == ["Not signed in"])
     }
 
@@ -75,7 +75,7 @@ struct DescribeUITests {
         let answer = try object(DescribeUI.screen.json(of: Self.tree, style: .wire))
 
         #expect((answer["children"] as? [Any])?.count == 2)
-        #expect(answer["how"] != nil)
+        #expect(answer["how"] == nil)
     }
 
     @Test func `should carry the tree on the wire when a read isn't short`() throws {

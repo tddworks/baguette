@@ -907,6 +907,16 @@ struct CommandParsingTests {
         #expect(cmd.text == "gary")
     }
 
+    @Test func `should fill and answer with what's next by default`() throws {
+        let cmd = try FillCommand.parse(["--udid", "ABC", "--label", "email", "--text", "gary"])
+        #expect(cmd.thenDescribeUI == true)
+    }
+
+    @Test func `should leave what's next out of a fill when asked`() throws {
+        let cmd = try FillCommand.parse(["--udid", "ABC", "--label", "email", "--text", "gary", "--no-then-describe-ui"])
+        #expect(cmd.thenDescribeUI == false)
+    }
+
     @Test func `should refuse a fill with no field named`() {
         #expect(throws: (any Error).self) {
             try FillCommand.parse(["--udid", "ABC", "--text", "gary"])

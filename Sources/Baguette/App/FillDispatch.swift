@@ -24,11 +24,24 @@ enum FillDispatch {
             let fill = try Fill.parse(dict)
             let outcome = await fill.execute(
                 accessibility: accessibility, pasteboard: pasteboard, input: input, timing: timing, inputTaken: inputTaken)
-            return AXAffordance.json(outcome.answer)
+            return answer(outcome, thenDescribe: dict["then_describe_ui"] as? Bool ?? true, accessibility: accessibility)
         } catch let error as GestureError {
             return AXAffordance.json(["ok": false, "error": error.message])
         } catch {
             return AXAffordance.json(["ok": false, "error": "\(error)"])
         }
+    }
+
+    /// The outcome as a line, with what the screen offers next, unless the caller
+    /// asked to leave that out or the outcome already says it.
+    static func answer(
+        _ outcome: FillOutcome, thenDescribe: Bool, accessibility: any Accessibility,
+        style: AXAffordance.Style = .wire
+    ) -> String {
+        var answer = outcome.answer(style)
+        if thenDescribe, answer["affordances"] == nil, let screen = try? accessibility.describeAll() {
+            answer.merge(screen.agentSummary(style)) { own, _ in own }
+        }
+        return AXAffordance.json(answer)
     }
 }

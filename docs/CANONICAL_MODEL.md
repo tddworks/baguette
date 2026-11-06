@@ -129,11 +129,13 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | a read of the frontmost app asks the bridge first and runs the guest helper only when the bridge can't read it, then gives an app that shows only the status bar a moment to appear; no PID outlives its query | `AXFrontmostRead` |
 | the sweep always looks where the walk can't see, and sweeps the gaps in full only when a scout finds something the walk didn't know | `AXSweep` |
 | a gesture asked to describe the UI compares against the screen before it, and reports the screen only once it has held still and no old page is sliding away | `AXSettle` |
-| an affordance is what can be done on this screen now: an enabled control can be tapped by name, wherever it is, and a disabled one is listed apart | `AXAffordance` |
+| an affordance is what can be done next on this screen, ready to run: a verb and a name, and its finished command, or its envelope on a session. An enabled text field can be filled, a slider dragged and any other enabled control tapped, wherever it is; a disabled one is listed apart | `AXAffordance` |
+| a name that reached nothing answers with what this screen offers, the same way a success does, so a caller can correct itself without another read | `AXTarget.Refusal` |
 | a tap by name never guesses between matches and never retries, because the app may have acted without changing its tree | `AXTarget` · `LabelTap` |
 | only a text field can be filled; anything else types nothing | `AXNode.textField` |
 | a fill types nothing until the field it named has focus | `Fill` |
 | a fill that didn't land says Device Hub has the input when it does, and asks only after a miss | `Fill` |
+| a fill answers with what can be done next, unless asked not to | `FillDispatch` |
 | a fill always clears first, because an empty field reads as its placeholder | `Fill` |
 | `ok` from a fill means the field shows the text, not that it was sent | `Fill` · `FillOutcome` |
 | a fill retries once with paste, because entering the same text again leaves the same result; a tap never retries | `Fill` |

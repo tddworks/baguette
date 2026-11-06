@@ -57,7 +57,7 @@ struct Fill: Equatable, Sendable {
         guard case .found(let node) = found.lookup else {
             return .unreachable(found.refusal(of: label) ?? AXTarget.Refusal(message: "nothing matches \(label)"))
         }
-        guard let field = node.textField else { return .notATextField(name: node.offerName) }
+        guard let field = node.textField else { return .notATextField(name: node.offerName, screen: found.tree) }
 
         let name = field.name
         func current() -> TextField? { currentField(accessibility) }
@@ -162,7 +162,8 @@ enum FillOutcome: Equatable, Sendable {
     case cleared(name: String)
     /// Still not the text after the retry. `wanted` is safe to repeat: a password is only its length.
     case differs(name: String, shows: String, wanted: String)
-    case notATextField(name: String)
+    /// `screen` is what it can offer instead.
+    case notATextField(name: String, screen: AXNode?)
     case neverFocused(name: String)
     /// Device Hub holds the simulator's input, so nothing can land until it's healed.
     case inputTaken(name: String)
@@ -193,7 +194,7 @@ enum FillOutcome: Equatable, Sendable {
     }
 
     /// The fields of the answer, for the App to serialize.
-    var answer: [String: Any] {
+    func answer(_ style: AXAffordance.Style = .wire) -> [String: Any] {
         switch self {
         case .filled(let name, let shows):
             return ["ok": true, "filled": name, "value": shows]
@@ -201,8 +202,11 @@ enum FillOutcome: Equatable, Sendable {
             return ["ok": true, "filled": name, "value": ""]
         case .differs(let name, let shows, let wanted):
             return ["ok": false, "error": "\(name) shows \"\(shows)\", not \(wanted)", "value": shows]
-        case .notATextField(let name):
-            return ["ok": false, "error": "\(name) isn't a text field, so nothing was typed"]
+        case .notATextField(let name, let screen):
+            var answer = screen?.agentSummary(style) ?? [:]
+            answer["ok"] = false
+            answer["error"] = "\(name) isn't a text field, so nothing was typed"
+            return answer
         case .neverFocused(let name):
             return ["ok": false, "error": "\(name) never took focus, so nothing was typed"]
         case .inputTaken(let name):
@@ -210,10 +214,12 @@ enum FillOutcome: Equatable, Sendable {
                 "ok": false,
                 "error": "Device Hub has taken this simulator's input, so nothing reached \(name). "
                     + "Run baguette heal, which restarts SpringBoard and ends running apps.",
+                "try": AXAffordance.Action.heal.spelled(style),
             ]
         case .unreachable(let refusal):
-            var answer: [String: Any] = ["ok": false, "error": refusal.message]
-            refusal.details.forEach { answer[$0.key] = $0.value }
+            var answer = refusal.fields(style)
+            answer["ok"] = false
+            answer["error"] = refusal.message
             return answer
         case .failed(let message):
             return ["ok": false, "error": message]
