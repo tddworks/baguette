@@ -79,10 +79,11 @@ so read one command's section, not the file:
 
 ## One-shot or streamed
 
-One command per gesture is right for a handful of steps; each pays the HID
-setup (~50–100 ms). For drags, choreography or many steps, open
-`baguette input --udid <UDID>` once and write one JSON gesture per line
-(`references/interact.md`). It answers `{"type":"describe_ui"}` too, so one
+One command per gesture is right for a handful of steps, but each one starts a
+process: a sign-in takes about 5.1 s that way and 4.1 s in one session. For a form,
+a flow of several steps, drags or choreography, open
+`baguette input --udid <UDID>` once and write one JSON gesture per line, reading
+one answer per line (`references/interact.md`). `fill` works there too. It answers `{"type":"describe_ui"}` too, so one
 session can look and act without paying startup on every call. Either way `ok:true` means *sent*, not that the
 screen reacted: use `--then-describe-ui` (`"then_describe_ui":true`) or a screenshot to check.
 
