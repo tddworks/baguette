@@ -22,6 +22,7 @@ struct Baguette: AsyncParsableCommand {
             PressCommand.self,
             KeyCommand.self,
             TypeCommand.self,
+            FillCommand.self,
             PasteCommand.self,
             ClipboardCommand.self,
             ChromeCommand.self,

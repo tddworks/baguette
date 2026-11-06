@@ -27,6 +27,8 @@ group that would otherwise shadow it.
 
 ## Reading the log line
 
+Printed with `BAGUETTE_VERBOSE=1`, and always by `baguette serve`:
+
 ```
 [ax] hit-test sweep: probed=259 discovered=255
 ```

@@ -420,7 +420,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             keepGoing: { Date() < deadline },
             probe: { discover(at: $0, ctx: ctx, depthCap: Self.sweepDepth) }
         )
-        log("[ax] hit-test sweep: probed=\(sweep.probed) discovered=\(sweep.discovered.count)")
+        trace("[ax] hit-test sweep: probed=\(sweep.probed) discovered=\(sweep.discovered.count)")
         return base.merging(discovered: sweep.discovered)
     }
 
@@ -527,7 +527,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         // route XPC requests to the right SimDevice. Without this
         // step every frontmost-app call returns nil.
         inst.setValue(sharedDispatcher, forKey: "bridgeTokenDelegate")
-        log("[ax] AXPTranslator wired with bridgeTokenDelegate")
+        trace("[ax] AXPTranslator wired with bridgeTokenDelegate")
         return inst
     }()
 

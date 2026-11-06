@@ -10,6 +10,11 @@ import Foundation
 struct TypeText: Gesture, Equatable {
     static let wireType = "type"
 
+    /// How long one typed key stays down. A burst needs it short: every character
+    /// waits for it, and 20–100 ms all landed every key in 20 runs each. Kept above the
+    /// 20 ms floor because `type` has no read-back to catch a dropped key.
+    static let keyHold = 0.03
+
     let text: String
     /// Pre-decomposed keystrokes; storing them lets `parse` reject
     /// unsupported text up front and lets `execute` stay loop-free
@@ -21,6 +26,12 @@ struct TypeText: Gesture, Equatable {
         // Force-decomposed for the value-init form — the public
         // parser handles errors. Used in tests with known-safe text.
         self.keystrokes = Self.tryDecompose(text) ?? []
+    }
+
+    /// `nil` when a character isn't on the US keyboard, so the caller goes through `paste`.
+    init?(typeable text: String) {
+        guard let strokes = Self.tryDecompose(text) else { return nil }
+        self.init(text: text, keystrokes: strokes)
     }
 
     static func parse(_ dict: [String: Any]) throws -> TypeText {
@@ -36,7 +47,7 @@ struct TypeText: Gesture, Equatable {
 
     func execute(on input: any Input) -> Bool {
         for s in keystrokes {
-            if !s.key.press(modifiers: s.modifiers, on: input) {
+            if !s.key.press(modifiers: s.modifiers, duration: Self.keyHold, on: input) {
                 return false
             }
         }

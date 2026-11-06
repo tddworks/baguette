@@ -10,6 +10,7 @@ import Foundation
 /// points, the same units the gesture wire uses.
 ///
 /// Mirrors `idb ui describe-all` / `idb ui describe-point` semantics.
+/// `--short` answers with what can be done and what the screen says, without the tree.
 struct DescribeUICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "describe-ui",
@@ -27,30 +28,29 @@ struct DescribeUICommand: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Output file (defaults to stdout)")
     var output: String?
 
+    @Flag(help: "Answer with what can be done and what the screen says, without the tree.")
+    var short = false
+
+    func validate() throws {
+        do {
+            _ = try DescribeUI.parse(x: x, y: y, short: short)
+        } catch let refusal as DescribeUI.Refusal {
+            throw ValidationError(refusal.message)
+        }
+    }
+
     func run() async throws {
         let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
         guard let simulator = simulators.find(udid: options.udid) else {
             log("Device \(options.udid) not found")
             throw ExitCode.failure
         }
-        let ax = simulator.accessibility()
-
-        let result: AXNode?
-        switch (x, y) {
-        case let (px?, py?):
-            result = try ax.describeAt(point: Point(x: px, y: py))
-        case (nil, nil):
-            result = try ax.describeAll()
-        default:
-            log("describe-ui: --x and --y must be supplied together")
-            throw ExitCode.failure
-        }
-
-        guard let tree = result else {
+        let read = try DescribeUI.parse(x: x, y: y, short: short)
+        guard let tree = try read.read(from: simulator.accessibility()) else {
             log("describe-ui: no accessibility data (sim not booted, or no frontmost app)")
             throw ExitCode.failure
         }
-        let bytes = Data(tree.json(affordances: options.affordanceStyle).utf8)
+        let bytes = Data(read.json(of: tree, style: options.affordanceStyle).utf8)
         if let output {
             try bytes.write(to: URL(fileURLWithPath: output))
         } else {

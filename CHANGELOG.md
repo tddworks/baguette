@@ -10,7 +10,19 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- Reading the screen, and everything that waits on it, is faster: a simulator is looked up once every few seconds rather than up to three times per read. → [docs](docs/features/accessibility/agent-performance.md)
+- `baguette type` holds each key for 30 ms instead of 100 ms, so text arrives about three times faster. → [docs](docs/features/keyboard/design.md)
+- Commands stop printing routine `[hid]` and `[ax]` progress, so an agent's shell doesn't pay for it. Set `BAGUETTE_VERBOSE=1` to see it; `baguette serve` still prints it, and failures always print. → [docs](docs/features/keyboard/design.md)
+- A `describe_ui` envelope with only `x` or only `y` is now an error instead of a whole-screen read. → [docs](docs/wire.md)
+
+### Fixed
+- A tap with `--then-describe-ui` no longer answers mid-slide with the old screen's controls, such as `Pay` beside "You're booked". → [docs](docs/features/accessibility/README.md)
+- The first `describe-ui` after a launch no longer answers with only the status bar when Device Hub is open. → [docs](docs/features/accessibility/README.md)
+
 ### Added
+- `baguette fill` makes a named text field hold some text in any language, and `ok` means the field shows it. → [docs](docs/features/fill/README.md)
+- `baguette describe-ui --short` answers with what can be done and what the screen says, about 60 tokens instead of 1,300, without the tree. → [docs](docs/features/accessibility/README.md)
 - `baguette input` answers `describe_ui`, so one long-lived session can read the screen and act without paying startup per call. On a Maps flow, reads take 0.34 s against 0.77 s one-shot, and taps 0.055 s against 0.25 s. → [docs](docs/features/accessibility/README.md#read-and-act-in-one-session)
 - `--then-describe-ui` on `tap` and `swipe`, and `"then_describe_ui":true` on a session gesture, wait for the screen to settle and answer with whether it changed and the new tree, and say what to try when nothing changed. → [docs](docs/features/accessibility/README.md#see-what-a-tap-did)
 - `baguette launch --then-describe-ui` opens an app and answers with its first real screen in one call, instead of a sleep and repeated reads of a launching app. → [docs](docs/features/accessibility/README.md#open-an-app-and-read-it)

@@ -188,4 +188,56 @@ struct AXTargetWaitTests {
         #expect(found.lookup == .disabled(pay(enabled: false)))
         #expect(time >= 1)
     }
+
+    @Test func `should name a text field among what's visible when it has no label`() {
+        let unnamed = AXNode(role: "AXTextField", subrole: "AXSearchField", value: "City or airport", frame: Self.somewhere)
+        let email = AXNode(role: "AXTextField", value: "Email", identifier: "email", frame: Self.somewhere)
+        let tree = AXNode(role: "AXApplication", frame: Self.somewhere, children: [unnamed, email])
+
+        #expect(AXTarget.visibleNames(in: tree) == ["TextField", "email"])
+    }
+
+    @Test func `should leave an unnamed group out of what's visible`() {
+        let group = AXNode(role: "AXGroup", frame: Self.somewhere)
+        let tree = AXNode(role: "AXApplication", frame: Self.somewhere, children: [group])
+
+        #expect(AXTarget.visibleNames(in: tree).isEmpty)
+    }
+
+    private func found(_ lookup: AXTarget.Lookup, tree: AXNode? = nil) -> AXTarget.Found {
+        AXTarget.Found(lookup: lookup, screen: nil, tree: tree)
+    }
+
+    private static let somewhere = Rect(origin: Point(x: 0, y: 0), size: Size(width: 10, height: 10))
+
+    @Test func `should not refuse when the name reached one element`() {
+        let node = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere)
+        #expect(found(.found(node)).refusal(of: "Pay") == nil)
+    }
+
+    @Test func `should say why when no element matches a name`() {
+        let pay = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere)
+        let tree = AXNode(role: "AXApplication", frame: Self.somewhere, children: [pay])
+
+        let refusal = found(.missing, tree: tree).refusal(of: "Cancel")
+
+        #expect(refusal?.message == "nothing matches Cancel")
+        #expect(refusal?.details == ["visible": ["Pay"]])
+    }
+
+    @Test func `should say why when several elements match a name`() {
+        let one = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere)
+        let two = AXNode(role: "AXButton", label: "Pay now", frame: Self.somewhere)
+
+        let refusal = found(.ambiguous([one, two])).refusal(of: "Pay")
+
+        #expect(refusal?.message == "more than one element matches Pay")
+        #expect(refusal?.details == ["matches": ["Pay", "Pay now"]])
+    }
+
+    @Test func `should say why when an element is disabled`() {
+        let pay = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere, enabled: false)
+
+        #expect(found(.disabled(pay)).refusal(of: "Pay")?.message == "Pay is disabled")
+    }
 }

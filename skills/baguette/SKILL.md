@@ -26,8 +26,9 @@ or a flow, use the `baguette-test-app` skill.
 ```bash
 baguette list --json                                    # 1. a booted UDID
 baguette boot --udid <UDID>                             #    (if none is running)
-baguette describe-ui --udid <UDID> | jq .screen        # 2. its size in points
-baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui   # 3. act by name, and read the new screen
+baguette describe-ui --udid <UDID> --short              # 2. what can be done, and what the screen says
+baguette fill --udid <UDID> --label email --text 'a@b.co'         # 3. put text in a field, and see what it shows
+baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui   #    act by name, and read the new screen
 baguette screenshot --udid <UDID> --output /tmp/frame.jpg             # 4. look, when you need the pixels
 ```
 
@@ -42,6 +43,10 @@ input surface; see `references/devices.md`).
 through accessibility, so there's no point to get wrong. A wrong or ambiguous name
 taps nothing and says why. With `--then-describe-ui`, the short answer lists what can
 be tapped next. It isn't a real finger: add `--touch` to test what a user can reach.
+
+Use `fill` for a field, not `tap` then `type`: it clears the field first, takes any
+language, and `"ok":true` means the field shows the text. Use the full `describe-ui`
+only for what the short answer leaves out: `screen`, frames and roles.
 
 ## Coordinates are device points (read this)
 

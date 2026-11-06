@@ -8,7 +8,7 @@ Every `baguette` command and flag, generated from the binary. For how to use a f
 
 **Exit codes:** `0` on success, `1` on any error, `3` when an iPhone Duo `orientation` or `hinge` change is unconfirmed: its guest helper timed out, so the change may have landed and will not land later. Errors print `{"ok":false,"error":"…"}`, so parse stdout, not just the exit code.
 
-**Commands:** [list](#baguette-list) · [boot](#baguette-boot) · [shutdown](#baguette-shutdown) · [lifetime](#baguette-lifetime) · [launch](#baguette-launch) · [input](#baguette-input) · [stream](#baguette-stream) · [tap](#baguette-tap) · [double-tap](#baguette-double-tap) · [swipe](#baguette-swipe) · [pinch](#baguette-pinch) · [pan](#baguette-pan) · [press](#baguette-press) · [key](#baguette-key) · [type](#baguette-type) · [paste](#baguette-paste) · [clipboard](#baguette-clipboard) · [chrome](#baguette-chrome) · [screenshot](#baguette-screenshot) · [record](#baguette-record) · [render-3d](#baguette-render-3d) · [describe-ui](#baguette-describe-ui) · [logs](#baguette-logs) · [serve](#baguette-serve) · [orientation](#baguette-orientation) · [hinge](#baguette-hinge) · [shake](#baguette-shake) · [status-bar](#baguette-status-bar) · [interface](#baguette-interface) · [location](#baguette-location) · [motion](#baguette-motion) · [network](#baguette-network) · [install](#baguette-install) · [add-media](#baguette-add-media) · [openurl](#baguette-openurl) · [notify](#baguette-notify) · [schemes](#baguette-schemes) · [plugin](#baguette-plugin) · [bakery](#baguette-bakery) · [diag-digitizer-trackpad](#baguette-diag-digitizer-trackpad) · [heal](#baguette-heal) · [defaults](#baguette-defaults)
+**Commands:** [list](#baguette-list) · [boot](#baguette-boot) · [shutdown](#baguette-shutdown) · [lifetime](#baguette-lifetime) · [launch](#baguette-launch) · [input](#baguette-input) · [stream](#baguette-stream) · [tap](#baguette-tap) · [double-tap](#baguette-double-tap) · [swipe](#baguette-swipe) · [pinch](#baguette-pinch) · [pan](#baguette-pan) · [press](#baguette-press) · [key](#baguette-key) · [type](#baguette-type) · [fill](#baguette-fill) · [paste](#baguette-paste) · [clipboard](#baguette-clipboard) · [chrome](#baguette-chrome) · [screenshot](#baguette-screenshot) · [record](#baguette-record) · [render-3d](#baguette-render-3d) · [describe-ui](#baguette-describe-ui) · [logs](#baguette-logs) · [serve](#baguette-serve) · [orientation](#baguette-orientation) · [hinge](#baguette-hinge) · [shake](#baguette-shake) · [status-bar](#baguette-status-bar) · [interface](#baguette-interface) · [location](#baguette-location) · [motion](#baguette-motion) · [network](#baguette-network) · [install](#baguette-install) · [add-media](#baguette-add-media) · [openurl](#baguette-openurl) · [notify](#baguette-notify) · [schemes](#baguette-schemes) · [plugin](#baguette-plugin) · [bakery](#baguette-bakery) · [diag-digitizer-trackpad](#baguette-diag-digitizer-trackpad) · [heal](#baguette-heal) · [defaults](#baguette-defaults)
 
 ## baguette list
 
@@ -248,6 +248,20 @@ baguette type --udid <udid> --text <text>
 | `--udid` | yes |  | Simulator UDID |
 | `--text` | yes |  | Text to type. Non-ASCII / dead-key characters are rejected. |
 
+## baguette fill
+
+Make a named text field hold this text, and answer with what it shows
+
+```
+baguette fill --udid <udid> --label <label> --text <text>
+```
+
+| Flag | Required | Default | Description |
+|---|---|---|---|
+| `--udid` | yes |  | Simulator UDID |
+| `--label` | yes |  | The text field, by its name from the answer's affordances, part of its label, or identifier. |
+| `--text` | yes |  | The text it should hold, in any language. Empty clears it. |
+
 ## baguette paste
 
 Paste text into the focused field via the simulator's pasteboard
@@ -403,7 +417,7 @@ baguette render-3d [--udid <udid>] [--screen <screen>] [--device <device>] [--sc
 Dump the simulator's accessibility tree as JSON
 
 ```
-baguette describe-ui --udid <udid> [--x <x>] [--y <y>] [--output <output>]
+baguette describe-ui --udid <udid> [--x <x>] [--y <y>] [--output <output>] [--short]
 ```
 
 | Flag | Required | Default | Description |
@@ -412,6 +426,7 @@ baguette describe-ui --udid <udid> [--x <x>] [--y <y>] [--output <output>]
 | `--x` |  |  | Hit-test x coordinate (device points). Pair with --y. |
 | `--y` |  |  | Hit-test y coordinate (device points). Pair with --x. |
 | `--output` |  |  | Output file (defaults to stdout) |
+| `--short` |  |  | Answer with what can be done and what the screen says, without the tree. |
 
 ## baguette logs
 

@@ -9,13 +9,23 @@ import ObjectiveC
 final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     private let deviceSetPath: String?
     private let serviceContext: @Sendable () -> NSObject?
+    private let now: @Sendable () -> TimeInterval
+
+    /// How long a found device is taken as still there. Finding one costs about 70 ms,
+    /// and a read asks up to three times, so polling a screen was mostly this. Short,
+    /// because `baguette serve` outlives devices: a deleted one is noticed within this.
+    private static let rememberFor: TimeInterval = 5
+    private let lock = NSLock()
+    private var remembered: [String: (device: NSObject, foundAt: TimeInterval)] = [:]
 
     init(
         deviceSetPath: String? = nil,
-        serviceContext: @escaping @Sendable () -> NSObject? = { CoreSimulators.sharedServiceContext() }
+        serviceContext: @escaping @Sendable () -> NSObject? = { CoreSimulators.sharedServiceContext() },
+        now: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSinceReferenceDate }
     ) {
         self.deviceSetPath = deviceSetPath
         self.serviceContext = serviceContext
+        self.now = now
         Self.loadFrameworks()
     }
 
@@ -49,13 +59,20 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     /// Look up the underlying `SimDevice` ObjC object for a UDID.
     /// Used by the Screen/Input adapters as well, hence `internal`.
     func resolveDevice(udid: String) -> NSObject? {
+        let time = now()
+        lock.lock()
+        let known = remembered[udid]
+        lock.unlock()
+        if let known, time - known.foundAt < Self.rememberFor { return known.device }
+
         guard let set = resolveSet() else { return nil }
-        for device in availableDevices(in: set.object) {
-            if (device.value(forKey: "UDID") as? NSUUID)?.uuidString == udid {
-                return device
-            }
+        let device = availableDevices(in: set.object).first {
+            ($0.value(forKey: "UDID") as? NSUUID)?.uuidString == udid
         }
-        return nil
+        lock.lock()
+        remembered[udid] = device.map { ($0, time) }
+        lock.unlock()
+        return device
     }
 
     // MARK: - private

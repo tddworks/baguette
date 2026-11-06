@@ -332,7 +332,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         // Sort modifiers so the down/up order is deterministic; iOS
         // doesn't care, but tests + logs become reproducible.
         let mods = modifiers.sorted { $0.rawValue < $1.rawValue }
-        log(
+        trace(
             "[hid] key page=\(key.hidUsage.page) usage=\(key.hidUsage.usage) modifiers=\(mods.map(\.rawValue)) hold=\(holdUs)us"
         )
 
@@ -443,7 +443,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             return false
         }
         let (arg0, target) = buttonCodes(for: button)
-        log(
+        trace(
             "[hid] press \(button.rawValue) via legacy arg0=\(arg0) target=0x\(String(target, radix: 16)) hold=\(holdUs)us"
         )
         guard let down = bfn(arg0, 1, target) else {
@@ -563,7 +563,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             return false
         }
         let target = touchTarget
-        log(
+        trace(
             "[hid] press \(button.rawValue) target=0x\(String(target, radix: 16)) page=\(usage.page) usage=\(usage.usage) hold=\(holdUs)us"
         )
         guard let down = kfn(target, usage.page, usage.usage, 1) else {
@@ -720,7 +720,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         removeCarPlaySvc = dlsym(handle, "IndigoHIDMessageToRemoveCarPlayService").map {
             unsafeBitCast($0, to: ServiceFn.self)
         }
-        log(
+        trace(
             "[hid] symbols resolved — mouse:\(mouseFn != nil) mouseEdge:\(mouseEdgeFn != nil) button:\(buttonFn != nil) hidArb:\(hidArbFn != nil) scroll:\(scrollFn != nil) carPlaySvc:\(createCarPlaySvc != nil)"
         )
     }
@@ -761,7 +761,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
         guard send(message: msg, to: client) else { return false }
         usleep(20_000)
-        log("[hid] carplay digitizer registered at \(hex(touchTarget))")
+        trace("[hid] carplay digitizer registered at \(hex(touchTarget))")
         return true
     }
 

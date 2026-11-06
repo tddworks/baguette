@@ -145,7 +145,8 @@ These ride the same channels but belong to one feature; their shapes and replies
 | Message | Channel | Owner |
 |---|---|---|
 | `paste`, `copy` → `paste_result`, `copy_result` | stdin, stream WS | [paste](features/paste/README.md) |
-| `describe_ui` → `describe_ui_result` | `baguette input` stdin, stream WS | [accessibility](features/accessibility/README.md) |
+| `describe_ui` → `describe_ui_result`; `"short":true` answers without `tree`; `x` needs `y` | `baguette input` stdin, stream WS | [accessibility](features/accessibility/README.md) |
+| `fill` → `{"ok","filled","value"}` | `baguette input` stdin | [fill](features/fill/README.md) |
 | `"then_describe_ui":true` on a gesture → `{"ok","changed","affordances","disabled","text","values"}` | `baguette input` stdin | [accessibility](features/accessibility/README.md#see-what-a-tap-did) |
 | `hinge` (server → page, foldables only) | stream WS | [hinge](features/hinge/README.md) |
 | `set_3d_camera`, `screen_quad`, atomic `frameMetadata=1` | `stream.3d.*` WS | [3d-rendering](features/3d-rendering/README.md) |

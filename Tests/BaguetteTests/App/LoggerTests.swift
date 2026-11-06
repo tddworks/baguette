@@ -20,6 +20,16 @@ struct LoggerTests {
         warn("")
     }
 
+    @Test func `should stay silent about progress when verbose isn't asked for`() {
+        #expect(Trace.isOn(environment: [:]) == false)
+        #expect(Trace.isOn(environment: ["BAGUETTE_VERBOSE": "0"]) == false)
+        #expect(Trace.isOn(environment: ["BAGUETTE_VERBOSE": ""]) == false)
+    }
+
+    @Test func `should report progress when verbose is asked for`() {
+        #expect(Trace.isOn(environment: ["BAGUETTE_VERBOSE": "1"]) == true)
+    }
+
     @Test func `should not colour output when stderr is not a terminal`() {
         // -1 is never a tty, so this is deterministic. Asserting on
         // STDERR_FILENO would not be: `swift test` inherits the parent's

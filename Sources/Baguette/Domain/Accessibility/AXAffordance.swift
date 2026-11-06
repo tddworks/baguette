@@ -60,7 +60,6 @@ extension AXNode {
         "AXCheckBox", "AXRadioButton", "AXSwitch", "AXSlider", "AXStepper",
         "AXPopUpButton", "AXMenuItem", "AXMenuButton", "AXDisclosureTriangle",
     ]
-    private static let textRoles: Set<String> = ["AXTextField", "AXTextArea", "AXSecureTextField"]
 
     /// The status bar's reach, which isn't what the screen says.
     private static let statusBarTop = 50.0
@@ -108,7 +107,7 @@ extension AXNode {
         if !names.isEmpty { affordances["tap"] = names }
         let sliders = numberedNames(enabled.filter { $0.role == "AXSlider" })
         if !sliders.isEmpty { affordances["adjust"] = sliders }
-        let typeable = enabled.filter { $0.focused && Self.textRoles.contains($0.role) }.map(\.offerName)
+        let typeable = enabled.filter { $0.textField?.isFocused == true }.map(\.offerName)
         if !typeable.isEmpty { affordances["type"] = typeable }
 
         var result: [String: Any] = ["affordances": affordances]
@@ -184,6 +183,12 @@ extension AXNode {
         let maxY = min(frame.origin.y + frame.size.height, screen.height)
         guard maxX > minX, maxY > minY else { return nil }
         return Rect(origin: Point(x: minX, y: minY), size: Size(width: maxX - minX, height: maxY - minY))
+    }
+
+    /// Nothing of the app is here yet: an app the guest client just woke reads like
+    /// this until its tree appears.
+    var showsOnlyTheStatusBar: Bool {
+        children.allSatisfy(\.isInStatusBar)
     }
 
     private var isInStatusBar: Bool {

@@ -14,6 +14,25 @@ enum AXTarget {
         var lookup: Lookup
         var screen: AXScreen?
         var tree: AXNode?
+
+        /// Why a name reached nothing a caller can act on, or `nil` when it reached one
+        /// element. The caller can correct itself from this, so it never guesses.
+        func refusal(of name: String) -> Refusal? {
+            switch lookup {
+            case .found: return nil
+            case .ambiguous(let nodes):
+                return Refusal(message: "more than one element matches \(name)", details: ["matches": nodes.map(\.offerName)])
+            case .disabled(let node):
+                return Refusal(message: "\(node.offerName) is disabled")
+            case .missing:
+                return Refusal(message: "nothing matches \(name)", details: ["visible": tree.map(AXTarget.visibleNames) ?? []])
+            }
+        }
+    }
+
+    struct Refusal: Equatable, Sendable {
+        var message: String
+        var details: [String: [String]] = [:]
     }
 
     static func find(_ name: String, in tree: AXNode) -> Lookup {
@@ -52,7 +71,7 @@ enum AXTarget {
     static func visibleNames(in tree: AXNode) -> [String] {
         var seen = Set<String>()
         return candidates(in: tree).compactMap { node in
-            guard node.label != nil, node.isVisible(on: tree.screen), seen.insert(node.offerName).inserted
+            guard node.label != nil || node.textField != nil, node.isVisible(on: tree.screen), seen.insert(node.offerName).inserted
             else { return nil }
             return node.offerName
         }

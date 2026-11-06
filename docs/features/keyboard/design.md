@@ -15,6 +15,19 @@ description: How keystrokes reach the simulator — IndigoHIDMessageForHIDArbitr
 parse time (`KeyboardKey.decompose(character:)`) and dispatched in
 order at execute.
 
+## How long a typed key is held
+
+`type` holds each key for 30 ms; a single `key` keeps the adapter's 100 ms unless it asks otherwise. `gary@example.com` on a fresh app, 20 runs per row, iPhone 17 Pro, iOS 27.0, Device Hub closed:
+
+| Hold | Exact text | Time per character |
+|---|---|---|
+| 100 ms | 20 of 20 | 104 ms |
+| 50 ms | 20 of 20 | 54 ms |
+| 30 ms | 20 of 20 | 34 ms |
+| 20 ms | 20 of 20 | 24 ms |
+
+It stays above the floor because `type` has no read-back to catch a dropped key; [fill](../fill/README.md) has one. Each key's `[hid] key` line prints only with `BAGUETTE_VERBOSE=1`.
+
 ## Dispatch — one path
 
 Both `Key` and `TypeText` route through the same

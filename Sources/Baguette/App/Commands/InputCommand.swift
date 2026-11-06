@@ -108,6 +108,11 @@ struct InputCommand: AsyncParsableCommand {
                 line: line, accessibility: accessibility, gesture: { dispatcher.dispatch(line: $0) }
             ) {
                 print(result)
+            } else if let result = await FillDispatch.dispatch(
+                line: line, accessibility: accessibility, pasteboard: pasteboard, input: input,
+                inputTaken: { await SimctlInputSurface().shadowed(on: simulator) }
+            ) {
+                print(result)
             } else if let ack = await PasteDispatch.dispatch(
                 line: line, pasteboard: pasteboard, input: input
             ).ackJSON {
