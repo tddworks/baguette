@@ -32,6 +32,21 @@
     return _cgImage;
 }
 
+- (NSDictionary<NSString *, id> *)metadata {
+    if (_cgImage == NULL) return @{};
+    NSNumber *width = @(CGImageGetWidth(_cgImage));
+    NSNumber *height = @(CGImageGetHeight(_cgImage));
+    return @{
+        (__bridge NSString *)kCGImagePropertyOrientation: @1,
+        (__bridge NSString *)kCGImagePropertyPixelWidth: width,
+        (__bridge NSString *)kCGImagePropertyPixelHeight: height,
+        (__bridge NSString *)kCGImagePropertyExifDictionary: @{
+            (__bridge NSString *)kCGImagePropertyExifPixelXDimension: width,
+            (__bridge NSString *)kCGImagePropertyExifPixelYDimension: height,
+        },
+    };
+}
+
 - (NSData *)fileDataRepresentation {
     if (_cgImage == NULL) return nil;
     NSMutableData *data = [NSMutableData data];

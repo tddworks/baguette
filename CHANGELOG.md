@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+- Taking a photo with the virtual camera no longer crashes the app. The fake `AVCapturePhoto` answers `metadata` itself; Apple's getter read capture state the fake never has, and expo-camera reads it on every capture. → [docs](docs/features/camera/README.md)
+
 ---
 
 ## [0.2.13] - 2026-11-05
