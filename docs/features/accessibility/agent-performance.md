@@ -299,7 +299,7 @@ node bench/run.mjs --tool baguette --udid <UDID> --out <DIR> --reads 3 --taps 3 
 ## 7 · Not in this design
 
 - A tap answer that lists only what changed. It's the next token step, and what passing 194 needs.
-- A long-lived process per device, as a daemon or `baguette mcp`: the biggest time step, and its own decision because it changes how agents run baguette.
+- A long-lived process per device, as a daemon or `baguette mcp`: the biggest time step, and its own decision because it changes how agents run baguette. Measured, with the HTTP API: [`baguette mcp`](mcp.md).
 - Detecting a settled screen from the screen buffer, and reusing a read while pixels hold still.
 - Folding the on-screen keyboard in `affordances`, where about 40 keys are listed while it's up.
 - `wait`, listing only the alert in front, and marking unreadable content.
