@@ -94,8 +94,10 @@ struct ThenDescribeTests {
             affordances: .commandLine(program: "baguette", udid: "X", deviceSet: nil),
             timing: Self.immediate, act: { true })
 
-        #expect((try parsed(json)["affordances"] as? [String: Any])?["tap General"] as? String
-            == "baguette tap --udid X --label General --then-describe-ui")
+        let answer = try parsed(json)
+        #expect(offeredNames(answer, "tap") == ["General"])
+        #expect(((answer["affordances"] as? [String: Any])?["tap"] as? [String: Any])?["command"] as? String
+            == "baguette tap --udid X --label '<name>' --then-describe-ui")
     }
 
     private static let cli = AXAffordance.Style.commandLine(program: "baguette", udid: "X", deviceSet: nil)

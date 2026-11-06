@@ -29,8 +29,11 @@ struct AXAffordanceTests {
 
     /// The names a verb is offered for, `nil` when it's offered for none.
     private func offered(_ tree: AXNode, _ verb: String) -> Set<String>? {
-        let names = commands(tree).keys.filter { $0.hasPrefix(verb + " ") }.map { String($0.dropFirst(verb.count + 1)) }
-        return names.isEmpty ? nil : Set(names)
+        ((commands(tree)[verb] as? [String: Any])?["names"] as? [String]).map(Set.init)
+    }
+
+    private func command(_ tree: AXNode, _ verb: String, _ style: AXAffordance.Style = cli) -> Any? {
+        (commands(tree, style)[verb] as? [String: Any])?["command"]
     }
 
     private func tappable(_ tree: AXNode) -> Set<String>? { offered(tree, "tap") }
@@ -82,7 +85,7 @@ struct AXAffordanceTests {
 
         #expect(offers["swipe DYNAMIC_TYPE_SLIDER"] as? String
             == "baguette swipe --udid U --start-x 200 --start-y 780 --end-x <x> --end-y 780 --width 402 --height 874 --then-describe-ui")
-        #expect(offers["tap Done"] != nil)
+        #expect(offered(tree(slider, button("Done")), "tap") == ["Done"])
         #expect(offers["adjust DYNAMIC_TYPE_SLIDER"] == nil)
     }
 
@@ -133,48 +136,74 @@ struct AXAffordanceTests {
         #expect(AXTarget.find("Name #2", in: screen) == .found(action))
     }
 
-    // MARK: - a finished command for each
+    // MARK: - one command for each verb
 
-    @Test func `should offer a finished command to fill a field`() {
-        #expect(commands(tree(field("email")))["fill email"] as? String
-            == "baguette fill --udid U --label email --text <text>")
+    @Test func `should offer one command to fill any of the fields`() {
+        #expect(command(tree(field("email"), field("password")), "fill") as? String
+            == "baguette fill --udid U --label '<name>' --text <text>")
+        #expect(offered(tree(field("email"), field("password")), "fill") == ["email", "password"])
     }
 
-    @Test func `should offer a finished command to tap a control`() {
-        #expect(commands(tree(button("Sign In")))["tap Sign In"] as? String
-            == "baguette tap --udid U --label 'Sign In' --then-describe-ui")
+    @Test func `should offer one command to tap any of the controls`() {
+        #expect(command(tree(button("Sign In"), button("Login")), "tap") as? String
+            == "baguette tap --udid U --label '<name>' --then-describe-ui")
+        #expect(offered(tree(button("Sign In"), button("Login")), "tap") == ["Sign In", "Login"])
     }
 
-    @Test func `should offer a finished command to type into a focused field`() {
-        #expect(commands(tree(field("City", focused: true)))["type City"] as? String
+    @Test func `should offer one command to type into the focused field`() {
+        #expect(command(tree(field("City", focused: true)), "type") as? String
             == "baguette type --udid U --text <text>")
     }
 
-    @Test func `should quote a name so the shell can't expand it`() {
-        #expect(commands(tree(button("Pay $1,240")))["tap Pay $1,240"] as? String
-            == "baguette tap --udid U --label 'Pay $1,240' --then-describe-ui")
-        #expect(commands(tree(button("It's on")))["tap It's on"] as? String
-            == #"baguette tap --udid U --label 'It'\''s on' --then-describe-ui"#)
+    @Test func `should list names in order, so a cut answer keeps what comes first`() {
+        let names = (commands(tree(button("Seat 1A"), button("Continue")))["tap"] as? [String: Any])?["names"] as? [String]
+
+        #expect(names == ["Continue", "Seat 1A"])
+    }
+
+    @Test func `should list seat 2 ahead of seat 10`() {
+        let names = (commands(tree(button("Seat 10A"), button("Seat 2A")))["tap"] as? [String: Any])?["names"] as? [String]
+
+        #expect(names == ["Seat 2A", "Seat 10A"])
+    }
+
+    @Test func `should put the command ahead of the names, so a cut answer keeps it`() {
+        let text = AXAffordance.json(tree(button("Sign In")).agentSummary(Self.cli))
+
+        #expect(text.contains(#""tap":{"command":"#))
     }
 
     @Test func `should offer the program as it was run and a custom device set`() {
         let style = AXAffordance.Style.commandLine(program: "/opt/baguette", udid: "U", deviceSet: "/my set")
 
-        #expect(commands(tree(button("A")), style)["tap A"] as? String
-            == #"/opt/baguette tap --udid U --device-set "/my set" --label A --then-describe-ui"#)
+        #expect(command(tree(button("A")), "tap", style) as? String
+            == #"/opt/baguette tap --udid U --device-set "/my set" --label '<name>' --then-describe-ui"#)
     }
 
     @Test func `should offer a session the envelope, not a command`() {
-        let offers = commands(tree(field("email"), button("Sign In")), .wire)
-        let tap = offers["tap Sign In"] as? [String: Any]
-        let fill = offers["fill email"] as? [String: Any]
+        let screen = tree(field("email"), button("Sign In"))
+        let tap = command(screen, "tap", .wire) as? [String: Any]
+        let fill = command(screen, "fill", .wire) as? [String: Any]
 
         #expect(tap?["type"] as? String == "tap")
-        #expect(tap?["label"] as? String == "Sign In")
+        #expect(tap?["label"] as? String == "<name>")
         #expect(tap?["then_describe_ui"] as? Bool == true)
         #expect(fill?["type"] as? String == "fill")
-        #expect(fill?["label"] as? String == "email")
+        #expect(fill?["label"] as? String == "<name>")
         #expect(fill?["text"] as? String == "<text>")
+    }
+
+    @Test func `should stay small on a screen with many controls`() throws {
+        let seats = (1...20).flatMap { row in
+            ["A", "B", "C", "D", "E", "F"].enumerated().map { column, letter in
+                button("Seat \(row)\(letter)", rect(48 + Double(column) * 52, 90 + Double(row) * 46, 46, 40))
+            }
+        }
+        let big = AXNode(
+            role: "AXApplication", frame: rect(0, 0, 402, 874), children: seats,
+            screen: AXScreen(width: 402, height: 874, orientation: .portrait))
+
+        #expect(try JSONSerialization.data(withJSONObject: big.agentSummary(Self.cli)).count < 2500)
     }
 
     @Test func `should have no separate section on how to act`() {

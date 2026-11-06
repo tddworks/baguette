@@ -388,7 +388,7 @@ struct FillTests {
 
         #expect(answer["ok"] as? Bool == false)
         #expect(answer["error"] as? String == "nothing matches x")
-        #expect((answer["affordances"] as? [String: Any])?["tap Pay"] != nil)
+        #expect(offeredNames(answer, "tap") == ["Pay"])
         #expect(answer["visible"] == nil)
     }
 
@@ -398,7 +398,7 @@ struct FillTests {
 
         let answer = await stage.fill("gary").answer()
 
-        #expect((answer["affordances"] as? [String: Any])?["tap email"] != nil)
+        #expect(offeredNames(answer, "tap") == ["email"])
     }
 
     @Test func `should offer the finished command to take the input back`() {

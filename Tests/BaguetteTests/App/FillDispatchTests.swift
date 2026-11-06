@@ -47,7 +47,7 @@ struct FillDispatchTests {
         let answer = try object(await dispatch(#"{"type":"fill","label":"email","text":"gary"}"#))
 
         #expect(answer["filled"] as? String == "email")
-        #expect((answer["affordances"] as? [String: Any])?["fill email"] != nil)
+        #expect(offeredNames(answer, "fill") == ["email"])
     }
 
     @Test func `should leave what's next out when asked`() async throws {
@@ -61,7 +61,7 @@ struct FillDispatchTests {
         let answer = try object(await dispatch(#"{"type":"fill","label":"email","text":"something else"}"#))
 
         #expect(answer["ok"] as? Bool == false)
-        #expect((answer["affordances"] as? [String: Any])?["fill email"] != nil)
+        #expect(offeredNames(answer, "fill") == ["email"])
     }
 
     @Test func `should answer a fill with no text as a refusal`() async throws {

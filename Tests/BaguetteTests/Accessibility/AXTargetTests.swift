@@ -202,10 +202,9 @@ struct AXTargetWaitTests {
         let tree = AXNode(role: "AXApplication", frame: Self.somewhere, children: [pay, search, seeAll])
 
         let fields = try #require(found(.missing, tree: tree).refusal(of: "City or airport")?.fields())
-        let offers = fields["affordances"] as? [String: Any]
-
-        #expect(offers?["fill TextField"] != nil)
-        #expect(offers?["tap Pay"] != nil)
+        
+        #expect(offeredNames(fields, "fill") == ["TextField"])
+        #expect(offeredNames(fields, "tap") == ["Pay"])
         #expect(fields["text"] as? [String] == ["See all"])
         #expect(fields["how"] == nil)
     }

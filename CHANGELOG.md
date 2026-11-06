@@ -11,7 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Changed
-- Breaking: `affordances` maps each next action to its finished command, like `"tap Sign In":"baguette tap …"`, and `how` is gone. Text fields offer `fill`, a slider `swipe`, and a name that reaches nothing answers with the same map, not `visible`. → [docs](docs/features/accessibility/README.md)
+- Breaking: `affordances` maps each verb to its command and names, like `"tap":{"command":"baguette tap …","names":["Sign In"]}`, and `how` is gone. Text fields offer `fill`, a slider `swipe`; a wrong name answers with the same map, not `visible`. → [docs](docs/features/accessibility/README.md)
 - Reading the screen, and everything that waits on it, is faster: a simulator is looked up once every few seconds rather than up to three times per read. → [docs](docs/features/accessibility/agent-performance.md)
 - `baguette type` holds each key for 30 ms instead of 100 ms, so text arrives about three times faster. → [docs](docs/features/keyboard/design.md)
 - Commands stop printing routine `[hid]` and `[ax]` progress, so an agent's shell doesn't pay for it. Set `BAGUETTE_VERBOSE=1` to see it; `baguette serve` still prints it, and failures always print. → [docs](docs/features/keyboard/design.md)

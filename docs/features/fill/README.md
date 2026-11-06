@@ -13,7 +13,7 @@ baguette fill --udid <UDID> --label email --text 'gary@example.com'
 ```
 
 ```json
-{"affordances":{"tap Sign In":"baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui", …},
+{"affordances":{"tap":{"command":"baguette tap --udid <UDID> --label '<name>' --then-describe-ui","names":["Sign In"]}, …},
  "filled":"email","ok":true,"text":[…],"value":"gary@example.com","values":{…}}
 ```
 

@@ -344,18 +344,42 @@ Three runs is too few to separate small differences. What the transcripts show p
 
 ## 11 · What can be done next
 
-Every answer says what can be done next, ready to run: `"tap Sign In":"baguette tap --udid U --label 'Sign In' --then-describe-ui"`, the shape `asc-cli` uses. This replaces the names and the separate `how` from `0189949d`, and sections above that mention `how` or `visible` describe the earlier shape.
+Every answer says what can be done next and how: each verb has one command and the names it takes, inside `affordances`. This replaces the names and the separate `how` from `0189949d`, and sections above that mention `how` or `visible` describe the earlier shape.
 
-It costs tokens, measured with the benchmark harness, 3 runs, with the program as `baguette`:
+```json
+"tap":{"command":"baguette tap --udid U --label '<name>' --then-describe-ui","names":["Sign In"]}
+```
 
-| | Names and `how` | Finished commands |
+A finished command per control was built and measured first, and dropped:
+
+| Measured on the benchmark, 3 runs | Names and `how` | A command per control | A command per verb |
+|---|---|---|---|
+| Short read of the sign-in form | 53 | 197 | 112 |
+| Sign-in | 219 | 1,127 | 726 |
+| Seat map | about 470 | about 3,400 | about 490 |
+| Skylark booking, with skills, median cost | $0.063 | $0.083 | see section 13 |
+
+Most of the sign-in's rise from 219 is that `fill` now answers with what's next; `--no-then-describe-ui` leaves it out.
+
+`command` sorts ahead of `names`, and names sort as a person would, so an answer cut short keeps the command and `Continue with 3F`. Each slider keeps its own finished command, because each drag starts from its own value; that drag hasn't been run on a real slider.
+
+Not done: `tap`, `swipe`, `type` and `press` without `--then-describe-ui` still answer only `ok`, and a screen with nothing but scrolling offers no `swipe`.
+
+## 12 · A task that needs typing
+
+Six more fresh agents, set up as in section 10, on the benchmark's form: "Sign in as josé@example.com with the password secret1, and confirm it worked." `type` rejects the `é`.
+
+| | With skills | Without |
 |---|---|---|
-| Short read of the sign-in form | 53 | 197 |
-| Sign-in | 219 | 1,127 (685 with `--no-then-describe-ui` on each fill) |
-| Sign-in time | 5.14 s | 6.54 s, because a fill now reads the screen too |
-| Skylark's seat map | about 470 | about 3,400 |
+| Signed in | 3 of 3 | 3 of 3 |
+| Time, median | 21 s | 21 s |
+| Commands, median | 3 | 5 |
+| Cost, median | $0.044 | $0.036 |
+| Characters read, median | 3,714, plus 7,422 of skill | 7,907 |
 
-That moves the sign-in from 2nd to 4th of 9 on tokens, and undoes the seat map's budget of 2,500 bytes from `86012430`. Both are accepted for answers that need nothing beyond themselves. Keys sort alphabetically, so a filter on the key finds a control wherever it is.
-
-Not done: `tap`, `swipe`, `type` and `press` without `--then-describe-ui` still answer only `ok`, and a screen with nothing but scrolling offers no `swipe`. A drag offered for a slider starts from its value and hasn't been run on a real slider.
+- **All six used `fill`, first try.** None tried `type` or `paste`.
+- **The offers weren't what taught it.** Agents without skills ran `fill --help` before their first answer, having seen `fill` in `baguette --help`; agents with skills had it from the skill.
+- **Agents trim the offers.** All three without skills chose `--no-then-describe-ui` on their fills, and two with skills filtered the tap's answer down with `jq`, dropping `affordances`.
+- **Nobody opened a `baguette input` session,** in these six or the previous six.
+- **Four of six took a screenshot** to confirm the result the answer already gave.
 

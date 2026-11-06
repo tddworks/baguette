@@ -53,7 +53,7 @@ struct LabelTapTests {
 
         #expect(result["tapped"] as? String == "Search flights")
         #expect(result["changed"] as? Bool == false)
-        #expect((result["affordances"] as? [String: Any])?["tap Search flights"] != nil)
+        #expect(offeredNames(result, "tap") == ["Search flights"])
         #expect(result["tree"] == nil)
     }
 
@@ -152,7 +152,7 @@ struct LabelTapTests {
 
         #expect(result["ok"] as? Bool == false)
         #expect((result["error"] as? String)?.contains("Nope") == true)
-        #expect((result["affordances"] as? [String: Any])?["tap Search flights"] != nil)
+        #expect(offeredNames(result, "tap") == ["Search flights"])
         #expect(result["visible"] == nil)
         verify(accessibility).press(.any).called(0)
     }

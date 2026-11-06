@@ -99,7 +99,7 @@ baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --then-descr
 ```
 
 ```json
-{"ok":true,"action":"tap","changed":true,"affordances":{"tap Sign In":"baguette tap --udid <UDID> --label 'Sign In' --then-describe-ui"},"text":[…]}
+{"ok":true,"action":"tap","changed":true,"affordances":{"tap":{"command":"baguette tap --udid <UDID> --label '<name>' --then-describe-ui","names":["Sign In"]}},"text":[…]}
 ```
 
 On a `baguette input` session, add `"then_describe_ui":true` to any gesture. It replaces

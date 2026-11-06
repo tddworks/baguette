@@ -1,9 +1,10 @@
 import Foundation
 
-/// An affordance is what an agent can do next on this screen, ready to run, so it
-/// needs nothing beyond the answer: no command tree to remember, no form to fill in
-/// from an earlier one. Baguette presses a control through accessibility, by name, so
-/// where a control is doesn't matter: only whether it's enabled, which iOS reports directly.
+/// An affordance is what an agent can do next on this screen, so it needs nothing
+/// beyond the answer: each verb says the command to run and what it takes. One command
+/// per verb, not per control, because a screen can have 120 controls and an agent pays
+/// for every token. Baguette presses a control through accessibility, by name, so where a
+/// control is doesn't matter: only whether it's enabled, which iOS reports directly.
 enum AXAffordance {
     /// How a next step is spelled: as a command for a one-shot caller, or as an
     /// envelope for a `baguette input` session.
@@ -13,8 +14,10 @@ enum AXAffordance {
     }
 
     /// One thing that can be done next. It says what it is once, and each caller gets
-    /// it in its own spelling.
+    /// it in its own spelling. The name is `name` for a form that takes any of several.
     enum Action: Equatable, Sendable {
+        static let name = "<name>"
+
         case tap(String)
         case fill(String)
         case type(String)
@@ -22,12 +25,12 @@ enum AXAffordance {
         case drag(String, from: Point, size: Size)
         case heal
 
-        var key: String {
+        var verb: String {
             switch self {
-            case .tap(let name): return "\(Tap.wireType) \(name)"
-            case .fill(let name): return "\(Fill.wireType) \(name)"
-            case .type(let name): return "\(TypeText.wireType) \(name)"
-            case .drag(let name, _, _): return "\(Swipe.wireType) \(name)"
+            case .tap: return Tap.wireType
+            case .fill: return Fill.wireType
+            case .type: return TypeText.wireType
+            case .drag: return Swipe.wireType
             case .heal: return "heal"
             }
         }
@@ -151,28 +154,38 @@ extension AXNode {
         let controls = preorder().filter { !$0.hidden && $0.hasSize && Self.controlRoles.contains($0.role) }
         let enabled = controls.filter(\.enabled)
         var result: [String: Any] = [
-            "affordances": Dictionary(actions(enabled).map { ($0.key, $0.spelled(style)) }) { first, _ in first }
+            "affordances": affordances(enabled, style)
         ]
         let disabled = numberedNames(controls.filter { !$0.enabled })
         if !disabled.isEmpty { result["disabled"] = disabled }
         return result
     }
 
-    /// What each enabled control offers. Named together, because a name reaches one
-    /// control whichever verb it's under.
-    private func actions(_ enabled: [AXNode]) -> [AXAffordance.Action] {
+    /// Each verb with its command and what it takes. Names sort as a person would, seat 2 before seat 10, so a caller can
+    /// find one, and `command` sorts ahead of `names`, so an answer cut short keeps it.
+    /// Named together, because a name reaches one control whichever verb it's under.
+    private func affordances(_ enabled: [AXNode], _ style: AXAffordance.Style) -> [String: Any] {
         let pressable = enabled.filter { $0.role != "AXSlider" }
-        var actions: [AXAffordance.Action] = zip(pressable, numberedNames(pressable)).map { node, name in
-            node.textField == nil ? .tap(name) : .fill(name)
+        let named = Array(zip(pressable, numberedNames(pressable)))
+        var map: [String: Any] = [:]
+        func offer(_ action: AXAffordance.Action, _ names: [String]) {
+            guard !names.isEmpty else { return }
+            map[action.verb] = ["command": action.spelled(style), "names": names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }]
         }
-        actions += enabled.filter { $0.textField?.isFocused == true }.map { .type($0.offerName) }
+        let form = AXAffordance.Action.name
+        offer(.tap(form), named.filter { $0.0.textField == nil }.map(\.1))
+        offer(.fill(form), named.filter { $0.0.textField != nil }.map(\.1))
+        offer(.type(form), enabled.filter { $0.textField?.isFocused == true }.map(\.offerName))
+        // Each slider's drag starts from its own value, so each has its own command.
         if let screen {
             let sliders = enabled.filter { $0.role == "AXSlider" }
-            actions += zip(sliders, numberedNames(sliders)).map { node, name in
-                .drag(name, from: node.thumb, size: Size(width: screen.width, height: screen.height))
+            for (node, name) in zip(sliders, numberedNames(sliders)) {
+                let drag = AXAffordance.Action.drag(
+                    name, from: node.thumb, size: Size(width: screen.width, height: screen.height))
+                map["\(drag.verb) \(name)"] = drag.spelled(style)
             }
         }
-        return actions
+        return map
     }
 
     /// Where a slider's thumb is, going by its value: `50%` or `0.5`, else its middle.

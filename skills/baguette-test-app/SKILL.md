@@ -45,32 +45,31 @@ It waits for the first real screen, usually 4 to 5 seconds. Baguette logs to std
 so add `2>/dev/null` if you only want the answer.
 
 **2. Read the answer and think.** It says what you can do next, each with the command
-to run:
+to run and the names it takes:
 
 ```json
 {"ok":true,"changed":true,
- "affordances":{"fill Name":"baguette fill --udid X --label Name --text <text>",
-                "tap Back":"baguette tap --udid X --label Back --then-describe-ui",
-                "tap New List":"baguette tap --udid X --label 'New List' --then-describe-ui"},
+ "affordances":{"fill":{"command":"baguette fill --udid X --label '<name>' --text <text>","names":["Name"]},
+                "tap":{"command":"baguette tap --udid X --label '<name>' --then-describe-ui","names":["Back","New List"]}},
  "disabled":["Share List"],
  "text":["My Lists"],
  "values":{"Home":"1"}}
 ```
 
-- **`affordances`:** what you can do next. Run the command as it's written, filling in
-  anything like `<text>`. `fill` is for a text field, `type` for one that has focus, and
-  `swipe` for a slider, because a press can't set its value.
+- **`affordances`:** what you can do next. Run the command with one of its `names`, filling
+  in anything else like `<text>`. `fill` is for a text field, `type` for one that has focus,
+  and `swipe <name>` is a slider's own command, because a press can't set its value.
 - **`disabled`:** controls that can't be used yet. Do what they're waiting for first.
 - **`text`:** what the screen says. Some of it can be tapped too, like a `Show more` link.
 - **`values`:** a control's value, like a switch's `1` or the selected tab's.
 
 Read what's there before choosing: the first row is rarely the one the task means.
 
-**A long answer** can offer over a hundred actions, so filter it by what you're after
-instead of cutting it off, because what you need next may be anywhere in it:
+**A long answer** can list over a hundred names, sorted by name. To find one, filter
+for it instead of cutting the answer off, because what you need may be anywhere in it:
 
 ```bash
-... 2>/dev/null | jq -r '.affordances | to_entries[] | select(.key | test("New List|Continue")) | .value'
+... 2>/dev/null | jq -r '.affordances.tap.names[] | select(test("New List|Continue"))'
 ```
 
 **3. Tap by name, and read, in one call.**

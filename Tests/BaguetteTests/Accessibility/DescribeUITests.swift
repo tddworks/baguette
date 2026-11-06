@@ -58,7 +58,7 @@ struct DescribeUITests {
     @Test func `should answer a short read with what can be done and what the screen says`() throws {
         let answer = try object(DescribeUI.short.json(of: Self.tree, style: .wire))
 
-        #expect((answer["affordances"] as? [String: Any])?["tap Sign In"] != nil)
+        #expect(offeredNames(answer, "tap") == ["Sign In"])
         #expect(answer["text"] as? [String] == ["Not signed in"])
     }
 
