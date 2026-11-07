@@ -17,7 +17,7 @@ baguette fill --udid <UDID> --label email --text 'gary@example.com'
  "filled":"email","ok":true,"text":[…],"value":"gary@example.com","values":{…}}
 ```
 
-Like any answer, it says what can be done next. `--no-then-describe-ui` (`"then_describe_ui":false`) leaves that out, for a script or a step you're already sure of.
+Like any answer, it says what can be done next. `--no-then-describe-ui` (`"then_describe_ui":false`) leaves that out, for a script or a step you're already sure of. It skips the read after a fill, not what a refusal says: a name that reaches nothing, or an element that isn't a text field, still answers with `affordances` and the screen's text.
 
 `--label` takes a name from `affordances`, part of a label, or an identifier, as [`tap --label`](../../commands.md#baguette-tap) does. An empty `--text` clears the field.
 
@@ -36,13 +36,15 @@ A form is one session, and one answer per line:
 ) | baguette input --udid <UDID>
 ```
 
+A pipe sends every line whatever the answers say, so the tap goes even if a fill failed. When a step depends on the one before, write one line, read its answer, and stop on `"ok":false`.
+
 ## What the answer means
 
 | Answer | Meaning |
 |---|---|
-| `"ok":true` | the field shows the text; `value` is what's there, with other punctuation if the field reformatted it |
+| `"ok":true` | the field shows the text; `value` is what's there, with other punctuation if the field reformatted it. Two readings are weaker: an empty `--text` is taken as cleared once the keys are sent, because an empty field reads as its placeholder, and a secure field is checked by its number of dots |
 | `"ok":false` and `value` | something was entered, and the field shows something else |
-| `"ok":false` without `value` | nothing was typed; `error` says why |
+| `"ok":false` without `value` | the field couldn't be read back; `error` says why. Keys may already have landed, as when the field left the screen after typing, so read the field before trying again |
 
 A secure field's `value` is its dots, and an error gives only the expected length, never the password.
 

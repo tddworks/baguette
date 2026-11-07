@@ -123,9 +123,10 @@ struct Fill: Equatable, Sendable {
         }
         guard typed.execute(on: input) else { return .failed("couldn't send a key to \(name)") }
 
-        let first = readBack()
+        // A field that's gone took the keys somewhere else: what has focus now isn't it.
+        guard let first = readBack() else { return outcome(nil) }
         // A password stays off the shared pasteboard while it can be typed.
-        guard first?.reading != .exact, first?.field.isSecure != true else { return outcome(first) }
+        guard first.reading != .exact, !first.field.isSecure else { return outcome(first) }
 
         // Autocorrect or smart punctuation may have changed the keys; a paste is taken
         // as it is. Safe to do once, unlike a tap: it leaves the same text in the field.

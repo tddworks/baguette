@@ -20,7 +20,7 @@ struct PasteCommand: AsyncParsableCommand {
     @Option(help: "Text to paste. Any unicode — emoji and accents included.")
     var text: String
 
-    @Flag(inversion: .prefixedNo, help: "Press Cmd+V after setting the pasteboard.")
+    @Flag(inversion: .prefixedNo, help: "Whether to press Cmd+V after setting the pasteboard.")
     var press: Bool = true
 
     func run() async throws {

@@ -93,6 +93,19 @@ struct DeviceHostTests {
         #expect(trips.count == 2)
     }
 
+    @Test func `should look again when the clock goes back`() {
+        let device = FakeDevice(Self.id)
+        let trips = Trips()
+        trips.time = 1_000
+        let host = host(FakeContext(FakeSet([device])), trips)
+
+        _ = host.resolveDevice(udid: Self.id.uuidString)
+        trips.time -= 3_600
+        _ = host.resolveDevice(udid: Self.id.uuidString)
+
+        #expect(trips.count == 2)
+    }
+
     @Test func `should notice a deleted device once it has been a while`() {
         let set = FakeSet([FakeDevice(Self.id)])
         let trips = Trips()

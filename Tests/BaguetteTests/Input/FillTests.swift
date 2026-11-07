@@ -18,13 +18,16 @@ private final class Stage: @unchecked Sendable {
     var showsAfterPaste = ""
     var pressFocuses = true
     var touchFocuses = true
+    /// The app moves on once keys land, as a form that submits on its last key does.
+    var goneAfterTyping = false
+    var gone = false
     var events: [String] = []
 
     init() { shows = placeholder }
 
     var tree: AXNode {
         let node = AXNode(role: role, subrole: subrole, value: shows, identifier: "email", frame: frame, focused: focused)
-        return AXNode(role: "AXApplication", frame: Self.full, children: [node],
+        return AXNode(role: "AXApplication", frame: Self.full, children: gone ? [] : [node],
                       screen: AXScreen(width: 402, height: 874, orientation: .portrait))
     }
 
@@ -57,6 +60,7 @@ private final class Stage: @unchecked Sendable {
             } else {
                 if self.events.last != "type" { self.events.append("type") }
                 self.shows = self.showsAfterTyping
+                if self.goneAfterTyping { self.gone = true }
             }
             return true
         }
@@ -226,6 +230,16 @@ struct FillTests {
 
         #expect(stage.events == ["touch", "select all", "delete", "type", "select all", "delete", "pasteboard a--b", "paste"])
         #expect(outcome == .filled(name: "email", shows: "a--b"))
+    }
+
+    @Test func `should send no more keys when the field is gone after typing`() async {
+        let stage = Stage()
+        stage.goneAfterTyping = true
+
+        let outcome = await stage.fill("gary")
+
+        #expect(stage.events == ["touch", "select all", "delete", "type"])
+        #expect(outcome == .failed("email is gone from the screen"))
     }
 
     @Test func `should count a field that only changes punctuation as filled`() async {

@@ -261,8 +261,8 @@ baguette fill --udid <udid> --label <label> --text <text> [--then-describe-ui] [
 | `--udid` | yes |  | Simulator UDID |
 | `--label` | yes |  | The text field, by its name from the answer's affordances, part of its label, or identifier. |
 | `--text` | yes |  | The text it should hold, in any language. Empty clears it. |
-| `--then-describe-ui` |  | `--then-describe-ui` | Answer with what can be done next and what the screen says, too. |
-| `--no-then-describe-ui` |  |  | Answer with what can be done next and what the screen says, too. |
+| `--then-describe-ui` |  | `--then-describe-ui` | Whether to answer with what can be done next and what the screen says, too. |
+| `--no-then-describe-ui` |  |  | Whether to answer with what can be done next and what the screen says, too. |
 
 ## baguette paste
 
@@ -276,8 +276,8 @@ baguette paste --udid <udid> --text <text> [--press] [--no-press]
 |---|---|---|---|
 | `--udid` | yes |  | Simulator UDID |
 | `--text` | yes |  | Text to paste. Any unicode — emoji and accents included. |
-| `--press` |  | `--press` | Press Cmd+V after setting the pasteboard. |
-| `--no-press` |  |  | Press Cmd+V after setting the pasteboard. |
+| `--press` |  | `--press` | Whether to press Cmd+V after setting the pasteboard. |
+| `--no-press` |  |  | Whether to press Cmd+V after setting the pasteboard. |
 
 ## baguette clipboard
 

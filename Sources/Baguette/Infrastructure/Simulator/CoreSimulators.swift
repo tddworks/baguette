@@ -21,7 +21,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     init(
         deviceSetPath: String? = nil,
         serviceContext: @escaping @Sendable () -> NSObject? = { CoreSimulators.sharedServiceContext() },
-        now: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSinceReferenceDate }
+        now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         self.deviceSetPath = deviceSetPath
         self.serviceContext = serviceContext
@@ -63,7 +63,8 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         lock.lock()
         let known = remembered[udid]
         lock.unlock()
-        if let known, time - known.foundAt < Self.rememberFor { return known.device }
+        // A clock that went back can't say how long it's been, so it looks again.
+        if let known, (0..<Self.rememberFor).contains(time - known.foundAt) { return known.device }
 
         guard let set = resolveSet() else { return nil }
         let device = availableDevices(in: set.object).first {

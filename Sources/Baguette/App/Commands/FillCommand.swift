@@ -19,7 +19,7 @@ struct FillCommand: AsyncParsableCommand {
     @Option(help: "The text it should hold, in any language. Empty clears it.")
     var text: String
 
-    @Flag(inversion: .prefixedNo, help: "Answer with what can be done next and what the screen says, too.")
+    @Flag(inversion: .prefixedNo, help: "Whether to answer with what can be done next and what the screen says, too.")
     var thenDescribeUI = true
 
     func run() async throws {
