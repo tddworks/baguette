@@ -307,12 +307,16 @@ static NSArray *h_discoveryDevices(id self, SEL _cmd) {
     return real;
 }
 
-static id h_initWithDevice(id self, SEL _cmd, AVCaptureDevice *device, NSError **err) {
+typedef id (*InitWithDeviceIMP)(__attribute__((ns_consumed)) id, SEL, AVCaptureDevice *, NSError **)
+    __attribute__((ns_returns_retained));
+
+static id h_initWithDevice(__attribute__((ns_consumed)) id self, SEL _cmd, AVCaptureDevice *device, NSError **err)
+    __attribute__((ns_returns_retained)) {
     if (device == gFakeDevice) {
         if (err) *err = nil;
         return gDummyInput;  // never run the real (crashing) initializer
     }
-    return ((id (*)(id, SEL, AVCaptureDevice *, NSError **))gOrigInitWithDevice)(self, _cmd, device, err);
+    return ((InitWithDeviceIMP)gOrigInitWithDevice)(self, _cmd, device, err);
 }
 
 static BOOL h_canAddInput(id self, SEL _cmd, id input) {
