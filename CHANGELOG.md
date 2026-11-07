@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.14] - 2026-11-07
+
 ### Added
 - `baguette fill` makes a named text field hold some text in any language, and `ok` means the field shows it. → [docs](docs/features/fill/README.md) ([#133](https://github.com/tddworks/baguette/pull/133))
 - `baguette describe-ui --short` answers with what can be done and what the screen says, about 60 tokens instead of 1,300, without the tree. → [docs](docs/features/accessibility/README.md) ([#133](https://github.com/tddworks/baguette/pull/133))
@@ -201,7 +205,8 @@ For releases prior to this changelog, see the
 
 [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.13...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.14...HEAD
+[0.2.14]: https://github.com/tddworks/baguette/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/tddworks/baguette/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/tddworks/baguette/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/tddworks/baguette/compare/v0.2.10...v0.2.11
