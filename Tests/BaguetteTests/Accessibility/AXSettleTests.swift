@@ -10,7 +10,10 @@ struct AXSettleTests {
     private static let frame = Rect(origin: Point(x: 0, y: 0), size: Size(width: 10, height: 10))
     private static let timing = AXSettle.Timing(quiet: 0.2, patience: 1, limit: 3, poll: 0.1)
 
-    private func screen(_ name: String) -> AXNode { AXNode(role: "AXApplication", label: name, frame: Self.frame) }
+    /// An app showing something: one with nothing on screen is mid-transition.
+    private func screen(_ name: String) -> AXNode {
+        AXNode(role: "AXApplication", label: name, frame: Self.frame, children: [AXNode(role: "AXButton", label: name, frame: Self.frame)])
+    }
 
     /// A fake clock that a glance and a sleep both move on, so a test reads
     /// as a timeline: each glance is 0.1 s after the last.
@@ -86,6 +89,60 @@ struct AXSettleTests {
 
         #expect(outcome?.changed == false)
         #expect(timeline.time < 1.3)
+    }
+
+    // MARK: - a page sliding away
+
+    private static let wide = Rect(origin: Point(x: 0, y: 0), size: Size(width: 402, height: 874))
+
+    private func app(_ name: String, sliding: Bool = false) -> AXNode {
+        let x: Double = sliding ? -105 : 16
+        return AXNode(
+            role: "AXApplication", frame: Self.wide,
+            children: [AXNode(role: "AXStaticText", label: name, frame: Rect(origin: Point(x: x, y: 114), size: Size(width: 300, height: 40)))])
+    }
+
+    private func nothing() -> AXNode { AXNode(role: "AXApplication", frame: Self.wide) }
+
+    @Test func `should wait for the old page to finish sliding away`() throws {
+        let sliding = app("Old and new", sliding: true)
+        let timeline = Timeline([app("Old"), sliding, sliding, sliding, sliding, sliding, app("New")])
+
+        var readAt: TimeInterval = -1
+        let outcome = try run(timeline, read: { readAt = timeline.time; return app("New") })
+
+        #expect(outcome?.changed == true)
+        #expect(readAt >= 0.5)
+        #expect(timeline.count >= 7)
+    }
+
+    @Test func `should not wait long for something that always sits across the edge`() throws {
+        let carousel = app("Carousel", sliding: true)
+        let timeline = Timeline([app("Old"), carousel])
+
+        var readAt: TimeInterval = -1
+        _ = try run(timeline, read: { readAt = timeline.time; return carousel })
+
+        #expect(readAt < 1.5)
+    }
+
+    @Test func `should wait for the app to show something after a change`() throws {
+        let timeline = Timeline([app("Sheet"), nothing(), nothing(), nothing(), nothing(), nothing(), app("Home")])
+
+        var readAt: TimeInterval = -1
+        let outcome = try run(timeline, read: { readAt = timeline.time; return app("Home") })
+
+        #expect(outcome?.changed == true)
+        #expect(readAt >= 0.5)
+    }
+
+    @Test func `should not slow a change where nothing is sliding`() throws {
+        let timeline = Timeline([app("Old"), app("New")])
+
+        var readAt: TimeInterval = -1
+        _ = try run(timeline, read: { readAt = timeline.time; return app("New") })
+
+        #expect(readAt <= 0.3)
     }
 
     @Test func `should stop watching a screen that never stops moving`() throws {

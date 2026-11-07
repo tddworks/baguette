@@ -169,6 +169,32 @@ struct KeyGestureTests {
 
 @Suite("TypeText")
 struct TypeTextGestureTests {
+    @Test func `should be typeable when every character is on the US keyboard`() {
+        #expect(TypeText(typeable: "gary@example.com")?.text == "gary@example.com")
+    }
+
+    @Test func `should not be typeable when a character isn't on the US keyboard`() {
+        #expect(TypeText(typeable: "café") == nil)
+    }
+
+    @Test func `should hold each typed key for 30 ms`() {
+        let input = MockInput()
+        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+
+        _ = TypeText(text: "aB").execute(on: input)
+
+        verify(input).key(.any, modifiers: .any, duration: .value(0.03)).called(2)
+    }
+
+    @Test func `should keep a single key press at its own hold`() throws {
+        let input = MockInput()
+        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+
+        _ = try Key.parse(["code": "KeyA"]).execute(on: input)
+
+        verify(input).key(.any, modifiers: .any, duration: .value(0)).called(1)
+    }
+
     @Test func `should read the text to type`() throws {
         let g = try TypeText.parse(["text": "hi"])
         #expect(g.text == "hi")
@@ -194,10 +220,10 @@ struct TypeTextGestureTests {
         _ = TypeText(text: "Aa").execute(on: input)
 
         verify(input).key(
-            .value(keyA), modifiers: .value([.shift]), duration: .value(0)
+            .value(keyA), modifiers: .value([.shift]), duration: .any
         ).called(1)
         verify(input).key(
-            .value(keyA), modifiers: .value([]), duration: .value(0)
+            .value(keyA), modifiers: .value([]), duration: .any
         ).called(1)
     }
 

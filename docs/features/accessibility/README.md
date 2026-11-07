@@ -17,7 +17,7 @@ parent / child structure underneath.
 ## Quick start
 
 ```bash
-baguette describe-ui --udid <UDID>                       # full tree
+baguette describe-ui --udid <UDID> --short               # what can be done and what it says; no --short: the tree
 baguette describe-ui --udid <UDID> --x 172 --y 880       # the node under one point
 baguette describe-ui --udid <UDID> --output tree.json
 ```
@@ -99,7 +99,7 @@ baguette tap --udid <UDID> --x 201 --y 314 --width 402 --height 874 --then-descr
 ```
 
 ```json
-{"ok":true,"action":"tap","changed":true,"affordances":{…},"text":[…]}
+{"ok":true,"action":"tap","changed":true,"affordances":{"tap":{"command":"baguette tap --udid <UDID> --label '<name>' --then-describe-ui","names":["Sign In"]}},"text":[…]}
 ```
 
 On a `baguette input` session, add `"then_describe_ui":true` to any gesture. It replaces

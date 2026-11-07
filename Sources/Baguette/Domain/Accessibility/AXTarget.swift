@@ -14,6 +14,33 @@ enum AXTarget {
         var lookup: Lookup
         var screen: AXScreen?
         var tree: AXNode?
+
+        /// Why a name reached nothing a caller can act on, or `nil` when it reached one
+        /// element. It carries the screen, so a caller can correct itself without reading again.
+        func refusal(of name: String) -> Refusal? {
+            switch lookup {
+            case .found: return nil
+            case .ambiguous(let nodes):
+                return Refusal(message: "more than one element matches \(name)", matches: nodes.map(\.offerName), screen: tree)
+            case .disabled(let node):
+                return Refusal(message: "\(node.offerName) is disabled", screen: tree)
+            case .missing:
+                return Refusal(message: "nothing matches \(name)", screen: tree)
+            }
+        }
+    }
+
+    struct Refusal: Equatable, Sendable {
+        var message: String
+        var matches: [String] = []
+        var screen: AXNode?
+
+        /// What sits beside `error`: what this screen offers and says, as a success answers.
+        func fields(_ style: AXAffordance.Style = .wire) -> [String: Any] {
+            var fields = screen?.agentSummary(style) ?? [:]
+            if !matches.isEmpty { fields["matches"] = matches }
+            return fields
+        }
     }
 
     static func find(_ name: String, in tree: AXNode) -> Lookup {
@@ -46,16 +73,6 @@ enum AXTarget {
         }
         guard contenders.count == 1, let chosen = contenders.first else { return .ambiguous(contenders) }
         return verdict(on: chosen)
-    }
-
-    /// The names on screen, so a caller with a wrong name can correct it.
-    static func visibleNames(in tree: AXNode) -> [String] {
-        var seen = Set<String>()
-        return candidates(in: tree).compactMap { node in
-            guard node.label != nil, node.isVisible(on: tree.screen), seen.insert(node.offerName).inserted
-            else { return nil }
-            return node.offerName
-        }
     }
 
     /// Waits for the element to appear and be enabled. A cheap glance is tried

@@ -26,7 +26,7 @@ enum AppLaunch {
                 wake: { try? accessibility.wake() },
                 read: { try accessibility.describeAll() },
                 timing: timing)
-            let fields = outcome.tree.map { "," + $0.agentSummaryFields(affordances, withHow: true) } ?? ""
+            let fields = outcome.tree.map { "," + $0.agentSummaryFields(affordances) } ?? ""
             return #"{"ok":true,"action":"launch","changed":\#(outcome.changed)\#(fields)}"#
         } catch {
             return #"{"ok":false,"action":"launch","error":"\#(GestureDispatcher.jsonEscape(String(describing: error)))"}"#

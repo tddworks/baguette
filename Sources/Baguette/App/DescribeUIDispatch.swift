@@ -15,14 +15,12 @@ enum DescribeUIDispatch {
         else { return nil }
 
         do {
-            let node: AXNode?
-            if let x = dict["x"] as? Double, let y = dict["y"] as? Double {
-                node = try accessibility.describeAt(point: Point(x: x, y: y))
-            } else {
-                node = try accessibility.describeAll()
-            }
-            guard let node else { return failure("no accessibility data") }
-            return #"{"type":"describe_ui_result","ok":true,\#(node.offersFields(.wire)),"tree":\#(node.json)}"#
+            let read = try DescribeUI.parse(
+                x: dict["x"] as? Double, y: dict["y"] as? Double, short: dict["short"] as? Bool == true)
+            guard let node = try read.read(from: accessibility) else { return failure("no accessibility data") }
+            return #"{"type":"describe_ui_result","ok":true,\#(read.wireFields(of: node))}"#
+        } catch let refusal as DescribeUI.Refusal {
+            return failure(refusal.message)
         } catch {
             return failure(error.localizedDescription)
         }

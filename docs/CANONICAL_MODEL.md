@@ -55,6 +55,8 @@ Simulators  ◆                               THE DEVICES — a device set (defa
     ├── input → Input  ◆                    GESTURES, in device points: tap · swipe · touch1 · touch2 ·
     │   │                                   button · key · scroll · twoFingerPath. `ok` = sent, not landed
     │   ├── Gesture  ◇ (GestureRegistry)    the wire dialect: one type per `type`, parse(dict) → execute(on:)
+    │   ├── Fill  ◇                         make one named text field hold this text → FillOutcome ◇;
+    │   │                                   takes Accessibility, Pasteboard and Input, as Paste takes two
     │   ├── FoldableInput  ◆                a foldable's keys — hardware and keyboard — through DeviceKeys
     │   └── LitPanelInput  ◆                a socket that outlives a fold: each gesture to the lit panel,
     │                                       a touch on the panel it went down on until it lifts
@@ -62,8 +64,11 @@ Simulators  ◆                               THE DEVICES — a device set (defa
     │   └── litPanel                        DERIVED — the angle's panel; no reading is folded (cover)
     ├── orientation → Orientation  ◆        portrait · landscape-left · landscape-right · upside-down
     ├── accessibility → Accessibility  ◆    WHAT IS ON SCREEN — describeAll() · describeAt(point:)
-    │   └── AXNode  ◇                       role · label · value · identifier · frame (device points) ·
-    │                                       children; the root carries AXScreen ◇ (size, orientation, panel)
+    │   ├── AXNode  ◇                       role · label · value · identifier · frame (device points) ·
+    │   │                                   children; the root carries AXScreen ◇ (size, orientation, panel)
+    │   ├── TextField  ◇                    node.textField: what it shows, secure or not, focused or not;
+    │   │                                   reading(of:) → FieldReading ◇ (exact · reformatted · differs)
+    │   └── DescribeUI  ◇                   which read was asked for: screen · short · point
     ├── logs → LogStream  ◆                 the unified log, filtered (LogFilter ◇)
     ├── THE CONDITIONS THE APP RUNS UNDER
     │   ├── location → Location  ◆          set(Coordinate ◇) · start(LocationRoute ◇) · clear()
@@ -98,12 +103,13 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | `boot` · `shutdown` | `simulator.boot()` · `shutdown()` | `boot` then heals if Device Hub attached |
 | `heal` | `InputSurface.heal(on:)` | restarts backboardd; running apps die |
 | `tap` · `swipe` · `pinch` · `pan` · `press` · `type` · `key` | `Gesture.execute(on: sim.input())` | one process per gesture; the input binds the lit panel once |
+| `fill` | `Fill.execute(accessibility:pasteboard:input:)` | also on `baguette input`; the App only projects the `FillOutcome` |
 | `input` (stdin) · the stream WebSocket | `GestureDispatcher` → the plane's `Input` | many gestures; `--expected-screen` → `displays.phone.input(expected:)` |
 | the Duo's 3D page | `sim.litPanelInput()` | the socket outlives a fold |
 | `paste` · `clipboard …` | `Paste.execute(pasteboard:input:)` · `pasteboard` | the path around `type`'s US-ASCII limit |
 | `hinge --pose` · `--angle` | `HingeCommand.parse` → `hinge.fold(to:over:)` | exit 3 when unconfirmed (`PoseDelivery`) |
 | `orientation <value>` | `orientation.set(_:) → PoseDelivery` | on a foldable, through the hinge motor |
-| `describe-ui [--x --y]` | `accessibility.describeAll()` · `describeAt(point:)` | |
+| `describe-ui [--x --y] [--short]` | `DescribeUI.read(from: accessibility)` | `--short` answers with the short answer, not the tree |
 | `screenshot` · `stream` · `record` | `StreamDisplayPlan.bind(to:)` → `Screen` | CarPlay fails closed, never the phone instead |
 | `location set · start · walk · clear` | `location.set` · `start(route)` · `start(walk.route())` · `clear` | |
 | `motion start · set · stop` | `motion.publish` · `clear` | injected |
@@ -120,15 +126,27 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | every coordinate is in device points, with the plane's `width` / `height` beside it; the adapter divides by size, the domain never normalizes | `Point` · `Size` · `IndigoHIDInput.sendMouse` |
 | a display's screen and input come from one binding, so a framebuffer never pairs with another plane's digitizer | `Display` · `DisplayBinding` |
 | a HID target is a registration, never computed from a screen id; an unregistered one kills backboardd. The phone plane uses its bound panel's `0x40000000 \| screenId`, else `0x32`; CarPlay its own `1` | `IndigoHIDTouchTarget` · `DisplayTouchTarget.resolve` |
-| a read of the frontmost app asks the bridge first and runs the guest helper only when the bridge can't read it; no PID outlives its query | `AXFrontmostRead` |
+| a read of the frontmost app asks the bridge first and runs the guest helper only when the bridge can't read it, then gives an app that shows only the status bar a moment to appear; no PID outlives its query | `AXFrontmostRead` |
 | the sweep always looks where the walk can't see, and sweeps the gaps in full only when a scout finds something the walk didn't know | `AXSweep` |
-| a gesture asked to describe the UI compares against the screen before it, and reports the screen only once it has held still | `AXSettle` |
-| an affordance is what can be done on this screen now: an enabled control can be tapped by name, wherever it is, and a disabled one is listed apart | `AXAffordance` |
+| a gesture asked to describe the UI compares against the screen before it, and reports the screen only once it has held still and no old page is sliding away | `AXSettle` |
+| an affordance is what can be done next on this screen: a verb, the one command that runs it (its envelope on a session), and the names it takes. An enabled text field can be filled, a slider dragged and any other enabled control tapped, wherever it is; a disabled one is listed apart | `AXAffordance` |
+| a name that reached nothing answers with what this screen offers, the same way a success does, so a caller can correct itself without another read | `AXTarget.Refusal` |
 | a tap by name never guesses between matches and never retries, because the app may have acted without changing its tree | `AXTarget` · `LabelTap` |
+| only a text field can be filled; anything else types nothing | `AXNode.textField` |
+| a fill types nothing until the field it named has focus | `Fill` |
+| a fill that didn't land says Device Hub has the input when it does, and asks only after a miss | `Fill` |
+| a fill answers with what can be done next, unless asked not to | `FillDispatch` |
+| a fill always clears first, because an empty field reads as its placeholder | `Fill` |
+| `ok` from a fill means the field shows the text, not that it was sent | `Fill` · `FillOutcome` |
+| a fill retries once with paste, because entering the same text again leaves the same result; a tap never retries | `Fill` |
+| a password stays off the shared pasteboard unless it can't be typed | `Fill` |
+| a secure field is compared by its number of characters; other punctuation is reformatted, not different | `TextField` |
+| a short read is of a screen, not a point; `x` and `y` come together | `DescribeUI` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
 | an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |
 | `type` / `key` are US-layout printable ASCII; anything else fails to parse and goes through `paste` | `KeyboardKey.decompose` · `TypeText.parse` |
+| a typed key is held 30 ms, because a burst needs it short; a single key press keeps its own hold | `TypeText` |
 | `siri` is not a button: every known path crashes backboardd | `DeviceButton` (left out on purpose) |
 | no hinge reading means as booted: folded, the cover | `Hinge.litPanel` |
 | 90° or more lights the unfolded panel | `HingeAngle.litPanel` |
@@ -206,6 +224,7 @@ moves, one change at a time.
 | `StreamFormat.makeStream` | Domain builds `MJPEGStream` / `AVCCStream` and takes `FrameSink`, all Infrastructure | the factory moves to Infrastructure; Domain keeps the format |
 | `FoldableInput` | calls `log(…)` from the App layer | Domain logs nothing; the failure is its `Bool` |
 | `boot` · `heal` · `input` | the App builds `SimctlInputSurface()` itself | `simulator.inputSurface()`, as for every other role |
+| `LabelTap` · `ThenDescribe` | hold a law and assemble JSON in the App | a Domain value answers, and the App only projects it, as `Fill` does |
 | `GuestHingeMotor` | plays `HingeMotor` and `DeviceKeys` over one guest helper | a name for the helper's role, not "motor" |
 
 ## 7 · Open

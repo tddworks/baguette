@@ -18,7 +18,7 @@ struct CommandParsingTests {
         #expect(Set(names) == [
             "list", "boot", "shutdown", "launch", "input", "stream",
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
-            "key", "type", "paste", "clipboard",
+            "key", "type", "fill", "paste", "clipboard",
             "chrome", "screenshot", "record", "render-3d", "describe-ui", "logs", "serve",
             "orientation", "hinge", "shake", "status-bar", "location", "motion", "network",
             "install", "add-media",
@@ -898,6 +898,56 @@ struct CommandParsingTests {
         #expect(cmd.x == nil && cmd.y == nil)
         #expect(cmd.output == nil)
         #expect(DescribeUICommand.configuration.commandName == "describe-ui")
+    }
+
+    @Test func `should fill the named field with the text given`() throws {
+        let cmd = try FillCommand.parse(["--udid", "ABC", "--label", "email", "--text", "gary"])
+        #expect(cmd.options.udid == "ABC")
+        #expect(cmd.label == "email")
+        #expect(cmd.text == "gary")
+    }
+
+    @Test func `should fill and answer with what's next by default`() throws {
+        let cmd = try FillCommand.parse(["--udid", "ABC", "--label", "email", "--text", "gary"])
+        #expect(cmd.thenDescribeUI == true)
+    }
+
+    @Test func `should leave what's next out of a fill when asked`() throws {
+        let cmd = try FillCommand.parse(["--udid", "ABC", "--label", "email", "--text", "gary", "--no-then-describe-ui"])
+        #expect(cmd.thenDescribeUI == false)
+    }
+
+    @Test func `should refuse a fill with no field named`() {
+        #expect(throws: (any Error).self) {
+            try FillCommand.parse(["--udid", "ABC", "--text", "gary"])
+        }
+    }
+
+    @Test func `should refuse a fill with no text given`() {
+        #expect(throws: (any Error).self) {
+            try FillCommand.parse(["--udid", "ABC", "--label", "email"])
+        }
+    }
+
+    @Test func `should reach fill from the root command`() throws {
+        #expect(Baguette.configuration.subcommands.contains { $0 == FillCommand.self })
+    }
+
+    @Test func `should read the screen short when asked`() throws {
+        let cmd = try DescribeUICommand.parse(["--udid", "ABC", "--short"])
+        #expect(cmd.short == true)
+    }
+
+    @Test func `should refuse a short read at a point on the command line`() {
+        #expect(throws: (any Error).self) {
+            try DescribeUICommand.parse(["--udid", "ABC", "--short", "--x", "1", "--y", "2"])
+        }
+    }
+
+    @Test func `should refuse a point with only one coordinate on the command line`() {
+        #expect(throws: (any Error).self) {
+            try DescribeUICommand.parse(["--udid", "ABC", "--x", "1"])
+        }
     }
 
     @Test func `should describe the UI at the point given into the output file given`() throws {

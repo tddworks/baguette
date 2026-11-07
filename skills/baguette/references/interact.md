@@ -76,11 +76,15 @@ power → Siri / SOS). `siri` is refused: it crashes backboardd.
 ## Text
 
 ```bash
+baguette fill  --udid <X> --label email --text "a@b.co"        # a named field; ok means it shows the text
 baguette type  --udid <X> --text "hello"                      # US-ASCII keystrokes
 baguette key   --udid <X> --code KeyA --modifiers shift,command --duration 0.2
 baguette paste --udid <X> --text "café 中文 🦄"                 # any unicode
 ```
 
+- `fill` is what you want for a form. It focuses, clears, enters and reads back, in any
+  language; `{"type":"fill","label":"email","text":"a@b.co"}` on `input`. When Device Hub has
+  taken the input, the answer says so: run `baguette heal`.
 - `type` / `key` press HID keys into the focused field: US layout only. `code`
   is a W3C `KeyboardEvent.code`; modifiers are `shift | control | option |
   command`. F-keys, Page Up/Down and Home/End are not supported.

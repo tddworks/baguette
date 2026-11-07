@@ -146,7 +146,8 @@ These ride the same channels but belong to one feature; their shapes and replies
 | Message | Channel | Owner |
 |---|---|---|
 | `paste`, `copy` → `paste_result`, `copy_result` | stdin, stream WS | [paste](https://github.com/tddworks/baguette/blob/main/docs/features/paste/README.md) |
-| `describe_ui` → `describe_ui_result` | `baguette input` stdin, stream WS | [accessibility](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md) |
+| `describe_ui` → `describe_ui_result`. On stdin, `"short":true` answers without `tree` and `x` needs `y`; the stream WS always answers `tree`, and reads the whole screen unless both `x` and `y` are given | `baguette input` stdin, stream WS | [accessibility](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md) |
+| `fill` → `{"ok","filled","value","affordances","text","values"}`; `"then_describe_ui":false` answers without what's next | `baguette input` stdin | [fill](https://github.com/tddworks/baguette/blob/main/docs/features/fill/README.md) |
 | `"then_describe_ui":true` on a gesture → `{"ok","changed","affordances","disabled","text","values"}` | `baguette input` stdin | [accessibility](https://github.com/tddworks/baguette/blob/main/docs/features/accessibility/README.md#see-what-a-tap-did) |
 | `hinge` (server → page, foldables only) | stream WS | [hinge](https://github.com/tddworks/baguette/blob/main/docs/features/hinge/README.md) |
 | `set_3d_camera`, `screen_quad`, atomic `frameMetadata=1` | `stream.3d.*` WS | [3d-rendering](https://github.com/tddworks/baguette/blob/main/docs/features/3d-rendering/README.md) |

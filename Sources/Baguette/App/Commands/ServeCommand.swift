@@ -35,6 +35,8 @@ struct ServeCommand: AsyncParsableCommand {
     var noPlugins = false
 
     func run() async throws {
+        // Someone reads this log while driving a page, and no agent pays for it.
+        setenv(Trace.variable, "1", 0)
         // A device driven over `serve` is lost the moment Simulator.app
         // closes its window, which is easy to trigger by accident when
         // another toolchain opened Simulator.app for you. Warn, don't

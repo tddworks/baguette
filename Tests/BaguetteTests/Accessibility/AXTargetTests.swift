@@ -113,15 +113,6 @@ struct AXTargetTests {
         #expect(AXTarget.find("Nope", in: app(button("Pay", rect(0, 0, 40, 40)))) == .missing)
     }
 
-    @Test func `should list what is on screen so the caller can correct a wrong name`() {
-        let tree = app(
-            button("Pay", rect(0, 0, 40, 40)),
-            AXNode(role: "AXGroup", frame: rect(0, 0, 402, 874)),
-            button("Below", rect(0, 900, 40, 40)))
-
-        #expect(AXTarget.visibleNames(in: tree) == ["Pay"])
-    }
-
     @Test func `should give a real touch the centre of what's on screen, and no point when none is`() {
         let screen = AXScreen(width: 402, height: 874, orientation: .portrait)
 
@@ -187,5 +178,58 @@ struct AXTargetWaitTests {
 
         #expect(found.lookup == .disabled(pay(enabled: false)))
         #expect(time >= 1)
+    }
+
+    private func found(_ lookup: AXTarget.Lookup, tree: AXNode? = nil) -> AXTarget.Found {
+        AXTarget.Found(lookup: lookup, screen: nil, tree: tree)
+    }
+
+    private static let somewhere = Rect(origin: Point(x: 0, y: 0), size: Size(width: 10, height: 10))
+
+    @Test func `should not refuse when the name reached one element`() {
+        let node = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere)
+        #expect(found(.found(node)).refusal(of: "Pay") == nil)
+    }
+
+    @Test func `should say why when no element matches a name`() {
+        #expect(found(.missing).refusal(of: "Cancel")?.message == "nothing matches Cancel")
+    }
+
+    @Test func `should answer a name that reached nothing with what the screen offers`() throws {
+        let pay = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere)
+        let search = AXNode(role: "AXTextField", subrole: "AXSearchField", value: "City or airport", frame: Self.somewhere)
+        let seeAll = AXNode(role: "AXStaticText", label: "See all", frame: Rect(origin: Point(x: 0, y: 100), size: Size(width: 50, height: 20)))
+        let tree = AXNode(role: "AXApplication", frame: Self.somewhere, children: [pay, search, seeAll])
+
+        let fields = try #require(found(.missing, tree: tree).refusal(of: "City or airport")?.fields())
+        
+        #expect(offeredNames(fields, "fill") == ["TextField"])
+        #expect(offeredNames(fields, "tap") == ["Pay"])
+        #expect(fields["text"] as? [String] == ["See all"])
+        #expect(fields["how"] == nil)
+    }
+
+    @Test func `should answer with no offers when it never saw a screen`() throws {
+        let fields = try #require(found(.missing).refusal(of: "Pay")?.fields())
+
+        #expect((fields["affordances"] as? [String: Any])?.isEmpty != false)
+    }
+
+    @Test func `should say why when several elements match a name`() throws {
+        let one = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere)
+        let two = AXNode(role: "AXButton", label: "Pay now", frame: Self.somewhere)
+        let tree = AXNode(role: "AXApplication", frame: Self.somewhere, children: [one, two])
+
+        let refusal = try #require(found(.ambiguous([one, two]), tree: tree).refusal(of: "Pay"))
+
+        #expect(refusal.message == "more than one element matches Pay")
+        #expect(refusal.fields()["matches"] as? [String] == ["Pay", "Pay now"])
+        #expect(refusal.fields()["affordances"] != nil)
+    }
+
+    @Test func `should say why when an element is disabled`() {
+        let pay = AXNode(role: "AXButton", label: "Pay", frame: Self.somewhere, enabled: false)
+
+        #expect(found(.disabled(pay)).refusal(of: "Pay")?.message == "Pay is disabled")
     }
 }

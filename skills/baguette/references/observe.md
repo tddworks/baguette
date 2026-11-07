@@ -31,6 +31,7 @@ an open stream socket, `{"type":"snapshot"}` sends a keyframe now.
 ## Find what to tap: `describe-ui`
 
 ```bash
+baguette describe-ui --udid <X> --short          # what can be done and what the screen says
 baguette describe-ui --udid <X>                  # whole accessibility tree
 baguette describe-ui --udid <X> --x 200 --y 400  # the element at a point
 ```

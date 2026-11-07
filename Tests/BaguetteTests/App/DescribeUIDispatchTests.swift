@@ -38,6 +38,25 @@ struct DescribeUIDispatchTests {
         #expect((ack["tree"] as? [String: Any])?["label"] as? String == "General")
     }
 
+    @Test func `should answer a short read with only the short answer`() throws {
+        let ax = MockAccessibility()
+        given(ax).describeAll().willReturn(Self.withScreen)
+
+        let ack = try result(DescribeUIDispatch.dispatch(line: #"{"type":"describe_ui","short":true}"#, accessibility: ax))
+
+        #expect(ack["ok"] as? Bool == true)
+        #expect(ack["tree"] == nil)
+        #expect(ack["affordances"] != nil)
+    }
+
+    @Test func `should refuse a read with only one coordinate`() throws {
+        let ax = MockAccessibility()
+
+        let ack = try result(DescribeUIDispatch.dispatch(line: #"{"type":"describe_ui","x":5}"#, accessibility: ax))
+
+        #expect(ack["ok"] as? Bool == false)
+    }
+
     @Test func `should offer the next gestures in the wire form`() throws {
         let ax = MockAccessibility()
         given(ax).describeAll().willReturn(Self.withScreen)
