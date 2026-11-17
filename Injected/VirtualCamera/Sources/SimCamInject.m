@@ -206,6 +206,68 @@ static void simcam_setSession(id self, SEL _cmd, id session) {
     }
 }
 
+#pragma mark - Capture orientation
+
+/// A real iPhone camera hands back "sensor" pixels: always landscape, with the
+/// rotation needed to display them upright carried in EXIF (portrait = 6/"Right",
+/// upside-down = 8/"Left", landscape-left = 1/"Up", landscape-right = 3/"Down").
+/// Apps either honour that EXIF or, like NativeScript's ui-cameraview, ignore
+/// it and re-derive the same rotation from `UIDevice.orientation`. baguette's
+/// frame is already upright, so handing it over unrotated with EXIF 1 makes the
+/// second kind of app rotate an upright picture by 90° (seen as a sideways
+/// capture while the preview looked fine). Instead rotate the pixels *away* by
+/// the amount the app will rotate them back, and stamp the matching EXIF, so
+/// both kinds of app end up upright — as on a device.
+///
+/// Must run on the main thread (UIDevice / UIApplication).
+static UIDeviceOrientation SimCamResolvedDeviceOrientation(void) {
+    UIDeviceOrientation d = UIDevice.currentDevice.orientation;
+    if (d == UIDeviceOrientationFaceUp || d == UIDeviceOrientationFaceDown) {
+        d = UIDeviceOrientationPortrait;
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+            if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+            switch (((UIWindowScene *)scene).interfaceOrientation) {
+                case UIInterfaceOrientationPortraitUpsideDown: d = UIDeviceOrientationPortraitUpsideDown; break;
+                // Interface and device landscape are mirror images of each other.
+                case UIInterfaceOrientationLandscapeLeft:      d = UIDeviceOrientationLandscapeRight; break;
+                case UIInterfaceOrientationLandscapeRight:     d = UIDeviceOrientationLandscapeLeft; break;
+                default:                                        d = UIDeviceOrientationPortrait; break;
+            }
+            break;
+        }
+    }
+    return d;
+}
+
+/// Returns the sensor-layout image for `upright` and the EXIF orientation that
+/// displays it upright again. `.unknown` (an app that never started device
+/// orientation notifications) maps to "no rotation", which is also what such
+/// apps assume.
+static UIImage *SimCamSensorImage(UIImage *upright, int *exifOut) {
+    UIImageOrientation drawAs = UIImageOrientationUp;  // inverse of what the app applies
+    int exif = 1;
+    switch (SimCamResolvedDeviceOrientation()) {
+        case UIDeviceOrientationPortrait:           exif = 6; drawAs = UIImageOrientationLeft;  break;
+        case UIDeviceOrientationPortraitUpsideDown: exif = 8; drawAs = UIImageOrientationRight; break;
+        case UIDeviceOrientationLandscapeRight:     exif = 3; drawAs = UIImageOrientationDown;  break;
+        default: break;  // landscape-left / unknown: sensor orientation, EXIF 1
+    }
+    *exifOut = exif;
+    if (drawAs == UIImageOrientationUp || upright.CGImage == NULL) return upright;
+
+    UIImage *oriented = [UIImage imageWithCGImage:upright.CGImage scale:1 orientation:drawAs];
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = 1;
+    format.opaque = YES;
+    format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;
+    CGSize size = oriented.size;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        [oriented drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    }];
+}
+
 static void simcam_capturePhoto(id self,
         SEL _cmd,
         AVCapturePhotoSettings *settings,
@@ -220,23 +282,27 @@ static void simcam_capturePhoto(id self,
     if (latest != nil && (reader.latestFlags & kSimCamFlagMirror)) {
         latest = SimCamMirrorImage(latest);
     }
-    CGImageRef cgImage = latest.CGImage;
+    BOOL haveImage = (latest.CGImage != NULL);
 
     AVCapturePhotoOutput *output = (AVCapturePhotoOutput *)self;
-    SimCamFakePhoto *photo = (cgImage != NULL)
-            ? [[SimCamFakePhoto alloc] initWithCGImage:cgImage]
-            : nil;
-    NSError *error = (cgImage == NULL)
-            ? [NSError errorWithDomain:@"SimCamInject"
+    NSError *error = haveImage
+            ? nil
+            : [NSError errorWithDomain:@"SimCamInject"
                                   code:1
                               userInfo:@{NSLocalizedDescriptionKey:
-                                      @"No frames available — start SimCam Mac and click Start Streaming."}]
-            : nil;
+                                      @"No frames available — start SimCam Mac and click Start Streaming."}];
 
     // Dispatch the standard capture sequence on the main queue. AVFoundation
     // normally fires these on the session queue; main is fine for sim-only
-    // and matches what most app code expects.
+    // and matches what most app code expects. The photo is built here too:
+    // choosing its orientation reads UIDevice / UIApplication.
     dispatch_async(dispatch_get_main_queue(), ^{
+        SimCamFakePhoto *photo = nil;
+        if (haveImage) {
+            int exif = 1;
+            UIImage *sensor = SimCamSensorImage(latest, &exif);
+            photo = [[SimCamFakePhoto alloc] initWithCGImage:sensor.CGImage exifOrientation:exif];
+        }
         if ([delegate respondsToSelector:@selector(captureOutput:willCapturePhotoForResolvedSettings:)]) {
             [delegate captureOutput:output willCapturePhotoForResolvedSettings:(id)settings];
         }
@@ -251,7 +317,7 @@ static void simcam_capturePhoto(id self,
         }
     });
     NSLog(@"[SimCamInject] capturePhoto delivered to delegate=%@ image=%@",
-            delegate, cgImage ? @"ok" : @"nil");
+            delegate, haveImage ? @"ok" : @"nil");
 }
 
 #pragma mark - AVCaptureSession
