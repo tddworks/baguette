@@ -8,6 +8,7 @@
 @implementation SimCamFakePhoto {
     CGImageRef _cgImage;
     int _exifOrientation;
+    CMTime _timestamp;
 }
 
 - (instancetype)initWithCGImage:(CGImageRef)cgImage {
@@ -26,6 +27,7 @@
         &superInfo, @selector(init));
     if (self) {
         if (cgImage) _cgImage = CGImageRetain(cgImage);
+        _timestamp = CMClockGetTime(CMClockGetHostTimeClock());
         _exifOrientation = (exifOrientation >= 1 && exifOrientation <= 8) ? exifOrientation : 1;
     }
     return self;
@@ -87,6 +89,7 @@
 - (NSInteger)photoCount { return 1; }
 - (NSInteger)sequenceCount { return 1; }
 - (AVCaptureBracketedStillImageSettings *)bracketSettings { return nil; }
-- (CMTime)timestamp { return CMClockGetTime(CMClockGetHostTimeClock()); }
+// Stamped once at capture so repeated reads describe the same moment.
+- (CMTime)timestamp { return _timestamp; }
 
 @end

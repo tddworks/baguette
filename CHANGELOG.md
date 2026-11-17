@@ -11,8 +11,8 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Fixed
-- Apps that wait for `AVCaptureSession.isRunning` or `AVCaptureSessionDidStartRunning`, or need a photo output's video connection, now capture on the virtual camera instead of doing nothing, e.g. NativeScript's `ui-cameraview` (NextLevel). → [docs](docs/features/camera/README.md)
-- Captured photos are no longer rotated 90° in apps that derive rotation from the device orientation, e.g. `ui-cameraview`. Photos are now stored like a real iPhone's: sensor-layout pixels plus a matching EXIF orientation. → [docs](docs/features/camera/README.md)
+- Pressing Start on the Camera card now brings up apps that wait for the capture session to report it is running, such as NativeScript's `ui-cameraview`: the preview shows and capture works instead of nothing happening. → [docs](docs/features/camera/README.md) ([#136](https://github.com/tddworks/baguette/pull/136))
+- Photos taken from the Camera card come out upright in apps that rotate by device orientation, such as `ui-cameraview`, matching a real iPhone's photo. → [docs](docs/features/camera/README.md) ([#136](https://github.com/tddworks/baguette/pull/136))
 
 ---
 

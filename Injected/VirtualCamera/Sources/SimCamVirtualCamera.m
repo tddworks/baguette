@@ -447,6 +447,34 @@ static BOOL h_isRunning(id self, SEL _cmd) {
     return ((BOOL (*)(id, SEL))gOrigIsRunning)(self, _cmd);
 }
 
+// `gRunningSessions` holds raw session pointers (no retain). A client may
+// release a running session without calling stopRunning, and a new session
+// allocated at the same address would then read as already running and never
+// get its DidStart notification. Hang a sentinel off each started session so
+// its dealloc drops the entry.
+@interface SimCamSessionSentinel : NSObject
+@property (nonatomic, strong) NSValue *key;
+@end
+@implementation SimCamSessionSentinel
+- (void)dealloc {
+    if (_key && gStateLock) {
+        [gStateLock lock];
+        [gRunningSessions removeObject:_key];
+        [gStateLock unlock];
+    }
+}
+@end
+
+static const void *kSimCamSessionSentinelKey = &kSimCamSessionSentinelKey;
+
+static void SimCamTrackSessionLifetime(id session) {
+    if (objc_getAssociatedObject(session, kSimCamSessionSentinelKey)) return;
+    SimCamSessionSentinel *sentinel = [SimCamSessionSentinel new];
+    sentinel.key = [NSValue valueWithPointer:(__bridge void *)session];
+    objc_setAssociatedObject(session, kSimCamSessionSentinelKey, sentinel,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 // Flip our running state and tell the app the way AVFoundation would: a KVO
 // change on `running` (the KVC key behind `isRunning`) and the
 // AVCaptureSession{DidStart,DidStop}RunningNotification. Apps like NextLevel
@@ -460,17 +488,23 @@ static void SimCamSetRunning(id session, BOOL running) {
     [gStateLock unlock];
     if (was == running) return;
 
+    if (running) SimCamTrackSessionLifetime(session);
+
     [session willChangeValueForKey:@"running"];
     [gStateLock lock];
     if (running) [gRunningSessions addObject:key]; else [gRunningSessions removeObject:key];
     [gStateLock unlock];
-    [session didChangeValueForKey:@"running"];
 
+    // Queue the notification right after the mutation and before the KVO
+    // post-change call: a `running` observer that reenters startRunning /
+    // stopRunning queues its own notification from inside didChangeValueForKey:,
+    // and ours must already be ahead of it on the main queue.
     NSNotificationName name = running ? AVCaptureSessionDidStartRunningNotification
                                       : AVCaptureSessionDidStopRunningNotification;
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:name object:session];
     });
+    [session didChangeValueForKey:@"running"];
 }
 
 // Never run the real graph — just track the session as running and let
