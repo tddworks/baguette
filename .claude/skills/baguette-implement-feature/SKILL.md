@@ -2,15 +2,17 @@
 name: app-implement-feature
 description: |
   Guide for implementing features in baguette — a Swift CLI + WebSocket server
-  that drives iOS simulators via private SimulatorKit. Use this skill when:
+  that drives iOS simulators (private SimulatorKit) and physical iPhones on a
+  cable (private CoreDevice and the phone's own services). Use this skill when:
   (1) Adding a new gesture, button, keyboard surface, stream format, or
       device-chrome behaviour (anything that lands across Domain / Infrastructure /
       App + Resources/Web).
   (2) Extending an existing wire-protocol envelope, CLI subcommand, or HTTP route.
   (3) User asks "add feature X to baguette", "implement <gesture>", "wire <new
       verb> through serve / input / CLI", or similar.
-  (4) Touching the iOS-26 SimulatorKit / IndigoHID surface — those edits MUST
-      go through this skill's Architecture phase before code lands.
+  (4) Touching the iOS-26 SimulatorKit / IndigoHID surface, or CoreDevice /
+      a phone's tunnel services — those edits MUST go through this skill's
+      Architecture phase before code lands.
   Avoid using this skill for refactors that don't add a new feature (keep those
   TDD-driven without the architecture-approval gate).
 ---
@@ -81,8 +83,8 @@ the **process** of adding features that fit those rules.
 ## Phase 0: Architecture Design (mandatory)
 
 For any feature that crosses a layer boundary or touches the
-SimulatorKit / IndigoHID / AXPTranslator / spawn surface, **stop and
-design before coding**. A bug fix that moves a rule or adds a type goes
+SimulatorKit / IndigoHID / AXPTranslator / CoreDevice / spawn surface,
+**stop and design before coding**. A bug fix that moves a rule or adds a type goes
 through Steps A and B too.
 
 ### Step A: Place it in the canonical model
@@ -92,7 +94,7 @@ tree, the words, every law and its one owner, the contexts — then answer:
 
 | Question | If yes |
 |---|---|
-| Which context owns the question it answers? (CANONICAL §5) | the files go in `Domain/<Context>/`, `Infrastructure/<Context>/`, `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
+| Which context owns the question it answers? (CANONICAL §5) | the files go in `Domain/<Context>/`, `Infrastructure/<Family>/<Context>/` (`Simulator/`, `CoreDevice/`, `Companion/`; `Host/` for what every family shares — families never reference each other), `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
 | Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; the App only parses and calls it |
 | Does it add or change a law? (CANONICAL §3) | it gets **one** owner — the node that holds the data. Grep for the rule first: if it's already written somewhere, that's the owner, or the duplicate to remove |
 | Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `AbilityTable` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |
@@ -143,7 +145,7 @@ Wire JSON                Domain                       Infrastructure
                               ▲
        CLI ─── ArgumentParser ┤
        WS  ─── Server.streamWS┤
-       JS  ─── sim-input{,-bridge}.js
+       JS  ─── baguette/gestures/*.js
 ```
 
 **Conversational-I/O feature** (start / stream / terminate — split
@@ -223,7 +225,8 @@ verify(input).key(.value(_), modifiers: .value([.shift]), duration: .value(0))
 If the feature needs a new method on an existing abstraction, add it
 to the protocol with a doc comment, then update the production
 adapter. **Do not** introduce a parallel hierarchy just to enable
-testing — `IndigoHIDInput` is allowed to be the only `Input` impl.
+testing — each family has one `Input` (`IndigoHIDInput` for a simulator,
+`DigitizerInput` for a phone), and that's all there needs to be.
 
 ### Adapter wraps 3rd-party I/O? Pick the split.
 
@@ -269,7 +272,10 @@ The orchestrator depends on `any Subprocess`. Tests inject
 `MockSubprocess` and drive every byte/exit/terminate path. The
 concrete impl (`HostSubprocess` ~30–50 LOC, wraps
 `Foundation.Process`) is the **only** integration-only file —
-exclude it from coverage targets and rely on a manual smoke test.
+exclude it from coverage and rely on a manual smoke test. Excluding
+means adding it to **both** `codecov.yml` (`ignore:`) and
+`.github/workflows/ci.yml` (`-ignore-filename-regex`), kept in step;
+everything else it uses must be a tested value.
 
 ### Coverage expectation per file
 
@@ -297,6 +303,32 @@ For `IndigoHIDInput` (and any future direct private-symbol caller):
 - Bracket multi-step sequences (modifiers, two-finger holds) with
   matching down/up pairs; never leave a key/modifier latched.
 
+### When the adapter reaches a physical phone (CoreDevice, tunnel services)
+
+For anything under `Infrastructure/CoreDevice/` (research:
+[`docs/features/real-devices/design.md`](../../../docs/features/real-devices/design.md)):
+
+- **Bind CoreDevice in Swift** with `@_silgen_name` on stand-in types
+  (`CoreDeviceFramework.swift`); it's weak-linked, and a Mac — or CI —
+  without it builds with no `COREDEVICE` define. Every member the
+  `COREDEVICE` side adds needs its stub in the `#else` branch, or CI's
+  build fails where yours passes. Check with `hasCoreDevice = false` in
+  `Package.swift` before pushing.
+- **Bound every wait** on CoreDevice or the phone (`wait(timeout:)`,
+  deadline-aware sockets, a cooldown before retrying a failed open): a
+  locked phone or a stalled tunnel never answers.
+- **Check a resilient type's size** (`CoreDeviceFramework.valueSize`)
+  before CoreDevice writes one into a fixed buffer.
+- **Wire formats are Domain values** (`Domain/CoreDevice/`: `DTXMessage`,
+  `XPCObject`, `HTTP2Frame`, `MediaStreamOffer`, `ReceiverFeedback`,
+  `AXTreeDump`), unit-tested byte for byte; the socket and the private call
+  are the only untested lines, and join the coverage exclusions.
+- **A phone serves one session** per service at a time and is shared
+  with the user — share reads (`SharedRead`) rather than open a second.
+- **Look before you touch.** Screenshot the user's phone before sending
+  any input, and only send input that can be undone: it is someone's
+  real device, with real apps open.
+
 ## Phase 3: Wiring
 
 Each new gesture / verb flows through the same checklist:
@@ -311,9 +343,13 @@ Each new gesture / verb flows through the same checklist:
    only if you're adding a *control* verb that bypasses the gesture
    path.
 4. **Browser** — when the feature is user-facing:
-   - Add the wire field handling to `Resources/Web/sim-input-bridge.js`
-     (translate plugin dialect → baguette wire).
-   - Expose a method on `SimInput` in `sim-input.js`.
+   - Build the wire envelope in `Resources/Web/baguette/gestures/`
+     (`gesture-envelope.js`; a new pointer source beside the mouse,
+     touch and wheel ones).
+   - Build resource URLs through `BaguetteTarget.path(udid, rest)`
+     (`target.js`), never a hardcoded `/simulators/`, so the same page
+     serves `/devices/<udid>`. A device page shows only what the
+     device's abilities in `/devices.json` back.
    - If a new DOM-driven module is needed, write a single-purpose
      IIFE that hangs one class on `window`, add a `<script>` tag in
      `sim.html` (and `farm/farm.html` if the farm path uses it),
@@ -397,8 +433,8 @@ not the flag table — `make docs` writes that).
   can't implement a feature, fail loudly with a parse error — silent
   drops mid-string are worse than an explicit `{"ok":false,"error":"…"}`.
 - **Adding a Mockable abstraction with one concrete impl just for
-  testing.** `IndigoHIDInput` is allowed to be the only `Input` impl;
-  don't invent a parallel hierarchy. The exception is the
+  testing.** One `Input` per family (`IndigoHIDInput`, `DigitizerInput`)
+  is enough; don't invent a parallel hierarchy. The exception is the
   orchestrator + collaborator split for 3rd-party I/O — there the
   collaborator (`Subprocess`) earns its `MockSubprocess` because the
   state machine is real.
@@ -478,9 +514,11 @@ not the flag table — `make docs` writes that).
 ### Phase 3 — Wiring
 - [ ] `GestureRegistry.standard` registers the new gesture (gestures only)
 - [ ] CLI subcommand registered in `RootCommand`; `CommandParsingTests` updated
-- [ ] Browser changes (if any) span `sim-input.js`, `sim-input-bridge.js`,
-      relevant IIFE, and BOTH `sim.html` + `farm/farm.html` script tags
-- [ ] Manual smoke test on a booted sim (the irreducible private-API call is
+- [ ] Browser changes (if any) span `baguette/gestures/` (wire envelopes),
+      relevant IIFE, URLs through `BaguetteTarget.path`, and BOTH
+      `sim.html` + `farm/farm.html` script tags
+- [ ] Manual smoke test on a booted sim — and on a phone when a phone family
+      registers it, screenshotting it before any input (the irreducible private-API call is
       integration-only — make sure it actually works end-to-end)
 
 ### Phase 4 — Docs + Changelog
