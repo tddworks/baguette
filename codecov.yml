@@ -21,28 +21,10 @@ coverage:
 ignore:
   - "Sources/Baguette/Resources/**"
   - "**/Internal/System/**"
-  # Not yet measured: the routes and commands, until the router is tested
-  # in-process (HummingbirdTesting) and each `run()` is thin.
-  - "Sources/Server/**"
+  # The one CoreDevice call Swift can't spell, in C: a system call by
+  # nature, in a target of its own.
+  - "Sources/CoreDeviceABI/**"
+  # Not yet measured: the commands, until each `run()` can be handed a
+  # device in a test.
   - "Sources/Commands/**"
-  # Still to split: each mixes decisions with its system call. Split one,
-  # move its call into `System/`, delete its line.
-  - "Sources/Device/Abilities/Capture/Internal/AVCCStream.swift"
-  - "Sources/Device/Abilities/Capture/Internal/MJPEGStream.swift"
-  - "Sources/Device/Abilities/Capture/Internal/VTH264Decoder.swift"
-  - "Sources/Device/Abilities/Capture/Internal/VTStreamDecoder.swift"
-  - "Sources/Devices/Simulator/Internal/CoreSimulator.swift"
-  - "Sources/Devices/Simulator/Internal/CoreSimulators.swift"
-  - "Sources/Devices/Simulator/Internal/InjectedDylibInstaller.swift"
-  - "Sources/Devices/Simulator/Internal/Input/IndigoHIDInput.swift"
-  - "Sources/Devices/Simulator/Internal/Screen/SimulatorKitScreen.swift"
-  - "Sources/Devices/Simulator/Internal/SimulatorKitDisplay.swift"
-  - "Sources/Devices/Simulator/Internal/SimulatorKitFramebuffers.swift"
-  - "Sources/Devices/Simulator/Internal/SimulatorKitScreenOrientation.swift"
-  - "Sources/Devices/iPhone/Internal/Accessibility/RemoteAXAccessibility.swift"
-  - "Sources/Devices/iPhone/Internal/Input/CoreDeviceDigitizer.swift"
-  - "Sources/Devices/iPhone/Internal/Kit/CoreDeviceFramework.swift"
-  - "Sources/Devices/iPhone/Internal/Kit/DigitizerReport.swift"
-  - "Sources/Devices/iPhone/Internal/Screen/MediaStreamScreen.swift"
-  - "Sources/Device/Abilities/Camera/Internal/HostVideoCapture.swift"
   - "Tests/**"

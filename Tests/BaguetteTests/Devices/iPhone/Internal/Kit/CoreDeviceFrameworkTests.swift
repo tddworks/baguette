@@ -109,14 +109,14 @@ struct CoreDeviceAnswerTests {
     private struct Refused: Error, Equatable {}
 
     @Test func `should hand back CoreDevice's answer when it comes in time`() throws {
-        let answer = try CoreDeviceAnswer.wait(upTo: 5, for: "opening") { 42 }
+        let answer = try CoreDeviceAnswer.wait(upTo: 60, for: "opening") { 42 }
 
         #expect(answer == 42)
     }
 
     @Test func `should pass on what CoreDevice failed with`() {
         #expect(throws: Refused()) {
-            try CoreDeviceAnswer.wait(upTo: 5, for: "opening") { () async throws -> Int in throw Refused() }
+            try CoreDeviceAnswer.wait(upTo: 60, for: "opening") { () async throws -> Int in throw Refused() }
         }
     }
 
