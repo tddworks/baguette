@@ -159,8 +159,13 @@ private func sharedServiceConnection() -> any ServiceConnection
 /// DeviceVisibilityClass.allCases
 @_silgen_name("$s10CoreDevice0B15VisibilityClassO8allCasesSayACGvgZ")
 private func visibilityClassAllCases() -> UnsafeRawPointer
-@_silgen_name("swift_bridgeObjectRetain")
-private func retainBridgeObject(_ object: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer
+/// The Swift runtime's retain for a native Set / Array buffer. Looked up,
+/// not bound: runtime entry points are off limits to `@_silgen_name`.
+private func retainBridgeObject(_ object: UnsafeMutableRawPointer) {
+    typealias Retain = @convention(c) (UnsafeMutableRawPointer) -> UnsafeMutableRawPointer
+    guard let retain = CoreDeviceFramework.symbol("swift_bridgeObjectRetain") else { return }
+    _ = unsafeBitCast(retain, to: Retain.self)(object)
+}
 
 private class DeviceManagerObject {
     /// DeviceManager(serviceConnection:allowedDeviceVisibilityClasses:)
