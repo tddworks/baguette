@@ -139,10 +139,12 @@ extension Server {
         router.get("/devices/:udid/definition.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
-            guard let device = physicalDevices.all.first(where: { $0.id.raw == udid }) else {
-                return Self.twinJSONResponse(
-                    ["ok": false, "error": "no connected device \(udid)"], status: .notFound
-                )
+            let device: any Device
+            do {
+                device = try physicalDevices.device(DeviceID(udid))
+            } catch {
+                // An id two sources claim is refused, never guessed at.
+                return Self.twinJSONResponse(["ok": false, "error": String(describing: error)], status: Self.status(for: error))
             }
             guard let chromeName = Self.bezelName(
                 picked: r.uri.queryParameters.get("chrome").map { String($0) },
@@ -244,10 +246,12 @@ extension Server {
         router.get("/devices/:udid/3d-model.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
-            guard let device = physicalDevices.all.first(where: { $0.id.raw == udid }) else {
-                return Self.twinJSONResponse(
-                    ["ok": false, "error": "no connected device \(udid)"], status: .notFound
-                )
+            let device: any Device
+            do {
+                device = try physicalDevices.device(DeviceID(udid))
+            } catch {
+                // An id two sources claim is refused, never guessed at.
+                return Self.twinJSONResponse(["ok": false, "error": String(describing: error)], status: Self.status(for: error))
             }
             if let installed = try? models.match(hardware: device.kind.hardware ?? device.kind.model) {
                 return Self.twinJSONResponse(
@@ -490,9 +494,7 @@ extension Server {
         let input: (any Input)?
         let accessibility: (any Accessibility)?
         do {
-            guard let device = devices.all.first(where: { $0.id.raw == udid }) else {
-                throw DeviceError.unknown(id: DeviceID(udid))
-            }
+            let device = try devices.device(DeviceID(udid))
             screen = try device.require(.screen)
             input = try? device.require(.input)
             accessibility = try? device.require(.accessibility)

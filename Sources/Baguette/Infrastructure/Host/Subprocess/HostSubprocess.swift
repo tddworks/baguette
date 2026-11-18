@@ -122,9 +122,15 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
         process.environment = environment ?? ProcessInfo.processInfo.environment
         if let workingDirectory { process.currentDirectoryURL = workingDirectory }
 
+        // The exit is reported once the output has all been handed over:
+        // Foundation runs the two handlers independently, and a reader that
+        // takes the exit as "done" (devicectl's pasteboard text) would get a
+        // prefix. A grandchild holding the pipe open can't stall it for long.
+        let drained = Drained()
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let bytes = handle.availableData
             if bytes.isEmpty {
+                defer { drained.finish() }
                 // End of file. Foundation keeps invoking the handler with
                 // nothing for as long as one is installed — a busy loop
                 // that pinned `serve` at 100% once children that exit on
@@ -137,7 +143,14 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
             onBytes(bytes)
         }
         process.terminationHandler = { proc in
-            onExit(proc.terminationStatus)
+            let status = proc.terminationStatus
+            // Done with: release what the handler captured (the caller's
+            // closures, and through them this subprocess).
+            proc.terminationHandler = nil
+            DispatchQueue.global(qos: .userInitiated).async {
+                drained.wait(upTo: 1)
+                onExit(status)
+            }
         }
 
         lock.lock()
@@ -189,6 +202,20 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
             Darwin.kill(proc.processIdentifier, SIGKILL)
         }
         closePipe(pipe)
+    }
+
+    /// End of the child's output, signalled once and awaited with a bound.
+    private final class Drained: @unchecked Sendable {
+        private let done = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var finished = false
+
+        func finish() {
+            let first = lock.withLock { defer { finished = true }; return !finished }
+            if first { done.signal() }
+        }
+
+        func wait(upTo seconds: Double) { _ = done.wait(timeout: .now() + seconds) }
     }
 
     private func closePipe(_ pipe: Pipe?) {

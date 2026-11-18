@@ -34,6 +34,13 @@ enum CoreDeviceFramework {
         return unsafeBitCast(unsafeBitCast(pointer, to: Accessor.self)(0).0, to: Any.Type.self)
     }
 
+    /// A value's size, from its type's value-witness table (one word before
+    /// the metadata; the size is its ninth entry).
+    static func valueSize(_ metadata: UnsafeRawPointer) -> Int {
+        let witnesses = metadata.load(fromByteOffset: -8, as: UnsafeRawPointer.self)
+        return witnesses.load(fromByteOffset: 8 * 8, as: Int.self)
+    }
+
     /// A CoreDevice or UniversalHID symbol (type metadata, a conformance).
     static func symbol(_ mangledName: String) -> UnsafeRawPointer? {
         dlsym(UnsafeMutableRawPointer(bitPattern: -2), mangledName).map(UnsafeRawPointer.init)
@@ -70,8 +77,15 @@ final class OpenedCapability: @unchecked Sendable {
 
 enum CoreDeviceError: Error, CustomStringConvertible {
     case unavailable
+    /// CoreDevice didn't answer in time: a phone asleep, or a stalled tunnel.
+    case noAnswer(String)
 
-    var description: String { "CoreDevice is not available on this Mac" }
+    var description: String {
+        switch self {
+        case .unavailable: "CoreDevice is not available on this Mac"
+        case let .noAnswer(what): "CoreDevice didn't answer \(what) in time"
+        }
+    }
 }
 
 /// Stands for any CoreDevice capability: gives Swift an existential's layout.
@@ -107,7 +121,8 @@ struct RemoteDevice: @unchecked Sendable {
             }
             done.signal()
         }
-        done.wait()
+        // The detached task keeps `capability` alive, so a late answer is safe.
+        guard done.wait(timeout: .now() + 15) == .success else { throw CoreDeviceError.noAnswer("opening \(kind.typeSymbol)") }
         if let error = failure.error { throw error }
         return capability
     }
@@ -123,12 +138,14 @@ extension RemoteDevice {
     func startMediaStream(_ makeRequest: @escaping @Sendable () throws -> [String: Any]) throws -> [String: Any] {
         guard let requestType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV12StartRequestVMa") as? Decodable.Type,
               let responseType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV13StartResponseVMa"),
-              let supportType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV19SupportInfoResponseVMa")
+              let supportType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV19SupportInfoResponseVMa"),
+              let functions = CoreDeviceFramework.symbol("$s10CoreDevice20MediaStreamFunctionsVN"),
+              CoreDeviceFramework.valueSize(functions) <= MemoryLayout<MediaStreamFunctionsWords>.size
         else { throw CoreDeviceError.unavailable }
         let call = StartCall(object: object, requestType: requestType, responseType: responseType,
                              supportType: supportType, makeRequest: makeRequest)
         Task.detached { await call.run() }
-        call.done.wait()
+        guard call.done.wait(timeout: .now() + 20) == .success else { throw CoreDeviceError.noAnswer("starting the stream") }
         if let error = call.error { throw error }
         guard let json = call.json else { throw CoreDeviceError.unavailable }
         return json
@@ -286,7 +303,8 @@ private struct RequestBox {
 }
 
 /// `MediaStreamFunctions(device:)` — a small resilient struct, returned
-/// indirectly; sixteen words is room enough (checked by size below).
+/// indirectly; sixteen words is room enough, which `startMediaStream`
+/// checks against the type's own size before calling.
 private typealias MediaStreamFunctionsWords = (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64,
                                                UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
 @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV6deviceAcA06RemoteB0C_tcfC")

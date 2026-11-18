@@ -22,23 +22,43 @@ final class TunnelSocket {
     init(host: String, port: UInt16, timeout: TimeInterval) throws {
         fd = socket(AF_INET6, SOCK_STREAM, 0)
         guard fd >= 0 else { throw Failure.connect(host, port, errno) }
+        // A write to a phone that hung up must fail, not end the process.
+        var on: Int32 = 1
+        guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
+            let code = errno
+            close(fd)
+            throw Failure.connect(host, port, code)
+        }
         var address = sockaddr_in6()
         address.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
         address.sin6_family = sa_family_t(AF_INET6)
         address.sin6_port = port.bigEndian
         inet_pton(AF_INET6, host, &address.sin6_addr)
-        var limit = timeval(tv_sec: Int(timeout), tv_usec: 0)
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+        // Connect without blocking, so `timeout` bounds it too.
+        let flags = fcntl(fd, F_GETFL)
+        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
         let connected = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size))
             }
         }
-        guard connected == 0 else {
-            let code = errno
+        var code: Int32 = connected == 0 ? 0 : errno
+        if code == EINPROGRESS {
+            var poller = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            if poll(&poller, 1, Int32(timeout * 1000)) > 0 {
+                var length = socklen_t(MemoryLayout<Int32>.size)
+                getsockopt(fd, SOL_SOCKET, SO_ERROR, &code, &length)
+            } else {
+                code = ETIMEDOUT
+            }
+        }
+        guard code == 0 else {
             close(fd)
             throw Failure.connect(host, port, code)
         }
+        _ = fcntl(fd, F_SETFL, flags)
+        var limit = timeval(tv_sec: Int(timeout), tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
     }
 
     deinit { close(fd) }

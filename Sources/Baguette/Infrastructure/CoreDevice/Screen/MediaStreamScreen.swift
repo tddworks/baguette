@@ -108,11 +108,14 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         var feedback = ReceiverFeedback(reporter: reporter, source: source)
         var gate = DecodeGate()
         var parameterSets: [Data] = []
-        var firstPacket: Date?
+        var firstFrame: Date?
         var stats = (packets: 0, frames: 0, since: Date())
         var buffer = [UInt8](repeating: 0, count: 65_536)
         let opened = Date()
         while isRunning {
+            // No picture yet — whether nothing arrives or fragments never make
+            // a whole frame — gives up for the screenshots instead.
+            if firstFrame == nil, Date().timeIntervalSince(opened) > 8 { throw StreamError.silent }
             for report in feedback.due(at: Date().timeIntervalSince(opened), wantingKeyframe: gate.needsKeyframe) {
                 send(report, to: &phone, on: fd)
             }
@@ -123,12 +126,10 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             }
             let count = recv(fd, &buffer, buffer.count, 0)
             guard count > 0 else {
-                if firstPacket == nil, Date().timeIntervalSince(opened) > 5 { throw StreamError.silent }
                 continue
             }
             let data = Data(buffer[0..<count])
             guard !RTPPacket.isRTCP(data), let packet = RTPPacket(data) else { continue }
-            if firstPacket == nil { firstPacket = Date() }
             stats.packets += 1
             for report in feedback.heard(packet) { send(report, to: &phone, on: fd) }
             guard let unit = depacketizer.push(packet) else { continue }
@@ -141,6 +142,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             }
             guard gate.admits(unit, droppedSince: depacketizer.droppedFrames), !parameterSets.isEmpty else { continue }
             stats.frames += 1
+            if firstFrame == nil { firstFrame = Date() }
             lock.withLock { self.decoder }?.decode(unit.lengthPrefixedFrame)
         }
     }

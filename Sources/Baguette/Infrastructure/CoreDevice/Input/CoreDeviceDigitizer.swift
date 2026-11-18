@@ -13,6 +13,10 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
     private let identifier: UUID
     private let lock = NSLock()
     private var hid: OpenedCapability?
+    /// When opening the touch service last failed: a swipe's many reports
+    /// mustn't each wait out CoreDevice again (up to seconds apiece).
+    private var failedAt: Date?
+    private static let retryAfter: TimeInterval = 10
 
     /// - Parameter identifier: CoreDevice's identifier for the phone (not its UDID).
     init(identifier: UUID) {
@@ -36,12 +40,14 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
     private func universalHID() -> OpenedCapability? {
         lock.withLock {
             if let hid { return hid }
+            if let failedAt, Date().timeIntervalSince(failedAt) < Self.retryAfter { return nil }
             guard DigitizerReport.isAvailable else {
                 log("[coredevice] this Xcode's UniversalHID can't build a touch report")
                 return nil
             }
             guard let device = CoreDeviceFramework.device(identifier) else {
                 log("[coredevice] CoreDevice does not list \(identifier)")
+                failedAt = Date()
                 return nil
             }
             do {
@@ -49,6 +55,7 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
             } catch {
                 log("[coredevice] could not open the touch service: \(error)")
             }
+            failedAt = hid == nil ? Date() : nil
             return hid
         }
     }

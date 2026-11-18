@@ -90,7 +90,10 @@ struct DevicectlTests {
         })
 
         let task = Task { try await devicectl.run(["list", "devices"]) }
-        try await Task.sleep(for: .milliseconds(20))
+        // Fire only once devicectl's exit callback is registered; a run that
+        // never registers one fails here rather than hanging the test.
+        try await waitUntil { exit.isHeld }
+        try #require(exit.isHeld)
         #expect(exit.subprocessAlive)
 
         exit.fire(0)
@@ -251,6 +254,7 @@ private final class ExitLatch: @unchecked Sendable {
     private var onExit: (@Sendable (Int32) -> Void)?
     func hold(_ onExit: @escaping @Sendable (Int32) -> Void) { lock.withLock { self.onExit = onExit } }
     func fire(_ status: Int32) { lock.withLock { onExit }?(status) }
+    var isHeld: Bool { lock.withLock { onExit != nil } }
     private weak var subprocess: AnyObject?
     func track(_ subprocess: AnyObject) { lock.withLock { self.subprocess = subprocess } }
     var subprocessAlive: Bool { lock.withLock { subprocess != nil } }

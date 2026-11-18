@@ -20,8 +20,8 @@ struct DigitizerReport {
               CoreDeviceFramework.symbol("$s12UniversalHID15DigitizerReportVAA05EventD18DescriptorProtocolAAWP") != nil,
               CoreDeviceFramework.symbol("$s12UniversalHID15DigitizerReportVAA05EventD8ProtocolAAWP") != nil
         else { return false }
-        return valueSize(report) == MemoryLayout<HIDData>.size
-            && valueSize(contact) == MemoryLayout<HIDData>.size
+        return CoreDeviceFramework.valueSize(report) == MemoryLayout<HIDData>.size
+            && CoreDeviceFramework.valueSize(contact) == MemoryLayout<HIDData>.size
     }
 
     /// `fingers` (1 or 2) touching, or lifting, at fractions of the screen;
@@ -69,13 +69,6 @@ struct DigitizerReport {
 /// The layout of a UniversalHID report or contact: one `Data`.
 struct HIDData {
     var data: Data
-}
-
-/// A value's size, from its type's value-witness table (one word before
-/// the metadata; the size is its ninth entry).
-private func valueSize(_ metadata: UnsafeRawPointer) -> Int {
-    let witnesses = metadata.load(fromByteOffset: -8, as: UnsafeRawPointer.self)
-    return witnesses.load(fromByteOffset: 8 * 8, as: Int.self)
 }
 
 /// Five words come back indirectly: room for the generic initializer to
