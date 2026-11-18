@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.15] - 2026-11-18
+
 ### Changed
 - `baguette serve`'s page and every per-device route live under `/devices/<UDID>/…`, for a simulator or a phone alike; page controls show only what the device can do. `/simulators/<UDID>/…` still answers, deprecated (`Deprecation` header), and goes in a later release. → [docs](docs/serve.md)
 - A `key`, `type`, `button` or `scroll` sent to a phone on a cable says `<phone> can't do key` (or `press`, `scroll`) instead of a bare `{"ok":false}`; the phone takes touches only. → [docs](docs/features/real-devices/README.md)
@@ -217,7 +221,8 @@ For releases prior to this changelog, see the
 
 [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.14...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.15...HEAD
+[0.2.15]: https://github.com/tddworks/baguette/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/tddworks/baguette/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/tddworks/baguette/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/tddworks/baguette/compare/v0.2.11...v0.2.12
