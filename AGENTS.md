@@ -63,7 +63,7 @@ Imports flow inward: `App` (CLI + use cases) → `Domain` (value types + `@Mocka
 
 ### The crucial detail: 9-arg `IndigoHIDMessageForMouseNSEvent`
 
-iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` / `AXe` routes to a pointer service that drops messages or crashes `backboardd`. Baguette uses the **9-arg signature from Xcode 26's preview-kit**, which routes to digitizer target `0x32`. The recipe lives in `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` (heavily commented).
+iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` / `AXe` routes to a pointer service that drops messages or crashes `backboardd`. Baguette uses the **9-arg signature from Xcode 26's preview-kit**, which routes to digitizer target `0x32`. The recipe lives in `Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift` (heavily commented).
 
 `IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent thread-local state, so it **must run on `MainActor`**. Calling it from a NIO event-loop thread builds malformed messages that the simulator silently drops. `Server.streamWS` hops to `MainActor` before invoking `GestureDispatcher`. Buttons (`IndigoHIDMessageForButton`) are pure C and thread-safe — useful as a sanity check when input fails.
 
@@ -96,4 +96,4 @@ One line each; the research behind every line is in the linked `design.md`. Read
 - **adding a feature** (gesture, route, verb, stream, web UI) → the `baguette-implement-feature` skill
 - **changing a route or the gesture wire** → [docs/serve.md](docs/serve.md), [docs/wire.md](docs/wire.md)
 - **touching docs** → [docs/documentation-design/](docs/documentation-design/README.md)
-- **following a tap end to end** → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); the 9-arg recipe itself is commented in `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift`
+- **following a tap end to end** → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); the 9-arg recipe is in `Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift`

@@ -46,8 +46,8 @@ first; the other two:
    rejects a replaced dylib at the same path.
 
 The HID recipe is commented in
-`Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift`; the
-camera pipeline lives in `Sources/Baguette/Infrastructure/Camera/` and
+`Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift`; the
+camera pipeline lives in `Sources/Baguette/Infrastructure/Host/Camera/` and
 `Injected/VirtualCamera/` (see [`features/camera/README.md`](features/camera/README.md)).
 
 ## Two consumers
@@ -153,7 +153,7 @@ protocols at the boundaries the App layer wires up.
 
 Adding a new gesture is one `Gesture`-conforming struct in
 `Domain/Input/` + one line in `GestureRegistry.standard`. Adding a
-new stream format is one `Stream` impl in `Infrastructure/Stream/` +
+new stream format is one `Stream` impl in `Infrastructure/Host/Stream/` +
 one case in `StreamFormat.makeStream`. Caller code stays unchanged
 (OCP).
 
@@ -462,6 +462,6 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 - [`features/plugins/README.md`](features/plugins/README.md) — the plugin contract:
   manifest schema, the command's JSON answer, the capability table and
   what it does and doesn't guarantee, bakery distribution.
-- `../Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` —
+- `../Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift` —
   the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
   commented.

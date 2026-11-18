@@ -231,7 +231,7 @@ the control phase. Orchestrators depend on the nouns; tests drive
 
 ## Infrastructure
 
-`Infrastructure/Device/` holds the irreducible I/O, split per the
+`Infrastructure/Companion/` holds the irreducible I/O, split per the
 adapter rules:
 
 - `LiveDevices` — the in-memory `Devices` implementation, membership

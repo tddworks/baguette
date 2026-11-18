@@ -12,8 +12,8 @@ import IOSurface
 /// rect, hand back a `CGImage`, and encode it as PNG or JPEG. Splitting
 /// it out this way is what makes the size feature testable — synthetic
 /// `CGImage`s go in, assertable pixels come out, and the only thing left
-/// in `ScreenSnapshot` that needs a booted simulator is SimulatorKit's
-/// framebuffer callback itself.
+/// in `ScreenSnapshot` that needs a live device is the `Screen`'s
+/// frame callback itself.
 ///
 /// The one non-obvious bit is the vertical flip in `compose`. A
 /// `CapturePlacement` counts `drawY` **down from the top** — the same
@@ -115,7 +115,7 @@ enum CaptureCanvas {
     /// `VideoFrameScaler` produced) to a `CGImage` that **owns its
     /// bytes**.
     ///
-    /// The copy is the point. SimulatorKit keeps rendering into the
+    /// The copy is the point. A `Screen` may keep rendering into the
     /// surface it handed us — `screen.stop()` only lands after the
     /// capture returns — so an image still aliasing that memory would be
     /// composed and encoded out from under a live writer, and come out a

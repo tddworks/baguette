@@ -323,7 +323,7 @@ Each new gesture / verb flows through the same checklist:
    - Small, reusable browser logic gets a `node:test` unit test —
      see [references/js-testing.md](references/js-testing.md).
 
-A new **stream format** is one `Stream` impl in `Infrastructure/Stream/`
+A new **stream format** is one `Stream` impl in `Infrastructure/Host/Stream/`
 plus one case in `StreamFormat.makeStream`; its byte envelope lives in
 `Domain/Stream/Envelope.swift`. No call site switches on the format.
 

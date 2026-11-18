@@ -3,7 +3,7 @@ import Foundation
 import IOSurface
 
 /// One-shot frame capture: open `Screen`, wait for the first IOSurface
-/// SimulatorKit delivers, lay it onto the requested canvas, encode, stop.
+/// the screen delivers, lay it onto the requested canvas, encode, stop.
 /// Shared by the `baguette screenshot` CLI and the
 /// `GET /simulators/:udid/screenshot.jpg` HTTP route. A timeout
 /// guards against an idle / wedged simulator that never fires its frame

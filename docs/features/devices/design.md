@@ -298,9 +298,13 @@ Infrastructure/
 The host half is already platform-neutral in code. Of the stream, recording,
 screen and render files that mention SimulatorKit, the stream, recording and
 subprocess ones do so only in comments ("SimulatorKit recycles the IOSurface").
-Those comments get rewritten to state the contract. `CaptureCanvas`,
-`ScreenSnapshot`, `RenderedScreen` and `VerifiedDeviceAssets` are read during
-the move to decide whether each is `Host/` or `Simulator/`.
+Those comments now state the `Screen` contract instead ("a `Screen` may
+recycle the IOSurface"). `CaptureCanvas`, `ScreenSnapshot` and
+`RenderedScreen` turned out to be host code. One reach across the fence
+remains: `Host/Render/VerifiedDeviceAssets` defaults to
+`CoreSimulators.developerDir()`. Which Xcode is installed is a fact about the
+Mac, not the simulator family, so that lookup moves to `Host/` when a second
+family needs it (CoreDevice will).
 
 AGENTS.md's layering sentence changes to:
 

@@ -3,7 +3,7 @@ import IOSurface
 
 /// A screen whose frames are composed through one persistent 3D device scene.
 ///
-/// Rendering is serialized away from SimulatorKit's callback. At most one
+/// Rendering is serialized away from the screen's frame callback. At most one
 /// pending surface is retained, so a slow model drops stale frames instead of
 /// blocking capture or growing an unbounded queue.
 final class RenderedScreen: DeviceFrames, @unchecked Sendable {

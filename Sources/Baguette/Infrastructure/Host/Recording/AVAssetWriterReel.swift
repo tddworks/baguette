@@ -95,7 +95,7 @@ final class AVAssetWriterReel: Reel, @unchecked Sendable {
                 ] as [String: Any],
             ]
         )
-        // Frames arrive on SimulatorKit's cadence, not on the writer's —
+        // Frames arrive on the screen's cadence, not on the writer's —
         // real-time mode lets the writer drop rather than stall us.
         input.expectsMediaDataInRealTime = true
 

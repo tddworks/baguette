@@ -80,7 +80,7 @@ final class AVCCStream: Stream, @unchecked Sendable {
 
     private func encode(_ surface: IOSurface) {
         guard running else { return }
-        // SimulatorKit recycles the IOSurface; VT must retain its own GPU copy.
+        // A Screen may recycle the IOSurface; VT must retain its own GPU copy.
         guard let pb = scaler.scale(surface, by: config.scale) else { return }
         if pendingSeedSnapshot {
             pendingSeedSnapshot = false
