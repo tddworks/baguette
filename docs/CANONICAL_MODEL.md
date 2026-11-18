@@ -49,7 +49,7 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
     │                                       state ◇ (off · starting · ready · unavailable)
     └── abilities → AbilityTable  ◇         WHAT IT CAN DO — require(.location) → the role; names
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
-                                            CoreDevicePhones (screen, input, pasteboard) ·
+                                            CoreDevicePhones (screen, input, accessibility, pasteboard) ·
                                             AndroidEmulators (later)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
@@ -160,6 +160,11 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a short read is of a screen, not a point; `x` and `y` come together | `DescribeUI` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
 | a physical phone's touches go to the Universal HID service it registers for its main touchscreen, `0x101` — measured, never computed | `CoreDeviceDigitizer.mainTouchscreen` |
+| a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
+| a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
+| a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
+| a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
+| a phone's tree takes its screen from the app at its root, which fills it | `AXNode.onItsAppsScreen` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
 | an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |
 | `type` / `key` are US-layout printable ASCII; anything else fails to parse and goes through `paste` | `KeyboardKey.decompose` · `TypeText.parse` |
@@ -232,7 +237,7 @@ Mac — and each family sorts itself by these context names
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
 | **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
-| **CoreDevice** | *what is a phone on a cable, to CoreDevice?* | ◇ `PhysicalPhone` · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
+| **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `RTPPacket` `VideoDepacketizer` (its screen) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind
 
@@ -241,10 +246,9 @@ moves, one change at a time.
 
 | Node | The code today | Moves to |
 |---|---|---|
-| `Devices` | device-level commands (`boot`, `screenshot`, `stream`, `record`, `orientation`, `clipboard`, `location`, `status-bar`, …) ask `Devices`; gestures, `input`, `fill`, `describe-ui`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` still take a `Simulator` (refusing other families by ability); the `/simulators/…` routes still read `Simulators` | every command and route through `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
+| `Devices` | device-level commands, gestures, `input`, `paste` and `describe-ui` ask `Devices`; `fill`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` still take a `Simulator` (refusing other families by ability); the `/simulators/…` routes still read `Simulators`, and `/devices/:udid/…` has only the device page, its stream and `screenshot` | every command and route through `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
 | `Device.abilities` | `Simulator` declares 21 role factories every device would have to fake | registrations in `CoreSimulator`'s `AbilityTable` |
 | `CompanionPhones` | the twin has its own `Devices` / `Device` (`capabilities: [String]`) and copies of the per-device routes | one source of `Devices`, one route tree |
-| `Infrastructure/` | split by context, every folder a simulator adapter | split by device family, plus `Host/` |
 | "no reading means folded" | written out as `angle()?.litPanel ?? .primary` at four call sites | `Hinge.litPanel` everywhere (#124); `Server.hingeJSON` keeps one read for both the degrees and the panel |
 | "is this device a foldable" | answered three ways: `chromes.panels(…).contains(.secondary)`, `IntegratedPanels.several(in:)`, `observed.multiplePanels` | one question, one owner |
 | the phone plane's target | picked by `DisplayTouchTarget.resolve` in `SimulatorKitDisplay.input()`, inline in `input(expected:)` | `DisplayTouchTarget.resolve` for both, and one place deciding `FoldableInput` |
@@ -266,5 +270,9 @@ moves, one change at a time.
 - **An offline render's default pose.** `DeviceRenderPlan` takes a missing
   `--hinge-degrees` as 180° (flat). That is a picture's pose, not the device's
   hinge, so the folded rule doesn't apply — the doc should say so.
+- **A phone held sideways.** Its accessibility frames come in the app's own
+  points and its tree takes a portrait screen, so `tap --label` on a phone in
+  landscape would place the touch wrong. The phone reports its orientation
+  (`devicectl device info displays`); which node takes it is open.
 - **Hinge ↔ Orientation.** `Hinge` uses `DeviceOrientation`; `Orientation`
   answers `PoseDelivery`. One should own the vocabulary.

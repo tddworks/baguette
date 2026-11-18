@@ -1,8 +1,8 @@
 # Baguette — Architecture
 
 How a tap in a browser becomes a `UITouch` inside a booted iOS 26
-simulator, and how the code is laid out to keep that path testable
-and extensible.
+simulator — or on an iPhone on a cable — and how the code is laid out
+to keep that path testable and extensible.
 
 If you just want to build and use Baguette, read [`../README.md`](../README.md).
 
@@ -107,11 +107,13 @@ Sources/Baguette/
 └── Resources/Web/      static HTML / JS / CSS for `serve`
 ```
 
-`Domain/` is split into bounded-context subfolders (`Simulator/`,
-`Input/`, `Screen/`, `Stream/`, `Chrome/`), and `Tests/BaguetteTests/`
-mirrors that split. `Infrastructure/` is split by what it talks to:
-one folder per device family (`Simulator/` for CoreSimulator,
-SimulatorKit and simctl; `Companion/` for the companion-app twin),
+`Domain/` is split into bounded-context subfolders (`Device/`,
+`Simulator/`, `CoreDevice/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`,
+`Accessibility/`, …), and `Tests/BaguetteTests/` mirrors that split.
+`Infrastructure/` is split by what it talks to: one folder per device
+family (`Simulator/` for CoreSimulator, SimulatorKit and simctl;
+`CoreDevice/` for a phone on a cable — CoreDevice, devicectl and the
+phone's own tunnel services; `Companion/` for the companion-app twin),
 each sorted inside by the same context names, plus `Host/` for what
 every family shares (encoders, recording, rendering, chrome, plugins)
 and `Server/`. A family never imports another family; `Host/` never
@@ -124,6 +126,9 @@ protocols at the boundaries the App layer wires up.
 
 | Context | Type | Kind | Notes |
 |---|---|---|---|
+| Device | `Devices` / `Device` | aggregate | every device of every family in one list; a device is identity + kind + state + an `AbilityTable`. `devices.require(.input, of: id)` hands back the role, or refuses naming the ability ([devices](features/devices/design.md)) |
+| Device | `AbilityTable` / `Ability` | value | what one device can do, registered by its family only when it can do it |
+| CoreDevice | `PhysicalPhone` · `MediaStreamOffer` · `ReceiverFeedback` · `DTXMessage` · `XPCObject` · `ServiceDirectory` · `AXTreeDump` | value | a phone on a cable, and the wire formats of its screen stream and its services — pure, tested byte for byte ([real devices](features/real-devices/design.md)) |
 | Simulator | `Simulator` | value | identity (`udid`, `name`, `state`, `runtime`); rich verbs `boot()` / `shutdown()` / `screen()` / `input()` / `chrome(in:)` delegate to the injected aggregate |
 | Simulator | `Simulators` | aggregate | `@Mockable` protocol — `all`, `find`, `boot`, `shutdown`, `screen(for:)`, `input(for:)`. Default-impl `running` / `available` / `listJSON` |
 | Screen | `Screen` | port | `@Mockable` protocol — `start(onFrame:)` / `stop`. Emits `IOSurface` per frame |
@@ -263,7 +268,10 @@ in points too — same unit system end to end.
 ## Streaming pipeline
 
 ```
-SimulatorKitScreen (IOSurface)        Stream impl                        FrameSink
+Screen (IOSurface per frame)          Stream impl                        FrameSink
+  SimulatorKitScreen — a simulator's framebuffer
+  MediaStreamScreen  — a phone's own H.264, received over its tunnel,
+                       decoded and cropped to its screen
 ─────────────────────────────         ───────────                        ─────────
   framebuffer callbacks      ──►      MJPEG / AVCC encode loop  ──►     StdoutSink
   (queue: baguette.screen)            keepalive timer (H.264)            WebSocketFrameSink
@@ -351,6 +359,10 @@ POST /simulators/:udid/carplay-display      attach/reattach CarPlay via Simulato
 GET  /simulators/:udid/describe-ui.json     Accessibility.describeAll / describeAt
 POST /simulators/:udid/input                GestureDispatcher (one envelope)
 WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
+GET  /devices.json                          Devices.connectedJSON (phones, with abilities)
+GET  /devices/:udid                         sim.html (same shell, device tree)
+GET  /devices/:udid/screenshot.{jpg,png}    devices.require(.screen, of:) — any family
+WS   /devices/:udid/stream?format=…         the device's Screen + Input; describe_ui from its Accessibility
 GET  /plugins.json                          Plugins.listJSON
 POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
 GET  /bakeries.json                         trusted sources + pinned commits + install state
@@ -462,6 +474,9 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 - [`features/plugins/README.md`](features/plugins/README.md) — the plugin contract:
   manifest schema, the command's JSON answer, the capability table and
   what it does and doesn't guarantee, bakery distribution.
+- [`features/real-devices/design.md`](features/real-devices/design.md) — how a
+  phone on a cable is reached: touches through CoreDevice's Universal HID, its
+  H.264 screen stream, and its accessibility tree over the tunnel.
 - `../Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift` —
   the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
   commented.
