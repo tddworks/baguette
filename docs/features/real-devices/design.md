@@ -71,7 +71,7 @@ Filled in at the end of the spike.
 
 | Outcome | Meaning | Next |
 |---|---|---|
-| Go: H1, H2, H3 pass | Screen and input both reachable | Design a CoreDevice-backed device type next to `CoreSimulator` in `Simulators`; real iPhones and vphone VMs both appear |
+| Go: H1, H2, H3 pass | Screen and input both reachable | A `CoreDevicePhones` source in [Devices](../devices/design.md), registering `screen` and `input`; real iPhones and vphone VMs both appear |
 | Partial: H1 and H2 pass, H3 fails | Watch-only real devices | Decide whether a view-only device is worth shipping; input for vphone still goes through vphoned |
 | No-go: H1 fails | CoreDevice route closed to us | [Fallback](#fallback-vphone-only-through-vphoned); physical devices stay out of scope |
 

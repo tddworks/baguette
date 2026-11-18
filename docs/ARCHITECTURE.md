@@ -107,10 +107,15 @@ Sources/Baguette/
 └── Resources/Web/      static HTML / JS / CSS for `serve`
 ```
 
-`Domain/` and `Infrastructure/` are further split into bounded-context
-subfolders (`Simulator/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`)
-that mirror across the two layers, so a feature lives in one place
-across both. `Tests/BaguetteTests/` mirrors the same context split.
+`Domain/` is split into bounded-context subfolders (`Simulator/`,
+`Input/`, `Screen/`, `Stream/`, `Chrome/`), and `Tests/BaguetteTests/`
+mirrors that split. `Infrastructure/` is split by what it talks to:
+one folder per device family (`Simulator/` for CoreSimulator,
+SimulatorKit and simctl; `Companion/` for the companion-app twin),
+each sorted inside by the same context names, plus `Host/` for what
+every family shares (encoders, recording, rendering, chrome, plugins)
+and `Server/`. A family never imports another family; `Host/` never
+imports a family. Why: [devices](features/devices/design.md).
 
 ### Domain
 
