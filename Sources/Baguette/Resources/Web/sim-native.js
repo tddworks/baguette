@@ -2184,6 +2184,7 @@
           const said = window.Baguette._DeviceBadge.of(hit && hit.capabilities);
           badge.textContent = said.text;
           badge.title = said.title;
+          showDeviceInspectTools(window.Baguette._DeviceBadge.inspectTools(hit && hit.capabilities));
         })
         .catch(() => { /* keep view-only */ });
       badge.style.cssText =
@@ -2192,6 +2193,20 @@
         'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
       osEl.insertAdjacentElement('afterend', badge);
     }
+  }
+
+  /// Brings back the inspect cluster on a device page with only the tools
+  /// the device can back (`ids`), e.g. the accessibility inspector.
+  function showDeviceInspectTools(ids) {
+    if (!ids.length) return;
+    const cluster = document.querySelector('#simNativeView [data-cluster="inspect"]');
+    if (!cluster) return;
+    cluster.style.display = '';
+    const sep = document.querySelector('#simNativeView [data-sep-for="inspect"]');
+    if (sep) sep.style.display = '';
+    cluster.querySelectorAll('button[id]').forEach((btn) => {
+      btn.style.display = ids.includes(btn.id) ? '' : 'none';
+    });
   }
 
   /**

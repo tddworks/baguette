@@ -488,12 +488,14 @@ extension Server {
     ) async {
         let screen: any Screen
         let input: (any Input)?
+        let accessibility: (any Accessibility)?
         do {
             guard let device = devices.all.first(where: { $0.id.raw == udid }) else {
                 throw DeviceError.unknown(id: DeviceID(udid))
             }
             screen = try device.require(.screen)
             input = try? device.require(.input)
+            accessibility = try? device.require(.accessibility)
         } catch {
             try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
             return
@@ -516,6 +518,10 @@ extension Server {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
+                // The inspector's `describe_ui`, from the device's own accessibility.
+                if let accessibility, await Self.handleDescribeUI(line: line, accessibility: accessibility, outbound: outbound) {
+                    continue
+                }
                 do {
                     if try Self.handleTwinInbound(line: line, stream: stream) { continue }
                 } catch {

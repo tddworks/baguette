@@ -3044,7 +3044,7 @@ struct Server: Sendable {
                     ))
                     continue
                 }
-                if await handleDescribeUI(line: line, sim: sim, outbound: outbound) {
+                if await handleDescribeUI(line: line, accessibility: sim.accessibility(), outbound: outbound) {
                     continue
                 }
                 if let frame = await PasteDispatch.dispatch(
@@ -3159,7 +3159,7 @@ struct Server: Sendable {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
                 if await handleDescribeUI(
-                    line: line, sim: sim, outbound: outbound
+                    line: line, accessibility: sim.accessibility(), outbound: outbound
                 ) {
                     continue
                 }
@@ -3191,16 +3191,16 @@ struct Server: Sendable {
         }
     }
 
-    /// `describe_ui` text message — needs the `Simulator` (to reach
-    /// the AX port) and the outbound writer (to ship the result
-    /// back), neither of which `handleInbound` carries. Returns
+    /// `describe_ui` text message — needs the device's accessibility
+    /// (a simulator's or a phone's) and the outbound writer (to ship the
+    /// result back), neither of which `handleInbound` carries. Returns
     /// `true` when the line was a `describe_ui` envelope (handled
     /// or rejected with an error JSON), `false` for any other
     /// shape so the caller falls through to the gesture / reconfig
     /// pipeline.
-    private static func handleDescribeUI(
+    static func handleDescribeUI(
         line: String,
-        sim: Simulator,
+        accessibility ax: @autoclosure () -> any Accessibility,
         outbound: WebSocketOutboundWriter
     ) async -> Bool {
         guard let data = line.data(using: .utf8),
@@ -3208,7 +3208,7 @@ struct Server: Sendable {
               (dict["type"] as? String) == "describe_ui" else {
             return false
         }
-        let ax = sim.accessibility()
+        let ax = ax()
         let result: AXNode?
         do {
             if let xv = (dict["x"] as? Double) ?? (dict["x"] as? Int).map(Double.init),

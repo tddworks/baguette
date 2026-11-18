@@ -17,6 +17,18 @@
           : 'A physical device that lists nothing it can do.',
       };
     },
+
+    /**
+     * The inspect cluster's tools a physical device's page shows: the
+     * accessibility inspector when the device can do accessibility. Logs
+     * and defaults are simulator-only.
+     * @param {string[]|undefined} capabilities
+     * @returns {string[]} toolbar button ids
+     */
+    inspectTools(capabilities) {
+      const abilities = Array.isArray(capabilities) ? capabilities : [];
+      return abilities.includes('accessibility') ? ['nativeAxToggle'] : [];
+    },
   };
 
   root.Baguette = root.Baguette || {};

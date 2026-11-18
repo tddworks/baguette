@@ -31,3 +31,12 @@ test('should name what a device can do in its title', () => {
 test('should read a device with no abilities listed as view-only', () => {
   assert.equal(DeviceBadge().of(undefined).text, 'DEVICE · view-only');
 });
+
+test('should offer the accessibility inspector to a device that can do accessibility', () => {
+  assert.deepEqual(DeviceBadge().inspectTools(['screen', 'input', 'accessibility']), ['nativeAxToggle']);
+});
+
+test('should offer no inspect tools to a device without accessibility', () => {
+  assert.deepEqual(DeviceBadge().inspectTools(['screen', 'input']), []);
+  assert.deepEqual(DeviceBadge().inspectTools(undefined), []);
+});

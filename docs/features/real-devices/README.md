@@ -30,7 +30,8 @@ for a simulator ([wire.md](../../wire.md)); `"edge":"bottom"` on a
 
 In `baguette serve`, the phone appears under **Devices** on the list page; its
 page (`/devices/<udid>`) asks for a borrowed bezel, then shows its screen and
-turns clicks and drags into touches. Its badge says `DEVICE · touch`.
+turns clicks and drags into touches. Its badge says `DEVICE · touch`; the
+crosshair opens the accessibility inspector over the phone's screen.
 
 ## What a phone can do
 
