@@ -73,33 +73,6 @@ struct IndigoHIDMessageTests {
         #expect(!ok)
     }
 
-    @Test(arguments: [false, true])
-    func `should still try to lift a tap and fail it when either half fails to deliver`(downFails: Bool) {
-        let client = DeferredHIDClient(automaticResults: downFails ? [Self.error, nil] : [nil, Self.error])
-        let ok = IOHIDDigitizerDispatch.tap(
-            point: CGPoint(x: 0.25, y: 0.5), holdSeconds: 0.02, edge: .none,
-            identifier: 1, target: IndigoHIDTouchTarget.phone, on: client
-        )
-        #expect(client.sentCount == 2)
-        #expect(!ok)
-    }
-
-    @Test(arguments: [false, true])
-    func `should stop a swipe's movement after a delivery failure and still try to lift`(failsDuringDwell: Bool) {
-        // Two moves and three dwell pulses would normally make seven sends.
-        let failedIndex = failsDuringDwell ? 3 : 1
-        var completions = [NSError?](repeating: nil, count: 7)
-        completions[failedIndex] = Self.error
-        let client = DeferredHIDClient(automaticResults: completions)
-        let ok = IOHIDDigitizerDispatch.swipe(
-            from: CGPoint(x: 0.25, y: 0.5), to: CGPoint(x: 0.5, y: 0.25),
-            steps: 2, stepMs: 0, dwellMs: 150,
-            identifier: 1, target: IndigoHIDTouchTarget.phone, on: client
-        )
-        #expect(!ok)
-        #expect(client.sentCount == failedIndex + 2)
-    }
-
     private static var error: NSError { NSError(domain: "HID transport", code: 17) }
 }
 

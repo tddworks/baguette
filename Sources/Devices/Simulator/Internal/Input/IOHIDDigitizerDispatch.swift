@@ -2,7 +2,9 @@ import BaguetteDevice
 import Foundation
 
 /// Production digitizer-event dispatch — the path we cracked while
-/// debugging the iOS 26.4 / Xcode 26 mouse-event regression.
+/// debugging the iOS 26.4 / Xcode 26 mouse-event regression. One finger
+/// event at a time: the sequences built from them (tap, swipe, dwell) and
+/// the screen guard are `IndigoHIDInput`'s.
 ///
 /// Xcode 26 it produces messages iOS
 /// either ignores or interprets as the Home gesture. The fix is to
@@ -84,77 +86,6 @@ enum IOHIDDigitizerDispatch {
         var touch: Bool { self != .up }
     }
 
-    // MARK: - one-shot helpers
-
-    /// Single-finger tap at `point` (normalised 0..1). Convenience
-    /// wrapper around `down` → hold → `up` for the common case.
-    static func tap(
-        point: CGPoint, holdSeconds: Double,
-        edge: Edge = .none, identifier: UInt32,
-        target: UInt32 = IndigoHIDTouchTarget.phone,
-        screenGuard: InputScreenGuard? = nil,
-        on client: AnyObject
-    ) -> Bool {
-        let pressed = send(
-            point: point, identifier: identifier, phase: .down,
-            edge: edge, target: target, screenGuard: screenGuard, on: client)
-        if pressed {
-            let holdUs = UInt32(max(0.02, holdSeconds) * 1_000_000)
-            usleep(holdUs)
-        }
-        let released = send(
-            point: point, identifier: identifier, phase: .up,
-            edge: edge, target: target, screenGuard: screenGuard, on: client)
-        return pressed && released
-    }
-
-    /// Continuous swipe from `start` to `end` over `steps`
-    /// interpolated moves. Optional `dwellMs` holds the finger at
-    /// the endpoint before lift — iOS uses dwell to discriminate
-    /// Home from App Switcher when `edge == .bottom`.
-    static func swipe(
-        from start: CGPoint, to end: CGPoint,
-        steps: Int = 10, stepMs: UInt32 = 16,
-        dwellMs: UInt32 = 0,
-        edge: Edge = .none, identifier: UInt32,
-        target: UInt32 = IndigoHIDTouchTarget.phone,
-        screenGuard: InputScreenGuard? = nil,
-        on client: AnyObject
-    ) -> Bool {
-        var ok = send(
-            point: start, identifier: identifier, phase: .down,
-            edge: edge, target: target, screenGuard: screenGuard, on: client)
-        var lastPoint = start
-        if ok {
-            for i in 1...steps {
-                usleep(stepMs * 1000)
-                let t = Double(i) / Double(steps)
-                lastPoint = CGPoint(
-                    x: start.x + (end.x - start.x) * t,
-                    y: start.y + (end.y - start.y) * t)
-                ok = send(
-                    point: lastPoint, identifier: identifier, phase: .move,
-                    edge: edge, target: target, screenGuard: screenGuard, on: client)
-                if !ok { break }
-            }
-        }
-        if ok && dwellMs > 0 {
-            let pulses = max(1, Int(dwellMs / 50))
-            for _ in 0..<pulses {
-                ok = send(
-                    point: lastPoint, identifier: identifier, phase: .move,
-                    edge: edge, target: target, screenGuard: screenGuard, on: client)
-                if !ok { break }
-                usleep(50_000)
-            }
-        }
-        if ok { usleep(stepMs * 1000) }
-        let released = send(
-            point: lastPoint, identifier: identifier, phase: .up,
-            edge: edge, target: target, screenGuard: screenGuard, on: client)
-        return ok && released
-    }
-
     // MARK: - core
 
     /// Build, patch, and dispatch one digitizer event. Returns
@@ -164,12 +95,9 @@ enum IOHIDDigitizerDispatch {
         point: CGPoint, identifier: UInt32, phase: Phase,
         edge: Edge,
         target: UInt32 = IndigoHIDTouchTarget.phone,
-        screenGuard: InputScreenGuard? = nil,
         on client: AnyObject
     ) -> Bool {
-        guard screenGuard?.allows(phase == .up ? .up : .move) != false,
-            ensureSymbols()
-        else { return false }
+        guard ensureSymbols() else { return false }
         guard
             let parent = makeDigitizerEvent(
                 point: point,

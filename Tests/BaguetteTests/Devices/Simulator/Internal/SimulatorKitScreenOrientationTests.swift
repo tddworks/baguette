@@ -50,6 +50,21 @@ struct SimulatorKitScreenOrientationTests {
         #expect(changed.target == ScreenTarget(screenId: 2, litPanel: .secondary, pixelSize: Size(width: 744, height: 1133)))
     }
 
+    @Test func `should fail when the screen properties have no current mode`() {
+        #expect(throws: SimulatorKitScreenOrientation.Failure.unavailable) {
+            try SimulatorKitScreenOrientation.readScreen(properties: ModelessProperties(), panel: nil)
+        }
+    }
+
+    @Test func `should say coordinate conversion is unavailable when the orientation cannot be read`() {
+        #expect(
+            SimulatorKitScreenOrientation.Failure.unavailable.errorDescription
+                == "SimulatorKit cannot report the screen's interface orientation; coordinate conversion is unavailable.")
+        #expect(
+            SimulatorKitScreenOrientation.Failure.unknown(9).errorDescription
+                == "SimulatorKit reported unknown interface orientation 9; coordinate conversion is unavailable.")
+    }
+
     @Test func `should reject a screen with a zero scale rather than divide by it`() {
         let properties = LiveProperties()
         properties.currentMode.preferredUIScale = 0
@@ -68,6 +83,11 @@ private final class LiveProperties: NSObject {
     @objc dynamic var screenID: UInt32 = 1
     @objc dynamic var uiOrientation: UInt32 = 1
     @objc dynamic var currentMode = LiveMode()
+}
+
+private final class ModelessProperties: NSObject {
+    @objc dynamic var pixelSize = CGSize(width: 1206, height: 2622)
+    @objc dynamic var screenID: UInt32 = 1
 }
 
 private final class ScreenProperties: NSObject {
