@@ -52,7 +52,25 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
 
     // MARK: - The tree
 
+    /// One read per phone at a time: its accessibility service closes a
+    /// second session, so callers that overlap share the one in flight.
     private func tree() throws -> AXNode? {
+        try Self.sharedRead(for: identifier).read { try readTree() }
+    }
+
+    private static let readsLock = NSLock()
+    nonisolated(unsafe) private static var reads: [UUID: SharedRead<AXNode?>] = [:]
+
+    private static func sharedRead(for phone: UUID) -> SharedRead<AXNode?> {
+        readsLock.withLock {
+            if let read = reads[phone] { return read }
+            let read = SharedRead<AXNode?>()
+            reads[phone] = read
+            return read
+        }
+    }
+
+    private func readTree() throws -> AXNode? {
         guard let translator = AXPTranslatorBridge.translator else { throw Failure.translatorUnavailable }
         let deadline = Date().addingTimeInterval(budget)
         let address = try tunnelAddress()

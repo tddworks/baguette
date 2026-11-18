@@ -48,3 +48,30 @@ test('hover preserves last-sibling priority and falls back to the parent outside
   assert.equal(hover(root, 180, 170), root);
   assert.equal(hover(root, 400, 800), null);
 });
+
+function inspectorWith(tree) {
+  const statuses = [];
+  const inspector = Object.assign(Object.create(AXInspector.prototype), {
+    tree, hover: null, _draw() {}, _setStatus(s) { statuses.push(s); },
+  });
+  return { inspector, statuses };
+}
+
+test('a failed refresh keeps the tree already drawn, and says why', () => {
+  const tree = node({ x: 0, y: 0, width: 400, height: 800 });
+  const { inspector, statuses } = inspectorWith(tree);
+
+  inspector.handleEnvelope({ type: 'describe_ui_result', ok: false, error: 'the phone closed the connection' });
+
+  assert.equal(inspector.tree, tree);
+  assert.equal(statuses.at(-1), 'the phone closed the connection');
+});
+
+test('a fresh tree replaces the one drawn', () => {
+  const fresh = node({ x: 0, y: 0, width: 400, height: 800 });
+  const { inspector } = inspectorWith(node({ x: 0, y: 0, width: 1, height: 1 }));
+
+  inspector.handleEnvelope({ type: 'describe_ui_result', ok: true, tree: fresh });
+
+  assert.equal(inspector.tree, fresh);
+});
