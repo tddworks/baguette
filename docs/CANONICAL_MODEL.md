@@ -9,7 +9,8 @@ description: The normative domain model baguette binds to — the tree from Devi
 > name it (a verb, a flag, a card on the page), and a rule lives on **the node
 > that holds the data it needs** (tell, don't ask).
 >
-> **Answers:** what is true — the nodes, the words, the laws and their owners.
+> **Answers:** what is true — the stable domain every device shares (1a), the
+> nodes as built, the words, the laws and their owners.
 > **Next:** [ARCHITECTURE.md](ARCHITECTURE.md) for how a tap travels through
 > the layers, and each feature's `design.md` for the private-API research.
 
@@ -31,7 +32,7 @@ Their exact syntax is in [commands.md](commands.md) and [wire.md](wire.md). An a
 
 | A word | Means here, and only here |
 |---|---|
-| **device points** | the unit of every coordinate and of the `width` / `height` beside it; never normalized, never pixels |
+| **device points** | the unit of every coordinate and of the `width` / `height` beside it — the display's *logical unit* (1a); never normalized, never pixels |
 | **display plane** | one of a device's screens as baguette drives it: `phone` or `carPlay` |
 | **panel** | one of a foldable's own screens: the **cover** (`primary`) or the **unfolded** panel (`secondary`) |
 | **lit panel** | the panel the hinge lights now; everything that touches or shows the phone plane follows it |
@@ -41,6 +42,55 @@ Their exact syntax is in [commands.md](commands.md) and [wire.md](wire.md). An a
 | **heal** | reclaim the input surface Device Hub took: restart backboardd |
 
 ## 1 · The tree
+
+### 1a · The stable domain — the same for every device
+
+baguette's domain is what a person does with **any** device. It doesn't change
+with the platform; a new kind of device brings **implementations**, never new
+abstractions. iOS simulators, iPhones on a cable, Android emulators and Android
+phones differ only below this line — in the family that realizes each role.
+
+```text
+            see            read            act               run         sense          power
+person ──▶  Screen         UI snapshot     TouchSurface ·    Apps ·      Location ·     Power
+agent       (frames)       (elements)      Controls          Links       Orientation ·  (virtual only)
+            └──── one Display binds the frames you see to the surface you touch ────┘   Motion
+            and beside them: Clipboard (text in and out) · Log (what the device says)
+```
+
+| Context | Its question | Stable role ◆ | Stable values ◇ | iOS simulator | iPhone (cable) | Android emulator | Android phone |
+|---|---|---|---|---|---|---|---|
+| **Device** | *which devices are there, and what can each do?* | `Devices` → `Device` | `DeviceID` · `DeviceKind` (platform × embodiment × model) · `PowerState` · abilities | CoreSimulator | CoreDevice | AVDs + adb | adb |
+| **Power** | *is it running?* | `Power` (turn on · off) | `PowerState` | simctl | — | `emulator` | — |
+| **Display** | *what does it show, and where do fingers go?* | `Displays` → `Display` → `Screen` · `TouchSurface` | `DisplayGeometry` (logical size · scale · orientation) · `Gesture` | SimulatorKit · IndigoHID | H.264 stream · Universal HID | screenrecord · adb input | same |
+| **Controls** | *what do the hands do besides the glass?* | `Controls` | `Navigation` (home · back · app switcher · notifications · lock) · `HardwareButton` (power · volume · action · side) · `Key` (HID usage) · `Text` | Indigo buttons · HID keys | — | key events | same |
+| **UI** | *what is on screen?* | `UI` (snapshot · press) | `UISnapshot` → element (`Role` · name · value · identifier · logical frame · state · platform role) | AXPTranslator | its accessibility service | the UI dump | same |
+| **Apps** | *what runs on it?* | `Apps` | `AppID` · `AppPackage` (`.app` · `.ipa` · `.apk`) · `Link` | simctl | — | adb · `am` | same |
+| **Senses** | *what does it sense?* | `Location` · `Orientation` · `Motion` | `Coordinate` · `LocationRoute` · `DeviceOrientation` | simctl · injection | — | the emulator console | — |
+| **Clipboard** · **Log** | *what does it hold, what does it say?* | `Clipboard` · `Log` | text · `LogFilter` | simctl | devicectl · — | adb · logcat | same |
+| **Stream** · **Capture** · **Chrome** | *how do frames leave, and in what frame?* | `Stream` · `Reel` · `Chromes` | `StreamFormat` · `CaptureSize` | host (shared) | host | host | host |
+
+The words every family shares (a family's own word maps onto one of these,
+inside the family, and never reaches the domain):
+
+| A word | Means | Not |
+|---|---|---|
+| **device id** | the name that survives restarts and unplugging: a UDID, an emulator's AVD name, a phone's serial | an **address** — where a family reaches it now (`emulator-5554`, a tunnel IP) |
+| **embodiment** | **virtual** (made on this Mac) or **physical** (on a cable) | a platform; a family |
+| **family** | how baguette reaches devices — a toolchain (CoreSimulator, CoreDevice, adb) | a platform: iOS has two families, adb one family of two embodiments |
+| **logical unit** | the display's device-independent unit: an iOS point, an Android dp — every coordinate in the domain | a pixel, which only a frame has |
+| **navigation** | where the person means to go: home, back, app switcher, notifications, lock | a hardware button, a part of the device's body |
+| **role** · **name** | what an element is to a person (button, text field, toggle, slider, link, image, text, container…) · what assistive technology announces for it | a platform's class (kept as the *platform role*) · its text or identifier |
+| **app id** · **app package** | the platform's name for an app · the file it installs from | each other |
+| **power state** | off · starting · ready · stopping · unavailable(reason) | a family's raw word (`Booted`, `device`, `offline`) |
+
+The rule that keeps this stable: **a family adds an implementation of a role it
+can perform, and registers it; it never adds a role, a value or a word to the
+domain.** What differs between devices is data — what a family registers, its
+geometry, its chrome — never a branch above Infrastructure. Some names above are
+the target and not yet the code's; §6 lists each move.
+
+### 1b · The tree as built (today's names)
 
 ```text
 Devices  ◆                                  EVERY DEVICE — one list from every source: `list` ·
@@ -259,6 +309,11 @@ moves, one change at a time.
 | `boot` · `heal` · `input` | the App builds `SimctlInputSurface()` itself | `simulator.inputSurface()`, as for every other role |
 | `LabelTap` · `ThenDescribe` | hold a law and assemble JSON in the App | a Domain value answers, and the App only projects it, as `Fill` does |
 | `GuestHingeMotor` | plays `HingeMotor` and `DeviceKeys` over one guest helper | a name for the helper's role, not "motor" |
+| `DeviceButton` | home, app switcher, power, volume and the swipes in one iOS-shaped enum | `Navigation` + `HardwareButton` (1a); Android needs `back` in the first |
+| `Input` | gestures, buttons, keys and scroll in one role | `TouchSurface` (on a display) + `Controls` (1a) |
+| `AXNode.role: String` · `label` | macOS AX role words (`AXButton`); one merged label | `Role` + platform role, and `name`; the JSON keeps printing `AXButton` |
+| `Lifecycle` · `DeviceState` · `DeviceKind.Reality` | boot / shutdown; simulated · physical · emulated | `Power` · `PowerState` · `Embodiment` (virtual · physical) |
+| `--udid` · `--bundle-id` · `install(AppBundle)` | iOS words in every command | `--device` · `--app` (the old flags kept as aliases) · `install(AppPackage)` |
 
 ## 7 · Open
 

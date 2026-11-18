@@ -119,6 +119,11 @@ every family shares (encoders, recording, rendering, chrome, plugins)
 and `Server/`. A family never imports another family; `Host/` never
 imports a family. Why: [devices](features/devices/design.md).
 
+The domain is the stable part: the same roles, values and words for every
+device ([CANONICAL_MODEL §1a](CANONICAL_MODEL.md#1a--the-stable-domain--the-same-for-every-device)).
+A family — iOS simulators, iPhones on a cable, and Android
+([design](features/android/design.md)) — only implements them.
+
 ### Domain
 
 Pure value types with rich behaviour, plus `@Mockable` aggregate

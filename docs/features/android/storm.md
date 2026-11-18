@@ -107,8 +107,9 @@ A table of *none*: no event type earns its place, as with iOS today.
 
 ## Hot spots
 
-Left open here, as a storm leaves them; [design.md](design.md) §4 proposes an
-answer to each from first principles, for the person to decide.
+Left open here, as a storm leaves them; the stable domain
+([CANONICAL_MODEL §1a](../../CANONICAL_MODEL.md#1a--the-stable-domain--the-same-for-every-device))
+answers each from first principles, and [design.md](design.md) §4 says what Android adds.
 
 | ⚡ | Meaning A | Meaning B | Who can decide |
 |---|---|---|---|
