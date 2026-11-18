@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.15] - 2026-11-18
+
 ### Changed
 - Breaking: a command that drives the screen (`tap`, `screenshot`, `record`, `orientation`, `shake`, …) refuses a device that isn't booted up front, saying so, instead of waiting or failing inside `simctl`. → [docs](docs/features/devices/design.md)
 
@@ -215,7 +219,8 @@ For releases prior to this changelog, see the
 
 [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.14...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.2.15...HEAD
+[0.2.15]: https://github.com/tddworks/baguette/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/tddworks/baguette/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/tddworks/baguette/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/tddworks/baguette/compare/v0.2.11...v0.2.12
