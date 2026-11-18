@@ -49,16 +49,17 @@ final class VideoToolboxDecompressionSession: DecompressionSession, @unchecked S
                 kVTPixelTransferPropertyKey_ScalingMode: kVTScalingMode_CropSourceToCleanAperture,
             ] as CFDictionary)
         }
-        let old = lock.withLock {
-            defer { session = created; self.format = format }
-            return session
+        let old: VTDecompressionSession? = lock.withLock {
+            defer { self.session = created; self.format = format }
+            return self.session
         }
         if let old { VTDecompressionSessionInvalidate(old) }
         return nil
     }
 
     func decode(_ frame: Data, asynchronously: Bool, done: @escaping @Sendable (DecompressionResult) -> Void) {
-        let (session, format) = lock.withLock { (session, format) }
+        let (session, format): (VTDecompressionSession?, CMVideoFormatDescription?) =
+            lock.withLock { (self.session, self.format) }
         guard let session, let format, let sample = CMSampleBuffer.holding(frame, as: format) else { return }
         VTDecompressionSessionDecodeFrame(
             session, sampleBuffer: sample, flags: asynchronously ? [._EnableAsynchronousDecompression] : [],
@@ -69,9 +70,9 @@ final class VideoToolboxDecompressionSession: DecompressionSession, @unchecked S
     }
 
     func close() {
-        let session = lock.withLock {
-            defer { session = nil; format = nil }
-            return session
+        let session: VTDecompressionSession? = lock.withLock {
+            defer { self.session = nil; self.format = nil }
+            return self.session
         }
         if let session {
             VTDecompressionSessionWaitForAsynchronousFrames(session)
