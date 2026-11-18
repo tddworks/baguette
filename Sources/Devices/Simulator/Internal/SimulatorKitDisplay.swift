@@ -16,6 +16,13 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
     /// When set, the lit panel is this one and the hinge is not asked —
     /// see `Displays.panel(_:)`.
     private let pinnedPanel: IntegratedPanel?
+    /// Sampled directly for an observation — see `observedBinding`.
+    private let guestHinge: any Hinge
+    /// A panel's live rotation, and its whole live screen, read from
+    /// SimulatorKit's screen properties.
+    private let readOrientation: (NSObject, UInt32) throws -> DeviceOrientation
+    private let readScreen: (NSObject, UInt32, IntegratedPanel?) throws -> AXScreen
+    private let environment: () -> [String: String]
     private let lock = NSLock()
     private var cached: DisplayBinding?
 
@@ -27,7 +34,13 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         enumerateIO: @escaping () throws -> String,
         hinge: any Hinge,
         keys: (any DeviceKeys)? = nil,
-        pinnedPanel: IntegratedPanel? = nil
+        pinnedPanel: IntegratedPanel? = nil,
+        guestHinge: (any Hinge)? = nil,
+        readOrientation: @escaping (NSObject, UInt32) throws -> DeviceOrientation =
+            SimulatorKitScreenOrientation.read(device:screenID:),
+        readScreen: @escaping (NSObject, UInt32, IntegratedPanel?) throws -> AXScreen =
+            SimulatorKitScreenOrientation.readScreen(device:screenID:panel:),
+        environment: @escaping () -> [String: String] = { ProcessInfo.processInfo.environment }
     ) {
         self.kind = kind
         self.udid = udid
@@ -37,6 +50,10 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         self.hinge = hinge
         self.keys = keys
         self.pinnedPanel = pinnedPanel
+        self.guestHinge = guestHinge ?? GuestHinge(udid: udid, deviceSetPath: deviceSetPath)
+        self.readOrientation = readOrientation
+        self.readScreen = readScreen
+        self.environment = environment
     }
 
     /// Binds the plane. On a foldable this also asks the hinge which
@@ -70,13 +87,13 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         let ports = try SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host)
         let screens = SimctlIOEnumerate.connectedScreens(from: try enumerateIO())
         let multiple = screens.filter { $0.screenType == .integrated }.count > 1
-        let angle = multiple ? GuestHinge(udid: udid, deviceSetPath: deviceSetPath).angle() : nil
+        let angle = multiple ? guestHinge.angle() : nil
         let observed = try ConnectedScreens.observedPhone(ports: ports, screens: screens, angle: angle)
         let binding = observed.binding
         guard let points = binding.pointSize(scale: observed.scale) else {
             throw ObservedScreenError.unavailable
         }
-        let orientation = try SimulatorKitScreenOrientation.read(device: device, screenID: binding.connectedScreenId)
+        let orientation = try readOrientation(device, binding.connectedScreenId)
         return (
             binding,
             AXScreen(
@@ -108,8 +125,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
             observe: { try observedScreen() },
             live: {
                 guard let device = host.resolveDevice(udid: udid) else { throw ObservedScreenError.unavailable }
-                return try SimulatorKitScreenOrientation.readScreen(
-                    device: device, screenID: last.binding.connectedScreenId, panel: last.binding.panel)
+                return try readScreen(device, last.binding.connectedScreenId, last.binding.panel)
             })
     }
 
@@ -127,8 +143,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
             guard let device = host.resolveDevice(udid: udid) else { throw ObservedScreenError.unavailable }
             // A single panel cannot change identity, so its live screen
             // properties answer a move without a `simctl` round-trip.
-            return try SimulatorKitScreenOrientation.readScreen(
-                device: device, screenID: observed.binding.connectedScreenId, panel: observed.binding.panel)
+            return try readScreen(device, observed.binding.connectedScreenId, observed.binding.panel)
         }
         let target =
             observed.multiplePanels
@@ -174,7 +189,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
             connectedScreenId: panel,
             derive: { _ in nil },
             override: DisplayTouchTarget.parseOverride(
-                ProcessInfo.processInfo.environment["BAGUETTE_CARPLAY_TARGET"]
+                environment()["BAGUETTE_CARPLAY_TARGET"]
             )
         ) ?? IndigoHIDTouchTarget.phone
         let touches = IndigoHIDInput(udid: udid, host: host, touchTarget: target, plane: kind)

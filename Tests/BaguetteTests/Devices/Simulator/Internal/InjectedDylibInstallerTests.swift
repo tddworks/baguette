@@ -122,3 +122,135 @@ extension InjectedDylibInstallPlanTests {
         #expect(plan.destPath.hasSuffix("/HingeControl"))
     }
 }
+
+/// Where a build keeps the dylibs it injects, in the order they are
+/// looked for: an explicit override, the source tree a development build
+/// runs from, the resource bundle beside the executable, the executable's
+/// own folder.
+@Suite("InjectedDylibInstaller — finds the bundled dylib")
+struct InjectedDylibInstallerLookupTests {
+
+    /// A scratch folder with an executable folder inside it, two deep,
+    /// as `.build/debug` sits in a checkout.
+    private final class Scratch {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("baguette-lookup-\(UUID().uuidString)")
+        var executable: URL { root.appendingPathComponent(".build/debug") }
+
+        init() throws {
+            try FileManager.default.createDirectory(at: executable, withIntermediateDirectories: true)
+        }
+
+        deinit { try? FileManager.default.removeItem(at: root) }
+
+        @discardableResult
+        func file(_ path: String, in base: URL? = nil, bytes: Data = Data([0x01])) throws -> URL {
+            let url = (base ?? root).appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try bytes.write(to: url)
+            return url
+        }
+    }
+
+    private func find(_ dylib: InjectedDylib, _ scratch: Scratch, environment: [String: String] = [:]) -> URL? {
+        InjectedDylibInstaller.bundledDylibURL(
+            dylib, environment: environment, executableDirectory: scratch.executable)
+    }
+
+    @Test func `should take the dylib its environment override names`() throws {
+        let scratch = try Scratch()
+        let named = try scratch.file("elsewhere/Mine.dylib")
+        try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib")
+
+        let found = find(.motion, scratch, environment: ["BAGUETTE_VIRTUALMOTION_DYLIB": named.path])
+
+        #expect(found?.path == named.path)
+    }
+
+    @Test func `should look further when the environment override names no file`() throws {
+        let scratch = try Scratch()
+        let tree = try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib")
+
+        let found = find(.motion, scratch, environment: ["BAGUETTE_VIRTUALMOTION_DYLIB": "/nowhere/Mine.dylib"])
+
+        #expect(found?.path == tree.path)
+    }
+
+    @Test func `should find the dylib in the source tree a development build runs from`() throws {
+        let scratch = try Scratch()
+        let tree = try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib")
+
+        #expect(find(.motion, scratch)?.path == tree.path)
+    }
+
+    @Test func `should find the dylib in the resource bundle beside the executable`() throws {
+        let scratch = try Scratch()
+        let bundled = try scratch.file(
+            "Baguette_Baguette.bundle/VirtualMotion/VirtualMotion.dylib", in: scratch.executable)
+
+        #expect(find(.motion, scratch)?.resolvingSymlinksInPath().path == bundled.resolvingSymlinksInPath().path)
+    }
+
+    @Test func `should find a bundled executable by its bare name`() throws {
+        let scratch = try Scratch()
+        let bundled = try scratch.file("Baguette_Baguette.bundle/HingeControl/HingeControl", in: scratch.executable)
+
+        #expect(
+            find(.hingeControl, scratch)?.resolvingSymlinksInPath().path == bundled.resolvingSymlinksInPath().path)
+    }
+
+    @Test func `should find the dylib beside the executable when the build ships no resource bundle`() throws {
+        let scratch = try Scratch()
+        let sibling = try scratch.file("VirtualMotion.dylib", in: scratch.executable)
+
+        #expect(find(.motion, scratch)?.path == sibling.path)
+    }
+
+    @Test func `should find nothing when this build ships no dylib`() throws {
+        let scratch = try Scratch()
+        try FileManager.default.createDirectory(
+            at: scratch.executable.appendingPathComponent("Baguette_Baguette.bundle"), withIntermediateDirectories: true)
+
+        #expect(find(.motion, scratch) == nil)
+    }
+
+    @Test func `should find nothing when the executable cannot be located`() {
+        #expect(InjectedDylibInstaller.bundledDylibURL(.motion, environment: [:], executableDirectory: nil) == nil)
+    }
+
+    @Test func `should install the dylib it finds under its build folder`() throws {
+        let scratch = try Scratch()
+        let bytes = Data([0xCA, 0xFE])
+        try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib", bytes: bytes)
+        let support = scratch.root.appendingPathComponent("support").path
+
+        let installed = InjectedDylibInstaller.installIfNeeded(
+            .motion, supportDir: support, environment: [:], executableDirectory: scratch.executable)
+
+        let plan = InjectedDylibInstallPlan.compute(bytes: bytes, supportDir: support, dylib: .motion)
+        #expect(installed == plan.destPath)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: plan.destPath)) == bytes)
+    }
+
+    @Test func `should install nothing when this build ships no dylib`() throws {
+        let scratch = try Scratch()
+
+        let installed = InjectedDylibInstaller.installIfNeeded(
+            .motion, supportDir: scratch.root.appendingPathComponent("support").path,
+            environment: [:], executableDirectory: scratch.executable)
+
+        #expect(installed == nil)
+    }
+
+    @Test func `should install nothing when its support folder cannot be written`() throws {
+        let scratch = try Scratch()
+        try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib")
+        let blocked = try scratch.file("support")
+
+        let installed = InjectedDylibInstaller.installIfNeeded(
+            .motion, supportDir: blocked.path, environment: [:], executableDirectory: scratch.executable)
+
+        #expect(installed == nil)
+    }
+}
