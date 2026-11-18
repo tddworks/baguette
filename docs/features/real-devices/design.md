@@ -1,6 +1,6 @@
 # Real devices: CoreDevice research
 
-> Status: **spike run**, 2026-11-18, on an iPhone 18 Pro Max (iOS 27.0.1, Xcode 27.0). H1 and H3 pass: baguette touches a physical iPhone through CoreDevice. H2 (a live stream) is open; the screen is `devicectl` screenshots. How to use it: [README.md](README.md).
+> Status: **built**, 2026-11-18, on an iPhone 18 Pro Max (iOS 27.0.1, Xcode 27.0). H1, H2 and H3 pass: baguette touches a physical iPhone and shows its live screen through CoreDevice. How to use it: [README.md](README.md).
 
 ## Question
 
@@ -70,11 +70,32 @@ Run them in order; stop at the first kill of H1 and jump to [Fallback](#fallback
 | Hypothesis | Result |
 |---|---|
 | H1 — CoreDevice is callable from our process | **Pass.** `DeviceManager`, built with every visibility class, lists physical phones beside simulators; `RemoteDevice.getImplementation(for:)` opens capabilities. No entitlement asked. |
-| H2 — frames reach us as something decodable | **Open.** `RemoteDevice.startMediaStream(with:)` exists, but `DeviceMediaStream.StartRequest` has no public initializer (only its `Codable` keys), and the frames travel over an AVConference negotiation (`MediaStreamHelper.getNegotiatorOptions`). Not attempted. The screen stays `devicectl device capture screenshot`, about one frame a second. |
+| H2 — frames reach us as something decodable | **Pass, without AVConference's receiver.** `MediaStreamFunctions.startMediaStream(with:)` starts the phone's stream, but `avconferenced` refuses an unentitled receiver (`vcMediaStreamSetSessionConfig failed authorization`; it wants `com.apple.videoconference.allow-conferencing`, which AMFI won't let us self-sign). So baguette receives the stream itself: plain RTP over the tunnel, unencrypted, HEVC. See *How the screen reaches the Mac*. |
 | H3 — touches go over a callable service | **Pass.** The `UniversalHIDServiceCapability` opens on the phone, and a UniversalHID `DigitizerReport` sent with `UniversalHIDService.send(report:to:)` to service `0x101` lands: a swipe paged the Home Screen and back, an edge swipe went Home. |
 | H4 — a vphone VM works unchanged | Not run (no VM on this Mac). |
 
-Outcome: **Go** for touch, **Partial** for the screen. Built: `CoreDevicePhones` registers `screen` (devicectl), `input` (Universal HID) and `pasteboard` (devicectl). Not `orientation`: `devicectl device orientation set` exits 0 on a phone and answers "New Device Orientation: portrait" — a phone turns by its sensors only.
+Outcome: **Go** for touch and the live screen. Built: `CoreDevicePhones` registers `screen` (the live stream, devicectl screenshots as fallback), `input` (Universal HID) and `pasteboard` (devicectl). Not `orientation`: `devicectl device orientation set` exits 0 on a phone and answers "New Device Orientation: portrait" — a phone turns by its sensors only.
+
+### How the screen reaches the Mac
+
+```
+MediaStreamScreen.start
+  → AVConferenceNegotiator.videoOffer()            AVCMediaStreamNegotiator initWithMode:5 (in-process, no entitlement)
+  → RemoteDevice.startMediaStream { request }      MediaStreamFunctions: support info (tunnel up), then start
+        request: StartRequest as JSON through CoreDevice's own Decodable —
+        type video, direction output, clientSupportedFeatures 140, receiverIP/Port = our socket,
+        options DisplayByID / VideoStreamForDisplayID 1 / network type 1 / transport type 2
+  ← StartResponse.connection.streamConfig          SourceIP/SourcePort, LocalSSRC (phone), RemoteSSRC (ours)
+  → UDP [::]:port ← RTP, payload type 100         unencrypted (SRTP suites 0)
+  → VideoDepacketizer(.hevc) → AccessUnit          RFC 7798: AP 48, FU 49; VPS/SPS/PPS + IRAP first
+  → VTStreamDecoder (HEVC parameter sets) → IOSurface → the usual Stream pipeline
+  ↔ RTCP receiver report every 1 s (the phone ends a stream after 20 s without), PLI until the first keyframe, BYE on stop
+```
+
+- **Why not AVConference's receiver.** CoreDevice's own client (`CoreDeviceMediaStreamSupport`, `VideoStreamConfiguration.receiveMirroredPrimary(layer:)`) negotiates fine and the phone starts streaming, but configuring the receiving `AVCVideoStream` asks `avconferenced`, which checks `com.apple.videoconference.allow-conferencing` — Device Hub has it; a self-signed binary claiming it is killed by AMFI.
+- **The receiver address** is the Mac's end of the CoreDevice tunnel: resolve `<CoreDevice identifier>.coredevice.local` (the phone, `…::1` on a `utun`) and take the local address on the same prefix (`…::2`). It exists once the tunnel is up, which the support-info query does.
+- **Codec.** Payload type 100 is HEVC here (AVConference codec type 102), though the RTP timestamps are all zero: the marker bit ends each access unit. Coded size 1328 × 2896 for a 1320 × 2868 screen — the padding is not yet cropped.
+- **Stopping.** An RTCP BYE; the phone's 20 s RTCP timeout ends it anyway. `StopRequest(stopAll:)` is not used — it could end Device Hub's stream too.
 
 ### How a touch reaches the phone
 

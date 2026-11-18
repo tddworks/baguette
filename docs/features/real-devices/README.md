@@ -36,7 +36,7 @@ turns clicks and drags into touches. Its badge says `DEVICE · touch`.
 | Ability | How | Note |
 |---|---|---|
 | touches (`tap`, `swipe`, `pinch`, `pan`, `input`) | CoreDevice's Universal HID | edge swipes too; no buttons, keys or scroll yet |
-| screen (`screenshot`, `stream`, `record`) | `devicectl device capture screenshot` | about one frame a second, not a live stream |
+| screen (`screenshot`, `stream`, `record`) | the phone's own HEVC stream, started through CoreDevice | live, up to 60 fps; screenshots stand in if it can't start |
 | pasteboard (`clipboard`, text in `paste`) | `devicectl device pasteboard` | |
 
 Anything else answers with what's missing and exits 1:
@@ -74,10 +74,10 @@ WS  /devices/<udid>/stream?format=mjpeg|avcc → frames down; stream controls an
 - **No apps, location, status bar or push.** `devicectl` covers part of each
   (install, a single location point); a phone registers an ability only when
   it can do all of it.
-- **The first frame takes a few seconds**, and a screenshot can wait up to five.
+- **The first frame takes a second or two** while CoreDevice brings the tunnel up and the phone sends its first keyframe. While a stream runs, the phone shows that the Mac is viewing its screen.
 
 ## See also
 
-- [design.md](design.md) — how a touch reaches the phone, and why the screen isn't live yet
+- [design.md](design.md) — how a touch reaches the phone, and how its live screen is received
 - [devices design](../devices/design.md) — one device model, and what each family registers
 - [device-twin](../device-twin/README.md) — a phone running the companion app, over Wi-Fi
