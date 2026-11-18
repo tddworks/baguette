@@ -104,8 +104,9 @@
       if (this.pending) {
         const f = this.pending;
         this.pending = null;
-        const shown = StreamSession.visibleSize(
-            f.displayWidth || f.width, f.displayHeight || f.height, this.opts.visible);
+        const frameW = f.displayWidth || f.width;
+        const frameH = f.displayHeight || f.height;
+        const shown = StreamSession.visibleSize(frameW, frameH, this.opts.visible);
         const w = shown.width;
         const h = shown.height;
         if (canvas.width !== w || canvas.height !== h) {
@@ -113,7 +114,10 @@
           canvas.height = h;
           if (onSize) onSize(w, h);
         }
-        ctx.drawImage(f, 0, 0, w, h, 0, 0, w, h);
+        // The whole frame at its own size, top-left; the canvas (the
+        // visible screen) clips the padding. Safari misreads a source
+        // rectangle on a WebCodecs VideoFrame, so none is passed.
+        ctx.drawImage(f, 0, 0, frameW, frameH);
         if (typeof f.close === 'function') { try { f.close(); } catch {} }
         this.frameCount++;
         if (onPaint) onPaint(w, h);
