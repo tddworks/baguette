@@ -75,6 +75,9 @@ struct Server: Sendable {
     let devices: LiveCompanionPhones
     let twinScreens: TwinScreens
     let twinPoses: TwinPoses
+    /// Every physical device the `/devices/…` page can show: companion
+    /// phones and phones CoreDevice reaches on a cable.
+    let physicalDevices: any Devices
 
     init(
         simulators: any Simulators,
@@ -90,7 +93,8 @@ struct Server: Sendable {
         cameraSessions: CameraSessions = CameraSessions(guestTerminated: { _ in false }),
         devices: LiveCompanionPhones = LiveCompanionPhones(),
         twinScreens: TwinScreens = TwinScreens(),
-        twinPoses: TwinPoses = TwinPoses()
+        twinPoses: TwinPoses = TwinPoses(),
+        phones: any Devices = CoreDevicePhones()
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
@@ -98,6 +102,9 @@ struct Server: Sendable {
         self.devices = devices
         self.twinScreens = twinScreens
         self.twinPoses = twinPoses
+        self.physicalDevices = CombinedDevices([
+            CompanionDevices(phones: devices, screens: twinScreens), phones,
+        ])
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer

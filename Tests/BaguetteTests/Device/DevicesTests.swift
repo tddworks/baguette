@@ -77,6 +77,41 @@ struct DevicesTests {
         }
     }
 
+    @Test func `should list each ready physical device as connected, with what it can do`() {
+        var abilities = AbilityTable(device: "han's iPhone")
+        abilities.register(.screen) { MockScreen() }
+        abilities.register(.orientation) { MockOrientation() }
+        let phone = device(
+            "PHONE-1", name: "han's iPhone",
+            kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"),
+            abilities: abilities)
+
+        #expect(CombinedDevices([source(phone)]).connectedJSON == #"""
+            {"connected":[{"capabilities":["screen","orientation"],"model":"iPhone19,7",\#
+            "name":"han's iPhone","udid":"PHONE-1"}]}
+            """#)
+    }
+
+    @Test func `should leave a phone that isn't ready out of the connected devices`() {
+        let unplugged = device(
+            "PHONE-2", kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone14,3"),
+            state: .unavailable(reason: "not connected"))
+
+        #expect(CombinedDevices([source(unplugged)]).connectedJSON == #"{"connected":[]}"#)
+    }
+
+    @Test func `should list a physical phone on one line, in a simulator line's order`() {
+        let phone = device(
+            "PHONE-1", name: "han's iPhone",
+            kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"),
+            state: .unavailable(reason: "not connected"))
+
+        #expect(phone.json == #"""
+            {"udid":"PHONE-1","name":"han's iPhone","state":"unavailable","runtime":"",\#
+            "reality":"physical","model":"iPhone19,7"}
+            """#)
+    }
+
     @Test func `should list each device's kind, state and abilities`() {
         var abilities = AbilityTable(device: "iPhone 17 Pro")
         abilities.register(.shake) { MockShake() }

@@ -27,6 +27,7 @@ extension Server {
             async throws -> RouterShouldUpgrade
     ) {
         let devices = self.devices
+        let physicalDevices = self.physicalDevices
         let screens = self.twinScreens
         let models = self.models
         let chromes = self.chromes
@@ -109,7 +110,7 @@ extension Server {
         router.get("/devices/:udid/definition.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
-            guard let device = devices.find(udid: udid) else {
+            guard let device = physicalDevices.all.first(where: { $0.id.raw == udid }) else {
                 return Self.twinJSONResponse(
                     ["ok": false, "error": "no connected device \(udid)"], status: .notFound
                 )
@@ -133,7 +134,7 @@ extension Server {
                 withAllowedCharacters: .urlPathAllowed) ?? chromeName
             let definition = SimulatorDefinition.compose(
                 identity: SimulatorDefinition.Identity(
-                    udid: device.udid, name: device.name, model: device.model
+                    udid: device.id.raw, name: device.name, model: device.kind.model
                 ),
                 chrome: assets,
                 urlPrefix: "/devices/\(udid)/chrome/\(encodedName)"
@@ -195,12 +196,12 @@ extension Server {
         router.get("/devices/:udid/3d-model.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
-            guard let device = devices.find(udid: udid) else {
+            guard let device = physicalDevices.all.first(where: { $0.id.raw == udid }) else {
                 return Self.twinJSONResponse(
                     ["ok": false, "error": "no connected device \(udid)"], status: .notFound
                 )
             }
-            if let installed = try? models.match(hardware: device.model) {
+            if let installed = try? models.match(hardware: device.kind.model) {
                 return Self.twinJSONResponse(
                     Self.model3DJSONObject(definition: installed.definition), status: .ok
                 )
@@ -210,7 +211,7 @@ extension Server {
                  "displayName": installed.definition.displayName]
             }
             return Self.twinJSONResponse(
-                ["model": NSNull(), "hardware": device.model, "models": choices],
+                ["model": NSNull(), "hardware": device.kind.model, "models": choices],
                 status: .ok
             )
         }
@@ -243,7 +244,7 @@ extension Server {
             return Response(
                 status: .ok,
                 headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(string: devices.listJSON))
+                body: .init(byteBuffer: ByteBuffer(string: physicalDevices.connectedJSON))
             )
         }
 
@@ -282,6 +283,7 @@ extension Server {
                 format: context.request.uri.queryParameters.get("format")
                     .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
                 screens: screens,
+                physicalDevices: physicalDevices,
                 inbound: inbound,
                 outbound: outbound
             )
@@ -340,11 +342,16 @@ extension Server {
         udid: String,
         format: StreamFormat,
         screens: TwinScreens,
+        physicalDevices: any Devices,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
         guard !udid.isEmpty, let hub = screens.find(udid: udid) else {
-            try? await outbound.write(.text(Self.twinErrorFrame("no connected device \(udid)")))
+            // No companion video: a phone CoreDevice reaches shows its
+            // screen through the same stream pipeline as a simulator.
+            await Self.deviceStreamWS(
+                udid: udid, format: format, devices: physicalDevices,
+                inbound: inbound, outbound: outbound)
             return
         }
 
@@ -400,6 +407,56 @@ extension Server {
                     if try !Self.handleTwinInbound(line: line, stream: stream) {
                         try? await outbound.write(.text(
                             Self.twinErrorFrame("device control is not wired yet")
+                        ))
+                    }
+                } catch {
+                    await sink.failAndClose(error)
+                    return
+                }
+            }
+        } catch {
+            // socket closed; defer cleans up
+        }
+    }
+
+    /// A physical device's screen, encoded here in the asked format.
+    private static func deviceStreamWS(
+        udid: String,
+        format: StreamFormat,
+        devices: any Devices,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        let screen: any Screen
+        do {
+            guard let device = devices.all.first(where: { $0.id.raw == udid }) else {
+                throw DeviceError.unknown(id: DeviceID(udid))
+            }
+            screen = try device.require(.screen)
+        } catch {
+            try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
+            return
+        }
+        let sink = WebSocketFrameSink(outbound: outbound, format: format)
+        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
+        do {
+            try stream.start(on: screen)
+        } catch {
+            try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
+            return
+        }
+        defer {
+            stream.stop()
+            screen.stop()
+        }
+        do {
+            for try await frame in inbound {
+                guard frame.opcode == .text else { continue }
+                let line = String(buffer: frame.data)
+                do {
+                    if try !Self.handleTwinInbound(line: line, stream: stream) {
+                        try? await outbound.write(.text(
+                            Self.twinErrorFrame("\(udid) takes no input yet")
                         ))
                     }
                 } catch {

@@ -37,6 +37,23 @@ extension Devices {
     }
 }
 
+extension Devices {
+    /// The physical devices ready to drive, in the shape the serve page's
+    /// device list reads (`/devices.json`): identity, model, and what each
+    /// can do.
+    var connectedJSON: String {
+        let connected = all
+            .filter { $0.kind.reality == .physical && $0.state == .ready }
+            .map { device -> [String: Any] in
+                ["udid": device.id.raw, "name": device.name,
+                 "model": device.kind.model, "capabilities": device.abilities.names]
+            }
+        let data = try! JSONSerialization.data(
+            withJSONObject: ["connected": connected], options: [.sortedKeys])
+        return String(decoding: data, as: UTF8.self)
+    }
+}
+
 extension Device {
     /// The role playing `ability` on this device: refused when the device
     /// never registered it, or when it acts on a running device and this
@@ -66,6 +83,22 @@ final class CombinedDevices: Devices {
         let found = try sources.compactMap { try $0.find(id: id) }
         guard found.count <= 1 else { throw DeviceError.claimedTwice(id: id) }
         return found.first
+    }
+}
+
+extension Device {
+    /// One `baguette list` line, its first four fields in a simulator
+    /// line's order so callers that grep them read a phone the same way.
+    var json: String {
+        let fields: [(String, String)] = [
+            ("udid", id.raw), ("name", name), ("state", state.wireName), ("runtime", ""),
+            ("reality", kind.reality.rawValue), ("model", kind.model),
+        ]
+        return "{" + fields.map { "\"\($0.0)\":\"\(Self.escape($0.1))\"" }.joined(separator: ",") + "}"
+    }
+
+    private static func escape(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
 
