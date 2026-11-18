@@ -129,7 +129,7 @@ one; any value other than a single `0` or `1` is rejected.
 
 When a stream can't bind anyway, the socket gets `{"ok":false,"error":…}` and
 closes; the pane shows the instructions plus the server's verbatim error
-(`noMatchingPort(carPlay)`).
+(`noMatchingFramebuffer(carPlay)`).
 
 ## Gotchas
 
@@ -161,7 +161,7 @@ closes; the pane shows the instructions plus the server's verbatim error
   --display <id>` fails with *"Timeout waiting for screen surfaces"*) is one
   whose host window has gone.
 - **`--display` never falls back.** CarPlay with no framebuffer exits with
-  `noMatchingPort(carPlay)` rather than showing the phone. An unrecognized value
+  `noMatchingFramebuffer(carPlay)` rather than showing the phone. An unrecognized value
   (`--display carply`) or an empty one (`--display "$PLANE"` with nothing in
   `$PLANE`) is a validation error, reported before the device is looked up.
   Omit the flag for the default.

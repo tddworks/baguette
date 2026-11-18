@@ -5,7 +5,7 @@ import ObjectiveC
 /// Reads a framebuffer IO-port's fallback size from KVC accessors the
 /// port actually exposes. ROCK remote proxies throw `NSUnknownKeyException`
 /// on undefined keys — never call `value(forKey:)` without `responds(to:)`.
-enum PortDefaultSize {
+enum FramebufferDefaultSize {
     static func read(from port: NSObject) -> Size? {
         let w = number(from: port, keys: ["defaultWidth", "width"])
         let h = number(from: port, keys: ["defaultHeight", "height"])

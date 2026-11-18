@@ -8,17 +8,17 @@ import Testing
 @Suite("ConnectedScreens")
 struct ConnectedScreensTests {
 
-    private let phonePort = FramebufferPortSnapshot(
+    private let phoneFramebuffer = FramebufferSnapshot(
         portName: "com.apple.framebuffer.display",
         connectedScreenId: 1,
         size: Size(width: 1179, height: 2556)
     )
-    private let carPlayPort = FramebufferPortSnapshot(
+    private let carPlayFramebuffer = FramebufferSnapshot(
         portName: "com.apple.framebuffer.display",
         connectedScreenId: 204,
         size: Size(width: 800, height: 480)
     )
-    private let overlayPort = FramebufferPortSnapshot(
+    private let overlayFramebuffer = FramebufferSnapshot(
         portName: "com.apple.framebuffer.display",
         connectedScreenId: 2,
         size: Size(width: 100, height: 100)
@@ -30,13 +30,13 @@ struct ConnectedScreensTests {
     /// unfolded panel (`primary-1`, 2007×2853). Both are portrait and
     /// both are Integrated, so shape cannot pick; the hinge says which
     /// one the guest lights, and the phone plane binds that one.
-    private let coverPanel = FramebufferPortSnapshot(
+    private let coverPanel = FramebufferSnapshot(
         portName: "com.apple.framebuffer.display",
         connectedScreenId: 1,
         size: Size(width: 1398, height: 2034),
         panel: .primary
     )
-    private let unfoldedPanel = FramebufferPortSnapshot(
+    private let unfoldedPanel = FramebufferSnapshot(
         portName: "com.apple.framebuffer.display",
         connectedScreenId: 3,
         size: Size(width: 2007, height: 2853),
@@ -80,7 +80,7 @@ struct ConnectedScreensTests {
     @Test func `should bind a device's only panel whatever the hinge says`() throws {
         let binding = try ConnectedScreens.binding(
             kind: .phone,
-            ports: [coverPanel, carPlayPort],
+            ports: [coverPanel, carPlayFramebuffer],
             litPanel: .secondary
         )
         #expect(binding.connectedScreenId == 1)
@@ -89,7 +89,7 @@ struct ConnectedScreensTests {
     /// The second panel is portrait, so it is never mistaken for an
     /// external either.
     @Test func `should not bind a foldable's second panel as CarPlay`() {
-        #expect(throws: FramebufferSelectionError.noMatchingPort(.carPlay)) {
+        #expect(throws: FramebufferSelectionError.noMatchingFramebuffer(.carPlay)) {
             try ConnectedScreens.binding(
                 kind: .carPlay,
                 ports: [unfoldedPanel, coverPanel]
@@ -102,7 +102,7 @@ struct ConnectedScreensTests {
     @Test func `should still bind the phone to the largest portrait screen when no panel is named`() throws {
         let binding = try ConnectedScreens.binding(
             kind: .phone,
-            ports: [overlayPort, phonePort, carPlayPort]
+            ports: [overlayFramebuffer, phoneFramebuffer, carPlayFramebuffer]
         )
         #expect(binding.connectedScreenId == 1)
     }
@@ -110,57 +110,57 @@ struct ConnectedScreensTests {
     @Test func `should bind the phone to the largest-area screen with its id, port and size`() throws {
         let binding = try ConnectedScreens.binding(
             kind: .phone,
-            ports: [overlayPort, phonePort, carPlayPort]
+            ports: [overlayFramebuffer, phoneFramebuffer, carPlayFramebuffer]
         )
         #expect(binding.kind == .phone)
         #expect(binding.connectedScreenId == 1)
-        #expect(binding.portName == phonePort.portName)
-        #expect(binding.size == phonePort.size)
+        #expect(binding.portName == phoneFramebuffer.portName)
+        #expect(binding.size == phoneFramebuffer.size)
     }
 
     @Test func `should bind CarPlay to the best external screen, never the phone's`() throws {
         let binding = try ConnectedScreens.binding(
             kind: .carPlay,
-            ports: [phonePort, carPlayPort, overlayPort]
+            ports: [phoneFramebuffer, carPlayFramebuffer, overlayFramebuffer]
         )
         #expect(binding.kind == .carPlay)
         #expect(binding.connectedScreenId == 204)
-        #expect(binding.size == carPlayPort.size)
+        #expect(binding.size == carPlayFramebuffer.size)
     }
 
     @Test func `should bind CarPlay to the larger runtime screen over the 720x480 plist size when areas differ`() throws {
-        let plistSized = FramebufferPortSnapshot(
+        let plistSized = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 101,
             size: Size(width: 720, height: 480)
         )
-        let runtimeLarger = FramebufferPortSnapshot(
+        let runtimeLarger = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 204,
             size: Size(width: 800, height: 480)
         )
         let binding = try ConnectedScreens.binding(
             kind: .carPlay,
-            ports: [phonePort, plistSized, runtimeLarger]
+            ports: [phoneFramebuffer, plistSized, runtimeLarger]
         )
         #expect(binding.connectedScreenId == 204)
         #expect(binding.size == runtimeLarger.size)
     }
 
     @Test func `should bind CarPlay to the screen nearest 720x480 only when areas tie`() throws {
-        let nearPlist = FramebufferPortSnapshot(
+        let nearPlist = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 101,
             size: Size(width: 720, height: 480)
         )
-        let sameAreaFarther = FramebufferPortSnapshot(
+        let sameAreaFarther = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 205,
             size: Size(width: 960, height: 360) // same 345600 area, farther from 720×480
         )
         let binding = try ConnectedScreens.binding(
             kind: .carPlay,
-            ports: [phonePort, sameAreaFarther, nearPlist]
+            ports: [phoneFramebuffer, sameAreaFarther, nearPlist]
         )
         #expect(binding.connectedScreenId == 101)
         #expect(binding.size == nearPlist.size)
@@ -172,14 +172,14 @@ struct ConnectedScreensTests {
     /// the pane then reported nothing attached for a screen the user was
     /// looking at. The device is picked by its own shape, not by size.
     @Test func `should bind CarPlay to a 4K external screen larger than the phone`() throws {
-        let uhd = FramebufferPortSnapshot(
+        let uhd = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 2,
             size: Size(width: 3840, height: 2160)
         )
         let binding = try ConnectedScreens.binding(
             kind: .carPlay,
-            ports: [phonePort, uhd]
+            ports: [phoneFramebuffer, uhd]
         )
         #expect(binding.connectedScreenId == 2)
         #expect(binding.size == uhd.size)
@@ -188,41 +188,41 @@ struct ConnectedScreensTests {
     /// Same list, other plane: the phone must not be handed the external
     /// either, or the device pane streams the car's screen.
     @Test func `should keep the phone on its own screen when a larger external one is attached`() throws {
-        let uhd = FramebufferPortSnapshot(
+        let uhd = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 2,
             size: Size(width: 3840, height: 2160)
         )
         let binding = try ConnectedScreens.binding(
             kind: .phone,
-            ports: [uhd, phonePort]
+            ports: [uhd, phoneFramebuffer]
         )
         #expect(binding.connectedScreenId == 1)
-        #expect(binding.size == phonePort.size)
+        #expect(binding.size == phoneFramebuffer.size)
     }
 
     @Test func `should find no CarPlay screen when only the phone is connected`() {
-        #expect(throws: FramebufferSelectionError.noMatchingPort(.carPlay)) {
-            try ConnectedScreens.binding(kind: .carPlay, ports: [phonePort])
+        #expect(throws: FramebufferSelectionError.noMatchingFramebuffer(.carPlay)) {
+            try ConnectedScreens.binding(kind: .carPlay, ports: [phoneFramebuffer])
         }
     }
 
     @Test func `should refuse a second phone-sized screen as CarPlay`() {
-        let phoneMirror = FramebufferPortSnapshot(
+        let phoneMirror = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: 3,
             size: Size(width: 1170, height: 2532)
         )
-        #expect(throws: FramebufferSelectionError.noMatchingPort(.carPlay)) {
+        #expect(throws: FramebufferSelectionError.noMatchingFramebuffer(.carPlay)) {
             try ConnectedScreens.binding(
                 kind: .carPlay,
-                ports: [phonePort, phoneMirror]
+                ports: [phoneFramebuffer, phoneMirror]
             )
         }
     }
 
     @Test func `should report no screen id when the CarPlay screen is not connected`() {
-        let disconnected = FramebufferPortSnapshot(
+        let disconnected = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: nil,
             size: Size(width: 800, height: 480)
@@ -230,19 +230,19 @@ struct ConnectedScreensTests {
         #expect(throws: FramebufferSelectionError.screenIdUnavailable) {
             try ConnectedScreens.binding(
                 kind: .carPlay,
-                ports: [phonePort, disconnected]
+                ports: [phoneFramebuffer, disconnected]
             )
         }
     }
 
     @Test func `should find no phone screen when no screens are connected`() {
-        #expect(throws: FramebufferSelectionError.noMatchingPort(.phone)) {
+        #expect(throws: FramebufferSelectionError.noMatchingFramebuffer(.phone)) {
             try ConnectedScreens.binding(kind: .phone, ports: [])
         }
     }
 
     @Test func `should report no screen id when the phone screen is not connected`() {
-        let headless = FramebufferPortSnapshot(
+        let headless = FramebufferSnapshot(
             portName: "com.apple.framebuffer.display",
             connectedScreenId: nil,
             size: Size(width: 1179, height: 2556)

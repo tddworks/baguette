@@ -43,9 +43,9 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
     /// panel is lit (~0.6 s through the guest); a single-panel device
     /// never pays that, since it has nothing to choose between.
     func resolve() throws -> DisplayBinding {
-        let sized = try SimulatorKitFramebufferPorts.sizedPorts(udid: udid, host: host)
+        let sized = try SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host)
         let screens = SimctlIOEnumerate.connectedScreens(from: try enumerateIO())
-        let ports = FramebufferPortSnapshots.assigningScreenIds(
+        let ports = FramebufferSnapshots.assigningScreenIds(
             ports: sized,
             screens: screens
         )
@@ -67,7 +67,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         guard kind == .phone, pinnedPanel == nil,
             let device = host.resolveDevice(udid: udid)
         else { throw ObservedScreenError.unavailable }
-        let ports = try SimulatorKitFramebufferPorts.sizedPorts(udid: udid, host: host)
+        let ports = try SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host)
         let screens = SimctlIOEnumerate.connectedScreens(from: try enumerateIO())
         let multiple = screens.filter { $0.screenType == .integrated }.count > 1
         let angle = multiple ? GuestHinge(udid: udid, deviceSetPath: deviceSetPath).angle() : nil
@@ -193,7 +193,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
     /// the slot, so a one-shot tap pays nothing new.
     private func boundPanelScreenId() -> UInt32? {
         guard kind == .phone,
-              let sized = try? SimulatorKitFramebufferPorts.sizedPorts(udid: udid, host: host),
+              let sized = try? SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host),
               IntegratedPanels.several(in: sized),
               let binding = try? resolve()
         else { return nil }

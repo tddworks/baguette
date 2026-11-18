@@ -31,9 +31,9 @@ struct ExistingDisplayTests {
         let display = MockDisplay()
         given(sim).displays().willReturn(displays)
         given(displays).carPlay.willReturn(display)
-        given(display).resolve().willThrow(FramebufferSelectionError.noMatchingPort(.carPlay))
+        given(display).resolve().willThrow(FramebufferSelectionError.noMatchingFramebuffer(.carPlay))
         let plan = try StreamDisplayPlan.from(cliFlag: "carplay", requireExistingDisplay: true)
-        #expect(throws: FramebufferSelectionError.noMatchingPort(.carPlay)) { try plan.bind(to: sim) }
+        #expect(throws: FramebufferSelectionError.noMatchingFramebuffer(.carPlay)) { try plan.bind(to: sim) }
         verify(sim).externalDisplays().called(0)
         verify(display).screen().called(0)
         verify(display).input().called(0)

@@ -12,11 +12,11 @@ import Foundation
 /// portrait — and that count is what makes the phone plane's screen id
 /// worth resolving: see `DisplayTouchTarget`.
 enum IntegratedPanels {
-    static func count(in ports: [SizedFramebufferPort]) -> Int {
+    static func count(in ports: [SizedFramebuffer]) -> Int {
         ports.filter { $0.size.height > $0.size.width }.count
     }
 
-    static func several(in ports: [SizedFramebufferPort]) -> Bool {
+    static func several(in ports: [SizedFramebuffer]) -> Bool {
         count(in: ports) > 1
     }
 }

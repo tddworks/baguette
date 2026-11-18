@@ -1168,7 +1168,7 @@
   // the socket and closes. That answer used to go to `console.log` and
   // nowhere else, so the pane sat there as an unexplained black
   // rectangle — the single most confusing thing about the CarPlay pane.
-  // `noMatchingPort(carPlay)` means the display is registered but has no
+  // `noMatchingFramebuffer(carPlay)` means the display is registered but has no
   // framebuffer, which is a thing the user can actually fix, so it
   // belongs on the pane next to the instructions for fixing it.
 
@@ -1184,7 +1184,7 @@
 
     const title = document.createElement('div');
     title.className = 'companion-fault-title';
-    title.textContent = /noMatchingPort/.test(env.error)
+    title.textContent = /noMatchingFramebuffer/.test(env.error)
       ? 'Nothing is rendering to this screen'
       : 'This screen could not be opened';
     note.appendChild(title);

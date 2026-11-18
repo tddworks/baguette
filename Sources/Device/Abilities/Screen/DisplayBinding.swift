@@ -42,7 +42,7 @@ public struct DisplayBinding: Sendable, Equatable {
 }
 
 /// Point-in-time port facts lifted from SimulatorKit for pure selection.
-public struct FramebufferPortSnapshot: Sendable, Equatable {
+public struct FramebufferSnapshot: Sendable, Equatable {
     public let portName: String
     public let connectedScreenId: UInt32?
     public let size: Size
@@ -70,7 +70,7 @@ public struct FramebufferPortSnapshot: Sendable, Equatable {
 }
 
 public enum FramebufferSelectionError: Error, Equatable {
-    case noMatchingPort(DisplayKind)
+    case noMatchingFramebuffer(DisplayKind)
     case screenIdUnavailable
 
     /// What a caller reads when the plane will not bind.
@@ -83,14 +83,14 @@ public enum FramebufferSelectionError: Error, Equatable {
     /// not clear it; only cycling the panel through Disabled does.
     public var message: String {
         switch self {
-        case .noMatchingPort(.carPlay):
+        case .noMatchingFramebuffer(.carPlay):
             return """
                 no CarPlay framebuffer is attached — enable it from \
                 Simulator's I/O ▸ External Displays ▸ CarPlay, or if the \
                 CarPlay window is already open, cycle that menu to \
                 Disabled and back to reattach a blank one
                 """
-        case .noMatchingPort(.phone):
+        case .noMatchingFramebuffer(.phone):
             return "no framebuffer for the device's own screen — it may still be booting"
         case .screenIdUnavailable:
             return "the display is attached but has no connected screen id yet — retry once it finishes coming up"

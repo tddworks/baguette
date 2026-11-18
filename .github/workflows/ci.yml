@@ -22,6 +22,9 @@ jobs:
       - name: Check links, budgets and changelog
         run: python3 scripts/check-docs.py --strict
 
+      - name: Check coverage exclusions
+        run: python3 scripts/check-coverage.py
+
       - name: Changelog release scripts
         run: scripts/test-changelog-release.sh
 
@@ -50,15 +53,13 @@ jobs:
           BIN_PATH=$(swift build --show-bin-path)
           XCTEST="$BIN_PATH/BaguettePackageTests.xctest/Contents/MacOS/BaguettePackageTests"
           PROFDATA="$BIN_PATH/codecov/default.profdata"
-          # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
-          # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,
-          # stdin/stdout) and the thin command-layer files that do nothing
-          # but wire those shims together — they need a booted simulator or
-          # live socket to exercise meaningfully.
+          # What is left out lives in codecov.yml's `ignore:`, one list;
+          # the regex is generated from it.
+          IGNORE=$(python3 scripts/check-coverage.py --regex)
           xcrun llvm-cov export "$XCTEST" \
             -instr-profile "$PROFDATA" \
             -format=lcov \
-            -ignore-filename-regex=".build|Tests|Resources|Mock|Sources/Server/|Devices/Simulator/Internal/[^/]+\\.swift|Devices/Simulator/Internal/Input/|Devices/Simulator/Internal/Screen/|Abilities/Screen/Internal/|Capture/Internal/(AVCCStream|ControlChannel|H264|JPEGEncoder|MJPEGStream|SeedFilter|StdoutSink|Stream|VT|VideoFrameScaler)|Chrome/Internal/PDFRasterizer|iPhone/Internal/Kit/CoreDeviceFramework|iPhone/Internal/Kit/DigitizerReport|iPhone/Internal/Input/CoreDeviceDigitizer|iPhone/Internal/Screen/MediaStreamScreen|iPhone/Internal/Accessibility/|Sources/Commands/|Device/Internal/Logger" \
+            -ignore-filename-regex="$IGNORE" \
             > coverage.lcov
 
       - name: Upload coverage to Codecov

@@ -9,37 +9,41 @@ coverage:
         target: 80%
         threshold: 1%
 
-# Mirror the lcov exclusions in .github/workflows/ci.yml: IO / 3rd-party
-# shims around CoreSimulator, SimulatorKit, IOKit HID, Hummingbird,
-# VideoToolbox, CoreImage, IOSurface, CoreDevice and stdin/stdout sinks need a
-# booted simulator, a phone on a cable or a live socket to exercise — and the thin command-layer files
-# that do nothing but wire those shims together follow the same rule.
+# The one list of what unit coverage leaves out. CI's llvm-cov regex is
+# generated from it (`scripts/check-coverage.py --regex`), so nothing else
+# needs editing when a file moves.
+#
+# What is left out is a kind of code, not a list of files: an irreducible
+# call to the outside world (a private framework, VideoToolbox, a socket, a
+# process) lives in an `Internal/System/` folder, thin by rule — the check
+# fails a file there over 100 lines. Everything that decides something
+# stays outside `System/` and is measured.
 ignore:
   - "Sources/Baguette/Resources/**"
+  - "**/Internal/System/**"
+  # Not yet measured: the routes and commands, until the router is tested
+  # in-process (HummingbirdTesting) and each `run()` is thin.
   - "Sources/Server/**"
-  - "Sources/Devices/Simulator/Internal/*.swift"
-  - "Sources/Devices/Simulator/Internal/Input/**"
-  - "Sources/Devices/Simulator/Internal/Screen/**"
-  - "Sources/Device/Abilities/Screen/Internal/**"
-  # The host's stream encoders and pumps (Capture's Internal, minus Recording).
+  - "Sources/Commands/**"
+  # Still to split: each mixes decisions with its system call. Split one,
+  # move its call into `System/`, delete its line.
   - "Sources/Device/Abilities/Capture/Internal/AVCCStream.swift"
-  - "Sources/Device/Abilities/Capture/Internal/ControlChannel.swift"
-  - "Sources/Device/Abilities/Capture/Internal/H264*.swift"
-  - "Sources/Device/Abilities/Capture/Internal/JPEGEncoder.swift"
+  - "Sources/Device/Abilities/Capture/Internal/H264Encoder.swift"
   - "Sources/Device/Abilities/Capture/Internal/MJPEGStream.swift"
-  - "Sources/Device/Abilities/Capture/Internal/SeedFilter.swift"
-  - "Sources/Device/Abilities/Capture/Internal/StdoutSink.swift"
-  - "Sources/Device/Abilities/Capture/Internal/Stream*.swift"
-  - "Sources/Device/Abilities/Capture/Internal/VT*.swift"
-  - "Sources/Device/Abilities/Capture/Internal/VideoFrameScaler.swift"
-  - "Sources/Device/Chrome/Internal/PDFRasterizer.swift"
-  # A phone's private CoreDevice calls and live tunnel sockets: their
-  # formats and rules are pure values in Devices/iPhone, tested there.
+  - "Sources/Device/Abilities/Capture/Internal/VTH264Decoder.swift"
+  - "Sources/Device/Abilities/Capture/Internal/VTStreamDecoder.swift"
+  - "Sources/Devices/Simulator/Internal/CoreSimulator.swift"
+  - "Sources/Devices/Simulator/Internal/CoreSimulators.swift"
+  - "Sources/Devices/Simulator/Internal/InjectedDylibInstaller.swift"
+  - "Sources/Devices/Simulator/Internal/Input/IndigoHIDInput.swift"
+  - "Sources/Devices/Simulator/Internal/Screen/SimulatorKitScreen.swift"
+  - "Sources/Devices/Simulator/Internal/SimulatorKitDisplay.swift"
+  - "Sources/Devices/Simulator/Internal/SimulatorKitFramebuffers.swift"
+  - "Sources/Devices/Simulator/Internal/SimulatorKitScreenOrientation.swift"
+  - "Sources/Devices/iPhone/Internal/Accessibility/RemoteAXAccessibility.swift"
+  - "Sources/Devices/iPhone/Internal/Input/CoreDeviceDigitizer.swift"
   - "Sources/Devices/iPhone/Internal/Kit/CoreDeviceFramework.swift"
   - "Sources/Devices/iPhone/Internal/Kit/DigitizerReport.swift"
-  - "Sources/Devices/iPhone/Internal/Input/CoreDeviceDigitizer.swift"
   - "Sources/Devices/iPhone/Internal/Screen/MediaStreamScreen.swift"
-  - "Sources/Devices/iPhone/Internal/Accessibility/**"
-  - "Sources/Commands/**"
-  - "Sources/Device/Internal/Logger.swift"
+  - "Sources/Device/Abilities/Camera/Internal/HostVideoCapture.swift"
   - "Tests/**"

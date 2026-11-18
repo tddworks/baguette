@@ -6,8 +6,8 @@ import Foundation
 /// device exposes none — refreshing against an already-connected
 /// TVOut/CarPlay resets guest display services and wedges the external
 /// surface (proven in the sim_carplay spike).
-enum IOPortsRefresh {
-    static func shouldUpdate(hasFramebufferDisplayPorts: Bool) -> Bool {
-        !hasFramebufferDisplayPorts
+enum FramebufferRefresh {
+    static func shouldUpdate(hasFramebuffers: Bool) -> Bool {
+        !hasFramebuffers
     }
 }

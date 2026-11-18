@@ -12,8 +12,8 @@ import Testing
 @Suite("IntegratedPanels")
 struct IntegratedPanelsTests {
 
-    private func port(_ w: Double, _ h: Double) -> SizedFramebufferPort {
-        SizedFramebufferPort(
+    private func port(_ w: Double, _ h: Double) -> SizedFramebuffer {
+        SizedFramebuffer(
             portName: "com.apple.framebuffer.display",
             size: Size(width: w, height: h)
         )

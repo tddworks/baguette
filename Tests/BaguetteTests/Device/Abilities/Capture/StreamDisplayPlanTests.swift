@@ -143,9 +143,9 @@ struct StreamDisplayPlanBindTests {
         given(external).enableCarPlay().willReturn(())
         given(sim).displays().willReturn(displays)
         given(displays).carPlay.willReturn(carPlay)
-        given(carPlay).resolve().willThrow(FramebufferSelectionError.noMatchingPort(.carPlay))
+        given(carPlay).resolve().willThrow(FramebufferSelectionError.noMatchingFramebuffer(.carPlay))
 
-        #expect(throws: FramebufferSelectionError.noMatchingPort(.carPlay)) {
+        #expect(throws: FramebufferSelectionError.noMatchingFramebuffer(.carPlay)) {
             try StreamDisplayPlan(kind: .carPlay, enableCarPlay: true).bind(to: sim)
         }
         verify(carPlay).screen().called(0)

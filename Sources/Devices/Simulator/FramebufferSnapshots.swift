@@ -2,29 +2,29 @@ import BaguetteDevice
 import Foundation
 
 /// Sized framebuffer port before Connected Screens ids are assigned.
-struct SizedFramebufferPort: Sendable, Equatable {
+struct SizedFramebuffer: Sendable, Equatable {
     let portName: String
     let size: Size
 }
 
 /// Joins live IOSurface port sizes to Connected Screens by closest
 /// pixel-size distance. Each connected screen is used at most once.
-enum FramebufferPortSnapshots {
+enum FramebufferSnapshots {
     static func assigningScreenIds(
-        ports: [SizedFramebufferPort],
+        ports: [SizedFramebuffer],
         screens: [ConnectedScreenRecord]
-    ) -> [FramebufferPortSnapshot] {
+    ) -> [FramebufferSnapshot] {
         var remaining = screens
         return ports.map { port in
             guard let index = bestScreenIndex(for: port.size, in: remaining) else {
-                return FramebufferPortSnapshot(
+                return FramebufferSnapshot(
                     portName: port.portName,
                     connectedScreenId: nil,
                     size: port.size
                 )
             }
             let screen = remaining.remove(at: index)
-            return FramebufferPortSnapshot(
+            return FramebufferSnapshot(
                 portName: port.portName,
                 connectedScreenId: screen.screenId,
                 size: port.size,

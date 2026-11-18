@@ -135,7 +135,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     func orientation() -> any Orientation {
         SimulatorOrientation(
             isFoldable: { [udid, host] in
-                let ports = try SimulatorKitFramebufferPorts.sizedPorts(udid: udid, host: host)
+                let ports = try SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host)
                 return IntegratedPanels.several(in: ports)
             },
             motor: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath),

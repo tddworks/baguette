@@ -26,11 +26,11 @@ Every `@Mockable protocol` in this codebase is named **for the role it plays in 
 When an adapter in `Internal/` wraps a private framework or external I/O (private SimulatorKit / CoreSimulator / AccessibilityPlatformTranslation symbols, `Foundation.Process`, `Pipe`, `dlopen`, …), the file gets two responsibilities:
 
 - **What it does** — the value-domain orchestration (state transitions, recursion, byte-to-line splitting, frame projection, error mapping). This MUST be unit-tested.
-- **How it talks to the outside** — the irreducible private-API call (`dlopen`, `class_getMethodImplementation`, `Process.run`, `kill(pid)`). This is integration-only.
+- **How it talks to the outside** — the irreducible private-API call (`dlopen`, `class_getMethodImplementation`, `Process.run`, `kill(pid)`). It goes in `Internal/System/`, ≤100 lines: the only code unit coverage leaves out.
 
 Always separate the two. Two patterns, picked by the **shape of the irreducible call**:
 
-1. **One-shot fetch** — the adapter makes a single private-API call, then operates on the value it gets back (e.g. `AXPTranslator.frontmostApplicationWithDisplayId:` returns one `AXPMacPlatformElement`, then we walk it). Lift the post-fetch logic into a **pure static factory or value type beside its ability** (`AXNode.walk(from:transform:)`, `AXFrameTransform.map(_:)`, `LineBuffer`). Drive it directly with `Fake…` `NSObject` subclasses that override KVC. The Infrastructure adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
+1. **One-shot fetch** — the adapter makes a single private-API call, then operates on the value it gets back (e.g. `AXPTranslator.frontmostApplicationWithDisplayId:` returns one `AXPMacPlatformElement`, then we walk it). Lift the post-fetch logic into a **pure static factory or value type beside its ability** (`AXNode.walk(from:transform:)`, `AXFrameTransform.map(_:)`, `LineBuffer`). Drive it directly with `Fake…` `NSObject` subclasses that override KVC. The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
 
 2. **Conversational I/O** — the adapter talks back-and-forth with the outside (start / stream-bytes / signal-exit / terminate). Pure helpers don't capture the state machine cleanly. Introduce **one small `@Mockable` collaborator named like a domain noun** (`Subprocess`, never `LogProcessPort`) — start / terminate / `onBytes` / `onExit`. The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess` and drive the state machine deterministically. The concrete impl (`HostSubprocess`) is a thin wrapper over `Foundation.Process` (~30 LOC) — integration-only.
 
@@ -40,7 +40,7 @@ The naming bar is the same for both: **collaborators are domain nouns, never pat
 
 **~100% of the device model.** Every value type, every static factory, every `@Mockable` collaborator's behaviour-spec is covered.
 
-**Adapters split as above.** The orchestrator is unit-tested via the collaborator's `MockXxx`; only the irreducible call lines stay uncovered — in `AXPTranslatorAccessibility` the four-line `dlopen` → `frontmostApplicationWithDisplayId:` dance, in `SimDeviceLogStream` just `Process.run` + `kill(pid)`. New code includes its unit-testable portion before it lands.
+**Adapters split as above.** The orchestrator is unit-tested via the collaborator's `MockXxx`; only its `System/` call is left out. `codecov.yml` holds the one ignore list; `make check-coverage` keeps it honest. New code includes its unit-testable portion before it lands.
 
 **Skipping the gate violates the project's primary rule.** The Chicago-school workflow is under [Testing approach](#testing-approach).
 

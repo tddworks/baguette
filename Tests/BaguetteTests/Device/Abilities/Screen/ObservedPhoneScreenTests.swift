@@ -13,8 +13,8 @@ struct ObservedPhoneScreenTests {
         screenId: 2, name: "Inner", screenType: .integrated,
         size: Size(width: 2200, height: 2800), deviceName: "primary-1", scale: 2)
     static let ports = [
-        SizedFramebufferPort(portName: "cover", size: cover.size),
-        SizedFramebufferPort(portName: "inner", size: inner.size),
+        SizedFramebuffer(portName: "cover", size: cover.size),
+        SizedFramebuffer(portName: "inner", size: inner.size),
     ]
 
     @Test func `should observe a single integrated screen without a hinge sample or a panel name`() throws {

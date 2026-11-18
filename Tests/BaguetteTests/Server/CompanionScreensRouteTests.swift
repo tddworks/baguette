@@ -29,7 +29,7 @@ struct CompanionScreensRouteTests {
                 )
             )
         } else {
-            given(display).resolve().willThrow(FramebufferSelectionError.noMatchingPort(.carPlay))
+            given(display).resolve().willThrow(FramebufferSelectionError.noMatchingFramebuffer(.carPlay))
         }
         given(displays).carPlay.willReturn(display)
         given(pairing).watch.willReturn(watch)

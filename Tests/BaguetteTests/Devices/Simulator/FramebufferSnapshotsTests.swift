@@ -4,16 +4,16 @@ import Testing
 
 /// Live IOSurface sizes join to Connected Screens by closest pixel size
 /// so Creatable CarPlay 101 never stamps a phone or external port.
-@Suite("FramebufferPortSnapshots")
-struct FramebufferPortSnapshotsTests {
+@Suite("FramebufferSnapshots")
+struct FramebufferSnapshotsTests {
 
     @Test func `should match each framebuffer to the connected screen closest in pixel size`() {
         let ports = [
-            SizedFramebufferPort(
+            SizedFramebuffer(
                 portName: "com.apple.framebuffer.display",
                 size: Size(width: 1206, height: 2622)
             ),
-            SizedFramebufferPort(
+            SizedFramebuffer(
                 portName: "com.apple.framebuffer.display",
                 size: Size(width: 800, height: 480)
             ),
@@ -33,7 +33,7 @@ struct FramebufferPortSnapshotsTests {
             ),
         ]
 
-        let snapshots = FramebufferPortSnapshots.assigningScreenIds(
+        let snapshots = FramebufferSnapshots.assigningScreenIds(
             ports: ports,
             screens: screens
         )
@@ -49,11 +49,11 @@ struct FramebufferPortSnapshotsTests {
     /// from the Connected Screens record it joins to.
     @Test func `should give a framebuffer the panel and orientation of its matched screen`() {
         let ports = [
-            SizedFramebufferPort(
+            SizedFramebuffer(
                 portName: "com.apple.framebuffer.display",
                 size: Size(width: 2007, height: 2853)
             ),
-            SizedFramebufferPort(
+            SizedFramebuffer(
                 portName: "com.apple.framebuffer.display",
                 size: Size(width: 1398, height: 2034)
             ),
@@ -70,7 +70,7 @@ struct FramebufferPortSnapshotsTests {
             ),
         ]
 
-        let snapshots = FramebufferPortSnapshots.assigningScreenIds(
+        let snapshots = FramebufferSnapshots.assigningScreenIds(
             ports: ports, screens: screens
         )
 
@@ -83,8 +83,8 @@ struct FramebufferPortSnapshotsTests {
     }
 
     @Test func `should name no panel for a framebuffer with no matched screen`() {
-        let snapshots = FramebufferPortSnapshots.assigningScreenIds(
-            ports: [SizedFramebufferPort(
+        let snapshots = FramebufferSnapshots.assigningScreenIds(
+            ports: [SizedFramebuffer(
                 portName: "com.apple.framebuffer.display",
                 size: Size(width: 100, height: 100)
             )],
@@ -95,12 +95,12 @@ struct FramebufferPortSnapshotsTests {
 
     @Test func `should leave the screen id unset when no connected screen remains to match`() {
         let ports = [
-            SizedFramebufferPort(
+            SizedFramebuffer(
                 portName: "com.apple.framebuffer.display",
                 size: Size(width: 100, height: 100)
             ),
         ]
-        let snapshots = FramebufferPortSnapshots.assigningScreenIds(
+        let snapshots = FramebufferSnapshots.assigningScreenIds(
             ports: ports,
             screens: []
         )
@@ -108,13 +108,13 @@ struct FramebufferPortSnapshotsTests {
     }
 
     @Test func `should bind phone and CarPlay to the live screen ids just matched`() throws {
-        let ports = FramebufferPortSnapshots.assigningScreenIds(
+        let ports = FramebufferSnapshots.assigningScreenIds(
             ports: [
-                SizedFramebufferPort(
+                SizedFramebuffer(
                     portName: "com.apple.framebuffer.display",
                     size: Size(width: 1179, height: 2556)
                 ),
-                SizedFramebufferPort(
+                SizedFramebuffer(
                     portName: "com.apple.framebuffer.display",
                     size: Size(width: 800, height: 480)
                 ),

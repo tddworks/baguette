@@ -123,7 +123,7 @@ Briefly produce:
 4. **Adapter changes** — how the production class (`IndigoHIDInput`, `AXPTranslatorAccessibility`, `SimDeviceLogStream`, …) handles it. Which private-API symbol, which arg shape. Flag iOS-26-specific gotchas explicitly (signature drift between idb/AXe and Xcode 26 has burned us before — see [`buttons/design.md`](../../../docs/features/buttons/design.md) for the canonical example).
 5. **I/O split (only when the adapter wraps 3rd-party I/O)** — read [AGENTS.md's "Splitting an adapter that wraps 3rd-party I/O"](../../../AGENTS.md#splitting-an-adapter-that-wraps-3rd-party-io) section and pick a pattern:
    - **One-shot fetch** (single private-API call → operate on the value): lift the post-fetch logic into a pure static factory beside its ability (`AXNode.walk(from:transform:)`, `AXFrameTransform`, `LineBuffer`). The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
-   - **Conversational I/O** (start / stream / signal-exit / terminate): introduce one small `@Mockable` collaborator named like a domain noun (`Subprocess`, never `LogProcessPort`). The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess`. The concrete impl (`HostSubprocess` ~30–50 LOC) is integration-only and should be excluded from coverage.
+   - **Conversational I/O** (start / stream / signal-exit / terminate): introduce one small `@Mockable` collaborator named like a domain noun (`Subprocess`, never `LogProcessPort`). The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess`. The concrete impl (`HostSubprocess` ~30–50 LOC) is integration-only and lives in `Internal/System/`, which coverage leaves out.
 6. **Frontend** — does the browser need to send / receive this? If yes, which IIFE(s) change.
 
 Present the CANONICAL_MODEL diff (if any), a short ASCII diagram and a
@@ -277,19 +277,19 @@ protocol Subprocess: AnyObject, Sendable {
 
 The orchestrator depends on `any Subprocess`. Tests inject
 `MockSubprocess` and drive every byte/exit/terminate path. The
-concrete impl (`HostSubprocess` ~30–50 LOC, wraps
-`Foundation.Process`) is the **only** integration-only file —
-exclude it from coverage and rely on a manual smoke test. Excluding
-means adding it to **both** `codecov.yml` (`ignore:`) and
-`.github/workflows/ci.yml` (`-ignore-filename-regex`), kept in step;
-everything else it uses must be a tested value.
+concrete impl (wraps `Foundation.Process`, a private symbol, a
+socket…) is the **only** integration-only file. It goes in that
+folder's `Internal/System/` (≤100 lines), which `codecov.yml` leaves
+out by one rule — never add a file path to the ignore list. CI builds
+its regex from that list; `make check-coverage` fails a `System/` file
+that grew decisions. Everything else it uses must be a tested value.
 
 ### Coverage expectation per file
 
 After the split:
 - Domain pure factories / value types: **100%** unit-tested.
 - Orchestrator (`<Feature>Orchestrator` or `Sim<Feature>Stream`): **≥ 90%** unit-tested via the collaborator's `MockXxx`.
-- `Host<Collaborator>` (the irreducible call): integration-only, excluded from coverage.
+- The irreducible call, in `Internal/System/`: integration-only, left out of coverage by its folder.
 
 If you can't get the orchestrator into a `MockXxx`-driven test, it's
 not split correctly — go back to Phase 0.
@@ -329,7 +329,7 @@ For anything under `Devices/iPhone/Internal/` (research:
 - **Wire formats are Domain values** (`Devices/iPhone/`: `DTXMessage`,
   `XPCObject`, `HTTP2Frame`, `MediaStreamOffer`, `ReceiverFeedback`,
   `AXTreeDump`), unit-tested byte for byte; the socket and the private call
-  are the only untested lines, and join the coverage exclusions.
+  are the only untested lines, and live in `Internal/System/`.
 - **A phone serves one session** per service at a time and is shared
   with the user — share reads (`SharedRead`) rather than open a second.
 - **Look before you touch.** Screenshot the user's phone before sending

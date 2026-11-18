@@ -15,7 +15,7 @@ enum ConnectedScreens {
     /// device boots and the only panel a single-panel device has.
     static func binding(
         kind: DisplayKind,
-        ports: [FramebufferPortSnapshot],
+        ports: [FramebufferSnapshot],
         litPanel: IntegratedPanel = .primary
     ) throws -> DisplayBinding {
         switch kind {
@@ -32,7 +32,7 @@ enum ConnectedScreens {
     /// absent or ambiguous framebuffer, or an unusable scale is an
     /// error, never a fallback to another panel.
     static func observedPhone(
-        ports: [SizedFramebufferPort], screens: [ConnectedScreenRecord], angle: HingeAngle?
+        ports: [SizedFramebuffer], screens: [ConnectedScreenRecord], angle: HingeAngle?
     ) throws -> (binding: DisplayBinding, scale: Double, multiplePanels: Bool) {
         let integrated = screens.filter { $0.screenType == .integrated }
         let record: ConnectedScreenRecord
@@ -59,27 +59,27 @@ enum ConnectedScreens {
     }
 
     private static func bindPhone(
-        ports: [FramebufferPortSnapshot],
+        ports: [FramebufferSnapshot],
         litPanel: IntegratedPanel
     ) throws -> DisplayBinding {
         guard let winner = devicePort(in: ports, litPanel: litPanel) else {
-            throw FramebufferSelectionError.noMatchingPort(.phone)
+            throw FramebufferSelectionError.noMatchingFramebuffer(.phone)
         }
         return try makeBinding(kind: .phone, port: winner)
     }
 
     private static func bindCarPlay(
-        ports: [FramebufferPortSnapshot],
+        ports: [FramebufferSnapshot],
         litPanel: IntegratedPanel
     ) throws -> DisplayBinding {
         guard let device = devicePort(in: ports, litPanel: litPanel) else {
-            throw FramebufferSelectionError.noMatchingPort(.carPlay)
+            throw FramebufferSelectionError.noMatchingFramebuffer(.carPlay)
         }
         let externals = ports.filter {
             $0 != device && FramebufferSurfacePick.acceptsExternal($0.size)
         }
         guard let best = pickBestExternal(from: externals) else {
-            throw FramebufferSelectionError.noMatchingPort(.carPlay)
+            throw FramebufferSelectionError.noMatchingFramebuffer(.carPlay)
         }
         return try makeBinding(kind: .carPlay, port: best)
     }
@@ -108,9 +108,9 @@ enum ConnectedScreens {
     /// primary gets its primary whatever the hinge says; shape is
     /// consulted only when nothing is named.
     private static func devicePort(
-        in ports: [FramebufferPortSnapshot],
+        in ports: [FramebufferSnapshot],
         litPanel: IntegratedPanel
-    ) -> FramebufferPortSnapshot? {
+    ) -> FramebufferSnapshot? {
         if let lit = ports.first(where: { $0.panel == litPanel })
             ?? ports.first(where: { $0.panel == .primary }) {
             return lit
@@ -121,15 +121,15 @@ enum ConnectedScreens {
     }
 
     private static func pickBestExternal(
-        from ports: [FramebufferPortSnapshot]
-    ) -> FramebufferPortSnapshot? {
+        from ports: [FramebufferSnapshot]
+    ) -> FramebufferSnapshot? {
         ports.max { a, b in
             if a.area != b.area { return a.area < b.area }
             return distanceToCarPlayPlist(a) > distanceToCarPlayPlist(b)
         }
     }
 
-    private static func distanceToCarPlayPlist(_ port: FramebufferPortSnapshot) -> Double {
+    private static func distanceToCarPlayPlist(_ port: FramebufferSnapshot) -> Double {
         let dw = port.size.width - carPlayPlistSize.width
         let dh = port.size.height - carPlayPlistSize.height
         return dw * dw + dh * dh
@@ -137,7 +137,7 @@ enum ConnectedScreens {
 
     private static func makeBinding(
         kind: DisplayKind,
-        port: FramebufferPortSnapshot
+        port: FramebufferSnapshot
     ) throws -> DisplayBinding {
         guard let screenId = port.connectedScreenId else {
             throw FramebufferSelectionError.screenIdUnavailable

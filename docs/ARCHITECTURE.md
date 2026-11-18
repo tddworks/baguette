@@ -122,7 +122,10 @@ Sources/
 
 Every folder keeps its public face at the top and its implementations
 — private APIs, host I/O — in `Internal/`
-([solid](features/devices/solid.md)). A family never imports another
+([solid](features/devices/solid.md)). The irreducible call to the outside
+world (a private symbol, VideoToolbox, a socket, a process) sits apart in
+`Internal/System/`, at most 100 lines a file: the only code unit coverage
+leaves out (`codecov.yml`, `make check-coverage`). A family never imports another
 family. Why: [devices](features/devices/design.md).
 `Tests/BaguetteTests/` mirrors `Sources/` folder for folder: a test
 sits in the folder of the source it covers.

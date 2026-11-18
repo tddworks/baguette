@@ -91,7 +91,7 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         guard let io = ioClient else { throw ScreenError.ioUnavailable }
 
         var         candidates = findFramebufferDescriptors(io: io)
-        if IOPortsRefresh.shouldUpdate(hasFramebufferDisplayPorts: !candidates.isEmpty) {
+        if FramebufferRefresh.shouldUpdate(hasFramebuffers: !candidates.isEmpty) {
             io.perform(NSSelectorFromString("updateIOPorts"))
             candidates = findFramebufferDescriptors(io: io)
         }

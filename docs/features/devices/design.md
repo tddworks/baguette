@@ -277,7 +277,9 @@ binding (`Display`).
 
 There is no `Domain/` or `Infrastructure/` folder. Each folder answers one
 question; its public face sits at the top and how it works — private APIs,
-host I/O — in its `Internal/` ([solid](solid.md)).
+host I/O — in its `Internal/` ([solid](solid.md)); the bare call to the
+outside world, in `Internal/System/`, thin by rule, is all unit coverage
+leaves out.
 
 ```
 Sources/
