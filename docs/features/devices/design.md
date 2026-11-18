@@ -349,18 +349,10 @@ AGENTS.md's layering sentence changes to:
   as an alias? Same for `/simulators/:udid` vs `/devices/:id`: plugins
   (`PluginRoute`) and the page use `/simulators/`, so the old tree stays as an
   alias for at least one release.
-- ~~**Platform-shaped words in the shared kernel.**~~ Settled as the stable domain in
-  [CANONICAL_MODEL §1a](../../CANONICAL_MODEL.md#1a--the-stable-domain--the-same-for-every-device): `Navigation`
-  and `HardwareButton` in place of `DeviceButton`, `Controls` beside a
-  `TouchSurface`. Kept below as it was asked:
 - **Platform-shaped words in the shared kernel.** `DeviceButton` (Common) is
   iOS's buttons; Android has back and recents. Each family's `Input` refusing
   what it lacks is the first answer, but the kernel may need a platform-neutral
   set.
-- ~~**Accessibility across platforms.**~~ Settled in
-  [CANONICAL_MODEL §1a](../../CANONICAL_MODEL.md#1a--the-stable-domain--the-same-for-every-device): a domain role vocabulary each family maps onto, the platform's class kept
-  as the platform role, the JSON's `AXButton` spellings kept as its projection.
-  As asked:
 - **Accessibility across platforms.** Can `AXNode` hold a uiautomator tree
   without iOS-only roles leaking into it? Decided when Android arrives.
 - **Chrome and 3D by `kind.model`.** A phone's model is a product type
