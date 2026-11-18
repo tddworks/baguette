@@ -13,14 +13,18 @@ import Foundation
 ///    Apple's translator (`AXPTranslatorBridge`), which builds the same
 ///    element tree a simulator's does, walked into an `AXNode`.
 ///
-/// Integration-only; the formats are pure values in `Devices/iPhone`.
-/// Research: docs/features/real-devices/design.md.
+/// The formats are pure values in `Devices/iPhone`; the connections, nettop
+/// and the translator are handed in (`TunnelConnection`,
+/// `AccessibilityTranslator`). Research: docs/features/real-devices/design.md.
 final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     private static let service = "com.apple.accessibility.axAuditDaemon.remoteAXService"
     private let identifier: UUID
     private let devicectl: Devicectl
     /// A tree takes about a second, plus ~15–45 ms an element.
     private let budget: TimeInterval
+    private let translator: any AccessibilityTranslator
+    private let connect: @Sendable (String, UInt16) throws -> any TunnelConnection
+    private let nettop: @Sendable () -> String
 
     enum Failure: Error, CustomStringConvertible {
         case noTunnel, noDirectory, noService, noTree, translatorUnavailable
@@ -36,10 +40,18 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
         }
     }
 
-    init(identifier: UUID, devicectl: Devicectl = Devicectl(), budget: TimeInterval = 20) {
+    init(identifier: UUID, devicectl: Devicectl = Devicectl(), budget: TimeInterval = 20,
+         translator: any AccessibilityTranslator = AXPTranslation(),
+         connect: @escaping @Sendable (String, UInt16) throws -> any TunnelConnection = {
+             try TunnelSocket(host: $0, port: $1, timeout: 5)
+         },
+         nettop: @escaping @Sendable () -> String = { Nettop.remotedConnections() }) {
         self.identifier = identifier
         self.devicectl = devicectl
         self.budget = budget
+        self.translator = translator
+        self.connect = connect
+        self.nettop = nettop
     }
 
     func describeAll() throws -> AXNode? { try tree() }
@@ -72,34 +84,30 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     }
 
     private func readTree() throws -> AXNode? {
-        guard let translator = AXPTranslatorBridge.translator else { throw Failure.translatorUnavailable }
+        guard translator.isAvailable else { throw Failure.translatorUnavailable }
         let deadline = Date().addingTimeInterval(budget)
         let address = try tunnelAddress()
-        guard let directoryPort = ServiceDirectory.port(fromNettop: Self.nettop(), phone: address) else {
+        guard let directoryPort = ServiceDirectory.port(fromNettop: nettop(), phone: address) else {
             throw Failure.noDirectory
         }
-        let directory = try Self.directory(at: address, port: directoryPort, by: deadline)
+        let directory = try Self.directory(on: connect(address, directoryPort), by: deadline)
         guard let port = directory.ports[Self.service] else { throw Failure.noService }
-        let dump = try Self.treeDump(at: address, port: port, by: deadline)
+        let dump = try Self.treeDump(on: connect(address, port), by: deadline)
 
         // One token per phone, pointed at its newest tree: the translator
         // caches the elements it builds, each still carrying the token it was
         // built with, so a fresh token per read leaves a long-lived process
         // (`serve`) asking a dead token — an empty app on every later read.
         let token = "baguette-phone-\(identifier.uuidString)"
-        AXPTranslatorBridge.dispatcher.register(token: token, deadline: .distantFuture) { request in
-            Self.respond(to: request, from: dump)
+        let translator = self.translator
+        return translator.tree(from: dump.root, token: token, deadline: deadline) { request in
+            Self.respond(to: request, from: dump, translator: translator)
         }
-        dump.root.setValue(token, forKey: "bridgeDelegateToken")
-        guard let element = AXPTranslatorBridge.macPlatformElement(translator: translator, translation: dump.root) else {
-            return nil
-        }
-        return AXNode.walk(from: element, transform: AXFrameTransform(pointSize: .zero, orientation: .portrait),
-                           deadline: deadline).onItsAppsScreen
     }
 
     /// The translator's request, answered from the phone's pushed tree.
-    private static func respond(to request: AnyObject, from dump: AXTreeDump) -> AnyObject? {
+    private static func respond(to request: AnyObject, from dump: AXTreeDump,
+                                translator: any AccessibilityTranslator) -> AnyObject? {
         guard let request = request as? NSObject else { return nil }
         let number = { (key: String) in (request.value(forKey: key) as? NSNumber)?.uint64Value ?? 0 }
         let answer = dump.answer(type: number("requestType"), attribute: number("attributeType"),
@@ -108,21 +116,17 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
         case let .response(response)?:
             return response
         case let .value(attribute, value)?:
-            let response = newResponse()
+            let response = translator.response()
             response?.setValue(NSNumber(value: attribute), forKey: "attribute")
             response?.setValue(value, forKey: "resultData")
             return response
         case let .values(values)?:
-            let response = newResponse()
+            let response = translator.response()
             response?.setValue(NSDictionary(dictionary: values), forKey: "resultData")
             return response
         case nil:
             return nil
         }
-    }
-
-    private static func newResponse() -> NSObject? {
-        (NSClassFromString("AXPTranslatorResponse") as? NSObject.Type)?.init()
     }
 
     // MARK: - Reaching the phone
@@ -146,23 +150,8 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
         return phone.tunnelAddress
     }
 
-    /// `remoted`'s TCP connections, as nettop lists them.
-    private static func nettop() -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        process.arguments = ["-L", "1", "-m", "tcp", "-n", "-x", "-p", "remoted", "-J", "state"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return "" }
-        let output = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(decoding: output, as: UTF8.self)
-    }
-
     /// The service directory's handshake, over RemoteXPC (HTTP/2).
-    private static func directory(at address: String, port: UInt16, by deadline: Date) throws -> ServiceDirectory {
-        let socket = try TunnelSocket(host: address, port: port, timeout: 5)
+    private static func directory(on socket: any TunnelConnection, by deadline: Date) throws -> ServiceDirectory {
         try socket.write(HTTP2Frame.remoteXPCOpening)
         var stream = Data()
         while true {
@@ -189,8 +178,7 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
 
     /// Asks the accessibility service for its tree and waits for the push
     /// that completes it.
-    private static func treeDump(at address: String, port: UInt16, by deadline: Date) throws -> AXTreeDump {
-        let socket = try TunnelSocket(host: address, port: port, timeout: 5)
+    private static func treeDump(on socket: any TunnelConnection, by deadline: Date) throws -> AXTreeDump {
         let next = { (count: Int) in try socket.read(count, by: deadline) }
         try socket.write(DTXMessage.call("_notifyOfPublishedCapabilities:", argument: [
             "com.apple.private.DTXBlockCompression": NSNumber(value: 0),
