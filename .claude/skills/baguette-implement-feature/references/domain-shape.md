@@ -74,15 +74,15 @@ have worked. Asking the questions of the types it touches finds the shape:
 | 1. Would the user say it? | *the lit panel* — yes, a word already on the wire |
 | 2. Does the thing decide about itself? | no: callers computed the lit panel from the angle; `Hinge.litPanel` owns it |
 | 3. Every state? | a touch has a state — *down on a panel* — that a per-gesture lookup forgot |
-| 4. As small as it can be? | one Domain decorator, `LitPanelInput`, a class only because a touch changes over time |
+| 4. As small as it can be? | one decorator in `Devices/Simulator/`, `LitPanelInput`, a class only because a touch changes over time |
 | 5. Data? | yes: two pinned panels from `Displays.panel(_:)`, no Duo branch |
 
 ```text
  NOW                                         PROPOSED
- Server.streamWS                             Server.streamWS
-  └─ input = sim.input()   (bound once)       └─ input = sim.litPanelInput()
-                                             Simulator.litPanelInput()
-                                              └─ LitPanelInput(cover:, unfolded:, hinge:)
+ Server.deviceStream                         Server.deviceStream
+  └─ input = device.input() (bound once)      └─ input = StreamDisplayPlan.bind(to: device)
+                                             a foldable's lit panel:
+                                              └─ LitPanelInput(displays:, hinge:)
                                                   ├─ each gesture → hinge.litPanel
                                                   └─ a touch keeps its panel until up
 ```

@@ -4,188 +4,98 @@ ASCII diagrams for documenting feature architecture before implementation.
 
 ## Table of Contents
 
-- [Layered Architecture](#layered-architecture)
+- [The tree, outside in](#the-tree-outside-in)
 - [Data Flow Diagrams](#data-flow-diagrams)
 - [Sequence Diagrams](#sequence-diagrams)
 - [Component Interaction Tables](#component-interaction-tables)
 
 ---
 
-## Layered Architecture
+## The tree, outside in
 
-### Three-Layer Pattern (Standard)
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        FEATURE: [Feature Name]                       │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  EXTERNAL              INFRASTRUCTURE           DOMAIN               │
-│  ┌─────────────┐       ┌─────────────────┐     ┌─────────────────┐  │
-│  │  [Source]   │──────▶│  [Repository/   │────▶│  [Model]        │  │
-│  │  (API/DB)   │       │   Client]       │     │  (value types)  │  │
-│  └─────────────┘       └─────────────────┘     └─────────────────┘  │
-│                                                        │             │
-│                                                        ▼             │
-│                                              ┌─────────────────┐     │
-│                                              │  [Service]      │     │
-│                                              │  (actor)        │     │
-│                                              └─────────────────┘     │
-│                                                       │              │
-│                                                       ▼              │
-│                        ┌───────────────────────────────────────┐    │
-│                        │  APP LAYER                             │    │
-│                        │  ┌─────────────────────────────────┐   │    │
-│                        │  │  [Views/Registration]            │   │    │
-│                        │  └─────────────────────────────────┘   │    │
-│                        └───────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Full System Overview
+### Where a feature lands
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          Swift App System                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                         Domain Layer                                │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │ │
-│  │  │ Order        │  │ User         │  │ OrderManager (actor)     │  │ │
-│  │  │ OrderStatus  │  │ Product      │  │ CartService              │  │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                    ▲                                     │
-│                                    │ implements                          │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                      Infrastructure Layer                           │ │
-│  │  ┌────────────────────────────────────────────────────────────┐    │ │
-│  │  │                      Repositories                           │    │ │
-│  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │    │ │
-│  │  │  │ Order    │ │ User     │ │ Product  │ │ [NewRepo]    │   │    │ │
-│  │  │  │ Repo     │ │ Repo     │ │ Repo     │ │              │   │    │ │
-│  │  │  └──────────┘ └──────────┘ └──────────┘ └──────────────┘   │    │ │
-│  │  └────────────────────────────────────────────────────────────┘    │ │
-│  │                                                                     │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │ │
-│  │  │ NetworkClient│  │ DatabaseClient│  │ NotificationService     │  │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                    ▲                                     │
-│                                    │ uses                                │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                          App Layer                                  │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │ │
-│  │  │ AppState     │  │ Views        │  │ App Entry Point          │  │ │
-│  │  │ (@Observable)│  │              │  │ (registration)           │  │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ FEATURE: [Feature Name]                                               │
+├──────────────────────────────────────────────────────────────────────┤
+│  THE WAYS IN        Commands/<Verb>Command.swift   Server/Server<X>Routes │
+│                     (parse, require, call)          (both trees, refusals) │
+│                            │                              │            │
+│                            └────────── devices.require(.x, of: id) ──┐ │
+│                                                                     ▼ │
+│  THE FAMILY         Devices/<Family>/  registers `.x` in its Abilities │
+│                     Internal/<x>/<Adapter>     decides (tested, Mock)  │
+│                     Internal/System/<Concrete> the bare call (≤100)    │
+│                                                                     ▲ │
+│  THE ABILITY        Device/Abilities/<x>/  the role, its values, its  │
+│  (BaguetteDevice)   `Ability` key — imports nothing of ours           │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### A worked one: the H.264 stream
+
+```
+Device/Abilities/Capture/
+├── H264Tuning.swift                 CompressionProperty values a tuning sets (pure)
+├── AVCDecoderConfigurationRecord.swift   avcC from SPS/PPS (pure)
+└── Internal/
+    ├── H264Encoder.swift            when to open, keyframes, which answer counts
+    ├── CompressionSession.swift     @Mockable role: open / set / prepare / submit / close
+    └── System/
+        ├── VideoToolboxSession.swift          one VT call per method
+        └── CompressedFrame+SampleBuffer.swift reading a CMSampleBuffer back
 ```
 
 ---
 
 ## Data Flow Diagrams
 
-### Repository Data Flow
+### A gesture, from either way in
 
 ```
-┌───────────┐     ┌───────────┐     ┌───────────┐     ┌───────────┐
-│  API/DB   │────▶│ Repository│────▶│  Mapper   │────▶│  Domain   │
-│  Response │     │  Fetch    │     │  Logic    │     │  Model    │
-└───────────┘     └───────────┘     └───────────┘     └───────────┘
-     Raw               Fetch            Parse            Domain
-     Data              Data             Data             Model
+browser (sim-stream.js)           baguette input (stdin)
+  {type:"tap",x,y,width,height}     {type:"tap",…}
+          │ WS                              │
+          ▼                                 ▼
+  Server.deviceStream ──────────▶ GestureDispatcher.dispatch(line:)
+                                    │ GestureRegistry.standard.parse
+                                    ▼
+                                  Tap (needs .touch) ── device.input() ──▶ Touch role
+                                                                             │
+                                  Devices/Simulator/Internal/Input/IndigoHIDInput
+                                    which messages, in what order, at what points
+                                                                             │ IndigoChannel
+                                  Devices/Simulator/Internal/System/SimulatorKitIndigoChannel
+                                    9-arg IndigoHIDMessageForMouseNSEvent, built on main
 ```
 
-### Service Orchestration Flow
+### A stream
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        SERVICE FLOW                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  View ──▶ Service (actor) ──▶ Repository.fetch() ──▶ API/DB         │
-│               │                                        │            │
-│               │                                        ▼            │
-│               │                              ┌─────────────────┐   │
-│               │                              │ External Call   │   │
-│               │                              └─────────────────┘   │
-│               │                                        │            │
-│               │                                        ▼            │
-│               │                              ┌─────────────────┐   │
-│               │                              │ Parse Response  │   │
-│               │                              └─────────────────┘   │
-│               │                                        │            │
-│               ▼                                        ▼            │
-│       ┌─────────────────┐                   ┌─────────────────┐     │
-│       │ Update State    │◀──────────────────│ Domain Model    │     │
-│       │ (notify views)  │                   │ (returned)      │     │
-│       └─────────────────┘                   └─────────────────┘     │
-│               │                                                     │
-│               ▼                                                     │
-│       ┌─────────────────┐                                           │
-│       │ SwiftUI Updates │                                           │
-│       └─────────────────┘                                           │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Error Handling Flow
-
-```
-┌─────────┐     ┌───────────┐     ┌─────────────┐     ┌──────────────┐
-│  Repo   │────▶│ Try Fetch │────▶│   Success   │────▶│ Return Data  │
-└─────────┘     └───────────┘     └─────────────┘     └──────────────┘
-                      │
-                      ▼ (failure)
-               ┌─────────────┐     ┌─────────────────┐
-               │ Catch Error │────▶│ Map to Domain   │
-               └─────────────┘     │ Error           │
-                                   └─────────────────┘
-                                          │
-                                          ▼
-                                   ┌─────────────────┐
-                                   │ Service handles │
-                                   │ or propagates   │
-                                   └─────────────────┘
+Screen (onFrame IOSurface) ─▶ AVCCStream ─▶ H264Encoder ─▶ CompressionSession ─▶ VideoToolbox
+                                   │              (decides)        (role)          (System/)
+                                   ▼
+                              FrameSink: StdoutSink (CLI) · WebSocketFrameSink (serve)
 ```
 
 ---
 
 ## Sequence Diagrams
 
-### User Action Flow
+### A route, refused or served
 
 ```
-User          View          Service          Repository        API
- │              │               │                │               │
- │──tap()──────▶│               │                │               │
- │              │──action()────▶│                │               │
- │              │               │──fetch()──────▶│               │
- │              │               │                │──request()───▶│
- │              │               │                │               │
- │              │               │                │◀──response────│
- │              │               │◀──model────────│               │
- │              │               │                │               │
- │              │               │──notify()─────▶│ (if changed)  │
- │◀───UI update─│               │                │               │
- │              │               │                │               │
-```
-
-### State Change Notification
-
-```
-Repository      Service         @Observable      View
-  │                 │               │               │
-  │──model─────────▶│               │               │
-  │                 │──update()────▶│               │
-  │                 │               │               │
-  │                 │               │ (state changed)
-  │                 │               │──invalidate()─▶│
-  │                 │               │               │
-  │                 │               │               │──redraw
-  │                 │               │               │
+Browser        Server router          Devices            Device / role
+  │ GET /devices/U/orientation        │                    │
+  │──────────────▶│ trust + grant     │                    │
+  │               │ checks            │                    │
+  │               │── role(.orientation, of: U) ──────────▶│
+  │               │                   │  unknown → 404     │
+  │               │                   │  unable  → 422     │
+  │               │                   │  not ready → 409   │
+  │               │◀────────────── the role ───────────────│
+  │◀── 200 JSON ──│ (a /simulators/U/… request also gets Deprecation: true)
 ```
 
 ---
@@ -202,27 +112,18 @@ Repository      Service         @Observable      View
 | Simulator        | Hands out the roles     | —                | litPanelInput() | Displays, Hinge   |
 ```
 
-### Extended Table (for complex features)
-
-```
-| Component        | Layer          | Protocol           | Creates/Modifies    | Test File                      |
-|------------------|----------------|--------------------|---------------------|--------------------------------|
-| APIOrderRepo     | Infrastructure | OrderRepository    | Creates             | APIOrderRepositoryTests.swift  |
-| OrderMapper      | Infrastructure | -                  | Creates             | OrderMapperTests.swift         |
-| OrderManager     | Domain         | -                  | Manages             | OrderManagerTests.swift        |
-| OrderListView    | App            | -                  | Displays            | -                              |
-```
-
 ### Files to Create/Modify Table
 
 ```
-| File Path                                       | Action   | Description                          |
-|-------------------------------------------------|----------|--------------------------------------|
-| Sources/Infrastructure/API/OrderRepository.swift | Create   | Implements OrderRepository protocol  |
-| Sources/Domain/Services/OrderManager.swift       | Create   | Actor managing order state           |
-| Tests/InfrastructureTests/OrderRepositoryTests.swift | Create | Repository behavior tests       |
-| Sources/App/Views/OrderListView.swift            | Create   | SwiftUI view for orders              |
-| Sources/App/App.swift                            | Modify   | Register dependencies                |
+| File Path                                                     | Action | Description                                  |
+|---------------------------------------------------------------|--------|----------------------------------------------|
+| Sources/Device/Abilities/<x>/<Value>.swift                    | Create | the value and its rich methods               |
+| Sources/Device/Abilities/<x>/<Role>.swift                     | Create | @Mockable role + `Ability<Role>` key         |
+| Sources/Devices/Simulator/Internal/<x>/<Adapter>.swift        | Create | what the simulator decides                   |
+| Sources/Devices/Simulator/Internal/System/<Concrete>.swift    | Create | the private call, ≤100 lines                 |
+| Sources/Devices/Simulator/SimulatorDevice.swift               | Modify | register `.x`                                |
+| Sources/Commands/<Verb>Command.swift · Server/Server<X>Routes | Create | the ways in                                  |
+| Tests/BaguetteTests/<same paths>Tests.swift                   | Create | one suite per source, same folder            |
 ```
 
 ---

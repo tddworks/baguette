@@ -18,43 +18,43 @@ Every `@Mockable protocol` is named for its domain role (`Touch`, `Screen`,
 **Aggregate CRUD is the one carve-out**: the plural collection noun
 (`Simulators`, `Chromes`), never the suffix `XxxRepository`.
 
-## 1. The aggregate hands out roles
+## 1. A device hands out the abilities it has
 
-`Simulator` is the aggregate root: a `@Mockable protocol` whose requirements
-are the device's facts (`udid`, `state`, `deviceTypeName`), its commands
-(`boot`, `shutdown`), and **factories for its roles** (`input()`, `hinge()`,
-`displays()`, `accessibility()`, `defaults()`, …). The one adapter,
-`CoreSimulator`, builds the Infrastructure behind each role.
+`Devices` is the one list of every device of every family; a `Device` is
+identity + kind + state + its `Abilities`. A family registers an ability
+**only where it can perform it** — a role a device can't play is absent,
+never a `false`. Callers ask for the role by its `Ability` key and get it,
+or a refusal naming what's missing:
 
 ```swift
-// ✅ The caller asks the aggregate for the role it needs.
-let pose = try sim.hinge().fold(to: 130, over: 0.8)
-let input = sim.litPanelInput()
+// ✅ The way in asks for the role it needs.
+let hinge = try devices.require(.hinge, of: id)        // unknown / unable / not ready → refused
+try hinge.fold(to: 130, over: 0.8)
+let input = try device.input()                         // Touch & Press & Key & Scroll it has
 
-// ❌ The caller builds an adapter, or composes domain objects itself.
-let surface = SimctlInputSurface()                    // App reaching into Infrastructure
-let input = LitPanelInput(cover: …, unfolded: …, …)   // Server deciding the domain
+// ❌ The caller builds an adapter, or composes the device itself.
+let surface = SimctlInputSurface()                     // Commands reaching into a family's Internal/
+let input = LitPanelInput(displays: …, hinge: …)       // Server deciding what the device is
 ```
 
-Rules that need several roles live as **extension methods on the protocol**,
-so they're tested against `MockSimulator` with no device:
+Rules that need several of a device's roles live as **extension methods on
+`Device`**, tested against `routeDevices(…)` / mocks with no device:
 
 ```swift
-extension Simulator {
-    var canAcceptInput: Bool { state == .booted }
-
+public extension Device {
     func litPanel(in chromes: any Chromes) -> IntegratedPanel {
-        guard chromes.panels(forDeviceName: deviceTypeName).contains(.secondary) else {
-            return .primary       // one panel: never ask the hinge (a guest round trip)
+        guard chromes.panels(forDeviceName: kind.model).contains(.secondary) else {
+            return .primary                    // one panel: never ask the hinge
         }
-        return hinge().litPanel
+        return (try? abilities.require(.hinge))?.litPanel ?? .primary
     }
 }
 ```
 
-A new role is a new factory on `Simulator` and a new `@Mockable` protocol in
-its context. The App layer parses and calls; `Server` transports. Neither
-builds adapters or decides which composition of roles a use needs.
+A new role is a new `@Mockable` protocol and `Ability` key in
+`Device/Abilities/<ability>/`, registered by each family that can play it.
+`Commands` parse and call; `Server` transports. Neither builds adapters or
+decides which composition of roles a use needs.
 
 ## 2. A law lives on the node that holds its data
 
@@ -68,7 +68,7 @@ extension Hinge {
 }
 
 // ❌ the same rule at a call site is a second owner, and they drift
-let lit = sim.hinge().angle()?.litPanel ?? .primary
+let lit = try device.require(.hinge).angle()?.litPanel ?? .primary
 ```
 
 The smell is a `?? default`, an `if x.count > …`, or a `switch` over another
@@ -235,11 +235,13 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
 
 - **A rule at the call site**: `?? .primary`, a count check, a `switch` on
   another type's state. Move it to the node that holds the data.
-- **The App or `Server` building adapters or composing roles**: ask the
-  `Simulator` for a role; add a factory if there isn't one.
-- **Domain reaching outward**: a Domain type importing an Infrastructure
-  type (`MJPEGStream`, `FrameSink`) or calling the App's `log(…)`. Domain
-  depends only on Foundation and IOSurface; a failure is its return value.
+- **`Commands` or `Server` building adapters or composing roles**: ask the
+  device for the ability (`devices.require(.x, of: id)`); register it in
+  the family if it isn't there.
+- **A value reaching outward**: a value in `Device/Abilities/` naming a
+  family's type (`SimDevice`, `CoreSimulators`) or a way in's. `BaguetteDevice`
+  imports nothing of ours — the compiler holds that; a failure is its
+  return value.
 - **A `Bool` flag the caller decides, or an optional meaning two things**:
   name the cases.
 - **Service objects with no state**: `OrderService.cancel(order)` belongs
