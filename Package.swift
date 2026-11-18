@@ -25,6 +25,13 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0"),
     ],
     targets: [
+        // CoreDevice (Xcode's private device stack) ships no Swift module:
+        // this target is the only code speaking its Swift ABI. Resolved with
+        // dlopen at runtime, never linked — same reason as SimulatorKit above.
+        .target(
+            name: "CoreDeviceABI",
+            path: "Sources/CoreDeviceABI"
+        ),
         .executableTarget(
             name: "Baguette",
             dependencies: [
@@ -32,6 +39,7 @@ let package = Package(
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+                "CoreDeviceABI",
             ],
             path: "Sources/Baguette",
             resources: [

@@ -10,7 +10,8 @@ struct PhysicalPhoneTests {
         #expect(phones == [PhysicalPhone(
             udid: "00008160-001239C43AA0000A", name: "han's iPhone",
             productType: "iPhone19,7", marketingName: "iPhone 18 Pro Max",
-            platform: .iOS, state: .ready)])
+            platform: .iOS, state: .ready,
+            coreDeviceIdentifier: UUID(uuidString: "30546CC9-90DC-5F06-87D3-42D2C2E913D1"))])
     }
 
     @Test func `should leave simulators out of the physical phones`() throws {

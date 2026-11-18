@@ -12,7 +12,9 @@ enum DeviceError: Error, Equatable {
     case notReady(device: String, state: DeviceState)
 }
 
-extension DeviceError: CustomStringConvertible {
+extension DeviceError: CustomStringConvertible, LocalizedError {
+    var errorDescription: String? { description }
+
     var description: String {
         switch self {
         case let .unable(ability, device): return "\(device) can't do \(ability)"

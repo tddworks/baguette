@@ -31,9 +31,9 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
 }
 
 /// A real phone as a `Device`. The one place deciding what the CoreDevice
-/// family can do: only roles devicectl performs in full. Input waits on
-/// CoreDevice's HID (the real-devices spike); apps and location wait on
-/// verbs devicectl lacks (a push, a route).
+/// family can do: its screen, orientation and pasteboard through devicectl,
+/// and touches through CoreDevice's Universal HID service. Apps and
+/// location wait on verbs devicectl lacks (a push, a route).
 struct CoreDevicePhone: Device {
     private let phone: PhysicalPhone
     private let devicectl: Devicectl
@@ -52,6 +52,9 @@ struct CoreDevicePhone: Device {
         let (udid, devicectl) = (phone.udid, devicectl)
         var table = AbilityTable(device: phone.name)
         table.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }
+        if let identifier = phone.coreDeviceIdentifier {
+            table.register(.input) { DigitizerInput(digitizer: CoreDeviceDigitizer(identifier: identifier)) }
+        }
         table.register(.orientation) { DevicectlOrientation(udid: udid, devicectl: devicectl) }
         table.register(.pasteboard) { DevicectlPasteboard(udid: udid, devicectl: devicectl) }
         return table

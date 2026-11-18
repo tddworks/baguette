@@ -243,13 +243,24 @@ struct CoreDevicePhonesTests {
     @Test func `should register what a physical phone can do, and nothing it can't`() {
         let phone = CoreDevicePhone(
             PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
-                          marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready),
+                          marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
+                          coreDeviceIdentifier: UUID()),
             devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
 
-        #expect(phone.abilities.names == ["screen", "orientation", "pasteboard"])
+        #expect(phone.abilities.names == ["screen", "input", "orientation", "pasteboard"])
         #expect(throws: DeviceError.unable(ability: "lifecycle", device: "han's iPhone")) {
             try phone.require(.lifecycle)
         }
+    }
+
+    @Test func `should take no input on a phone CoreDevice gave no identifier`() {
+        let phone = CoreDevicePhone(
+            PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
+                          marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
+                          coreDeviceIdentifier: nil),
+            devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
+
+        #expect(phone.abilities.names == ["screen", "orientation", "pasteboard"])
     }
 }
 

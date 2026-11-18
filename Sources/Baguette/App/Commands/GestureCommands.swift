@@ -1,14 +1,28 @@
 import ArgumentParser
 import Foundation
 
-/// Resolve the simulator a gesture goes to, or exit(1) saying why: unknown,
-/// or a device that can't take input.
-private func resolve(udid: String, deviceSet: String?) -> Simulator {
+/// The device a gesture goes to, from every family — or exit(1) saying no
+/// source knows it.
+private func resolve(udid: String, deviceSet: String?) -> any Device {
     var options = DeviceOption()
     options.udid = udid
     options.deviceSet = deviceSet
-    guard let simulator = try? options.simulator(for: .input) else { Foundation.exit(1) }
-    return simulator
+    guard let device = try? options.device() else { Foundation.exit(1) }
+    return device
+}
+
+private extension Device {
+    /// Its gestures, or exit(1) saying it can't take them (or isn't ready).
+    func input() -> any Input { requireOrExit(.input) }
+    /// What is on its screen, for `--label` and `--then-describe-ui`.
+    func accessibility() -> any Accessibility { requireOrExit(.accessibility) }
+
+    private func requireOrExit<Role>(_ ability: Ability<Role>) -> Role {
+        do { return try require(ability) } catch {
+            log("\(error)")
+            Foundation.exit(1)
+        }
+    }
 }
 
 private func runOrExit(_ ok: Bool, action: String) {

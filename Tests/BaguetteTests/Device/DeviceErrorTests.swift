@@ -8,6 +8,11 @@ struct DeviceErrorTests {
             == "iPhone 18 Pro Max can't do lifecycle")
     }
 
+    @Test func `should read in its own words wherever an error is shown as text`() {
+        #expect(DeviceError.unable(ability: "accessibility", device: "han's iPhone").localizedDescription
+            == "han's iPhone can't do accessibility")
+    }
+
     @Test func `should name the id no source knows`() {
         #expect("\(DeviceError.unknown(id: "NOPE"))" == "Device NOPE not found")
     }

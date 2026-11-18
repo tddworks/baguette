@@ -7,7 +7,8 @@ import IOSurface
 /// Shared by the `baguette screenshot` CLI and the
 /// `GET /simulators/:udid/screenshot.jpg` HTTP route. A timeout
 /// guards against an idle / wedged simulator that never fires its frame
-/// callback.
+/// callback. It is 5 s, not 2: a physical phone's screen is a devicectl
+/// screenshot, whose first frame honestly takes one to three seconds.
 enum ScreenSnapshot {
 
     struct Frame: Sendable {
@@ -31,7 +32,7 @@ enum ScreenSnapshot {
         screen: any Screen,
         quality: Double = 0.85,
         scale: Int = 1,
-        timeout: TimeInterval = 2.0,
+        timeout: TimeInterval = 5.0,
         size: CaptureSize = .native,
         fit: CaptureFit = .contain,
         background: String = "transparent",
@@ -49,7 +50,7 @@ enum ScreenSnapshot {
         screen: any Screen,
         quality: Double = 0.85,
         scale: Int = 1,
-        timeout: TimeInterval = 2.0,
+        timeout: TimeInterval = 5.0,
         size: CaptureSize = .native,
         fit: CaptureFit = .contain,
         background: String = "transparent",

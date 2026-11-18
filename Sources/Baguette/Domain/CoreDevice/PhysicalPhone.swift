@@ -13,6 +13,9 @@ struct PhysicalPhone: Equatable, Sendable {
     let marketingName: String
     let platform: DeviceKind.Platform
     let state: DeviceState
+    /// CoreDevice's own identifier for the phone (`30546CC9-…`), which its
+    /// framework API takes where devicectl takes the UDID.
+    let coreDeviceIdentifier: UUID?
 }
 
 extension PhysicalPhone {
@@ -34,7 +37,8 @@ extension PhysicalPhone {
                 : hardware.platform == "tvOS" ? .tvOS
                 : hardware.platform == "xrOS" || hardware.platform == "visionOS" ? .visionOS
                 : .iOS,
-            state: Self.state(of: entry))
+            state: Self.state(of: entry),
+            coreDeviceIdentifier: entry.identifier.flatMap(UUID.init(uuidString:)))
     }
 
     /// Ready means CoreDevice can reach it now: paired, Developer Mode on,
@@ -76,6 +80,7 @@ private struct Listing: Decodable {
             let marketingName: String?
             let platform: String?
         }
+        let identifier: String?
         let connectionProperties: Connection
         let deviceProperties: Properties
         let hardwareProperties: Hardware
