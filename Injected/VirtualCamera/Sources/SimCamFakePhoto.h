@@ -12,6 +12,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithCGImage:(CGImageRef)cgImage;
 
+/// `exifOrientation` is the EXIF / CGImagePropertyOrientation (1...8) to
+/// report in `metadata` and write into the JPEG from `fileDataRepresentation`.
+/// The pixels in `cgImage` are expected to already be in "sensor" layout for
+/// that orientation, as on a real device (see `simcam_capturePhoto`).
+- (instancetype)initWithCGImage:(CGImageRef)cgImage exifOrientation:(int)exifOrientation;
+
 @end
 
 NS_ASSUME_NONNULL_END
