@@ -2,13 +2,16 @@ import CoreMedia
 import CoreVideo
 import Foundation
 import IOSurface
-import VideoToolbox
 
-/// Real-time H.264 encoder backed by `VTCompressionSession`. Submission is
-/// fire-and-forget — the caller hands a surface in, the encoder hands an
-/// `Encoded` chunk back via the output handler when VT is ready, on VT's
-/// own queue. Steady output cadence even when individual frames take
-/// 5 ms (P) or 50 ms (IDR) — the caller never blocks on encoder slowness.
+/// Real-time H.264 encoder. Submission is fire-and-forget — the caller
+/// hands a frame in, the encoder hands an `Encoded` chunk back when the
+/// compression session is ready, on the session's own queue. Steady output
+/// cadence even when individual frames take 5 ms (P) or 50 ms (IDR) — the
+/// caller never blocks on encoder slowness.
+///
+/// It decides; the `CompressionSession` only compresses: when a session
+/// opens (the first frame, a new size), which tuning it must accept, which
+/// frames are keyframes, and which of the session's answers become a frame.
 public final class H264Encoder: @unchecked Sendable {
     public struct Encoded: Sendable {
         /// avcC parameter-set blob — emitted exactly once on the first IDR.
@@ -29,10 +32,11 @@ public final class H264Encoder: @unchecked Sendable {
 
     private let lock = NSLock()
     /// Set by the owner after init when the callback needs to capture
-    /// `self`. Calls fire on VT's internal queue.
+    /// `self`. Calls fire on the session's queue.
     public var onEncoded: (@Sendable (Encoded) -> Void)?
 
-    private var session: VTCompressionSession?
+    private let session: any CompressionSession
+    private var open = false
     private var width: Int32 = 0
     private var height: Int32 = 0
     private var fps: Int32
@@ -41,31 +45,35 @@ public final class H264Encoder: @unchecked Sendable {
     private var referenceChain = H264ReferenceChain()
     private var timeline = H264Timeline()
 
-    public init(
+    public convenience init(
         fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency,
         onEncoded: (@Sendable (Encoded) -> Void)? = nil
+    ) {
+        self.init(fps: fps, bitrate: bitrate, tuning: tuning, session: VideoToolboxSession(), onEncoded: onEncoded)
+    }
+
+    init(
+        fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency,
+        session: any CompressionSession, onEncoded: (@Sendable (Encoded) -> Void)? = nil
     ) {
         self.fps = Int32(fps)
         self.bitrate = bitrate
         self.tuning = tuning
+        self.session = session
         self.onEncoded = onEncoded
     }
 
     deinit {
-        if let session {
-            VTCompressionSessionInvalidate(session)
-        }
+        if open { session.close() }
     }
 
     public func setBitrate(_ bps: Int) throws {
-        guard bps > 0 else { throw EncodingFailure(operation: "set bitrate", status: kVTParameterErr) }
+        guard bps > 0 else { throw EncodingFailure(operation: "set bitrate", status: Self.parameterError) }
         lock.lock()
         defer { lock.unlock() }
-        if let session {
-            let status = VTSessionSetProperty(
-                session, key: kVTCompressionPropertyKey_AverageBitRate,
-                value: NSNumber(value: bps))
-            guard status == noErr else { throw EncodingFailure(operation: "set bitrate", status: status) }
+        if open {
+            let status = session.set(.averageBitRate(bps))
+            guard status == 0 else { throw EncodingFailure(operation: "set bitrate", status: status) }
         }
         bitrate = bps
     }
@@ -73,41 +81,35 @@ public final class H264Encoder: @unchecked Sendable {
     /// Retune the live session without resetting its reference chain or timeline.
     public func setFrameRate(_ value: Int) throws {
         guard let rate = Int32(exactly: value), rate > 0 else {
-            throw EncodingFailure(operation: "set frame rate", status: kVTParameterErr)
+            throw EncodingFailure(operation: "set frame rate", status: Self.parameterError)
         }
-        if let session {
-            for (key, value) in [
-                (kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: rate)),
-                (
-                    kVTCompressionPropertyKey_MaxKeyFrameInterval,
-                    NSNumber(value: tuning.maxKeyFrameInterval(fps: Int(rate)))
-                ),
-            ] {
-                let status = VTSessionSetProperty(session, key: key, value: value)
-                guard status == noErr else { throw EncodingFailure(operation: "set \(key)", status: status) }
+        if open {
+            for property in tuning.frameRateProperties(fps: rate) {
+                let status = session.set(property)
+                guard status == 0 else { throw EncodingFailure(operation: "set \(property)", status: status) }
             }
         }
         fps = rate
     }
 
-    /// Submit a surface for encoding. Wraps the IOSurface zero-copy into
-    /// a CVPixelBuffer; for the downscaled path use the `CVPixelBuffer`
-    /// overload directly.
+    /// Submit a surface for encoding, wrapped zero-copy into a pixel buffer;
+    /// for the downscaled path use the `CVPixelBuffer` overload directly.
     public func encode(_ surface: IOSurface, forceKeyframe: Bool = false) {
-        guard let pixelBuffer = wrap(surface) else { return }
+        guard let pixelBuffer = PixelBuffer.wrapping(surface) else { return }
         encode(pixelBuffer, forceKeyframe: forceKeyframe)
     }
 
-    /// Submit a CVPixelBuffer for encoding. Used by the scaled path so the
-    /// caller can hand in a smaller buffer directly. Returns immediately;
-    /// output fires on VT's queue.
+    /// Submit a pixel buffer for encoding. Returns immediately; output
+    /// fires on the session's queue. Tuning is best-effort: a property the
+    /// session refuses is skipped, since nobody waits on this frame.
     public func encode(_ pixelBuffer: CVPixelBuffer, forceKeyframe: Bool = false) {
         encode(pixelBuffer, forceKeyframe: forceKeyframe, strict: false) { [weak self] result in
             if case .success(let encoded?) = result { self?.onEncoded?(encoded) }
         }
     }
 
-    /// The completion belongs to this exact submission, including failures.
+    /// The completion belongs to this exact submission, including failures;
+    /// a session that refuses any of its tuning fails it.
     public func encode(
         _ pixelBuffer: CVPixelBuffer, forceKeyframe: Bool = false,
         completion: @escaping @Sendable (Result<Encoded?, any Error>) -> Void
@@ -117,8 +119,8 @@ public final class H264Encoder: @unchecked Sendable {
 
     public func stop() {
         lock.withLock { referenceChain.reset() }
-        if let session { VTCompressionSessionInvalidate(session) }
-        session = nil
+        if open { session.close() }
+        open = false
     }
 
     private func encode(
@@ -127,228 +129,78 @@ public final class H264Encoder: @unchecked Sendable {
     ) {
         let w = Int32(CVPixelBufferGetWidth(pixelBuffer))
         let h = Int32(CVPixelBufferGetHeight(pixelBuffer))
-        if session == nil || w != width || h != height {
+        if !open || w != width || h != height {
             width = w
             height = h
-            do { try rebuildSession(strict: strict) } catch {
+            do { try reopen(strict: strict) } catch {
                 completion(.failure(error))
                 return
             }
         }
-        guard let session else {
-            completion(.failure(EncodingFailure(operation: "create session", status: -1)))
-            return
-        }
 
         let (generation, needsKeyframe) = lock.withLock { (referenceChain.generation, referenceChain.needsKeyframe) }
-        let frameProps: NSDictionary? =
-            (forceKeyframe || needsKeyframe)
-            ? [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue!] as NSDictionary
-            : nil
-
-        let pts = timeline.next(fps: fps)
-
-        let status = VTCompressionSessionEncodeFrame(
-            session,
-            imageBuffer: pixelBuffer,
-            presentationTimeStamp: pts,
-            duration: .invalid,
-            frameProperties: frameProps,
-            infoFlagsOut: nil
-        ) { [weak self] status, flags, sampleBuffer in
+        let status = session.submit(
+            pixelBuffer, at: timeline.next(fps: fps), keyframe: forceKeyframe || needsKeyframe
+        ) { [weak self] result in
             guard let self else { return }
-            completion(output(generation: generation, status: status, flags: flags, sampleBuffer: sampleBuffer))
+            completion(output(generation: generation, result: result))
         }
-        if status != noErr { completion(.failure(EncodingFailure(operation: "submit frame", status: status))) }
+        if status != 0 { completion(.failure(EncodingFailure(operation: "submit frame", status: status))) }
     }
 
-    public func output(
-        generation: Int, status: OSStatus, flags: VTEncodeInfoFlags, sampleBuffer: CMSampleBuffer?
-    ) -> Result<Encoded?, any Error> {
+    /// What one of the session's answers becomes: nothing for a stale
+    /// session, a dropped frame or a frame its reference chain can't take
+    /// yet; a failure for an encoder error; otherwise the frame, with the
+    /// avcC record when it starts a chain.
+    func output(generation: Int, result: CompressionResult) -> Result<Encoded?, any Error> {
         lock.withLock {
             guard generation == referenceChain.generation else { return .success(nil) }
-            guard status == noErr else {
-                return .failure(EncodingFailure(operation: "encode frame output", status: status))
+            guard result.status == 0 else {
+                return .failure(EncodingFailure(operation: "encode frame output", status: result.status))
             }
-            // Real-time VT sessions may complete a submission without emitting a frame.
-            guard !flags.contains(.frameDropped), let sampleBuffer else { return .success(nil) }
-            guard let encoded = extract(from: sampleBuffer) else {
-                return .failure(EncodingFailure(operation: "read encoded frame", status: -1))
+            guard !result.dropped, let frame = result.frame else { return .success(nil) }
+            var description: Data?
+            if frame.keyframe, referenceChain.needsKeyframe, let sps = frame.sps, let pps = frame.pps {
+                description = AVCDecoderConfigurationRecord.bytes(sps: sps, pps: pps)
             }
             guard
                 referenceChain.accepts(
-                    generation: generation, keyframe: encoded.kind == .keyframe,
-                    hasDescription: encoded.description != nil
-                )
+                    generation: generation, keyframe: frame.keyframe, hasDescription: description != nil)
             else { return .success(nil) }
-            return .success(encoded)
+            return .success(Encoded(description: description, kind: frame.keyframe ? .keyframe : .delta, avcc: frame.avcc))
         }
     }
 
-    // MARK: - private
-
-    private func wrap(_ surface: IOSurface) -> CVPixelBuffer? {
-        var pb: Unmanaged<CVPixelBuffer>?
-        let status = CVPixelBufferCreateWithIOSurface(
-            kCFAllocatorDefault, surface,
-            [kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA] as CFDictionary,
-            &pb
-        )
-        return status == kCVReturnSuccess ? pb?.takeRetainedValue() : nil
-    }
-
-    private func rebuildSession(strict: Bool) throws {
+    private func reopen(strict: Bool) throws {
         lock.withLock { referenceChain.reset() }
-        if let session {
-            VTCompressionSessionInvalidate(session)
-            self.session = nil
-        }
+        if open { session.close() }
+        open = false
 
-        // Low-latency rate control is a create-time spec, not a settable
-        // property; everything else below is a post-create property.
-        let encoderSpec: CFDictionary? =
-            tuning.lowLatencyRateControl
-            ? [kVTVideoEncoderSpecification_EnableLowLatencyRateControl: kCFBooleanTrue!] as CFDictionary
-            : nil
-
-        var sess: VTCompressionSession?
-        let status = VTCompressionSessionCreate(
-            allocator: kCFAllocatorDefault,
-            width: width, height: height,
-            codecType: kCMVideoCodecType_H264,
-            encoderSpecification: encoderSpec,
-            imageBufferAttributes: nil,
-            compressedDataAllocator: kCFAllocatorDefault,
-            outputCallback: nil,
-            refcon: nil,
-            compressionSessionOut: &sess
-        )
-        guard status == noErr, let sess else { throw EncodingFailure(operation: "create session", status: status) }
-
-        // Values from `H264Tuning` (unit-tested); mapping to VT keys is the
-        // irreducible call. Per-submit completion callers require every
-        // requested property; legacy callers retain best-effort tuning.
-        var props: [(CFString, Any)] = [
-            (kVTCompressionPropertyKey_RealTime, (tuning.realTime ? kCFBooleanTrue : kCFBooleanFalse)!),
-            (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel),
-            (
-                kVTCompressionPropertyKey_AllowFrameReordering,
-                (tuning.allowFrameReordering ? kCFBooleanTrue : kCFBooleanFalse)!
-            ),
-            (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: bitrate)),
-            (kVTCompressionPropertyKey_ExpectedFrameRate, NSNumber(value: fps)),
-            (
-                kVTCompressionPropertyKey_MaxKeyFrameInterval,
-                NSNumber(value: tuning.maxKeyFrameInterval(fps: Int(fps)))
-            ),
-        ]
-        if let maxDelay = tuning.maxFrameDelayCount {
-            props.append((kVTCompressionPropertyKey_MaxFrameDelayCount, NSNumber(value: maxDelay)))
-        }
-        do {
-            for (key, value) in props {
-                let status = VTSessionSetProperty(sess, key: key, value: value as CFTypeRef)
-                if strict, status != noErr { throw EncodingFailure(operation: "set \(key)", status: status) }
+        // Low-latency rate control is chosen when the session opens; the
+        // rest of the tuning is set on it afterwards.
+        let status = session.open(width: width, height: height, lowLatencyRateControl: tuning.lowLatencyRateControl)
+        guard status == 0 else { throw EncodingFailure(operation: "create session", status: status) }
+        for property in tuning.properties(bitrate: bitrate, fps: fps) {
+            let status = session.set(property)
+            if strict, status != 0 {
+                session.close()
+                throw EncodingFailure(operation: "set \(property)", status: status)
             }
-            let status = VTCompressionSessionPrepareToEncodeFrames(sess)
-            if strict, status != noErr { throw EncodingFailure(operation: "prepare session", status: status) }
-        } catch {
-            VTCompressionSessionInvalidate(sess)
-            throw error
         }
-
-        session = sess
+        let prepared = session.prepare()
+        if strict, prepared != 0 {
+            session.close()
+            throw EncodingFailure(operation: "prepare session", status: prepared)
+        }
+        open = true
     }
+
+    /// VideoToolbox's `kVTParameterErr`.
+    private static let parameterError: Int32 = -12902
 
     private struct EncodingFailure: Error, CustomStringConvertible {
         let operation: String
-        let status: OSStatus
+        let status: Int32
         var description: String { "H.264 \(operation) failed (\(status))" }
-    }
-
-    private func extract(from sample: CMSampleBuffer) -> Encoded? {
-        let isKeyframe = !cmSampleNotSync(sample)
-        guard let dataBuf = CMSampleBufferGetDataBuffer(sample) else { return nil }
-
-        var totalLength = 0
-        var dataPointer: UnsafeMutablePointer<Int8>?
-        guard
-            CMBlockBufferGetDataPointer(
-                dataBuf, atOffset: 0, lengthAtOffsetOut: nil,
-                totalLengthOut: &totalLength, dataPointerOut: &dataPointer
-            ) == noErr, let dataPointer
-        else {
-            return nil
-        }
-        let avcc = Data(bytes: dataPointer, count: totalLength)
-
-        var description: Data?
-        if isKeyframe, referenceChain.needsKeyframe,
-            let format = CMSampleBufferGetFormatDescription(sample)
-        {
-            description = avcCBlob(from: format)
-        }
-
-        return Encoded(
-            description: description,
-            kind: isKeyframe ? .keyframe : .delta,
-            avcc: avcc
-        )
-    }
-
-    private func cmSampleNotSync(_ sample: CMSampleBuffer) -> Bool {
-        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false),
-            CFArrayGetCount(attachments) > 0,
-            let dict = CFArrayGetValueAtIndex(attachments, 0)
-        else { return false }
-        let cfDict = unsafeBitCast(dict, to: CFDictionary.self)
-        return CFDictionaryContainsKey(cfDict, Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque())
-    }
-
-    /// avcC parameter-set blob (ISO/IEC 14496-15 §5.2.4.1).
-    private func avcCBlob(from format: CMFormatDescription) -> Data? {
-        var spsCount = 0
-        var spsPtr: UnsafePointer<UInt8>?
-        var spsSize = 0
-        var nalSize: Int32 = 0
-        guard
-            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
-                format, parameterSetIndex: 0,
-                parameterSetPointerOut: &spsPtr,
-                parameterSetSizeOut: &spsSize,
-                parameterSetCountOut: &spsCount,
-                nalUnitHeaderLengthOut: &nalSize
-            ) == noErr, let spsPtr
-        else { return nil }
-
-        var ppsPtr: UnsafePointer<UInt8>?
-        var ppsSize = 0
-        guard
-            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
-                format, parameterSetIndex: 1,
-                parameterSetPointerOut: &ppsPtr,
-                parameterSetSizeOut: &ppsSize,
-                parameterSetCountOut: nil,
-                nalUnitHeaderLengthOut: nil
-            ) == noErr, let ppsPtr
-        else { return nil }
-
-        let sps = UnsafeBufferPointer(start: spsPtr, count: spsSize)
-        let pps = UnsafeBufferPointer(start: ppsPtr, count: ppsSize)
-        var blob = Data()
-        blob.append(0x01)
-        blob.append(sps[1])
-        blob.append(sps[2])
-        blob.append(sps[3])
-        blob.append(0xFF)
-        blob.append(0xE1)
-        blob.append(UInt8((spsSize >> 8) & 0xFF))
-        blob.append(UInt8(spsSize & 0xFF))
-        blob.append(contentsOf: sps)
-        blob.append(0x01)
-        blob.append(UInt8((ppsSize >> 8) & 0xFF))
-        blob.append(UInt8(ppsSize & 0xFF))
-        blob.append(contentsOf: pps)
-        return blob
     }
 }

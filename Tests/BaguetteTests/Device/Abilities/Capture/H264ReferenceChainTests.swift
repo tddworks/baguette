@@ -8,15 +8,14 @@ import VideoToolbox
 struct H264ReferenceChainTests {
     @Test func `should produce no frame for a normal encoder drop but surface a real encoder error until stopped`() throws {
         let encoder = H264Encoder(fps: 20)
-        for flags in [VTEncodeInfoFlags.frameDropped, []] {
-            #expect(try encoder.output(generation: 0, status: noErr, flags: flags, sampleBuffer: nil).get() == nil)
+        for dropped in [true, false] {
+            let result = CompressionResult(status: 0, dropped: dropped, frame: nil)
+            #expect(try encoder.output(generation: 0, result: result).get() == nil)
         }
-        #expect(throws: (any Error).self) {
-            try encoder.output(generation: 0, status: kVTInvalidSessionErr, flags: [], sampleBuffer: nil).get()
-        }
+        let failed = CompressionResult(status: kVTInvalidSessionErr, dropped: false, frame: nil)
+        #expect(throws: (any Error).self) { try encoder.output(generation: 0, result: failed).get() }
         encoder.stop()
-        #expect(
-            try encoder.output(generation: 0, status: kVTInvalidSessionErr, flags: [], sampleBuffer: nil).get() == nil)
+        #expect(try encoder.output(generation: 0, result: failed).get() == nil)
     }
 
     @Test func `should ignore an old session's frames and wait for a keyframe with its own description when the session is replaced`() {

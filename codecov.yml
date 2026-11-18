@@ -28,7 +28,6 @@ ignore:
   # Still to split: each mixes decisions with its system call. Split one,
   # move its call into `System/`, delete its line.
   - "Sources/Device/Abilities/Capture/Internal/AVCCStream.swift"
-  - "Sources/Device/Abilities/Capture/Internal/H264Encoder.swift"
   - "Sources/Device/Abilities/Capture/Internal/MJPEGStream.swift"
   - "Sources/Device/Abilities/Capture/Internal/VTH264Decoder.swift"
   - "Sources/Device/Abilities/Capture/Internal/VTStreamDecoder.swift"

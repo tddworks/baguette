@@ -58,3 +58,35 @@ public struct H264Tuning: Equatable, Sendable {
         self.keyFrameIntervalSeconds = keyFrameIntervalSeconds
     }
 }
+
+/// One setting an H.264 compression session is given — VideoToolbox's
+/// `kVTCompressionPropertyKey_*`, as a value the tuning can be tested by.
+public enum CompressionProperty: Equatable, Sendable {
+    case realTime(Bool)
+    /// High profile, the level chosen by the encoder.
+    case highProfileAutoLevel
+    case allowFrameReordering(Bool)
+    case averageBitRate(Int)
+    case expectedFrameRate(Int32)
+    case maxKeyFrameInterval(Int)
+    case maxFrameDelayCount(Int)
+}
+
+public extension H264Tuning {
+    /// Everything a new session is given, in the order it is given.
+    func properties(bitrate: Int, fps: Int32) -> [CompressionProperty] {
+        var all: [CompressionProperty] = [
+            .realTime(realTime), .highProfileAutoLevel, .allowFrameReordering(allowFrameReordering),
+            .averageBitRate(bitrate),
+        ] + frameRateProperties(fps: fps)
+        if let maxFrameDelayCount { all.append(.maxFrameDelayCount(maxFrameDelayCount)) }
+        return all
+    }
+
+    /// What changes on a live session when its frame rate does: the
+    /// expected rate, and the keyframe spacing that is counted in frames.
+    func frameRateProperties(fps: Int32) -> [CompressionProperty] {
+        [.expectedFrameRate(fps), .maxKeyFrameInterval(maxKeyFrameInterval(fps: Int(fps)))]
+    }
+}
+

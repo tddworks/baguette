@@ -76,6 +76,8 @@ let package = Package(
             // (Devices) and the plugins, around the one `@main` in
             // Sources/Baguette, which also keeps the resources.
             path: "Sources",
+            // Their own targets; listed so this one doesn't warn about them.
+            exclude: ["Device", "CoreDeviceABI"],
             sources: ["Baguette/RootCommand.swift", "Commands", "Server", "Devices", "Plugins"],
             resources: [
                 // Static HTML/CSS/JS for `baguette serve`. Each file is
