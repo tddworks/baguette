@@ -73,7 +73,7 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
             return nil
         }
         return AXNode.walk(from: element, transform: AXFrameTransform(pointSize: .zero, orientation: .portrait),
-                           deadline: deadline)
+                           deadline: deadline).onItsAppsScreen
     }
 
     /// The translator's request, answered from the phone's pushed tree.

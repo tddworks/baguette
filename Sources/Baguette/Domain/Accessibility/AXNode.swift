@@ -219,3 +219,15 @@ struct AXNode: Equatable, Sendable {
         return result
     }
 }
+
+extension AXNode {
+    /// The tree with its screen taken from the app at its root, which fills
+    /// the screen — for a device that reports no screen of its own (a
+    /// physical phone). Portrait: its frames are in the app's own points.
+    var onItsAppsScreen: AXNode {
+        guard screen == nil else { return self }
+        var tree = self
+        tree.screen = AXScreen(width: frame.size.width, height: frame.size.height, orientation: .portrait)
+        return tree
+    }
+}
