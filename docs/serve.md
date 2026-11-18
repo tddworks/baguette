@@ -54,10 +54,10 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/devices/:udid/openurl?url=` *any device* | open a deep link | [deep-links](features/deep-links/README.md) |
 | `GET` | `/devices/:udid/schemes.json?q=` *any device* | URL schemes the device's apps registered | [deep-links](features/deep-links/README.md) |
 | `POST` | `/devices/:udid/notify?bundleId=` *any device* | deliver a remote notification (body: the payload) | [notifications](features/notifications/README.md) |
-| `WS` | `/simulators/:udid/stream?format=mjpeg\|avcc` | live frames + gestures + stream control (`display=carplay`, `panel=`) | [below](#one-websocket-per-stream) |
+| `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
 | `WS` | `/simulators/:udid/stream.3d.mjpeg`, `.avcc` | live 3D stage | [3d-rendering](features/3d-rendering/README.md) |
 | `WS` | `/devices/:udid/logs?level=&style=&predicate=&bundleId=` *any device* | live unified log | [logs](features/logs/README.md) |
-| `WS` | `/simulators/:udid/camera` | virtual camera control | [camera](features/camera/README.md) |
+| `WS` | `/devices/:udid/camera` *any device* | virtual camera control; a device with no camera baguette can feed, like a phone on a cable, is refused by name | [camera](features/camera/README.md) |
 | `GET` | `/plugins.json` | installed plugin manifests | [plugins](features/plugins/README.md) |
 | `POST` | `/plugins/:id/commands/:cmd?udid=` | run one plugin contribution | [plugins](features/plugins/README.md) |
 | `GET` | `/bakeries.json` | trusted bakeries, pinned commits, install state | [plugins](features/plugins/README.md) |
@@ -68,7 +68,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 
 ## One WebSocket per stream
 
-`WS /simulators/:udid/stream` carries a whole viewing session in both directions:
+`WS /devices/:udid/stream` (or `/simulators/:udid/stream`) carries a whole viewing session in both directions:
 
 - **Server → page**: one binary message per encoded frame. MJPEG sends raw JPEG bytes. AVCC sends a 1-byte tag then the payload: `0x01` avcC description (feed to `VideoDecoder.configure`), `0x02` keyframe, `0x03` delta, `0x04` JPEG seed that paints before the first H.264 keyframe lands. Text messages come back for `*_result` replies and a foldable's `hinge` samples.
 - **Page → server**: text JSON, one message each — stream control (`set_bitrate`, `set_fps`, `set_scale`, `force_idr`, `snapshot`) and gestures, both in [wire.md](wire.md).

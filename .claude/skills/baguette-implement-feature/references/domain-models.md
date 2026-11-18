@@ -247,7 +247,8 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
   behaviour.
 - **A device-name branch**: make the difference data.
 - **Async/await in the input path**: the HID API is synchronous and the wire
-  is request/ack. The only hop is `Server`'s to the `MainActor`.
+  is request/ack. A device's gestures run on its `GestureQueues` lane; the
+  only main-thread hop is `IndigoHIDInput`'s, for each message build.
 
 ## Adding a domain type — checklist
 

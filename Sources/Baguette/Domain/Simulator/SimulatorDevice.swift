@@ -49,6 +49,7 @@ struct SimulatorDevice: Device {
         abilities.register(.motion) { sim.motion() }
         abilities.register(.network) { sim.network() }
         abilities.register(.inputSurface) { sim.inputSurface() }
+        abilities.register(.camera) { sim.camera() }
         abilities.register(.pasteboard) { sim.pasteboard() }
         abilities.register(.apps) { sim.apps() }
         abilities.register(.defaults) { sim.defaults() }

@@ -5,13 +5,13 @@ import NIOCore
 @_spi(WSInternal) import WSCore
 
 extension Server {
-    /// Register the `/simulators/:udid/camera` WebSocket route — the
+    /// Register the `/devices/:udid/camera` (and `/simulators/…`) WebSocket route — the
     /// browser's camera picker drives this. One WS owns the host frame
     /// buffer. Closing stops capture and removes the dylib's launchd
     /// env on successful cleanup. Failed cleanup remains recoverable by
     /// reconnecting to the same device and explicitly stopping again.
     func registerCameraRoute(on router: Router<BasicWebSocketRequestContext>) {
-        let simulators = self.simulators
+        let devices = allDevices
         let sessions = self.cameraSessions
         let bindHost = self.host
         let bindPort = self.port
@@ -23,17 +23,19 @@ extension Server {
                     request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
                 ) ? .upgrade([:]) : .dontUpgrade
             }
-        router.ws(
-            "/simulators/:udid/camera",
-            shouldUpgrade: trustedWebSocketUpgrade
-        ) { inbound, outbound, context in
-            await Self.cameraWS(
-                udid: Self.udidParam(context.request),
-                simulators: simulators,
-                sessions: sessions,
-                inbound: inbound,
-                outbound: outbound
-            )
+        for path in Self.deviceRoutes("camera") {
+            router.ws(
+                RouterPath(path),
+                shouldUpgrade: trustedWebSocketUpgrade
+            ) { inbound, outbound, context in
+                await Self.cameraWS(
+                    udid: Self.udidParam(context.request),
+                    devices: devices,
+                    sessions: sessions,
+                    inbound: inbound,
+                    outbound: outbound
+                )
+            }
         }
     }
 
@@ -47,18 +49,16 @@ extension Server {
     @MainActor
     private static func cameraWS(
         udid: String,
-        simulators: any Simulators,
+        devices: any Devices,
         sessions: CameraSessions,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            try? await outbound.write(
-                .text(
-                    #"{"type":"camera_state","ok":false,"error":"unknown udid"}"#
-                ))
+        if let stopped = cameraStopped(udid: udid, devices: devices) {
+            try? await outbound.write(.text(stopped))
             return
         }
+        guard case .role(let camera) = role(.camera, of: udid, in: devices) else { return }
         let cameras = AVCameras()
         let session: CameraSession
         do {
@@ -68,7 +68,6 @@ extension Server {
                     image: ImageFileCapture(),
                     video: VideoFileCapture(),
                     sink: try SharedMemoryFrameSink(path: "/tmp/SimCam.bgra"),
-                    injection: SimctlSimulatorInjection(),
                     guestTerminated: sessions.guestTerminated
                 )
             }
@@ -109,7 +108,7 @@ extension Server {
                     line: line,
                     cameras: cameras,
                     session: session,
-                    sim: sim,
+                    camera: camera,
                     outbound: outbound
                 )
             }
@@ -138,7 +137,7 @@ extension Server {
         line: String,
         cameras: any Cameras,
         session: CameraSession,
-        sim: any Simulator,
+        camera: any Camera,
         outbound: WebSocketOutboundWriter
     ) async {
         guard let data = line.data(using: .utf8),
@@ -172,7 +171,7 @@ extension Server {
                 }
                 source = .device(uid: uid)
             case .image, .video:
-                guard let path = CameraSourceStaging.shared.path(udid: sim.udid) else {
+                guard let path = CameraSourceStaging.shared.path(udid: camera.device) else {
                     await sendCameraState(
                         session: session, outbound: outbound,
                         requestId: requestId,
@@ -197,7 +196,7 @@ extension Server {
                     requestId: requestId, error: "VirtualCamera.dylib is not bundled in this build")
                 return
             }
-            await session.start(source: source, on: sim, dylibPath: dylibPath)
+            await session.start(source: source, camera: camera, dylibPath: dylibPath)
             await sendCameraState(session: session, outbound: outbound, requestId: requestId)
         case .stop:
             guard let dylibPath = InjectedDylibInstaller.installIfNeeded(.camera) else {
@@ -206,7 +205,7 @@ extension Server {
                     requestId: requestId, error: "VirtualCamera.dylib is not bundled in this build")
                 return
             }
-            await session.stop(on: sim, dylibPath: dylibPath)
+            await session.stop(camera: camera, dylibPath: dylibPath)
             await sendCameraState(session: session, outbound: outbound, requestId: requestId)
         case .setFlags(let flags):
             session.setFlags(flags)
@@ -273,4 +272,15 @@ extension Server {
         return String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
     }
 
+
+    /// The frame that stops a camera socket at once — no device has that
+    /// id, or the one that does has no camera baguette can feed — or nil.
+    static func cameraStopped(udid: String, devices: any Devices) -> String? {
+        switch role(.camera, of: udid, in: devices) {
+        case .role: return nil
+        case .unknownDevice: return #"{"type":"camera_state","ok":false,"error":"unknown udid"}"#
+        case .refused(let refusal):
+            return #"{"type":"camera_state","ok":false,"error":"\#(jsonEscape(refusal.description))"}"#
+        }
+    }
 }

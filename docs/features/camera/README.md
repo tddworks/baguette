@@ -59,7 +59,8 @@ restarts.
 
 ## HTTP / WebSocket
 
-The browser opens `ws://<host>:<port>/simulators/<udid>/camera` and
+The browser opens `ws://<host>:<port>/devices/<udid>/camera` (or the old
+`/simulators/<udid>/camera`) and
 exchanges text frames. Commands may include a string `requestId`; their
 reply echoes it even on errors. Initial state and streaming heartbeats omit
 it, so clients can match a reply without treating a heartbeat as an ACK.

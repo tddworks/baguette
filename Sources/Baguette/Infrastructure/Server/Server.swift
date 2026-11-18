@@ -432,26 +432,10 @@ struct Server: Sendable {
         router.ws(
             "/simulators/:udid/stream",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { [simulators, chromes] inbound, outbound, context in
-            let existingDisplayValues = context.request.uri.queryParameters
-                .filter { $0.key == "requireExistingDisplay" }.map { String($0.value) }
-            guard let requireExistingDisplay = try? StreamDisplayPlan.requireExistingDisplay(query: existingDisplayValues)
-            else {
-                try? await outbound.write(.text(#"{"ok":false,"error":"invalid requireExistingDisplay"}"#))
-                return
-            }
-            await Self.streamWS(
-                udid: Self.udidParam(context.request),
-                format: context.request.uri.queryParameters.get("format")
-                    .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
-                displayQuery: context.request.uri.queryParameters.get("display"),
-                panelQuery: context.request.uri.queryParameters.get("panel").map { String($0) },
-                requireExistingDisplay: requireExistingDisplay,
-                simulators: simulators,
-                chromes: chromes,
-                inbound: inbound,
-                outbound: outbound
-            )
+        ) { [allDevices, chromes] inbound, outbound, context in
+            await Self.deviceStream(
+                context.request, devices: allDevices, chromes: chromes,
+                inbound: inbound, outbound: outbound)
         }
 
         // Live 3D streams — SceneKit acts as a Screen decorator, so both
@@ -1882,7 +1866,7 @@ struct Server: Sendable {
                     continue
                 }
                 do {
-                    try await handleInbound(line: line, stream: stream, dispatcher: dispatcher)
+                    try await handleInbound(line: line, stream: stream, dispatcher: dispatcher, udid: udid)
                 } catch {
                     await sink.failAndClose(error)
                     return
@@ -1893,18 +1877,47 @@ struct Server: Sendable {
         }
     }
 
+    /// A device's live stream, its knobs read off the request: `format`,
+    /// `display`, `panel`, `requireExistingDisplay`. The one stream for every
+    /// device — `/devices/:udid/stream` uses it for any device whose screen
+    /// isn't the companion app's video.
+    static func deviceStream(
+        _ request: Request, devices: any Devices, chromes: any Chromes,
+        inbound: WebSocketInboundStream, outbound: WebSocketOutboundWriter
+    ) async {
+        let existingDisplayValues = request.uri.queryParameters
+            .filter { $0.key == "requireExistingDisplay" }.map { String($0.value) }
+        guard let requireExistingDisplay = try? StreamDisplayPlan.requireExistingDisplay(query: existingDisplayValues)
+        else {
+            try? await outbound.write(.text(#"{"ok":false,"error":"invalid requireExistingDisplay"}"#))
+            return
+        }
+        await streamWS(
+            udid: udidParam(request),
+            format: request.uri.queryParameters.get("format")
+                .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+            displayQuery: request.uri.queryParameters.get("display"),
+            panelQuery: request.uri.queryParameters.get("panel").map { String($0) },
+            requireExistingDisplay: requireExistingDisplay,
+            devices: devices,
+            chromes: chromes,
+            inbound: inbound,
+            outbound: outbound
+        )
+    }
+
     private static func streamWS(
         udid: String,
         format: StreamFormat,
         displayQuery: String?,
         panelQuery: String? = nil,
         requireExistingDisplay: Bool = false,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             try? await outbound.write(.text(#"{"ok":false,"error":"unknown udid"}"#))
             return
         }
@@ -1912,9 +1925,9 @@ struct Server: Sendable {
         let displayPlan = StreamDisplayPlan.from(
             query: displayQuery, panel: panelQuery, requireExistingDisplay: requireExistingDisplay
         )
-        let bound: (screen: any Screen, input: any HID)
+        let bound: (screen: any Screen, input: Abilities?)
         do {
-            bound = try displayPlan.bind(to: sim)
+            bound = try displayPlan.bind(to: device)
         } catch {
             try? await outbound.write(.text(
                 #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
@@ -1925,10 +1938,12 @@ struct Server: Sendable {
         // One guest round-trip per attach, off the critical path: if
         // Device Hub has shadowed this device's input surface, every
         // gesture on this socket will ack and land nowhere. Say so.
-        Task {
-            if await sim.inputSurface().shadowed(),
-               let advisory = DeviceHubAttachment(attached: true).advisory(udid: sim.udid) {
-                warn("[serve] \(advisory)")
+        if let surface = try? device.require(.inputSurface) {
+            Task {
+                if await surface.shadowed(),
+                   let advisory = DeviceHubAttachment(attached: true).advisory(udid: udid) {
+                    warn("[serve] \(advisory)")
+                }
             }
         }
 
@@ -1936,9 +1951,11 @@ struct Server: Sendable {
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
         let screen = bound.screen
         // One input for the whole session — the paste keystroke must
-        // reuse the same warmed HID services the gestures ride.
-        let input = Abilities.input(of: sim.name, all: bound.input)
-        let pasteboard = sim.pasteboard()
+        // reuse the same warmed HID services the gestures ride. A device
+        // that takes no touches gets none: each gesture is refused by name.
+        let input = bound.input ?? Abilities(device: device.name)
+        let pasteboard = try? device.require(.pasteboard)
+        let accessibility = try? device.require(.accessibility)
         let dispatcher = GestureDispatcher(input: input)
 
         do {
@@ -1955,9 +1972,9 @@ struct Server: Sendable {
         // the moment the lit panel is about to change. A phone has no
         // hinge and is not watched.
         let foldable = displayPlan.kind == .phone
-            && chromes.panels(forDeviceName: sim.deviceTypeName).contains(.secondary)
+            && chromes.panels(forDeviceName: device.kind.model).contains(.secondary)
         let hingeWatch: (any HingeWatch)? = foldable
-            ? sim.hinge().watch { angle in
+            ? (try? device.require(.hinge))?.watch { angle in
                 Task { try? await outbound.write(.text(Self.hingeMessage(angle))) }
             }
             : nil
@@ -1971,18 +1988,18 @@ struct Server: Sendable {
             for try await frame in inbound {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
-                if await handleDescribeUI(
-                    line: line, accessibility: sim.accessibility(), outbound: outbound
+                if let accessibility, await handleDescribeUI(
+                    line: line, accessibility: accessibility, outbound: outbound
                 ) {
                     continue
                 }
-                if let frame = await PasteDispatch.dispatch(
+                if let pasteboard, let frame = await PasteDispatch.dispatch(
                     line: line, pasteboard: pasteboard, input: input
                 ).resultFrame {
                     try? await outbound.write(.text(frame))
                     continue
                 }
-                if let frame = await CopyDispatch.dispatch(
+                if let pasteboard, let frame = await CopyDispatch.dispatch(
                     line: line, pasteboard: pasteboard, input: input
                 ).resultFrame {
                     try? await outbound.write(.text(frame))
@@ -1992,7 +2009,8 @@ struct Server: Sendable {
                     try await handleInbound(
                         line: line,
                         stream: stream,
-                        dispatcher: dispatcher
+                        dispatcher: dispatcher,
+                        udid: udid
                     )
                 } catch {
                     await sink.failAndClose(error)
@@ -2249,7 +2267,8 @@ struct Server: Sendable {
     private static func handleInbound(
         line: String,
         stream: any Stream,
-        dispatcher: GestureDispatcher
+        dispatcher: GestureDispatcher,
+        udid: String
     ) async throws {
         let next = ReconfigParser.apply(line, to: stream.config)
         if next != stream.config {
@@ -2265,7 +2284,7 @@ struct Server: Sendable {
             default: break
             }
         }
-        _ = await MainActor.run { dispatcher.dispatch(line: line) }
+        _ = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: line) }
     }
 
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.

@@ -100,6 +100,10 @@ protocol Simulator: Sendable {
     /// file, not the handle.
     func motion() -> any Motion
 
+    /// The camera baguette feeds: VirtualCamera injected into what the
+    /// simulator launches next. Fresh handle per call.
+    func camera() -> any Camera
+
     /// Condition what this simulator's apps see of the network — latency,
     /// downlink bandwidth, request loss, and hard offline. Like `motion()`
     /// there is no `simctl` verb behind it, and for a sharper reason: the

@@ -1,9 +1,9 @@
 import Foundation
 
-/// Owns the camera-streaming state machine for one simulator. Drives
+/// Owns the camera-streaming state machine for one device. Drives
 /// three collaborators:
 ///
-///   • `SimulatorInjection`  — arms the dylib env on the target sim
+///   • `Camera`              — the device's camera, connected to the feed
 ///   • `CameraCapture`       — pulls BGRA frames off a Mac camera
 ///   • `FrameSink`           — writes those frames into the shared buffer
 ///
@@ -25,24 +25,22 @@ final class CameraSession {
     private(set) var flags: CameraFlags = CameraFlags()
 
     /// Capture has stopped, but removing the guest injection still needs an explicit stop.
-    var cleanupRequired: Bool { phase == .idle && armedSimulator != nil }
+    var cleanupRequired: Bool { phase == .idle && connectedCamera != nil }
 
     private let webcam: any CameraCapture
     private let image: any CameraCapture
     private let video: any CameraCapture
     private let sink: any CameraFrameSink
-    private let injection: any SimulatorInjection
     private let guestTerminated: (String) throws -> Bool
 
     /// The capture serving the current stream — retained so `stop`
     /// tears down exactly the producer that `start` selected.
     private var activeCapture: (any CameraCapture)?
 
-    /// The simulator whose launchd domain we armed with
-    /// `DYLD_INSERT_LIBRARIES` — retained so `stop` disarms it. Leaving
-    /// it armed loads the dylib into every future app launch on that
-    /// sim until it reboots, so teardown must unset it.
-    private var armedSimulator: (any Simulator)?
+    /// The camera we connected — retained so `stop` disconnects it. On a
+    /// simulator, leaving it connected loads the dylib into every future
+    /// app launch until it reboots, so teardown must undo it.
+    private var connectedCamera: (any Camera)?
 
     /// The dylib path `start` armed — retained because the variable is
     /// shared with other injecting features, so teardown has to name its
@@ -58,14 +56,12 @@ final class CameraSession {
         image: any CameraCapture,
         video: any CameraCapture,
         sink: any CameraFrameSink,
-        injection: any SimulatorInjection,
         guestTerminated: @escaping (String) throws -> Bool
     ) {
         self.webcam = webcam
         self.image = image
         self.video = video
         self.sink = sink
-        self.injection = injection
         self.guestTerminated = guestTerminated
     }
 
@@ -85,21 +81,20 @@ final class CameraSession {
         self.flags = flags
     }
 
-    /// Arm the dylib on `simulator` and start pulling frames off
-    /// `source`. On any failure the session stays `.idle` with
+    /// Connect `camera` and start pulling frames off `source`. On any failure the session stays `.idle` with
     /// `lastError` populated; callers can read both fields without
     /// catching.
-    func start(source: CameraSource, on simulator: any Simulator, dylibPath: String) async {
+    func start(source: CameraSource, camera: any Camera, dylibPath: String) async {
         if let cleanupTask { await cleanupTask.value }
         guard !cleanupRequired else { return }
         guard case .idle = phase else { return }
         do {
-            try await injection.arm(dylibPath: dylibPath, on: simulator)
+            try await camera.connect(dylibPath: dylibPath)
         } catch {
             lastError = error.localizedDescription
             return
         }
-        armedSimulator = simulator
+        connectedCamera = camera
         armedDylibPath = dylibPath
         let capture = capture(for: source)
         do {
@@ -121,9 +116,9 @@ final class CameraSession {
     }
 
     /// A restarted server has no arm history; explicit stop must still remove the selected guest's injection.
-    func stop(on simulator: any Simulator, dylibPath: String) async {
-        if armedSimulator == nil {
-            armedSimulator = simulator
+    func stop(camera: any Camera, dylibPath: String) async {
+        if connectedCamera == nil {
+            connectedCamera = camera
             armedDylibPath = dylibPath
         }
         await stop()
@@ -158,17 +153,17 @@ final class CameraSession {
 
     private func disarm() async {
         lastError = nil
-        guard let sim = armedSimulator, let dylibPath = armedDylibPath else { return }
+        guard let camera = connectedCamera, let dylibPath = armedDylibPath else { return }
         do {
-            try await injection.disarm(dylibPath: dylibPath, on: sim)
-            armedSimulator = nil
+            try await camera.disconnect(dylibPath: dylibPath)
+            connectedCamera = nil
             armedDylibPath = nil
         } catch {
             let failure =
-                "Camera injection cleanup failed on \(sim.udid): \(error.localizedDescription). Stop again to retry cleanup before starting another camera."
+                "Camera injection cleanup failed on \(camera.device): \(error.localizedDescription). Stop again to retry cleanup before starting another camera."
             do {
-                if try guestTerminated(sim.udid) {
-                    armedSimulator = nil
+                if try guestTerminated(camera.device) {
+                    connectedCamera = nil
                     armedDylibPath = nil
                     return
                 }

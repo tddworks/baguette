@@ -58,7 +58,7 @@ grep for; each example is one CANONICAL §6 lists.
 | 3 | **Does every law have one owner?** | the same rule twice, drifting; a caller reading state to decide | "is this a foldable" answered three ways; the phone target picked in two places |
 | 4 | **Is the business above, and the technique below?** | private API, argv or JSON assembled by the caller; a domain decision in `Server` | `Server` building `LitPanelInput` from two panels and a hinge (#124 moved it to `Simulator.litPanelInput()`); Domain's `StreamFormat` constructing Infrastructure streams |
 | 5 | **Does a new case add data, not an edit?** (SRP, OCP) | a `switch` on a device name; one type changing for several reasons | `GuestHingeMotor` changes for poses *and* keyboard keys |
-| 6 | **Does the question have a home?** | a context's rule only in a doc or in `Server` | "IndigoHID runs on the MainActor" is enforced by one hop in `Server.streamWS` and owned by no type |
+| 6 | **Does the question have a home?** | a context's rule only in a doc or in `Server` | "IndigoHID runs on the MainActor" was enforced by one hop in `Server.streamWS` and owned by no type (now `IndigoHIDInput`'s, for the build alone) |
 
 A finding is a row in CANONICAL §6 when a law already says what is right, or a
 line in §7 (Open) when the design must decide first.

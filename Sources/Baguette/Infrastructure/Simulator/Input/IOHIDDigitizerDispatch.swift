@@ -244,7 +244,7 @@ enum IOHIDDigitizerDispatch {
     private static func wrapTrackpad(event: CFTypeRef) -> UnsafeMutableRawPointer? {
         guard let wrapFn = trackpadWrapFn else { return nil }
         let raw = Unmanaged.passUnretained(event as AnyObject).toOpaque()
-        return wrapFn(raw)
+        return onMainThread { wrapFn(raw) }
     }
 
     /// Patch the byte slots the trackpad wrapper leaves

@@ -546,14 +546,18 @@ final class IndigoHIDInput: HID, @unchecked Sendable {
         for _ in 0..<3 {
             if let p2 {
                 var pt2 = p2
-                msg = withUnsafePointer(to: &pt1) { p1Ref in
-                    withUnsafePointer(to: &pt2) { p2Ref in
-                        mfn(p1Ref, p2Ref, touchTarget, eventType, edge, 1.0, 1.0)
+                msg = onMainThread {
+                    withUnsafePointer(to: &pt1) { p1Ref in
+                        withUnsafePointer(to: &pt2) { p2Ref in
+                            mfn(p1Ref, p2Ref, touchTarget, eventType, edge, 1.0, 1.0)
+                        }
                     }
                 }
             } else {
-                msg = withUnsafePointer(to: &pt1) { p1Ref in
-                    mfn(p1Ref, nil, touchTarget, eventType, edge, 1.0, 1.0)
+                msg = onMainThread {
+                    withUnsafePointer(to: &pt1) { p1Ref in
+                        mfn(p1Ref, nil, touchTarget, eventType, edge, 1.0, 1.0)
+                    }
                 }
             }
             if msg != nil { break }
@@ -614,9 +618,11 @@ final class IndigoHIDInput: HID, @unchecked Sendable {
                 y: clamp01(p2.y / size.height)
             )
             for _ in 0..<maxAttempts {
-                msg = withUnsafePointer(to: &pt1) { p1Ref in
-                    withUnsafePointer(to: &pt2) { p2Ref in
-                        mfn(p1Ref, p2Ref, touchTarget, eventType, direction, 1.0, 1.0, size.width, size.height)
+                msg = onMainThread {
+                    withUnsafePointer(to: &pt1) { p1Ref in
+                        withUnsafePointer(to: &pt2) { p2Ref in
+                            mfn(p1Ref, p2Ref, touchTarget, eventType, direction, 1.0, 1.0, size.width, size.height)
+                        }
                     }
                 }
                 if msg != nil { break }
@@ -624,8 +630,10 @@ final class IndigoHIDInput: HID, @unchecked Sendable {
             }
         } else {
             for _ in 0..<maxAttempts {
-                msg = withUnsafePointer(to: &pt1) { p1Ref in
-                    mfn(p1Ref, nil, touchTarget, eventType, direction, 1.0, 1.0, size.width, size.height)
+                msg = onMainThread {
+                    withUnsafePointer(to: &pt1) { p1Ref in
+                        mfn(p1Ref, nil, touchTarget, eventType, direction, 1.0, 1.0, size.width, size.height)
+                    }
                 }
                 if msg != nil { break }
                 usleep(5_000)

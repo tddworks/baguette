@@ -261,11 +261,10 @@ extension Server {
             shouldUpgrade: trustedWebSocketUpgrade
         ) { inbound, outbound, context in
             await Self.twinStreamWS(
-                udid: Self.udidParam(context.request),
-                format: context.request.uri.queryParameters.get("format")
-                    .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+                context.request,
                 screens: screens,
-                physicalDevices: physicalDevices,
+                devices: allDevices,
+                chromes: chromes,
                 inbound: inbound,
                 outbound: outbound
             )
@@ -321,19 +320,21 @@ extension Server {
     }
 
     private static func twinStreamWS(
-        udid: String,
-        format: StreamFormat,
+        _ request: Request,
         screens: TwinScreens,
-        physicalDevices: any Devices,
+        devices: any Devices,
+        chromes: any Chromes,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
+        let udid = Self.udidParam(request)
+        let format = request.uri.queryParameters.get("format")
+            .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg
         guard !udid.isEmpty, let hub = screens.find(udid: udid) else {
-            // No companion video: a phone CoreDevice reaches shows its
-            // screen through the same stream pipeline as a simulator.
-            await Self.deviceStreamWS(
-                udid: udid, format: format, devices: physicalDevices,
-                inbound: inbound, outbound: outbound)
+            // No companion video: every other device — a simulator, a phone
+            // CoreDevice reaches — streams through the one device stream.
+            await Self.deviceStream(
+                request, devices: devices, chromes: chromes, inbound: inbound, outbound: outbound)
             return
         }
 
@@ -408,73 +409,6 @@ extension Server {
         case .unable?: return .unprocessableContent
         case .notReady?, .claimedTwice?: return .conflict
         case nil: return .internalServerError
-        }
-    }
-
-    /// A physical device's screen, encoded here in the asked format, and
-    /// its touches when it can take input.
-    private static func deviceStreamWS(
-        udid: String,
-        format: StreamFormat,
-        devices: any Devices,
-        inbound: WebSocketInboundStream,
-        outbound: WebSocketOutboundWriter
-    ) async {
-        let screen: any Screen
-        let input: Abilities?
-        let accessibility: (any Accessibility)?
-        do {
-            let device = try devices.device(DeviceID(udid))
-            screen = try device.require(.screen)
-            input = try? device.input()
-            accessibility = try? device.require(.accessibility)
-        } catch {
-            try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
-            return
-        }
-        let dispatcher = input.map { GestureDispatcher(input: $0) }
-        let gestures = DispatchQueue(label: "baguette.device-gestures.\(udid)")
-        let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
-        do {
-            try stream.start(on: screen)
-        } catch {
-            try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
-            return
-        }
-        defer {
-            stream.stop()
-            screen.stop()
-        }
-        do {
-            for try await frame in inbound {
-                guard frame.opcode == .text else { continue }
-                let line = String(buffer: frame.data)
-                // The inspector's `describe_ui`, from the device's own accessibility.
-                if let accessibility, await Self.handleDescribeUI(line: line, accessibility: accessibility, outbound: outbound) {
-                    continue
-                }
-                do {
-                    if try Self.handleTwinInbound(line: line, stream: stream) { continue }
-                } catch {
-                    await sink.failAndClose(error)
-                    return
-                }
-                guard let dispatcher else {
-                    try? await outbound.write(.text(Self.twinErrorFrame("\(udid) takes no input")))
-                    continue
-                }
-                // A drag holds its fingers for its duration: send it off
-                // the event loop, one gesture after another.
-                await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-                    gestures.async {
-                        _ = dispatcher.dispatch(line: line)
-                        done.resume()
-                    }
-                }
-            }
-        } catch {
-            // socket closed; defer cleans up
         }
     }
 

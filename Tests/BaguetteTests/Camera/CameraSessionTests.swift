@@ -26,7 +26,7 @@ struct CameraSessionTests {
         let video: MockCameraCapture
         let sink: MockCameraFrameSink
         let injection: MockSimulatorInjection
-        let sim: MockSimulator
+        let camera: any Camera
         let captures: Captures
     }
 
@@ -47,11 +47,12 @@ struct CameraSessionTests {
         let captures = Captures()
         let session = CameraSession(
             webcam: webcam, image: image, video: video,
-            sink: sink, injection: decorate(injection), guestTerminated: guestTerminated
+            sink: sink, guestTerminated: guestTerminated
         )
         return Wiring(
             session: session, webcam: webcam, image: image, video: video,
-            sink: sink, injection: injection, sim: sim, captures: captures
+            sink: sink, injection: injection,
+            camera: SimulatorCamera(simulator: sim, injection: decorate(injection)), captures: captures
         )
     }
 
@@ -75,7 +76,7 @@ struct CameraSessionTests {
         given(w.injection).arm(dylibPath: .any, on: .any).willReturn(())
         stubHappyCapture(w)
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
 
         verify(w.injection).arm(dylibPath: .value("/tmp/vc.dylib"), on: .any).called(1)
         verify(w.webcam).start(source: .value(Self.webcam), onFrame: .any).called(1)
@@ -89,7 +90,7 @@ struct CameraSessionTests {
         given(w.image).start(source: .any, onFrame: .any).willReturn(())
 
         let source = CameraSource.image(path: "/tmp/pic.png")
-        await w.session.start(source: source, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: source, camera: w.camera, dylibPath: "/tmp/vc.dylib")
 
         verify(w.image).start(source: .value(source), onFrame: .any).called(1)
         verify(w.webcam).start(source: .any, onFrame: .any).called(0)
@@ -104,7 +105,7 @@ struct CameraSessionTests {
         given(w.video).start(source: .any, onFrame: .any).willReturn(())
         given(w.video).stop().willReturn(())
 
-        await w.session.start(source: .video(path: "/tmp/clip.mp4"), on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: .video(path: "/tmp/clip.mp4"), camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await w.session.stop()
 
         verify(w.video).stop().called(1)
@@ -121,7 +122,7 @@ struct CameraSessionTests {
                     userInfo: [NSLocalizedDescriptionKey: "no perm"]
                 ))
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
 
         verify(w.webcam).start(source: .any, onFrame: .any).called(0)
         #expect(w.session.phase == .idle)
@@ -140,7 +141,7 @@ struct CameraSessionTests {
                     userInfo: [NSLocalizedDescriptionKey: "device busy"]
                 ))
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
 
         #expect(w.session.phase == .idle)
         #expect(w.session.lastError?.contains("device busy") == true)
@@ -153,7 +154,7 @@ struct CameraSessionTests {
         stubHappyCapture(w)
 
         w.session.setFlags(CameraFlags(fillGravity: true, mirror: false))
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
 
         let frame = try CameraFrame(
             sequence: 1, timestampMs: 100, width: 2, height: 2, pixels: Data(count: 16)
@@ -172,7 +173,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await w.session.stop()
 
         verify(w.webcam).stop().called(1)
@@ -187,7 +188,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await w.session.stop()
 
         // Injection must be removed on teardown — leaving DYLD_INSERT_LIBRARIES
@@ -209,7 +210,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await w.session.stop()
 
         #expect(w.session.phase == .idle)
@@ -222,7 +223,7 @@ struct CameraSessionTests {
         #expect(state["cleanupRequired"] as? Bool == true)
         #expect(state["requestId"] as? String == "stop-1")
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/new.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/new.dylib")
         verify(w.injection).arm(dylibPath: .any, on: .any).called(1)
         #expect(w.session.cleanupRequired)
         await w.session.stop()
@@ -264,7 +265,7 @@ struct CameraSessionTests {
                     domain: "test", code: 2,
                     userInfo: [NSLocalizedDescriptionKey: "device busy"]))
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         #expect(w.session.cleanupRequired)
         #expect(w.session.lastError?.contains("device busy") == true)
         #expect(w.session.lastError?.contains("disarm denied") == true)
@@ -311,7 +312,7 @@ struct CameraSessionTests {
                 NSError(
                     domain: "test", code: 3,
                     userInfo: [NSLocalizedDescriptionKey: "disarm denied"]))
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         let first = Task { await w.session.stop() }
         while gate.continuation == nil { await Task.yield() }
         let second = Task {
@@ -374,7 +375,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
         let first = try await sessions.connect(udid: "U") { w.session }
-        await first.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await first.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         let closing = Task { await sessions.disconnect(first) }
         while gate.continuation == nil { await Task.yield() }
         let other = makeWiring()
@@ -403,7 +404,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
         let connected = try await sessions.connect(udid: "U") { w.session }
-        await connected.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await connected.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await connected.stop()
         await sessions.disconnect(connected)
         verify(w.injection).disarm(dylibPath: .any, on: .any).called(1)
@@ -429,7 +430,7 @@ struct CameraSessionTests {
             given(w.webcam).stop().willReturn(())
             stubHappyCapture(w)
             let session = try await sessions.connect(udid: "U") { w.session }
-            await session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+            await session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
             // Even confirmed shutdown does not let another socket steal a live connection.
             await #expect(throws: CameraOwnershipError.self) { try await sessions.connect(udid: "V") { makeWiring().session } }
             await session.stop()
@@ -455,7 +456,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
         let session = try await sessions.connect(udid: "U") { w.session }
-        await session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await sessions.disconnect(session)
         await #expect(throws: (any Error).self) { try await sessions.connect(udid: "V") { makeWiring().session } }
         #expect(session.cleanupRequired)
@@ -471,7 +472,7 @@ struct CameraSessionTests {
                 .willThrow(NSError(domain: "disarm", code: 1))
             given(w.webcam).stop().willReturn(())
             stubHappyCapture(w)
-            await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+            await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
             await w.session.stop()
             #expect(w.session.cleanupRequired == !terminated)
             #expect((w.session.lastError == nil) == terminated)
@@ -489,7 +490,7 @@ struct CameraSessionTests {
             .willThrow(NSError(domain: "disarm", code: 1, userInfo: [NSLocalizedDescriptionKey: "disarm denied"]))
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         await w.session.stop()
         #expect(w.session.cleanupRequired)
         #expect(w.session.lastError?.contains("disarm denied") == true)
@@ -501,10 +502,10 @@ struct CameraSessionTests {
         given(w.injection).disarm(dylibPath: .value("/tmp/current/VirtualCamera.dylib"), on: .any)
             .willThrow(NSError(domain: "disarm", code: 1, userInfo: [NSLocalizedDescriptionKey: "disarm denied"]))
         given(w.injection).disarm(dylibPath: .value("/tmp/current/VirtualCamera.dylib"), on: .any).willReturn(())
-        await w.session.stop(on: w.sim, dylibPath: "/tmp/current/VirtualCamera.dylib")
+        await w.session.stop(camera: w.camera, dylibPath: "/tmp/current/VirtualCamera.dylib")
         #expect(w.session.cleanupRequired)
         #expect(w.session.lastError?.contains("disarm denied") == true)
-        await w.session.stop(on: w.sim, dylibPath: "/tmp/current/VirtualCamera.dylib")
+        await w.session.stop(camera: w.camera, dylibPath: "/tmp/current/VirtualCamera.dylib")
         #expect(!w.session.cleanupRequired)
         #expect(w.session.lastError == nil)
         verify(w.injection).disarm(dylibPath: .any, on: .any).called(2)
@@ -521,7 +522,7 @@ struct CameraSessionTests {
                     #expect(simulator.udid == "sim-U")
                     if terminated { throw NSError(domain: "guest gone", code: 1) }
                 }
-            await w.session.stop(on: w.sim, dylibPath: "/tmp/current/VirtualCamera.dylib")
+            await w.session.stop(camera: w.camera, dylibPath: "/tmp/current/VirtualCamera.dylib")
             #expect(!w.session.cleanupRequired)
             #expect(w.session.lastError == nil)
             verify(w.injection).disarm(dylibPath: .any, on: .any).called(1)
@@ -540,7 +541,7 @@ struct CameraSessionTests {
         given(w.webcam).stop().willReturn(())
         stubHappyCapture(w)
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         async let first: Void = w.session.stop()
         async let second: Void = w.session.stop()
         _ = await (first, second)
@@ -556,7 +557,7 @@ struct CameraSessionTests {
         given(w.sink).write(.any, flags: .any).willReturn(())
         stubHappyCapture(w)
 
-        await w.session.start(source: Self.webcam, on: w.sim, dylibPath: "/tmp/vc.dylib")
+        await w.session.start(source: Self.webcam, camera: w.camera, dylibPath: "/tmp/vc.dylib")
         w.session.sampleFPS()  // seed baseline; fps stays 0
 
         let frame = try CameraFrame(

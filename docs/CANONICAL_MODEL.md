@@ -113,7 +113,8 @@ Simulators  ◆                               THE SIMULATOR FAMILY — a device 
 Chromes  ◆            bezels and profiles by device type — panels(forDeviceName:) says if it folds
 DeviceModels  ◆       installed 3D models · DeviceRenderer ◆ · DeviceScene ◆ (the page's 3D book)
 Stream  ◆             a framebuffer as MJPEG or AVCC — StreamFormat ◇ · StreamDisplayPlan ◇
-CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇
+CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇; the device's
+                      Camera ◆ (a simulator's: VirtualCamera injected) is what it feeds
 Plugins  ◆            installed plugins — PluginManifest ◇ · PluginRoute ◇ · PluginGrants ◆
 Bakery  ◇             trusted plugin sources — Checkout ◆ · InstallPlan ◇
 CompanionPhones  ◆    the companion-app twin, one source of Devices — not wired: no companion app ships
@@ -147,6 +148,8 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | Law | Owner |
 |---|---|
 | a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `Abilities` |
+| a device takes its gestures one at a time, in the order sent, from every connection; two devices never wait on each other | `GestureQueues` |
+| an Indigo mouse message is built on the main thread — that call alone, never a whole gesture | `IndigoHIDInput` (`onMainThread`) |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
 | one id names one device across every source; asking for an id two sources claim is a refusal, never a pick | `CombinedDevices` |
 | an ability that drives the running screen (screen, touch, press, key, scroll, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
@@ -277,8 +280,11 @@ moves, one change at a time.
 
 ## 7 · Open
 
-- **Who owns "IndigoHID runs on the MainActor"?** Only `Server.streamWS`'s hop
-  enforces it; no type states it.
+- ~~**Who owns "IndigoHID runs on the MainActor"?**~~ `IndigoHIDInput`: it
+  builds each mouse message on the main thread (`onMainThread`), that call
+  alone; gestures run on their device's `GestureQueues` lane. Settled when
+  the server's `MainActor` hop held every simulator's gestures behind one
+  drag.
 - **argv in the Domain.** `LogFilter.argv`, `Coordinate.argument`,
   `PreferenceSuite.containerArguments` and friends are values that build a
   subprocess's arguments. Pure and tested — but is that business or technique?

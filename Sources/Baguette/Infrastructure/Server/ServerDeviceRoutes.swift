@@ -8,6 +8,11 @@ import NIOCore
 /// how a refusal answers.
 extension Server {
 
+    /// Each device's gesture lane, shared by every way in — the stream
+    /// sockets, `POST …/input` — so its gestures land one at a time, in the
+    /// order sent, and two devices never wait on each other.
+    static let gestureQueues = GestureQueues()
+
     /// A per-device route's paths: `/devices/:udid/<leaf>` for any device,
     /// and `/simulators/:udid/<leaf>`, the old spelling the page and
     /// plugins still use. The udid stays second-to-last in both, as

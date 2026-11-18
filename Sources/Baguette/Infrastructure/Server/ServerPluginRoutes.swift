@@ -251,9 +251,8 @@ extension Server {
         } catch {
             return .unknownDevice
         }
-        let ack = await MainActor.run {
-            GestureDispatcher(input: input).dispatch(line: body)
-        }
+        let dispatcher = GestureDispatcher(input: input)
+        let ack = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: body) }
         return .ok(ack)
     }
 

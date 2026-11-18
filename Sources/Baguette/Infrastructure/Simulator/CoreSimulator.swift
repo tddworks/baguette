@@ -162,6 +162,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     /// publishing an intent is useless without the dylib that reads it. A
     /// build that doesn't ship the dylib yields a handle whose `publish`
     /// throws `MotionError.dylibMissing` rather than silently doing nothing.
+    func camera() -> any Camera {
+        SimulatorCamera(simulator: self, injection: SimctlSimulatorInjection())
+    }
+
     func motion() -> any Motion {
         SharedFileMotion(
             fileURL: URL(fileURLWithPath: SharedFileMotion.path(forUDID: udid)),

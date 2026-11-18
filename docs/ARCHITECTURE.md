@@ -223,8 +223,9 @@ Thin orchestration; ArgumentParser lives here.
    space), serialises to JSON, sends as a text WS message.
 4. **`Server.streamWS`** — receives the text frame, runs
    `applyStreamControl` first (returns `false` since this isn't a
-   `set_*` / `force_idr` / `snapshot`), then hops to `MainActor` and
-   calls `GestureDispatcher.dispatch`.
+   `set_*` / `force_idr` / `snapshot`), then queues
+   `GestureDispatcher.dispatch` on the device's lane (`GestureQueues`):
+   one gesture at a time, in the order sent, off the event loop.
 5. **`GestureDispatcher`** — parses the JSON via
    `GestureRegistry.standard.parse`, gets back a `Tap` value type,
    asks the screen's input for `Tap.ability` (`.touch`) and calls
@@ -243,10 +244,11 @@ Thin orchestration; ArgumentParser lives here.
 
 Total latency on warm services: a few milliseconds per gesture.
 
-The `MainActor` hop in step 4 matters: `IndigoHIDMessageForMouseNSEvent`
-reads AppKit / NSEvent thread-local state, so calling it from a NIO
-event-loop thread builds a malformed message that the simulator
-silently drops. Buttons (`IndigoHIDMessageForButton` — pure C, no
+The main-thread hop in step 7 matters: `IndigoHIDMessageForMouseNSEvent`
+reads AppKit / NSEvent thread-local state, so building it on any other
+thread makes a malformed message the simulator silently drops.
+`IndigoHIDInput` hops for each build alone (`onMainThread`), so a drag's
+waits hold its device's lane, never the main thread. Buttons (`IndigoHIDMessageForButton` — pure C, no
 AppKit dep) work from any thread, which was the diagnostic that
 isolated the issue.
 
@@ -359,11 +361,11 @@ GET  /devices/:udid/companion-screens.json   CarPlay display + paired watch
 POST /devices/:udid/carplay-display         attach/reattach CarPlay via Simulator.app
 GET  /devices/:udid/describe-ui.json        Accessibility.describeAll / describeAt
 POST /devices/:udid/input                   GestureDispatcher (one envelope)
-WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
+WS   /devices/:udid/stream?format=…         Stream + GestureDispatcher on the device's GestureQueues lane;
+                                            the companion app's video when it streams one
 GET  /devices.json                          Devices.connectedJSON (phones, with abilities)
 GET  /devices/:udid                         sim.html (same shell, device tree)
 GET  /devices/:udid/screenshot.{jpg,png}    devices.require(.screen, of:) — any family
-WS   /devices/:udid/stream?format=…         the device's Screen + input abilities; describe_ui from its Accessibility
 GET  /plugins.json                          Plugins.listJSON
 POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
 GET  /bakeries.json                         trusted sources + pinned commits + install state

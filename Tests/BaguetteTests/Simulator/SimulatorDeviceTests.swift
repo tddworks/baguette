@@ -51,7 +51,7 @@ struct SimulatorDeviceTests {
         #expect(device.abilities.names == [
             "lifecycle", "screen", "touch", "press", "key", "scroll", "displays", "hinge", "externalDisplays",
             "accessibility", "logs", "orientation", "statusBar", "interface", "location",
-            "motion", "network", "inputSurface", "pasteboard", "apps", "defaults", "photos", "shake",
+            "motion", "network", "inputSurface", "camera", "pasteboard", "apps", "defaults", "photos", "shake",
             "watchPairing",
         ])
     }

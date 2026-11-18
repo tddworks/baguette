@@ -65,7 +65,7 @@ Imports flow inward: `App` (CLI + use cases) → `Domain` (value types + `@Mocka
 
 iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` / `AXe` routes to a pointer service that drops messages or crashes `backboardd`. Baguette uses the **9-arg signature from Xcode 26's preview-kit**, which routes to digitizer target `0x32`. The recipe lives in `Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift` (heavily commented).
 
-`IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent thread-local state, so it **must run on `MainActor`**. Calling it from a NIO event-loop thread builds malformed messages that the simulator silently drops. `Server.streamWS` hops to `MainActor` before invoking `GestureDispatcher`. Buttons (`IndigoHIDMessageForButton`) are pure C and thread-safe — useful as a sanity check when input fails.
+`IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent thread-local state, so it **must build on the main thread**; elsewhere its messages are malformed and silently dropped. `IndigoHIDInput` hops there for the build alone; gestures run on their device's `GestureQueues` lane. Buttons (`IndigoHIDMessageForButton`) are pure C and thread-safe — useful as a sanity check when input fails.
 
 **Coordinates.** Wire coordinates (`x`, `y`, `startX`, `x1`, `cx`, …) are **device points**, the units of the `width` / `height` every gesture envelope carries — never normalized. The browser normalizes internally and `sim-stream.js` multiplies back before sending; `IndigoHIDInput.sendMouse` divides by size before the C call.
 
