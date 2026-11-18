@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Loads installed model bundles from ordered filesystem roots.

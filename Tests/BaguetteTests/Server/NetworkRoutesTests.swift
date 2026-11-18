@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level coverage for the network routes.
 ///

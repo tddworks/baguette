@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import ArgumentParser
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `baguette defaults read|write|delete` — the flags map onto Domain
 /// values (`PreferenceSuite`, `PreferenceEdit`) the run path hands to

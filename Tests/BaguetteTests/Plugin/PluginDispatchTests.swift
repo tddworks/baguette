@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `PluginDispatch` — argv assembly, the
 /// pinned working directory, the injected environment, and the

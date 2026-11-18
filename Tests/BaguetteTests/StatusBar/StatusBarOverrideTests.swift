@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `StatusBarOverride.overrideArguments` — the
 /// argv tail handed to `xcrun simctl status_bar <udid> override …`.

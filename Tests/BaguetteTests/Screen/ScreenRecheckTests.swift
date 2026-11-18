@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// After a read, the display is checked again so frames never describe
 /// a screen that has since changed. Listing the connected screens spawns

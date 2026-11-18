@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level coverage for the defaults routes, driven through the
 /// pure dispatch helpers with one device's `MockDefaults` + `MockApps` —

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Host External Displays enablement: probe Connected Screens first;
 /// only click the I/O panel when CarPlay is absent; a second call is

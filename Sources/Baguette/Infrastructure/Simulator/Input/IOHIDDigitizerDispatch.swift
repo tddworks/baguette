@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Production digitizer-event dispatch — the path we cracked while

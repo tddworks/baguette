@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The motion state of every device the server is driving, keyed by its id.

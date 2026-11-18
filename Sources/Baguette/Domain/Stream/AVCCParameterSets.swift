@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The SPS/PPS parameter sets inside an avcC configuration blob

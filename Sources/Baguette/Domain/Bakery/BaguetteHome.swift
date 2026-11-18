@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Where baguette keeps installed plugins, trusted bakeries, and the

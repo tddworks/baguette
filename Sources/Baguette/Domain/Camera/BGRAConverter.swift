@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Pure factory: turns a `CVPixelBuffer`'s row-strided BGRA bytes

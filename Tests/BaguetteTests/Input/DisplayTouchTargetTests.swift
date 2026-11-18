@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Both planes address a **constant**. A HID target is only valid if
 /// some create-service message registered it, so it is never computed —

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Wire-format coverage for `OrientationEvent.machMessage(orientation:)`.
 /// The bytes-on-the-wire here have to match what

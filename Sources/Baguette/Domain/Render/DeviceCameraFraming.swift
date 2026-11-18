@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Perspective framing for a complete device model.

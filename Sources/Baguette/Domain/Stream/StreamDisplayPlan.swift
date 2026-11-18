@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Pure plan for which display plane a stream session binds to.

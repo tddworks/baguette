@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The bridge answers in milliseconds but a freshly launched app can
 /// show it an empty tree until a guest AX client has connected, so the

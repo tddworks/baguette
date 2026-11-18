@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What a request is allowed to do, once we've asked whether it's a

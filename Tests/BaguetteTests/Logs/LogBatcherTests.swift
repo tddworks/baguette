@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `LogBatcher` collects emitted log lines into batches that flush
 /// either when a size cap is reached or when a time window elapses.

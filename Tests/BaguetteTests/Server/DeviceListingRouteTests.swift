@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// One device as the page reads it: who it is, what kind, its state, and
 /// what it can do — so the page shows only what the device can do.

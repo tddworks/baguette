@@ -4,6 +4,7 @@ import ImageIO
 import Testing
 import UniformTypeIdentifiers
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("ImageSurface")
 struct ImageSurfaceTests {

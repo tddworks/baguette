@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The simulator delivers a frame whenever the screen changes, which is
 /// up to 60 times a second. A recording asked for 30 fps keeps every

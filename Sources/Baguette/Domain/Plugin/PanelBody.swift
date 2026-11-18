@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A side panel a plugin adds to focus mode, described entirely as

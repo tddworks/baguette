@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `AVVideoDecoder` is the AVFoundation half of video-file playback.
 /// The pacing/looping logic above it is covered against

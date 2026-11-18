@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The `~/.baguette` registry — the trusted-bakeries list

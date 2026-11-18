@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `MotionKind` — the classification an app reads
 /// back as `CMMotionActivity`.

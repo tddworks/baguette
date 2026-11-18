@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What a plugin says about itself — the contents of its

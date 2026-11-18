@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Streaming `\n`-delimited UTF-8 line splitter. Hands raw byte

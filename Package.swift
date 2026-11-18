@@ -49,9 +49,23 @@ let package = Package(
             name: "CoreDeviceABI",
             path: "Sources/CoreDeviceABI"
         ),
+        // What a device is: its id, kind and state, how it looks (Chrome)
+        // and what it can do (Abilities) — the roles and their values. The
+        // innermost context: it depends on nothing of baguette's.
+        .target(
+            name: "BaguetteDevice",
+            dependencies: [
+                .product(name: "Mockable", package: "Mockable"),
+            ],
+            path: "Sources/Device",
+            swiftSettings: [
+                .define("MOCKING", .when(configuration: .debug)),
+            ]
+        ),
         .executableTarget(
             name: "Baguette",
             dependencies: [
+                "BaguetteDevice",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
@@ -110,6 +124,7 @@ let package = Package(
             name: "BaguetteTests",
             dependencies: [
                 "Baguette",
+                "BaguetteDevice",
                 .product(name: "Mockable", package: "Mockable"),
             ],
             path: "Tests/BaguetteTests",

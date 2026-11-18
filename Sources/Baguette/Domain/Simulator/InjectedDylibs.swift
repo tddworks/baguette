@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The dylibs currently listed in a simulator's `DYLD_INSERT_LIBRARIES`.

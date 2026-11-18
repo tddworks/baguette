@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// How a screen is read again once it has been observed. Only a foldable

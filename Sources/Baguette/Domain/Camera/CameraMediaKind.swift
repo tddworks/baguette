@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What kind of frame producer a host file feeds. Classifies by

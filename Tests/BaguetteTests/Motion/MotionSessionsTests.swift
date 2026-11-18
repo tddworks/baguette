@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Coverage for `MotionSessions` — the per-device motion state the
 /// server's stateless route handlers reach through.

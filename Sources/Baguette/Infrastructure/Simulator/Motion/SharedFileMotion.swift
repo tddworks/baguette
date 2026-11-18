@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Motion` backed by a small JSON file both sides can see, plus the

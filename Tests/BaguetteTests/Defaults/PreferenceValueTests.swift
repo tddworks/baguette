@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A stored preference is a typed plist value. The two directions that
 /// matter are **in** (what the user typed on the CLI / sent over HTTP,

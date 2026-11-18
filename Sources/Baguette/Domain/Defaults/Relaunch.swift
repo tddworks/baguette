@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Whether an edit relaunches the app so it sees the change.

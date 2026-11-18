@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Where `SimulatorKit.framework` lives inside an Xcode install.

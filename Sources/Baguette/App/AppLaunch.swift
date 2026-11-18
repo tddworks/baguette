@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Launches an app and, when asked, answers with its first real screen, so

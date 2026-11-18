@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Runs one contributed plugin command and turns what the child said

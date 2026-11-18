@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Pixel geometry of one captured frame. The draw rectangle uses a

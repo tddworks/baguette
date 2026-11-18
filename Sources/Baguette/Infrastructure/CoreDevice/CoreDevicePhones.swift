@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The CoreDevice family as a source of `Devices`: the real phones

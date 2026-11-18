@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Defaults` backed by two simctl children per operation:

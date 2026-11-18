@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Decides where the hit-test sweep looks, and when it can stop.

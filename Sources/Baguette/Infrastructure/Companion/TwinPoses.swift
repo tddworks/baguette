@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Per-device attitude fan-out — the motion sibling of `TwinScreens`,

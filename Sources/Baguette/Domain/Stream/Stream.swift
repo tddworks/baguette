@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A live frame stream of a particular wire format. Owns its lifecycle,

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A foldable's input across folds: each gesture goes to the panel the

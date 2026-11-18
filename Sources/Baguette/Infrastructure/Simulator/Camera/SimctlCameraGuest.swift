@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A failed disarm is safe only when a fresh, successful device-set listing proves the guest is gone.

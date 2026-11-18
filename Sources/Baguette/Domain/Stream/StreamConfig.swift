@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Mutable knobs the user can retune mid-stream — frame rate, bitrate, and

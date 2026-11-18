@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One monitor per device, shared by everyone who asks about its hinge.

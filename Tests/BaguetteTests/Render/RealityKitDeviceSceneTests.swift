@@ -3,6 +3,7 @@ import IOSurface
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("RealityKitDeviceScene")
 struct RealityKitDeviceSceneTests {

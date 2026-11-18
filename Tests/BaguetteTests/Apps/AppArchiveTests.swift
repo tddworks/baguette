@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `AppArchive` — a zip that carries an app.
 /// The browser can't upload a folder-form `.app` bundle as one file, so

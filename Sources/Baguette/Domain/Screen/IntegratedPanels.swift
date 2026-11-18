@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The device's own display panels among its live framebuffer ports,

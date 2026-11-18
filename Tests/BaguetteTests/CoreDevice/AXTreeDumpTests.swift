@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Stands in for AccessibilityPlatformTranslation's objects: answers KVC
 /// from a dictionary, as `AXPTranslatorResponse` / `AXPTranslationObject` do.

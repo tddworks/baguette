@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `DeepLink` — what a developer means when they
 /// type a URL into the console and expect it to land in their app.

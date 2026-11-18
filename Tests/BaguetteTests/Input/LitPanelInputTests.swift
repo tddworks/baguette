@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// iPhone Duo's page keeps one socket across a fold: the book draws both
 /// panels, so nothing reconnects when the hinge lights the other one.

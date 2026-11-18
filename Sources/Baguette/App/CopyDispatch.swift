@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Intercepts `copy` wire lines ahead of `GestureDispatcher` on both

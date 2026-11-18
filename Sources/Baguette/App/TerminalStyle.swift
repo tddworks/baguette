@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// How a message looks on the way to stderr.

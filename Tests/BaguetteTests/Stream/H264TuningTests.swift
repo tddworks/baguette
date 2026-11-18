@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("H264Tuning")
 struct H264TuningTests {

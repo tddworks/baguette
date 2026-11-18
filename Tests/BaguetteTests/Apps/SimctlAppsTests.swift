@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `SimctlApps` — argv assembly + the
 /// `Subprocess` exit handshake. The irreducible `xcrun` spawn lives in

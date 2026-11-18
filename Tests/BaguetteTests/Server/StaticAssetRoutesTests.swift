@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The static UI lives in subfolders under `Resources/Web/` (`farm/`,
 /// `baguette/gestures/`, `sim-list/`, …) and Hummingbird needs one

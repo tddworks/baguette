@@ -1,5 +1,6 @@
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The devices a route asks: one device under `id`, ready unless told
 /// otherwise, with only the abilities `register` gives it.

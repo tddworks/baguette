@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Whether an edit needs the app relaunched to be seen. A running app that
 /// watches a key (`@AppStorage`) updates the moment cfprefsd reports the

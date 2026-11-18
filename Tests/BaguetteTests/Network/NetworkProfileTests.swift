@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The named presets, pinned to Network Link Conditioner's own numbers.
 ///

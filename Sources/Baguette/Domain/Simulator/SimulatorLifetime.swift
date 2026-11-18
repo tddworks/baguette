@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Simulator.app's device lifetime policy — whether closing a

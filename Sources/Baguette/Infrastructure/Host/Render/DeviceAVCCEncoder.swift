@@ -1,3 +1,4 @@
+import BaguetteDevice
 import CoreVideo
 import Foundation
 import IOSurface

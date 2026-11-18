@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A request to move the hinge: Device Hub's three poses by name, or an

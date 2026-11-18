@@ -1,6 +1,7 @@
 import Testing
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 // MARK: - Tap
 

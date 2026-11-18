@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Display preferences shipped with every frame written into the

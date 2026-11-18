@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("DTXMessage")
 struct DTXMessageTests {

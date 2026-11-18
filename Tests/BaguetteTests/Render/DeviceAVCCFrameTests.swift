@@ -4,6 +4,7 @@ import IOSurface
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("DeviceAVCCFrame")
 struct DeviceAVCCFrameTests {

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A TCP connection to one of the phone's services over the CoreDevice

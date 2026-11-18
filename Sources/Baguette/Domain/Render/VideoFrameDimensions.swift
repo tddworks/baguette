@@ -1,3 +1,4 @@
+import BaguetteDevice
 /// Pixel dimensions accepted by the live video encoding pipeline.
 ///
 /// H.264 uses 4:2:0 chroma planes, so both axes must be even. The value owns

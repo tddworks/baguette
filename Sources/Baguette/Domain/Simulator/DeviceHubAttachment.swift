@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Whether Xcode 27's Device Hub has attached its HID daemon to a

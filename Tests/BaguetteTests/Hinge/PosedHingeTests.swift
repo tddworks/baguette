@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The angle a foldable's book is shown at. A sweep baguette plays is
 /// shown as it is commanded, at 60 Hz, however late the guest's readings

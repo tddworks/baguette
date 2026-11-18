@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `PhotoLibrary` backed by `xcrun simctl addmedia <udid> <path>`.

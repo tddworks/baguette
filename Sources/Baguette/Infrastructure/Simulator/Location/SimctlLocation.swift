@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Location` backed by `xcrun simctl location <udid> set | start | clear`.

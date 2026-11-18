@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A gesture that answers with what it did and the screen it left, so an

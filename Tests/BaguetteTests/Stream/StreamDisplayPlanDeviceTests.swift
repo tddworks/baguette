@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A display plan bound to any device — a simulator's planes, or a
 /// physical phone that has only its own screen.

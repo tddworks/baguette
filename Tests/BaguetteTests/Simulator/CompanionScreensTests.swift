@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The extra screens a simulator can show beside its own glass: the
 /// CarPlay external display, and the Apple Watch paired to it. The
@@ -48,7 +49,7 @@ struct CompanionScreensTests {
             watch: PairedWatch(
                 udid: "WATCH-1",
                 name: "Apple Watch Series 11 (46mm)",
-                state: .booted
+                state: .ready
             )
         )
 
@@ -61,7 +62,7 @@ struct CompanionScreensTests {
     @Test func `should offer a paired watch with its shut-down state when it isn't booted`() {
         let screens = CompanionScreens(
             externalSize: Size(width: 800, height: 480),
-            watch: PairedWatch(udid: "WATCH-2", name: "Apple Watch Ultra 3", state: .shutdown)
+            watch: PairedWatch(udid: "WATCH-2", name: "Apple Watch Ultra 3", state: .off)
         )
 
         #expect(screens.json == """
@@ -73,7 +74,7 @@ struct CompanionScreensTests {
     @Test func `should keep a watch name intact when it carries JSON punctuation`() {
         let screens = CompanionScreens(
             externalSize: nil,
-            watch: PairedWatch(udid: "W", name: #"Watch "Test" \ 1"#, state: .booted)
+            watch: PairedWatch(udid: "W", name: #"Watch "Test" \ 1"#, state: .ready)
         )
 
         let parsed = (try? JSONSerialization.jsonObject(with: Data(screens.json.utf8)))

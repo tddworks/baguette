@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("VerifiedDeviceAssets")
 struct VerifiedDeviceAssetsTests {

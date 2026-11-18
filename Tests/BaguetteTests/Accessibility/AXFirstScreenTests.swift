@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// After a launch, an agent wants the app's first real screen. A new app
 /// can show the bridge an empty tree until the guest helper wakes it, and

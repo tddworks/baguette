@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `CameraCapture` for a still image. Decodes the file once, then

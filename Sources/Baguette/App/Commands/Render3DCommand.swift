@@ -1,3 +1,4 @@
+import BaguetteDevice
 import ArgumentParser
 import Foundation
 import ImageIO

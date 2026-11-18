@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `xcrun devicectl` — the public door into CoreDevice, shared by every

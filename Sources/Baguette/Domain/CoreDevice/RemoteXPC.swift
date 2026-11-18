@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 // RemoteXPC: the XPC values a phone's services exchange over the CoreDevice

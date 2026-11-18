@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// How a read of the frontmost app chooses between its two routes.

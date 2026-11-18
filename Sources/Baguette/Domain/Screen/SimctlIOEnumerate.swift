@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One connected screen from `simctl io enumerate`'s Connected Screens

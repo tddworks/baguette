@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Two-finger parallel drag. Both fingers start at given positions and

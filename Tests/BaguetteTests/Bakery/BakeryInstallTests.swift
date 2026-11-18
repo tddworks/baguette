@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Coverage for the install orchestrator. Git is mocked (`MockCheckout`
 /// writes a fixture bakery into the requested clone dir); the registry

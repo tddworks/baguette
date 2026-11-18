@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level coverage for the location routes. As with the
 /// status-bar routes, we test the pure parse + dispatch helpers

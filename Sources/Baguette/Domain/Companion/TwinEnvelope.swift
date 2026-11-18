@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One JSON text frame from the companion app on the phone. Three

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The pure brain of installation: given a reference, an optional

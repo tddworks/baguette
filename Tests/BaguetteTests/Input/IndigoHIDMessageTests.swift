@@ -3,6 +3,7 @@ import Synchronization
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("IndigoHIDMessageTests", .serialized)
 struct IndigoHIDMessageTests {

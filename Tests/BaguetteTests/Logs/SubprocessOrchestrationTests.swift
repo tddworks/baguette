@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// State-machine tests for `SimDeviceLogStream` driven entirely
 /// through a `MockSubprocess`. Coverage scope: every byte-flow,

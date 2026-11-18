@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The logs socket for any device: it stops at once, saying why, for a
 /// device that has no log stream.

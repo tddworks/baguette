@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// An agent knows it wants `Search flights`. Finding the element it means, without
 /// guessing between several, is baguette's job.

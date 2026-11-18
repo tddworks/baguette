@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Which read a caller asked for, from `describe-ui` or a `describe_ui` envelope.

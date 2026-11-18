@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A foldable's input: touches go to the lit panel's digitizer as on any

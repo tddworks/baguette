@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A live element is found again from what was read a moment ago, and a control can
 /// have moved a little since: a pulsing glow, the end of an animation.

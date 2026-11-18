@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Pure geometry: shrink a frame so both edges fit within a square

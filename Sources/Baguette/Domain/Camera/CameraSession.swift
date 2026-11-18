@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Owns the camera-streaming state machine for one device. Drives

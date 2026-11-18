@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 struct DeviceRenderOptions: Equatable, Sendable {

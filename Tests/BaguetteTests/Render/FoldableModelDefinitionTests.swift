@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 // iPhone Duo's model is Apple's own: `V68.usdz` inside Xcode's DeviceKit
 // plug-in, a skinned book whose `l_over_r` clip shuts it, with the

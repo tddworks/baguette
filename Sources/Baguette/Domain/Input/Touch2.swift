@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One streaming two-finger event. The two-finger counterpart to `Touch1`.

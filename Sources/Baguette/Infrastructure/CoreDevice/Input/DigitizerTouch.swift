@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Touch` for a device whose touches go to a `Digitizer`: each gesture

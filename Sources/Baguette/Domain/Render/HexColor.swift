@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A `#RRGGBB` wire color parsed into unit RGB components. Malformed

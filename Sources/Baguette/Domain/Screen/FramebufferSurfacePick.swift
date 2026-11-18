@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Picks which live framebuffer surface to emit for a display binding.

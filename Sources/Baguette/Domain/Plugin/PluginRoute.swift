@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The plugin-facing surface: which capability each route demands.

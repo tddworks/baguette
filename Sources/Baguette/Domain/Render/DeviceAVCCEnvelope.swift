@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Version 2 retains the AVCC tag and binds each visual payload to its render.

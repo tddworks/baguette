@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One completion offered by the console's URL bar: a scheme an

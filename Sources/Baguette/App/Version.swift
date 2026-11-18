@@ -1,3 +1,4 @@
+import BaguetteDevice
 // Single source of truth for the CLI version string. The release
 // workflow rewrites this literal in CI before `swift build` (see
 // `.github/workflows/release.yml` step "Inject release version") so

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What a given upload route will let onto the device.

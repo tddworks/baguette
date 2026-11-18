@@ -3,6 +3,7 @@ import Foundation
 import ArgumentParser
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("ChromeCommand")
 struct ChromeCommandTests {

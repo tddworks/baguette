@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `InputSurface` backed by `xcrun simctl spawn <udid> …` into the guest.

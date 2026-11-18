@@ -2,6 +2,7 @@ import Testing
 import VideoToolbox
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("H264 reference chain")
 struct H264ReferenceChainTests {

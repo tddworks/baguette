@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The part of a decoded picture that is the screen, in the terms a

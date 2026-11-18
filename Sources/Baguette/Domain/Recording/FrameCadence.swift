@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Decides which of the simulator's frames become frames of the

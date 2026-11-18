@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A fold or rotation is delivered, rejected, or — when the guest helper
 /// timed out and was stopped — unconfirmed. Every command and route takes

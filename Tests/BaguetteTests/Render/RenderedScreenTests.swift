@@ -3,6 +3,7 @@ import IOSurface
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("RenderedScreen")
 struct RenderedScreenTests {

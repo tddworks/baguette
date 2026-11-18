@@ -1,3 +1,4 @@
+import BaguetteDevice
 /// A live stream keeps only the newest unencoded frame. Unlike a recording,
 /// its final pending frame must still be delivered after the source goes quiet.
 struct StreamFrameSchedule<Frame> {

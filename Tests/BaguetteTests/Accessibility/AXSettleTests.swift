@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// After a gesture, an agent wants the screen it caused: not one caught
 /// mid-animation, and without a guessed sleep. `AXSettle` watches the app's

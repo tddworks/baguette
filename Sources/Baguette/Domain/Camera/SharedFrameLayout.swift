@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Layout of the mmap'd buffer at `/tmp/SimCam.bgra` (the path the

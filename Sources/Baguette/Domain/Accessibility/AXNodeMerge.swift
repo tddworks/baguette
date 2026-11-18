@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Hit-test discovery merge for `AXNode`.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Whether SimulatorKit should call `updateIOPorts` before reading

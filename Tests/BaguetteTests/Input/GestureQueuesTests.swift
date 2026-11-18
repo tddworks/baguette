@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The order a device takes its gestures in: one at a time, as sent,
 /// from every connection — while two devices never wait on each other.

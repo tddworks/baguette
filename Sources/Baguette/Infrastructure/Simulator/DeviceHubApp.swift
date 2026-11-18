@@ -1,3 +1,4 @@
+import BaguetteDevice
 import AppKit
 
 /// Xcode 27's Device Hub, as a host process.

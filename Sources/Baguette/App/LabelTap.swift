@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A tap that names its element. It presses through accessibility, which needs no

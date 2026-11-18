@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Delivering a remote notification through `simctl push` — the payload
 /// travels as a file (simctl reads a path), and a refusal carries

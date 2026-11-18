@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Every kind of device baguette drives, listed once — the only place a kind

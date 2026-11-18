@@ -232,8 +232,10 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 Each is a **fence**: inside it every word has one meaning, and its laws have
 one owner. Across a fence only a reference passes (an id, a value of the
 shared kernel) — never another context's aggregate, its storage or its
-adapter. `Sources/Baguette/Domain/<Context>/`, its `Infrastructure/<Context>/`
-and `Tests/BaguetteTests/<Context>/` share a name. `Infrastructure/` is
+adapter. A device's own contexts — what it is, how it looks, what it can do
+— are the module `BaguetteDevice` (`Sources/Device/`, an ability's roles and
+values under `Abilities/<ability>/`). The rest: `Sources/Baguette/Domain/<Context>/`,
+its `Infrastructure/<Context>/` and `Tests/BaguetteTests/<Context>/` share a name. `Infrastructure/` is
 split one level higher, by what it talks to — one folder per device family
 (`Simulator/`, `Companion/`, `CoreDevice/`, `Android/`) plus `Host/` for the
 Mac — and each family sorts itself by these context names

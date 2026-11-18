@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Bounded simctl output, including process exit and both output channels.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The running totals behind `CMPedometer` — steps taken and metres

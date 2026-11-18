@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A simulator, as a `Device`: its identity in the words every family

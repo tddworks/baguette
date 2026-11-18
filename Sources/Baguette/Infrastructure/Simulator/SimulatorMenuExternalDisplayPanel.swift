@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// AppleScript click of Simulator → I/O → External Displays → CarPlay.

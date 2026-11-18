@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Installed identities remain stable when the user renames a simulator.

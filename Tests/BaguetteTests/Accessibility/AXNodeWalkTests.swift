@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Walk-tree-into-AXNode tests against `FakeAXTreeElement` —
 /// `NSObject` subclasses that override KVC and the

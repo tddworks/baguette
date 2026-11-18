@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Where baguette keeps installed plugins, trusted bakeries and the
 /// clone cache. One resolver so the CLI, the server and the plugin

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Owns the motion feature's state for one simulator: which kind is being

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One press of a navigation or a hardware button — an act of `Press`.

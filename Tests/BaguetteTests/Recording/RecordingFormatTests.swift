@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The container a recording is written into is decided by the file the
 /// user names — `demo.mp4` is an MP4, `demo.mov` a QuickTime movie.

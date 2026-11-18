@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Ending a session must not unregister the digitizer behind an external
 /// plane. baguette does not own that display — the host's own window for it

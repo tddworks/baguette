@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The name of the directory one simulator's uploaded camera source is

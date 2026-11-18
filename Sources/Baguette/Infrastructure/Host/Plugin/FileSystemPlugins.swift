@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Production `Plugins` — plugins are directories on disk, each with a

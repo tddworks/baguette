@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `GuestHinge` reads the hinge with `HingeControl read-angle` spawned
 /// in the guest, which prints the current angle and exits, and watches

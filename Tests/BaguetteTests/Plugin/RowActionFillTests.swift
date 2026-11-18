@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `rowAction: "fill"` — a row that puts its text into the panel's own
 /// prompt instead of doing something with it.

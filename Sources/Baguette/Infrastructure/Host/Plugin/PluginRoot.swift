@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Locator for the plugins baguette itself ships (currently the

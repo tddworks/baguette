@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The accessibility tree a phone pushes when asked: the answers its

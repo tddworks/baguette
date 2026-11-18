@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The jobs a simulator's launchd reports through `launchctl list` —

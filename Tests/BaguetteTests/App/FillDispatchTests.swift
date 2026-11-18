@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A `baguette input` session answers `fill` ahead of the gesture pipeline, as it
 /// does `paste`. The rules are `Fill`'s; this only parses and serializes.

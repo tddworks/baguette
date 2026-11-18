@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `LocationWalk` — the joystick's vector
 /// (origin + bearing + speed) and its projection onto the

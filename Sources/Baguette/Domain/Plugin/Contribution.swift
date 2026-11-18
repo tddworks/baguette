@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One thing a plugin adds to the UI, and the executable that answers

@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// An affordance is what an agent can do on this screen right now. Baguette
 /// presses a control through accessibility, by name, so where it is doesn't matter:

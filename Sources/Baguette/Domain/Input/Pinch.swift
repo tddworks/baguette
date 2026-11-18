@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Two-finger pinch / spread around a centre point. Translates to a pair

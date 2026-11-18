@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The output size a capture should come out at — the Swift half of the

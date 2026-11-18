@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A sweep baguette plays on the hinge moves it the way `HingeControl
 /// sweep` does: one sample every 60 Hz frame with Device Hub's ease-out,

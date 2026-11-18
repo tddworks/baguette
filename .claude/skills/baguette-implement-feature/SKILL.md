@@ -96,7 +96,7 @@ tree, the words, every law and its one owner, the contexts — then answer:
 
 | Question | If yes |
 |---|---|
-| Which context owns the question it answers? (CANONICAL §5) | the files go in `Domain/<Context>/`, `Infrastructure/<Family>/<Context>/` (`Simulator/`, `CoreDevice/`, `Companion/`; `Host/` for what every family shares — families never reference each other), `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
+| Which context owns the question it answers? (CANONICAL §5) | a role or value of what a device is or can do goes in `Sources/Device/Abilities/<ability>/` (module `BaguetteDevice`, `public`); otherwise the files go in `Domain/<Context>/`, `Infrastructure/<Family>/<Context>/` (`Simulator/`, `CoreDevice/`, `Companion/`; `Host/` for what every family shares — families never reference each other), `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
 | Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; the App only parses and calls it |
 | Does it add or change a law? (CANONICAL §3) | it gets **one** owner — the node that holds the data. Grep for the rule first: if it's already written somewhere, that's the owner, or the duplicate to remove |
 | Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `Abilities` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |

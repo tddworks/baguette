@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A trusted bakery — a git repo the user accepted as a source of

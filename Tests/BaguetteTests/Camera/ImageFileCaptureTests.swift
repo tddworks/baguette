@@ -4,6 +4,7 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("ImageFileCapture")
 struct ImageFileCaptureTests {

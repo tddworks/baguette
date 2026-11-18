@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Infra wrapper around SimulatorKit's `IndigoHIDTargetForScreen`.

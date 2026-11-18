@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Where a `Stream` sends its encoded bytes. The CLI writes to stdout;

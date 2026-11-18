@@ -1,3 +1,4 @@
+import BaguetteDevice
  import Foundation
 
 /// Xcode's private device stack (`CoreDevice.framework`), reached in-process

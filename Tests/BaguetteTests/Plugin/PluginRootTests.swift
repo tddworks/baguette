@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `PluginRoot` finds the plugins baguette itself ships — the same
 /// three-step lookup `WebRoot` uses for web assets, and pinned here for

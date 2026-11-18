@@ -7,6 +7,7 @@ import Mockable
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The SimulatorKit call that hands over a framebuffer is integration-
 /// only, but everything `ScreenSnapshot` does around it is not: the

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One DTX message, the framing Xcode's device services speak (the phone's

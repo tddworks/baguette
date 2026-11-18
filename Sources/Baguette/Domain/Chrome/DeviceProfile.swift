@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What we read from a CoreSimulator device-type's `profile.plist`.

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// One field on a pretend screen. It answers the same reads a simulator does, and
 /// keys change what it shows, so a test says what the app does and checks the outcome.

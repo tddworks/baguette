@@ -1,3 +1,4 @@
+import BaguetteDevice
 import CoreMedia
 
 /// Accumulated durations keep timestamps increasing when the live FPS changes.

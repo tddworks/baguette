@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Answers `describe_ui` on a `baguette input` session, ahead of the

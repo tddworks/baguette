@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The extra screens a simulator can show beside its own glass: the
@@ -26,7 +27,9 @@ struct CompanionScreens: Sendable, Equatable {
         if let watch {
             watchField["udid"] = watch.udid
             watchField["name"] = watch.name
-            watchField["state"] = watch.state.description
+            // The rail asks only whether the watch is booted, in simctl's word.
+            watchField["state"] = watch.state == .ready ? "Booted"
+                : watch.state == .starting ? "Booting" : "Shutdown"
         }
         var externalField: [String: Any] = ["available": externalSize != nil]
         if let externalSize {

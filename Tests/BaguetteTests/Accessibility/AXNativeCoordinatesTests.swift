@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("AX native coordinates")
 struct AXNativeCoordinatesTests {

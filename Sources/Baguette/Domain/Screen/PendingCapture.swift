@@ -1,3 +1,4 @@
+import BaguetteDevice
 /// Whether a framebuffer capture is already queued and waiting to run.
 ///
 /// SimulatorKit composites frames faster than a capture can complete —

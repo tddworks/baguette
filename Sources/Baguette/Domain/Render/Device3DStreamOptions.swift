@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Public connection options for a live 3D stream.

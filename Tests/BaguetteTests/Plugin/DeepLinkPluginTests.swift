@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The deep-link plugin baguette publishes, parsed exactly as an
 /// installed copy would be.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `SimulatorInjection` backed by `xcrun simctl spawn <udid> launchctl …`.

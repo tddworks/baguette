@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 // Device Hub's pose picker, on the page: shut, open or flat, driven on the
 // device's own hinge. The envelope rides the 3D socket beside

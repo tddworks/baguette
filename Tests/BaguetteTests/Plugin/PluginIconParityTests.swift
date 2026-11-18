@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The icon set exists twice — `PluginIcon` here, the `ICONS` map in
 /// `sim-plugins.js` — and until this suite nothing checked they agreed.

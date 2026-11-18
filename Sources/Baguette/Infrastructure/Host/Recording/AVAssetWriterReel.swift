@@ -1,3 +1,4 @@
+import BaguetteDevice
 import AVFoundation
 import CoreImage
 import CoreMedia

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The encoded frames a client has not read yet, held under a byte

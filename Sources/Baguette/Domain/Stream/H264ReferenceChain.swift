@@ -1,3 +1,4 @@
+import BaguetteDevice
 /// A decoder can accept deltas only after the current session supplied a keyframe and configuration.
 struct H264ReferenceChain {
     private(set) var generation = 0

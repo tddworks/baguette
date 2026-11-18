@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Coalesces individual log lines into bounded batches. The browser

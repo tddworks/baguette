@@ -3,6 +3,7 @@ import Mockable
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `GET /simulators/:udid/companion-screens.json` — what the focus-mode
 /// screens rail asks before it offers anything. A device with no CarPlay
@@ -40,7 +41,7 @@ struct CompanionScreensRouteTests {
     @Test func `should offer both CarPlay and the watch when the device has both screens`() {
         let sim = simulator(
             carPlayBinds: true,
-            watch: PairedWatch(udid: "WATCH-1", name: "Apple Watch Ultra 3", state: .booted)
+            watch: PairedWatch(udid: "WATCH-1", name: "Apple Watch Ultra 3", state: .ready)
         )
 
         let simulators = MockSimulators()

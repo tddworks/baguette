@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// How a device looks: its chrome found by its model, and — on a
 /// foldable — the panel its hinge lights.

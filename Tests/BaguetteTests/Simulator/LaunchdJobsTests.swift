@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `launchctl list` inside a simulator prints one job per line —
 /// `pid<TAB>status<TAB>label`, with `-` for a job that isn't running.

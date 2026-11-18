@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Reads newline-delimited JSON commands from stdin in event-driven mode

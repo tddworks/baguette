@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `CameraCapture` for a looping video file. Pulls decoded frames off a

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The angle a foldable's book is shown at.

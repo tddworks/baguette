@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 // The wire's `DeviceEdge` and the digitizer message's edge bitmask are
 // two vocabularies for the same thing. One translation, shared by the

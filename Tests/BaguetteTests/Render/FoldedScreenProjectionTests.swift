@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 // Where a foldable's lit screen lands in the rendered image, so a click
 // can be mapped back onto it. The unfolded screen bends at the hinge,

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One streaming touch event — the streaming counterpart to `Tap`. Lets

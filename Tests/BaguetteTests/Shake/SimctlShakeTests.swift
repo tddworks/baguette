@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `SimctlShake` — argv assembly (delegated
 /// to `MotionShake`) + the `Subprocess` exit handshake. The irreducible

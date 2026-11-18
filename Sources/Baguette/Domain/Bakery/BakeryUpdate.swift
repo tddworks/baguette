@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One trusted bakery, measured against what its remote holds now.

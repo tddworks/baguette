@@ -2,6 +2,7 @@ import Mockable
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("StreamCommand", .serialized)
 struct StreamCommandTests {

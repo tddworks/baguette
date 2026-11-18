@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Production `Subprocess` — wraps a `Foundation.Process` plus a

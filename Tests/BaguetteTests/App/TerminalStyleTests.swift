@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `TerminalStyle` decides how a message appears on the way to stderr.
 /// Pure string composition + a pure colour decision, so the `isatty`

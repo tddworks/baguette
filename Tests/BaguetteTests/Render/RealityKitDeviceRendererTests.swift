@@ -4,6 +4,7 @@ import ImageIO
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("RealityKitDeviceRenderer")
 struct RealityKitDeviceRendererTests {

@@ -2,6 +2,7 @@ import CoreGraphics
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("AXFrameTransform")
 struct AXFrameTransformTests {

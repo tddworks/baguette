@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A recording plan is everything the user asked for — how big, how the
 /// frame sits inside that, how fast, how long — resolved against the

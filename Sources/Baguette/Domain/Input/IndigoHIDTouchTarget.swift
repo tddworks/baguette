@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Indigo HID digitizer routing targets.

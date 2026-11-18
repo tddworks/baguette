@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Counts the reads that actually ran.
 private final class Reads: @unchecked Sendable {

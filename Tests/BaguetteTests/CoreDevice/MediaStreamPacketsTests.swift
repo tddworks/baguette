@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// RTP header: V=2, P=0, X, CC; M, PT; sequence; timestamp; SSRC.
 private func rtp(

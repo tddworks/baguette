@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `simctl list pairs -j` is the host's whole pairing table, not one
 /// device's. A phone finds its watch by looking for the pair whose
@@ -49,12 +50,12 @@ struct SimctlPairsTests {
         #expect(watch == PairedWatch(
             udid: "WATCH-2",
             name: "Apple Watch Ultra 3",
-            state: .shutdown
+            state: .off
         ))
     }
 
     @Test func `should report a booted watch as booted`() {
-        #expect(SimctlPairs.watch(pairedWith: "PHONE-1", in: pairsJSON)?.state == .booted)
+        #expect(SimctlPairs.watch(pairedWith: "PHONE-1", in: pairsJSON)?.state == .ready)
     }
 
     @Test func `should find no watch when the phone is not paired`() {
@@ -81,7 +82,7 @@ struct SimctlPairsTests {
             {"pairs":{"P":{"phone":{"name":"iPhone","udid":"PHONE-1","state":"Booted"},
              "watch":{"name":"Apple Watch","udid":"WATCH-1","state":"Hibernating"}}}}
             """
-        #expect(SimctlPairs.watch(pairedWith: "PHONE-1", in: odd)?.state == .shutdown)
+        #expect(SimctlPairs.watch(pairedWith: "PHONE-1", in: odd)?.state == .off)
     }
 
     @Test func `should read back every simulator state from its printed name`() {

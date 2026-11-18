@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Where an app's preferences live on a simulator. simctl reports the
 /// container (`get_app_container`), so nothing here guesses a path —

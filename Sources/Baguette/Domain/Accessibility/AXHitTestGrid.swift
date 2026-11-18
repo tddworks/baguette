@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The grid of screen points at which the AX adapter runs

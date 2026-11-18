@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `describe_ui` on a gesture answers with what the gesture did and the
 /// screen it left, so an agent gets one call per screen.

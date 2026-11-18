@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 @testable import protocol Baguette.Stream
 
 @Suite("StreamReconfiguration")

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Everything `baguette record` can refuse to do, with the sentence the

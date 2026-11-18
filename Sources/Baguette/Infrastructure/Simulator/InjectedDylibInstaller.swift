@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Resolves a bundled dylib and copies it into a per-hash subdirectory under

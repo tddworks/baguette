@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Resolves the Indigo HID digitizer target for a display plane.

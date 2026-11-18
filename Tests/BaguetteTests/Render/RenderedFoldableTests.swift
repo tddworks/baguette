@@ -3,6 +3,7 @@ import IOSurface
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 // A foldable has two screens and a hinge. Frames from either panel
 // compose through one scene, posed at the hinge's latest angle, with the

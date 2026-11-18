@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The screen-state routes — orientation, shake, status bar — answered for
 /// any device through `Devices`, under `/devices/:udid/…` and, for a

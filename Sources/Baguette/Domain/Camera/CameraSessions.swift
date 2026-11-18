@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The shared camera frame buffer admits one owner for the whole server.

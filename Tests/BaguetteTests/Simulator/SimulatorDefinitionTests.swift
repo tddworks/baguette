@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `SimulatorDefinition.compose` is the pure projection that the SDK
 /// bootstrap endpoint (`/simulators/<udid>/definition.json`) serialises.

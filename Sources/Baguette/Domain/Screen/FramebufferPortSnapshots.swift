@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Sized framebuffer port before Connected Screens ids are assigned.

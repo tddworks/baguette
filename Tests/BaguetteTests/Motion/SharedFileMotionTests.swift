@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `SharedFileMotion` — publishing a
 /// `MotionIntent` where the injected dylib can read it, and arming /

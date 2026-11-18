@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Where the frames streamed into the simulator's camera come from.

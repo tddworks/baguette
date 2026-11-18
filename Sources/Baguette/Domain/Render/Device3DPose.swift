@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Device Hub's pose picker, on the page: `{"type":"set_pose","hingeDegrees":130}`

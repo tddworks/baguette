@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("Navigations and hardware buttons")
 struct ButtonSetsTests {

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Answers `fill` on a `baguette input` session and for `baguette fill`, ahead of the

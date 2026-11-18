@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `HingeMotor` — and `DeviceKeys` — that keeps `HingeControl serve`

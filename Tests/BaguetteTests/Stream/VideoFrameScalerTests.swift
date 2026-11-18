@@ -2,6 +2,7 @@ import CoreVideo
 import IOSurface
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("VideoFrameScaler")
 struct VideoFrameScalerTests {

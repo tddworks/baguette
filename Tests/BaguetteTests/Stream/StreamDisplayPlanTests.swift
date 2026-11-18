@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A stream session binds to a display kind from the `display` query
 /// (`phone`|`carplay`, default phone). CarPlay plans ask to enable the

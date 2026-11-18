@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Quitting and launching an app — what a preferences edit wraps itself
 /// in when asked to relaunch, so the app starts from the edited file.

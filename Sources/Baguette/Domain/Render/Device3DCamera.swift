@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 struct Device3DCamera: Equatable, Sendable {

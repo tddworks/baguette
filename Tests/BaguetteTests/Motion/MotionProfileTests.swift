@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `MotionProfile` — the per-kind constants the
 /// injected dylib evaluates to synthesise `CMPedometer` counters and

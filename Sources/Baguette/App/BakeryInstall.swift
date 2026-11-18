@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Orchestrates the whole install lifecycle — clone, read the menu,

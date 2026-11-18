@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The wire format the user picks for a frame stream. Drives the codec

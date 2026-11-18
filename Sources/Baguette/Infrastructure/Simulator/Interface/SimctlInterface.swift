@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Interface` backed by `xcrun simctl ui <udid> <option> [<value>]`.

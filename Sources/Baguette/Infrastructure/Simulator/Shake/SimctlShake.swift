@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Shake` backed by `xcrun simctl spawn <udid> notifyutil -p

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Runs an action, waits until the screen has stopped moving, and reads it.

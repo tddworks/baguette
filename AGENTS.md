@@ -57,7 +57,7 @@ Every other target (`make`, `make docs`, `make check-docs`, …) and the toolcha
 
 ## Architecture
 
-Imports flow inward: `App` (CLI + use cases) → `Domain` (value types + `@Mockable` abstractions) + `Infrastructure` (the only private-API code); `Infrastructure` → `Domain`; `Domain` → Foundation + IOSurface. `Domain/` splits by bounded context; `Tests/BaguetteTests/` mirrors it. `Infrastructure/` splits by device family (`Simulator/`, `Companion/`…), then context, plus `Host/`; families never import each other → [devices](docs/features/devices/design.md). `Resources/Web/` holds the vanilla IIFE modules `baguette serve` serves.
+Imports flow inward. `Sources/Device/` (`BaguetteDevice`): what a device is, its roles and values, importing nothing of ours. In `Sources/Baguette/`: `App` → `Domain` + `Infrastructure` (private APIs) → `Device`. `Domain/` splits by bounded context; `Tests/BaguetteTests/` mirrors it. `Infrastructure/` splits by device family (`Simulator/`, `Companion/`…), then context, plus `Host/`; families never import each other → [devices](docs/features/devices/design.md). `Resources/Web/` holds the vanilla IIFE modules `baguette serve` serves.
 
 **Two consumers, one pipeline.** Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → the gesture's role (`Touch`, `Key`, …) → `IndigoHIDInput`. The only difference is the App-layer entry point.
 

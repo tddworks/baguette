@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One frame handed back by a `VideoDecoder`, already fitted to the

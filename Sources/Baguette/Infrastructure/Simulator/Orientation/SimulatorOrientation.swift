@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Foldable simulators consume Device Hub pose events; other devices use Purple.

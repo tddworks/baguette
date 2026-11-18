@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A simulator's camera: it has none of its own, so baguette gives it one
 /// by injecting VirtualCamera into what it launches next.

@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The sentences `baguette record` prints on its way out. They are
 /// asserted because a recording fails minutes after the user walked

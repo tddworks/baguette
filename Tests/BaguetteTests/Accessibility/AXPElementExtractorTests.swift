@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Unit tests for the static element-reading helpers on
 /// `AXPTranslatorAccessibility`. These extract values out of the

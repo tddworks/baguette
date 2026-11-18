@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One change to an app's persisted preferences — store a value under a

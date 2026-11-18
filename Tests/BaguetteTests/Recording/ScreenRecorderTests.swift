@@ -3,6 +3,7 @@ import Foundation
 import IOSurface
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `ScreenRecorder` — the value-domain half of
 /// `baguette record`: resolving the requested output size against the

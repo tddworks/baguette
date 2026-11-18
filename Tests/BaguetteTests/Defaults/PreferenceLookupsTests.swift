@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// What a running app answers when asked which preferences it has looked
 /// up — the keys its own code (or SwiftUI's `@AppStorage`) read, each with

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `SimctlDefaults`: ask simctl for the
 /// container, then run the simulator's own `defaults` tool against the

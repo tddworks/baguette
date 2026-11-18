@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The pure decision behind "should we install from this bakery?".

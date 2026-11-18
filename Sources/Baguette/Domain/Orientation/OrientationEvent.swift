@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Pure builder for the `PurpleWorkspacePort` mach message that tells a

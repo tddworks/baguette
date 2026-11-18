@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// What `HingeControl` prints to its owner: its guest pid at startup, then
 /// one `done <status>` per command it played. Anything else is diagnostics.

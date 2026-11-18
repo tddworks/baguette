@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Parses one stdin line as JSON, routes through `GestureRegistry`, and

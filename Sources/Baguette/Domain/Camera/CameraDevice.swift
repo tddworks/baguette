@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One camera the host can capture from. Identity is `uid` —

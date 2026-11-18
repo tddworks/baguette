@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// One screenshot handler for every device, under both trees.
 @Suite("Screenshot routes")

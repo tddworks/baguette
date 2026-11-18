@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Gestures on a phone whose touches go through a digitizer: every report
 /// the digitizer receives, in order, in fractions of the screen.

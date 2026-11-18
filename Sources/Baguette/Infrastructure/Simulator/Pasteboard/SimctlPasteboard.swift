@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Pasteboard` backed by `xcrun simctl pbcopy | pbpaste | pbsync`,

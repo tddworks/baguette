@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `CopyDispatch` intercepts `copy` wire lines ahead of the gesture
 /// registry on both entry points (`baguette input` stdin, serve WS) —

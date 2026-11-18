@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `CameraSession` reports a failed start to the browser as
 /// `error.localizedDescription`, so every camera error that can reach

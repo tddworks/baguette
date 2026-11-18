@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A set of interface settings to apply. Every field is optional: a

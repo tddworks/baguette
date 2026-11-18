@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `SimulatorLifetime` is the value-typed reading of Simulator.app's
 /// device lifetime policy — the two preferences Apple groups under

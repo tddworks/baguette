@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// An edit to an app's persisted preferences, with the app lifecycle
 /// made explicit: a running app keeps its own copy of `UserDefaults` in

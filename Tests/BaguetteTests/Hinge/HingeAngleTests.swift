@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A foldable's hinge angle, as `HingeControl` reports it from the
 /// guest, and which panel that angle leaves lit.

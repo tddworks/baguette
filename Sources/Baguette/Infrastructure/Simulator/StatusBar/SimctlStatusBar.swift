@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `StatusBar` backed by `xcrun simctl status_bar <udid> override | clear`.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The order each device takes its gestures in: one at a time, as sent,

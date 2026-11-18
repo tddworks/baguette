@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One turn of the scroll wheel, as a browser's `WheelEvent` carries it:

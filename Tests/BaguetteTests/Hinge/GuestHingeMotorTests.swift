@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The hinge is moved from inside the guest: `HingeControl serve`, spawned
 /// once with `simctl spawn` and kept, registers a HID service shaped like

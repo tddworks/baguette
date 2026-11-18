@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The in-memory `CompanionPhones` implementation. Membership is driven by

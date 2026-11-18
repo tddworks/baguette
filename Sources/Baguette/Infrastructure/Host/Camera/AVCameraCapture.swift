@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `CameraCapture` orchestrator. Wraps a `VideoCapture` collaborator

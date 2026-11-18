@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Production `ChromeStore` — reads from the standard Apple paths.

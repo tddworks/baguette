@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A simulator's camera: VirtualCamera injected into what it launches next.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Bytes that wrap each frame on the wire for `StreamFormat.mjpeg`.

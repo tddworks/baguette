@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The ordered conversation one companion socket holds with the host:

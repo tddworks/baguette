@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The encoder each wire format is built with. Here, beside the encoders,

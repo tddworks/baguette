@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Creating ports is only necessary when the device exposes none.
 /// Calling updateIOPorts against an already-connected TVOut/CarPlay

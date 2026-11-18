@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Copy the focused field's selection out of the sim onto the host

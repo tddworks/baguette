@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One display plane backed by SimulatorKit ports + Connected Screens.

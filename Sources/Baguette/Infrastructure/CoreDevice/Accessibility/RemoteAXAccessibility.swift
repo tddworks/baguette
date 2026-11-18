@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A physical phone's accessibility tree, read from its own accessibility

@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Port selection over live framebuffer snapshots: phone is the largest
 /// plane; CarPlay is the best remaining external after that winner is

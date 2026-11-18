@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `Simulator` is a `@Mockable` protocol now — identity, state, and
 /// the per-simulator capabilities live on the entity itself, not on

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Parses one stdin reconfig line and applies it to a `StreamConfig`.

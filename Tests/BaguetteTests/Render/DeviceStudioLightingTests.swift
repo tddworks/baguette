@@ -2,6 +2,7 @@ import SceneKit
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("DeviceStudioLighting")
 struct DeviceStudioLightingTests {

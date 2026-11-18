@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Pure binding heuristic over live framebuffer port snapshots.

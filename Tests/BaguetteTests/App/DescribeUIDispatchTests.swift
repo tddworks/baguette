@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A long-lived `baguette input` session answers `describe_ui` itself,
 /// so one process can both look and act without paying startup per call.

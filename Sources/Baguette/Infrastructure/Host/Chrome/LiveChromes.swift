@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Production `Chromes` — composes a filesystem `ChromeStore` and a

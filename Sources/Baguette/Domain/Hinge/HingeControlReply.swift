@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A line `HingeControl` prints to its owner: its guest pid at startup, then

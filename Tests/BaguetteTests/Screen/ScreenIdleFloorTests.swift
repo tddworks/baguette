@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// CarPlay's compositor often goes idle on a static home screen, so
 /// callback-only capture starves the browser. An idle floor keeps

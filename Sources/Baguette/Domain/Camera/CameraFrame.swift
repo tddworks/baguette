@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One BGRA frame about to be written into the shared-memory buffer.

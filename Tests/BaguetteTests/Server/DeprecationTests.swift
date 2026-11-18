@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The old `/simulators/:udid/…` spelling still answers, but says it is
 /// deprecated and where its successor is.

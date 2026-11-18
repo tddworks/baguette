@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `NetworkCondition` — how degraded a simulator's
 /// network is claimed to be.

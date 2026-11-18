@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `RemoteNotification` — a notification a
 /// developer wants delivered to one app on the simulator, as if APNs had

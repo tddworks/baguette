@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One plugin a trusted bakery offers, and whether this machine

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One read many callers share: whoever asks while a read is in flight

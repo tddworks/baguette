@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `WatchPairing` backed by `xcrun simctl list pairs -j`.

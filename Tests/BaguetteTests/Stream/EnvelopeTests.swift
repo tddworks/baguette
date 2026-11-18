@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("MJPEGEnvelope")
 struct MJPEGEnvelopeTests {

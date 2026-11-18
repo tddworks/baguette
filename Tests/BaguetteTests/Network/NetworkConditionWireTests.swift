@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Coverage for the bytes `NetworkCondition` publishes into the simulator
 /// and the injected dylib reads back.

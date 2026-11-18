@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Hinge` read inside the guest: `xcrun simctl spawn <udid> <HingeControl>

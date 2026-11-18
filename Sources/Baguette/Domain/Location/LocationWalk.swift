@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A joystick's vector — "from here, head that way, at that speed". The

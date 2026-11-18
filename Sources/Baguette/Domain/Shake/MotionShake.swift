@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The UIKit motion-shake signal delivered to a booted simulator.

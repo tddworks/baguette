@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Single-line stderr log. Stdout is reserved for stream output / acks;

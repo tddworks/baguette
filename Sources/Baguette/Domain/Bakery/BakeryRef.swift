@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A reference the user types to point at a bakery — the git repo a

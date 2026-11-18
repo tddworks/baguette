@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Xcode 27 relocated `SimulatorKit.framework` out of the developer
 /// directory: it used to sit under `Contents/Developer/Library/

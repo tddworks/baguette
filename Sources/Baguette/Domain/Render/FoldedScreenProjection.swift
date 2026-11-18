@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One flat piece of a foldable's lit screen in the rendered image: its

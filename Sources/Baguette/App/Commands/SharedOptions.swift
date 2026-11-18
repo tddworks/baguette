@@ -1,3 +1,4 @@
+import BaguetteDevice
 import ArgumentParser
 
 /// Reused by every subcommand that targets one specific simulator.

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import CoreGraphics
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The sweep probes only where the walk couldn't see: inside childless
 /// containers and along the status bar. Everywhere else the walk already

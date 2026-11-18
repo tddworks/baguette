@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level coverage for the motion routes and, more importantly, for
 /// the hook that lets a location walk drive motion.

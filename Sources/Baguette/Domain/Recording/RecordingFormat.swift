@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The container a recording lands in. There is no `--format` flag: the

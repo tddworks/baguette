@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Whether a browser's install request may be served — the pure

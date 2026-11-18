@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What a plugin is allowed to ask baguette to do. A manifest declares

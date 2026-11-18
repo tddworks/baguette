@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Display planes hang off the simulator as a plural aggregate. Callers
 /// pick phone or carPlay, resolve a live binding, and take screen/input

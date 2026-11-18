@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 import HTTPTypes
 import Hummingbird

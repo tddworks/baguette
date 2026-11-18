@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `POST /simulators/:udid/input` — the HTTP door to the gesture
 /// pipeline, so a plugin subprocess can drive the device without

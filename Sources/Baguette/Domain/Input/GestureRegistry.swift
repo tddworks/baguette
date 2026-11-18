@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Routes incoming JSON dicts to the right `Gesture` parser by their

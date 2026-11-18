@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Checkout` backed by `/usr/bin/git`. The only bakery code that talks

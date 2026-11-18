@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// A temporary xcrun records the actual read-modify-write result, including
 /// argv, exit status, and separate stdout/stderr across real process captures.

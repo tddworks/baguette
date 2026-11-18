@@ -1,5 +1,6 @@
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// One screen's input roles as mocks — and, forwarding each role to its
 /// mock, a whole simulator HID, for what wraps one.

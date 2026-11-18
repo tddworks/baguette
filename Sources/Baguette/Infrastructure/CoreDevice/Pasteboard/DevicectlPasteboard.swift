@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A physical phone's general pasteboard, through `devicectl device

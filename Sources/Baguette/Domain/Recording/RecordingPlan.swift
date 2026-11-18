@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Everything the user asked `baguette record` for, as one value: how

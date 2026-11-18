@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Production `ExternalDisplays` — clicks the host panel only when

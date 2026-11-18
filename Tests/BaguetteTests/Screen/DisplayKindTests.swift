@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Wire / CLI tokens map onto display kinds. Unknown tokens stay nil so
 /// App can default to phone without Domain inventing a fallback.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Build an Indigo message on the main thread — the call alone, not the

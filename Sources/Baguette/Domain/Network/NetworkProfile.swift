@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The named network presets, borrowed wholesale from Network Link

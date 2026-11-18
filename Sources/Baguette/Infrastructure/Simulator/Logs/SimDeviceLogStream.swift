@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `LogStream` orchestrator. Owns the state machine —

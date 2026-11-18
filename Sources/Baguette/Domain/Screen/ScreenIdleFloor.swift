@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Cadence floor for SimulatorKit screen capture. CarPlay's home

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Restoring a saved set of preferences in one go — the repeatable test
 /// setup an export makes possible. A relaunch wraps the whole batch, not

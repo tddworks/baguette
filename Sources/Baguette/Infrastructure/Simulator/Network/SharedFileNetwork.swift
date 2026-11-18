@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Network` backed by a small JSON file both sides can see, plus the

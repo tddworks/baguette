@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import CoreGraphics
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `TokenDispatcher` is the bridge-token delegate we install on
 /// `AXPTranslator`. AXPTranslator looks it up via three `@objc

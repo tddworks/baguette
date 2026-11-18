@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// At most one queued delivery and one latest frame, even if encoding is slower

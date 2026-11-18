@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A real phone (or iPad, or watch) CoreDevice knows about — read from

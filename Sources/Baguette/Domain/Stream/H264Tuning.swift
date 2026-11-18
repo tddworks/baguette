@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Encoder-latency knobs for the H.264 (AVCC) stream, as a pure value so

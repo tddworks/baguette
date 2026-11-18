@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Pure-value coverage for `InstalledApp` — "the apps on this device,
 /// and the URL schemes each one answers to." This is the data source

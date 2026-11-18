@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One installed plugin: where it lives on disk, and what it declares.

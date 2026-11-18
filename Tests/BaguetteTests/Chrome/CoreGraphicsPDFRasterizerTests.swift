@@ -3,6 +3,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("CoreGraphicsPDFRasterizer")
 struct CoreGraphicsPDFRasterizerTests {

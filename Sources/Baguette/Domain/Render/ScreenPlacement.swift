@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// UV-space placement of a simulator frame on a device screen surface.

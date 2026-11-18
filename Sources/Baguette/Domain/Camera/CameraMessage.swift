@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// One inbound WS message on `/simulators/:udid/camera`. Pure value

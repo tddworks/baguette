@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The SDK bootstrap payload — one value type that describes *what

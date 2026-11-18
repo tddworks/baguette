@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 private struct BootFailed: Error, CustomStringConvertible {
     var description: String { "Unable to boot device in current state: Booted" }

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Orchestration coverage for `MotionSession` — the state behind the
 /// motion feature: which kind is being published, what the pedometer has

@@ -96,16 +96,25 @@ per-session warmup that should only happen once.
 ## Three-layer code split
 
 Cross-layer imports flow strictly inward: App depends on Domain +
-Infrastructure; Infrastructure depends on Domain; Domain depends on
-nothing but Foundation / IOSurface (a public Apple type).
+Infrastructure; Infrastructure depends on Domain; everything depends on
+`BaguetteDevice`, which depends on nothing of baguette's — only
+Foundation / IOSurface (public Apple types) and Mockable.
 
 ```
-Sources/Baguette/
-├── App/                CLI dispatch + use-case orchestration
-├── Domain/             pure Swift, no private Apple APIs
-├── Infrastructure/     @Mockable protocols + concrete impls
-└── Resources/Web/      static HTML / JS / CSS for `serve`
+Sources/
+├── Device/             module BaguetteDevice — what a device is: Device,
+│                       Devices, Abilities, Chrome/, Abilities/<ability>/
+│                       (the roles and their values), all `public`
+└── Baguette/           everything else, until its own module lands
+    ├── App/                CLI dispatch + use-case orchestration
+    ├── Domain/             pure Swift, no private Apple APIs
+    ├── Infrastructure/     @Mockable protocols + concrete impls
+    └── Resources/Web/      static HTML / JS / CSS for `serve`
 ```
+
+The rest follows one module per context, outside to inside, each with its
+public face at the top and its implementations in `Internal/`
+([solid](features/devices/solid.md)).
 
 `Domain/` is split into bounded-context subfolders (`Device/`,
 `Simulator/`, `CoreDevice/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`,

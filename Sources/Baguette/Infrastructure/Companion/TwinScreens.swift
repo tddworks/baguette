@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The per-device registry of twin ingest hubs, held by `Server` the

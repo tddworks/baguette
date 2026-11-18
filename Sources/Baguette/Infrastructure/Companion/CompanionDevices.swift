@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The companion family as a source of `Devices`: each phone whose

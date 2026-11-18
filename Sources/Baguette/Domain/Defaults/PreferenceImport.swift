@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// A saved set of preferences written back in one go — what makes an

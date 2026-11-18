@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// What an input session hands back when it ends.

@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// Waits for an app's first real screen after a launch.

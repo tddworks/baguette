@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// `Apps` backed by `xcrun simctl install <udid> <path>` — plus, for a

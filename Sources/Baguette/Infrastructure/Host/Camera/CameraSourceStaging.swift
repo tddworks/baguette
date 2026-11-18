@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Foundation
 
 /// The host-side landing spot for a browser-uploaded camera source.

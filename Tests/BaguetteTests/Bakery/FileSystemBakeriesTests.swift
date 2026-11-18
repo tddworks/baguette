@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Round-trip coverage for the `~/.baguette` registry. Roots are
 /// injectable so the suite writes into a throwaway temp home, mirroring

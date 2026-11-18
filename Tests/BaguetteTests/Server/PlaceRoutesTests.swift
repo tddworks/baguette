@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Location, motion and network for any device: a device without the
 /// ability is refused by name, and every route answers under both trees.
