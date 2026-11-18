@@ -58,11 +58,15 @@ struct PluginsCommand: ParsableCommand {
         @Argument(help: "Plugin name.") var name: String
 
         func run() throws {
-            guard let plugin = try roots.plugins.plugin(named: name) else {
-                log("No plugin named \(name)")
+            try Self.show(name: name, in: roots.plugins, output: .standard)
+        }
+
+        static func show(name: String, in plugins: any Plugins, output: CommandOutput) throws {
+            guard let plugin = try plugins.plugin(named: name) else {
+                output.warn("No plugin named \(name)")
                 throw ExitCode.failure
             }
-            print(PluginsCommand.detail(plugin))
+            output.say(PluginsCommand.detail(plugin))
         }
     }
 
@@ -75,20 +79,24 @@ struct PluginsCommand: ParsableCommand {
         @Argument(help: "Path to the plugin directory.") var path: String
 
         func run() throws {
+            try Self.validate(directory: path, output: .standard)
+        }
+
+        static func validate(directory path: String, output: CommandOutput) throws {
             let manifest = URL(fileURLWithPath: path)
                 .appendingPathComponent(FileSystemPlugins.manifestFilename)
             guard let data = try? Data(contentsOf: manifest) else {
-                log("No \(FileSystemPlugins.manifestFilename) at \(path)")
+                output.warn("No \(FileSystemPlugins.manifestFilename) at \(path)")
                 throw ExitCode.failure
             }
             switch PluginsCommand.validate(json: data) {
             case .valid(let name, let commands, let panels, let warnings):
-                print("\(name) is valid — \(commands) command(s), \(panels) panel(s)")
+                output.say("\(name) is valid — \(commands) command(s), \(panels) panel(s)")
                 // Not a failure — the plugin works — but the author
                 // asked what's wrong with it, and this is the answer.
-                for warning in warnings { log("warning: \(warning)") }
+                for warning in warnings { output.warn("warning: \(warning)") }
             case .invalid(let reason):
-                log("Invalid manifest: \(reason)")
+                output.warn("Invalid manifest: \(reason)")
                 throw ExitCode.failure
             }
         }
@@ -124,12 +132,18 @@ struct PluginsCommand: ParsableCommand {
                 ),
                 plugins: roots.plugins
             )
+            try Self.report(outcome, output: .standard)
+        }
+
+        /// The plugin's answer on stdout — failing when it reported
+        /// failure — or why it gave none.
+        static func report(_ outcome: PluginDispatch.Outcome, output: CommandOutput) throws {
             switch outcome {
             case .ok(let result):
-                print(result.json)
+                output.say(result.json)
                 if !result.ok { throw ExitCode.failure }
             default:
-                log(outcome.errorText ?? "plugin failed")
+                output.warn(outcome.errorText ?? "plugin failed")
                 throw ExitCode.failure
             }
         }
@@ -147,8 +161,15 @@ struct PluginsCommand: ParsableCommand {
         var accept = false
 
         func run() async throws {
-            let install = BakeryCommand.installer()
+            try await Self.install(
+                target: target, accept: accept, using: BakeryCommand.installer(),
+                confirm: TrustPrompt.confirm, output: .standard)
+        }
 
+        static func install(
+            target: String, accept: Bool, using install: BakeryInstall,
+            confirm: (String) -> Bool, output: CommandOutput
+        ) async throws {
             // A bare name (no `/`, not a URL) resolves across bakeries
             // already trusted — no new consent. Anything with a slash is
             // a direct reference, which may add a new bakery.
@@ -162,17 +183,17 @@ struct PluginsCommand: ParsableCommand {
                 switch TrustDecision.decide(alreadyTrusted: preview.alreadyTrusted, accepted: accept) {
                 case .granted: break
                 case .mustAsk:
-                    guard TrustPrompt.confirm(
+                    guard confirm(
                         TrustDecision.prompt(source: preview.menu.name ?? target, commit: preview.commit)
-                    ) else { log("Not installed."); throw ExitCode.failure }
+                    ) else { output.warn("Not installed."); throw ExitCode.failure }
                 }
                 installed = try await install.install(ref: ref, requested: ref.plugin)
             }
 
             for plugin in installed {
-                print("✓ installed \(plugin.name) @ \(plugin.commit) (from \(plugin.bakery))")
+                output.say("✓ installed \(plugin.name) @ \(plugin.commit) (from \(plugin.bakery))")
             }
-            print("  refresh the browser to see it in the plugins rail")
+            output.say("  refresh the browser to see it in the plugins rail")
         }
     }
 
@@ -197,20 +218,27 @@ struct PluginsCommand: ParsableCommand {
         @Argument(help: "Plugin name to update; omit to update all installed plugins.") var name: String?
 
         func run() async throws {
-            let install = BakeryCommand.installer()
-            let registry = FileSystemBakeries(home: BakeryCommand.home)
+            try await Self.update(
+                name: name, using: BakeryCommand.installer(), registry: BakeryCommand.registry,
+                output: .standard)
+        }
+
+        static func update(
+            name: String?, using install: BakeryInstall, registry: FileSystemBakeries,
+            output: CommandOutput
+        ) async throws {
             let targets = try registry.installed().filter { name == nil || $0.name == name }
-            guard !targets.isEmpty else { print("Nothing to update."); return }
+            guard !targets.isEmpty else { output.say("Nothing to update."); return }
 
             let bakeries = try registry.bakeries()
             for plugin in targets {
                 guard let bakery = bakeries.first(where: { $0.id == plugin.bakery }) else {
-                    log("skipping \(plugin.name): its bakery \(plugin.bakery) is no longer trusted")
+                    output.warn("skipping \(plugin.name): its bakery \(plugin.bakery) is no longer trusted")
                     continue
                 }
                 let ref = try BakeryRef.parse(bakery.url)
                 let installed = try await install.install(ref: ref, requested: plugin.name)
-                for p in installed { print("✓ \(p.name) @ \(p.commit)") }
+                for p in installed { output.say("✓ \(p.name) @ \(p.commit)") }
             }
         }
     }

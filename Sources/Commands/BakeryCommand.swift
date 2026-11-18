@@ -5,6 +5,10 @@ import Foundation
 /// `baguette bakery <add|list|outdated|remove|update>` — manage the
 /// trusted sources plugins come from. A bakery is any git repo with a
 /// `baguette.json` at its root.
+///
+/// Each subcommand's body is a static function over its collaborators
+/// (installer, registry, checkout) and a `CommandOutput`; `run()` only
+/// hands it the real ones.
 struct BakeryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bakery",
@@ -20,6 +24,8 @@ struct BakeryCommand: AsyncParsableCommand {
         BakeryInstall(checkout: GitCheckout(), home: home)
     }
 
+    static var registry: FileSystemBakeries { FileSystemBakeries(home: home) }
+
     // MARK: - add
 
     struct Add: AsyncParsableCommand {
@@ -32,30 +38,38 @@ struct BakeryCommand: AsyncParsableCommand {
         var accept = false
 
         func run() async throws {
+            try await Self.add(
+                reference: reference, accept: accept, using: BakeryCommand.installer(),
+                confirm: TrustPrompt.confirm, output: .standard)
+        }
+
+        static func add(
+            reference: String, accept: Bool, using install: BakeryInstall,
+            confirm: (String) -> Bool, output: CommandOutput
+        ) async throws {
             let ref = try BakeryRef.parse(reference)
-            let install = BakeryCommand.installer()
 
             // Clone + read the menu first so the user sees exactly what
             // they'd be trusting, and the prompt can show the real commit.
             let preview = try await install.preview(ref)
-            print("\(preview.menu.name ?? reference) — offers: "
-                  + preview.menu.entries.map(\.name).joined(separator: ", "))
+            output.say("\(preview.menu.name ?? reference) — offers: "
+                + preview.menu.entries.map(\.name).joined(separator: ", "))
 
             switch TrustDecision.decide(alreadyTrusted: preview.alreadyTrusted, accepted: accept) {
             case .granted:
                 break
             case .mustAsk:
-                guard TrustPrompt.confirm(
+                guard confirm(
                     TrustDecision.prompt(source: preview.menu.name ?? reference, commit: preview.commit)
                 ) else {
-                    log("Not added.")
+                    output.warn("Not added.")
                     throw ExitCode.failure
                 }
             }
 
             let bakery = try await install.add(ref)
-            print("✓ added \(bakery.id) @ \(bakery.commit)")
-            print("  install a plugin with: baguette plugin install \(preview.menu.entries.first?.name ?? "<name>")")
+            output.say("✓ added \(bakery.id) @ \(bakery.commit)")
+            output.say("  install a plugin with: baguette plugin install \(preview.menu.entries.first?.name ?? "<name>")")
         }
     }
 
@@ -67,13 +81,17 @@ struct BakeryCommand: AsyncParsableCommand {
         )
 
         func run() throws {
-            let bakeries = try FileSystemBakeries(home: BakeryCommand.home).bakeries()
+            try Self.list(registry: BakeryCommand.registry, output: .standard)
+        }
+
+        static func list(registry: FileSystemBakeries, output: CommandOutput) throws {
+            let bakeries = try registry.bakeries()
             guard !bakeries.isEmpty else {
-                print("No bakeries added. Add one with: baguette bakery add owner/repo")
+                output.say("No bakeries added. Add one with: baguette bakery add owner/repo")
                 return
             }
             for bakery in bakeries {
-                print("\(bakery.id)  @\(bakery.commit)  offers: \(bakery.plugins.joined(separator: ", "))")
+                output.say("\(bakery.id)  @\(bakery.commit)  offers: \(bakery.plugins.joined(separator: ", "))")
             }
         }
     }
@@ -88,9 +106,13 @@ struct BakeryCommand: AsyncParsableCommand {
         @Argument(help: "owner/repo or a git URL.") var reference: String
 
         func run() throws {
+            try Self.remove(reference: reference, registry: BakeryCommand.registry, output: .standard)
+        }
+
+        static func remove(reference: String, registry: FileSystemBakeries, output: CommandOutput) throws {
             let ref = try BakeryRef.parse(reference)
-            try FileSystemBakeries(home: BakeryCommand.home).forget(bakeryID: ref.bakery.cacheSubpath)
-            print("✓ forgot \(ref.bakery.cacheSubpath) (its installed plugins remain)")
+            try registry.forget(bakeryID: ref.bakery.cacheSubpath)
+            output.say("✓ forgot \(ref.bakery.cacheSubpath) (its installed plugins remain)")
         }
     }
 
@@ -103,10 +125,14 @@ struct BakeryCommand: AsyncParsableCommand {
         )
 
         func run() async throws {
-            let registry = FileSystemBakeries(home: BakeryCommand.home)
-            let checkout = GitCheckout()
+            try await Self.outdated(registry: BakeryCommand.registry, checkout: GitCheckout(), output: .standard)
+        }
+
+        static func outdated(
+            registry: FileSystemBakeries, checkout: any Checkout, output: CommandOutput
+        ) async throws {
             let trusted = try registry.bakeries()
-            guard !trusted.isEmpty else { print("No bakeries added."); return }
+            guard !trusted.isEmpty else { output.say("No bakeries added."); return }
 
             var updates: [BakeryUpdate] = []
             for bakery in trusted {
@@ -118,13 +144,13 @@ struct BakeryCommand: AsyncParsableCommand {
                 )
             }
 
-            for update in updates { print(update.line) }
+            for update in updates { output.say(update.line) }
 
             let moved = updates.filter { $0.state == .available }
             guard !moved.isEmpty else { return }
-            print("")
-            print("Re-pin with: baguette bakery update <owner/repo>")
-            print("Nothing changes on your machine until you do.")
+            output.say("")
+            output.say("Re-pin with: baguette bakery update <owner/repo>")
+            output.say("Nothing changes on your machine until you do.")
         }
     }
 
@@ -138,8 +164,15 @@ struct BakeryCommand: AsyncParsableCommand {
         @Argument(help: "owner/repo to update; omit to update all.") var reference: String?
 
         func run() async throws {
-            let install = BakeryCommand.installer()
-            let registry = FileSystemBakeries(home: BakeryCommand.home)
+            try await Self.update(
+                reference: reference, using: BakeryCommand.installer(),
+                registry: BakeryCommand.registry, output: .standard)
+        }
+
+        static func update(
+            reference: String?, using install: BakeryInstall, registry: FileSystemBakeries,
+            output: CommandOutput
+        ) async throws {
             let targets: [Bakery]
             if let reference {
                 let id = try BakeryRef.parse(reference).bakery.cacheSubpath
@@ -147,10 +180,10 @@ struct BakeryCommand: AsyncParsableCommand {
             } else {
                 targets = try registry.bakeries()
             }
-            guard !targets.isEmpty else { print("Nothing to update."); return }
+            guard !targets.isEmpty else { output.say("Nothing to update."); return }
             for bakery in targets {
                 let updated = try await install.add(BakeryRef.parse(bakery.url))
-                print("✓ \(updated.id) @ \(updated.commit)")
+                output.say("✓ \(updated.id) @ \(updated.commit)")
             }
         }
     }
@@ -162,7 +195,13 @@ enum TrustPrompt {
     static func confirm(_ message: String) -> Bool {
         print(message)
         print("Add it? [y/N] ", terminator: "")
-        guard let line = readLine() else { return false }
-        return ["y", "yes"].contains(line.trimmingCharacters(in: .whitespaces).lowercased())
+        return accepts(readLine())
+    }
+
+    /// Whether an answer is consent: `y` or `yes`, in any case; no answer
+    /// (end of input) is a refusal.
+    static func accepts(_ answer: String?) -> Bool {
+        guard let answer else { return false }
+        return ["y", "yes"].contains(answer.trimmingCharacters(in: .whitespaces).lowercased())
     }
 }

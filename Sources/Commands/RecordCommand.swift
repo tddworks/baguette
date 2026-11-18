@@ -109,17 +109,31 @@ struct RecordCommand: AsyncParsableCommand {
 
     // MARK: - Run
 
-    func run() async throws {
-        let url = URL(fileURLWithPath: output)
-        let plan = RecordingPlan(
+    /// The take the flags describe. `validate()` has normalised them.
+    func plan() throws -> RecordingPlan {
+        RecordingPlan(
             size: try CaptureSize.parse(size),
             fit: CaptureFit(rawValue: fit) ?? .contain,
             background: HexColor(background),
             fps: fps,
             bitrateBps: bitrate,
             duration: duration,
-            format: try RecordingFormat.forFile(url)
+            format: try RecordingFormat.forFile(URL(fileURLWithPath: output))
         )
+    }
+
+    /// The line logged once the file is flushed.
+    static func report(_ summary: RecordingSummary) -> String {
+        String(
+            format: "Recorded %d frames · %.2fs · %d×%d → %@",
+            summary.frameCount, summary.duration,
+            summary.width, summary.height, summary.output.path
+        )
+    }
+
+    func run() async throws {
+        let url = URL(fileURLWithPath: output)
+        let plan = try self.plan()
 
         // A device that isn't running has no screen to record: refused up
         // front, rather than sitting out --duration and then blaming a
@@ -183,11 +197,7 @@ struct RecordCommand: AsyncParsableCommand {
 
         do {
             let summary = try await recorder.finish()
-            log(String(
-                format: "Recorded %d frames · %.2fs · %d×%d → %@",
-                summary.frameCount, summary.duration,
-                summary.width, summary.height, summary.output.path
-            ))
+            log(Self.report(summary))
         } catch let error as RecordingError {
             log(error.message)
             throw ExitCode.failure

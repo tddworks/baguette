@@ -44,6 +44,17 @@ func orExit<T>(_ body: () throws -> T) throws -> T {
     }
 }
 
+/// Where a command's words go: what it answers (stdout) and what it tells
+/// the user along the way (stderr). Injected so a command's body can be
+/// run, and read back, in a test.
+struct CommandOutput: Sendable {
+    let say: @Sendable (String) -> Void
+    let warn: @Sendable (String) -> Void
+
+    /// stdout and stderr, as every command writes them.
+    static let standard = CommandOutput(say: { print($0) }, warn: { log($0) })
+}
+
 extension DeviceOption {
     /// The device `--udid` names and the role it registered for `ability`,
     /// or exit 1 in the device's own words ("han's iPhone can't do network",

@@ -39,7 +39,7 @@ struct LifetimeCommand: ParsableCommand {
     }
 
     /// nil when the command was invoked with no flags, i.e. read-only.
-    private var desired: SimulatorLifetime? {
+    var desired: SimulatorLifetime? {
         if detach { return .detached }
         if shutdown { return .appleDefault }
         return nil
@@ -79,26 +79,34 @@ struct LifetimeCommand: ParsableCommand {
     }
 
     private func report(_ lifetime: SimulatorLifetime) {
-        print("Simulator lifetime (\(SimulatorAppPreferences.domain))")
-        print("  closing a window   \(Self.effect(lifetime.detachOnWindowClose))")
-        print("  quitting the app   \(Self.effect(lifetime.detachOnAppQuit))")
-        print("")
+        for line in Self.report(lifetime, colored: terminalColorized(STDOUT_FILENO)) { print(line) }
+    }
+
+    /// The policy in force, as the read-only command prints it.
+    static func report(_ lifetime: SimulatorLifetime, colored: Bool) -> [String] {
+        var lines = [
+            "Simulator lifetime (\(SimulatorAppPreferences.domain))",
+            "  closing a window   \(effect(lifetime.detachOnWindowClose))",
+            "  quitting the app   \(effect(lifetime.detachOnAppQuit))",
+            "",
+        ]
         if let advisory = lifetime.advisory {
             // The report is the command's product, so it goes to stdout
             // — but the advisory is the same problem `serve` warns
             // about, and it would read oddly as the only uncoloured
             // warning in the tool.
-            print(TerminalStyle.warning(advisory, colored: terminalColorized(STDOUT_FILENO)))
+            lines.append(TerminalStyle.warning(advisory, colored: colored))
         } else {
-            print("Booted devices survive Simulator.app.")
+            lines.append("Booted devices survive Simulator.app.")
         }
+        return lines
     }
 
     private static func effect(_ detaches: Bool) -> String {
         detaches ? "leaves the device booted" : "shuts the device down"
     }
 
-    private static func headline(_ lifetime: SimulatorLifetime) -> String {
+    static func headline(_ lifetime: SimulatorLifetime) -> String {
         lifetime.survivesSimulatorApp
             ? "Simulator.app will leave booted devices running."
             : "Simulator.app will shut devices down on window close and quit."
