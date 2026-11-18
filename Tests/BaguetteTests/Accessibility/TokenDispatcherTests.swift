@@ -21,6 +21,12 @@ import CoreGraphics
 /// integration-only. These tests cover the three callback
 /// surfaces + the `register/unregister/lookup` lifecycle that
 /// every callback consults.
+/// What a registered answer source saw, and what it answers.
+private final class Seen: @unchecked Sendable {
+    var request: AnyObject?
+    let answer = NSObject()
+}
+
 @Suite("TokenDispatcher")
 struct TokenDispatcherTests {
 
@@ -40,6 +46,21 @@ struct TokenDispatcherTests {
         // checking we don't double-up.
         dispatcher.register(device: device, token: "T1", deadline: Date.distantFuture)
         // No crash, no exception → state was cleared first time.
+    }
+
+    @Test func `should answer the translator from the source registered for its token`() {
+        let dispatcher = TokenDispatcher()
+        let seen = Seen()
+        let request = NSObject()
+        dispatcher.register(token: "PHONE", deadline: .distantFuture) { (asked: AnyObject) -> AnyObject? in
+            seen.request = asked
+            return seen.answer
+        }
+
+        let reply = dispatcher.answer(request, forToken: "PHONE")
+
+        #expect(ObjectIdentifier(reply) == ObjectIdentifier(seen.answer))
+        #expect(seen.request.map(ObjectIdentifier.init) == ObjectIdentifier(request))
     }
 
     @Test func `should ignore unregistering an unknown token`() {

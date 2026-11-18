@@ -100,6 +100,31 @@ MediaStreamScreen.start
 - **Size.** Coded 1328 × 2896 for a 1320 × 2868 screen, padded right and bottom, with no crop window in the SPS; a smaller resolution in the offer is ignored. The phone's screen size comes from `devicectl device info displays` (the primary display's `nativeSize`), asked while the stream starts, and the decoder crops each picture to it — a clean aperture at the top-left, applied by VideoToolbox as it converts (`kVTScalingMode_CropSourceToCleanAperture`). So every consumer — the page, `screenshot`, `record` — gets the screen and never the padding.
 - **Stopping.** An RTCP BYE; the phone's 20 s RTCP timeout ends it anyway. `StopRequest(stopAll:)` is not used — it could end Device Hub's stream too.
 
+### How the accessibility tree reaches the Mac
+
+```
+RemoteAXAccessibility.describeAll
+  → devicectl list devices                      the tunnel address (devicectl device info details brings a down tunnel up)
+  → nettop -m tcp -n -x -p remoted -J state     remoted's one connection to the phone = its service directory's port
+  → ServiceDirectory (RemoteXPC over HTTP/2)    the handshake's Services: remoteAXService's Port
+  → DTX to that port                            _notifyOfPublishedCapabilities:, then clientNeedsAccessibility: YES
+  ← processDataFromRemoteDevice: × 2            InitialDump, then AdditionalData — the tree (AXPTranslatorResponse records)
+  → AXTreeDump answers AXPTranslator            through AXPTranslatorBridge's token dispatcher, no round trip per question
+  → AXPMacPlatformElement → AXNode.walk         the same walk as a simulator's; frames already in device points
+```
+
+- **Why not CoreDevice or remoted.** `remoted` (`remote_device_copy_service`) needs Apple-private
+  entitlements (`com.apple.private.RemoteServiceDiscovery.device-admin`). CoreDevice's
+  `CreateServiceSocketCapability.fileHandle(toServiceNamed:)` opens raw sockets to some services
+  (`dtservicehub`, `testmanagerd.remote`) but refuses `remoteAXService` — its directory entry says
+  `Entitlement: AppleInternal`. The phone itself takes a plain TCP connection to the port.
+- **The directory's port** isn't fixed; `remoted` keeps one connection to it per tunnel, and nettop shows it.
+- **The tree is a cache.** The second push holds every answer the phone's service gave: request 4
+  (the frontmost app), 5 (all of an element's attributes), 2 (one attribute), 3 (settable).
+  Answering the translator from it builds the tree in-process; a request it lacks answers empty.
+- **No press yet.** Pressing through accessibility needs a live `processDataFromHost:` request;
+  `press` answers `false`, so `tap --label` falls back to a touch at the element.
+
 ### How a touch reaches the phone
 
 ```

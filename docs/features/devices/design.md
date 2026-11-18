@@ -168,7 +168,7 @@ The abilities, from today's `Simulator` methods plus one new one:
 | `screen` | `Screen` | ✓ | ✓ (devicectl screenshots, ~1 fps) | ✓ once its video arrives | ✓ |
 | `input` | `Input` | ✓ | ✓ (CoreDevice Universal HID: touches; not buttons or keys) | later (runner) | ✓ |
 | `displays` | `Displays` (phone · panels · CarPlay) | ✓ | — | — | — |
-| `accessibility` | `Accessibility` | ✓ | ? | — | ✓ |
+| `accessibility` | `Accessibility` | ✓ | ✓ (its own accessibility service, over the tunnel) | — | ✓ |
 | `apps` · `logs` | `Apps` · `LogStream` | ✓ | — (devicectl can't push a notification; no syslog verb) | — | ✓ |
 | `orientation` | as today | ✓ | — (devicectl's `set` exits 0 and leaves a phone as its sensors hold it) | — | ✓ |
 | `pasteboard` | as today | ✓ | ✓ (devicectl) | — | ✓ |

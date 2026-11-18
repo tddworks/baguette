@@ -14,7 +14,7 @@ import Foundation
 struct DescribeUICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "describe-ui",
-        abstract: "Dump the simulator's accessibility tree as JSON"
+        abstract: "Dump a device's accessibility tree as JSON"
     )
 
     @OptionGroup var options: DeviceOption
@@ -40,10 +40,11 @@ struct DescribeUICommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let simulator = try options.simulator(for: .accessibility)
+        // Any device that can do accessibility: a simulator, or a phone on a cable.
+        let accessibility = try orExit { try options.devices.require(.accessibility, of: DeviceID(options.udid)) }
         let read = try DescribeUI.parse(x: x, y: y, short: short)
-        guard let tree = try read.read(from: simulator.accessibility()) else {
-            log("describe-ui: no accessibility data (sim not booted, or no frontmost app)")
+        guard let tree = try read.read(from: accessibility) else {
+            log("describe-ui: no accessibility data (device not ready, or no frontmost app)")
             throw ExitCode.failure
         }
         let bytes = Data(read.json(of: tree, style: options.affordanceStyle).utf8)

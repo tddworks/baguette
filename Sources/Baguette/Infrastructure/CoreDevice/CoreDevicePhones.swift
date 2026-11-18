@@ -67,6 +67,8 @@ struct CoreDevicePhone: Device {
         }
         if let identifier = phone.coreDeviceIdentifier {
             table.register(.input) { DigitizerInput(digitizer: CoreDeviceDigitizer(identifier: identifier)) }
+            // Its own accessibility service, over the tunnel.
+            table.register(.accessibility) { RemoteAXAccessibility(identifier: identifier, devicectl: devicectl) }
         }
         table.register(.pasteboard) { DevicectlPasteboard(udid: udid, devicectl: devicectl) }
         return table

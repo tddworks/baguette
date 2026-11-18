@@ -219,7 +219,7 @@ struct CoreDevicePhonesTests {
                           coreDeviceIdentifier: UUID()),
             devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
 
-        #expect(phone.abilities.names == ["screen", "input", "pasteboard"])
+        #expect(phone.abilities.names == ["screen", "input", "accessibility", "pasteboard"])
         #expect(throws: DeviceError.unable(ability: "lifecycle", device: "han's iPhone")) {
             try phone.require(.lifecycle)
         }

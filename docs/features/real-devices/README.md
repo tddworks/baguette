@@ -21,6 +21,7 @@ baguette screenshot --udid 00008160-… --output /tmp/phone.jpg
 baguette stream     --udid 00008160-… > phone.mjpeg
 baguette record     --udid 00008160-… --output phone.mp4 --duration 10
 baguette clipboard get --udid 00008160-…
+baguette describe-ui --udid 00008160-…   # the frontmost app's accessibility tree, as for a simulator
 ```
 
 `baguette input --udid 00008160-…` takes the same one-gesture-per-line JSON as
@@ -38,12 +39,11 @@ turns clicks and drags into touches. Its badge says `DEVICE · touch`.
 | touches (`tap`, `swipe`, `pinch`, `pan`, `input`) | CoreDevice's Universal HID | edge swipes too; no buttons, keys or scroll yet |
 | screen (`screenshot`, `stream`, `record`) | the phone's own H.264 stream, started through CoreDevice | live, up to 60 fps; screenshots stand in if it can't start |
 | pasteboard (`clipboard`, text in `paste`) | `devicectl device pasteboard` | |
+| accessibility (`describe-ui`, `tap --label`) | the phone's own accessibility service, over the tunnel | the frontmost app's tree, ~2 s; `tap --label` lands as a touch on the element |
 
 Anything else answers with what's missing and exits 1:
 
 ```
-$ baguette describe-ui --udid 00008160-…
-[baguette] han's iPhone can't do accessibility
 $ baguette boot --udid 00008160-…
 [baguette] han's iPhone can't do lifecycle
 ```
