@@ -14,6 +14,18 @@ struct PhysicalPhoneTests {
             coreDeviceIdentifier: UUID(uuidString: "30546CC9-90DC-5F06-87D3-42D2C2E913D1"))])
     }
 
+    @Test func `should know a connected phone's tunnel address`() throws {
+        let phones = try PhysicalPhone.list(fromDevicectlJSON: listing([phone(tunnel: "connected", tunnelAddress: "fdd3:48cf:f69f::1")]))
+
+        #expect(phones.first?.tunnelAddress == "fdd3:48cf:f69f::1")
+    }
+
+    @Test func `should know no tunnel address while the tunnel is down`() throws {
+        let phones = try PhysicalPhone.list(fromDevicectlJSON: listing([phone()]))
+
+        #expect(phones.first?.tunnelAddress == nil)
+    }
+
     @Test func `should leave simulators out of the physical phones`() throws {
         let phones = try PhysicalPhone.list(fromDevicectlJSON: listing([simulator(), phone()]))
 
@@ -65,13 +77,13 @@ extension PhysicalPhoneTests {
     }
 
     private func phone(
-        udid: String = "00008160-001239C43AA0000A", tunnel: String = "disconnected",
+        udid: String = "00008160-001239C43AA0000A", tunnel: String = "disconnected", tunnelAddress: String? = nil,
         pairing: String = "paired", developerMode: String = "enabled", boot: String = "booted",
         platform: String = "iOS"
     ) -> String {
         #"""
         {"identifier":"30546CC9-90DC-5F06-87D3-42D2C2E913D1",
-         "connectionProperties":{"pairingState":"\#(pairing)","tunnelState":"\#(tunnel)","transportType":"wired"},
+         "connectionProperties":{"pairingState":"\#(pairing)","tunnelState":"\#(tunnel)","transportType":"wired"\#(tunnelAddress.map { #","tunnelIPAddress":"\#($0)""# } ?? "")},
          "deviceProperties":{"name":"han's iPhone","bootState":"\#(boot)","developerModeStatus":"\#(developerMode)","osVersionNumber":"27.0.1"},
          "hardwareProperties":{"udid":"\#(udid)","reality":"physical","productType":"iPhone19,7",
            "marketingName":"iPhone 18 Pro Max","platform":"\#(platform)","deviceType":"iPhone"}}

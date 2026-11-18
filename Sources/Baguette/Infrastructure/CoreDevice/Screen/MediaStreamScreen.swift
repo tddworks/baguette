@@ -11,6 +11,7 @@ import IOSurface
 /// stream can't start, the screen falls back to `fallback` (screenshots).
 final class MediaStreamScreen: Screen, @unchecked Sendable {
     private let identifier: UUID
+    private let devicectl: Devicectl
     private let makeDecoder: @Sendable () -> any StreamDecoder
     private let fallback: any Screen
     private let lock = NSLock()
@@ -23,9 +24,11 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     private var usingFallback = false
 
     init(identifier: UUID,
+         devicectl: Devicectl = Devicectl(),
          makeDecoder: @escaping @Sendable () -> any StreamDecoder = { VTStreamDecoder() },
          fallback: any Screen) {
         self.identifier = identifier
+        self.devicectl = devicectl
         self.makeDecoder = makeDecoder
         self.fallback = fallback
     }
@@ -69,9 +72,9 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         let port = Self.port(of: fd)
         let offer = try AVConferenceNegotiator.videoOffer()
 
-        let identifier = self.identifier
+        let identifier = self.identifier, devicectl = self.devicectl
         let response = try device.startMediaStream {
-            guard let local = Self.localTunnelAddress(identifier) else { throw StreamError.noTunnel }
+            guard let local = Self.localTunnelAddress(identifier, devicectl: devicectl) else { throw StreamError.noTunnel }
             return Self.startRequest(offer: offer, receiverIP: local, port: port)
         }
 
@@ -197,25 +200,21 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         }
     }
 
-    /// The Mac's end of the phone's tunnel, once the tunnel is up.
-    private static func localTunnelAddress(_ identifier: UUID) -> String? {
-        guard let phone = resolve("\(identifier.uuidString).coredevice.local").first else { return nil }
-        return TunnelAddress.local(facing: phone, among: interfaceAddresses())
-    }
-
-    private static func resolve(_ host: String) -> [String] {
-        var hints = addrinfo()
-        hints.ai_family = AF_INET6
-        var results: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, nil, &hints, &results) == 0 else { return [] }
-        defer { freeaddrinfo(results) }
-        var addresses: [String] = []
-        var cursor = results
-        while let entry = cursor {
-            addresses.append(numericHost(entry.pointee.ai_addr, entry.pointee.ai_addrlen))
-            cursor = entry.pointee.ai_next
-        }
-        return addresses
+    /// The Mac's end of the phone's tunnel, once the tunnel is up: the
+    /// local address on the prefix of the phone's tunnel address, which
+    /// devicectl lists (resolving its `.coredevice.local` name instead can
+    /// sit out a five-second mDNS timeout).
+    private static func localTunnelAddress(_ identifier: UUID, devicectl: Devicectl) -> String? {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-tunnel-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard (try? devicectl.runAndWait(["list", "devices", "--quiet", "--json-output", file.path])) != nil,
+              let data = try? Data(contentsOf: file),
+              let phone = try? PhysicalPhone.list(fromDevicectlJSON: data)
+                .first(where: { $0.coreDeviceIdentifier == identifier }),
+              let address = phone.tunnelAddress
+        else { return nil }
+        return TunnelAddress.local(facing: address, among: interfaceAddresses())
     }
 
     private static func interfaceAddresses() -> [String] {

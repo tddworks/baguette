@@ -59,7 +59,7 @@ struct CoreDevicePhone: Device {
             // The phone's own H.264 stream, received over the tunnel; the
             // devicectl screenshots stand in when it can't start.
             table.register(.screen) {
-                MediaStreamScreen(identifier: identifier,
+                MediaStreamScreen(identifier: identifier, devicectl: devicectl,
                                   fallback: DevicectlScreen(udid: udid, devicectl: devicectl))
             }
         } else {

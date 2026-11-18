@@ -16,6 +16,8 @@ struct PhysicalPhone: Equatable, Sendable {
     /// CoreDevice's own identifier for the phone (`30546CC9-…`), which its
     /// framework API takes where devicectl takes the UDID.
     let coreDeviceIdentifier: UUID?
+    /// The phone's end of the CoreDevice tunnel (`…::1`), while it is up.
+    var tunnelAddress: String? = nil
 }
 
 extension PhysicalPhone {
@@ -38,7 +40,8 @@ extension PhysicalPhone {
                 : hardware.platform == "xrOS" || hardware.platform == "visionOS" ? .visionOS
                 : .iOS,
             state: Self.state(of: entry),
-            coreDeviceIdentifier: entry.identifier.flatMap(UUID.init(uuidString:)))
+            coreDeviceIdentifier: entry.identifier.flatMap(UUID.init(uuidString:)),
+            tunnelAddress: entry.connectionProperties.tunnelIPAddress)
     }
 
     /// Ready means CoreDevice can reach it now: paired, Developer Mode on,
@@ -67,6 +70,7 @@ private struct Listing: Decodable {
         struct Connection: Decodable {
             let pairingState: String?
             let tunnelState: String?
+            let tunnelIPAddress: String?
         }
         struct Properties: Decodable {
             let name: String

@@ -21,7 +21,7 @@ enum CoreDeviceFramework {
     static func device(_ identifier: UUID) -> RemoteDevice? {
         #if COREDEVICE
         guard isAvailable else { return nil }
-        return DeviceManager.shared?.devices().first { $0.identifier == identifier }
+        return DeviceManager.shared?.device(identifier)
         #else
         return nil
         #endif
@@ -162,11 +162,19 @@ private final class DeviceManager: @unchecked Sendable {
         }
     }
 
-    /// The devices CoreDevice lists, once it has filled the list (it does so
-    /// shortly after the manager is made).
-    func devices() -> [RemoteDevice] {
-        for _ in 0..<50 where !object.isReady() { usleep(100_000) }
-        return object.devices().map(RemoteDevice.init(object:))
+    /// The device CoreDevice lists by `identifier`. CoreDevice fills its
+    /// list shortly after the manager is made, and its "fully initialized"
+    /// flag can stay down for seconds after the phone is listed: return as
+    /// soon as the phone appears, and wait (up to 5 s) only while it hasn't.
+    func device(_ identifier: UUID) -> RemoteDevice? {
+        for _ in 0..<50 {
+            if let found = object.devices().first(where: { $0.identifier() == identifier }) {
+                return RemoteDevice(object: found)
+            }
+            if object.isReady() { return nil }
+            usleep(100_000)
+        }
+        return nil
     }
 
     /// Apple's own cases, from its `allCases`, as the Set the initializer takes.

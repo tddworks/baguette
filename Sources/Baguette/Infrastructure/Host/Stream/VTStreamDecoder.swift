@@ -13,6 +13,14 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
     private var format: CMVideoFormatDescription?
     private var onFrame: (@Sendable (IOSurface) -> Void)?
     private var reportedDecodeFailure = false
+    /// The last few decoded frames, kept alive. VideoToolbox's pool reuses
+    /// a frame's IOSurface as soon as its pixel buffer is released; the
+    /// stream pipeline reads the newest surface a moment later (its encoder
+    /// runs on its own tick), and a surface being decoded into meanwhile
+    /// reads as a mosaic of two frames. Holding a short ring keeps every
+    /// surface a consumer can still be reading out of the pool.
+    private var recent: [CVPixelBuffer] = []
+    private static let heldFrames = 6
 
     func configure(codec: VideoCodec, parameterSets: [Data], onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         let format = try Self.format(codec: codec, parameterSets: parameterSets)
@@ -71,13 +79,21 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
                 }
                 return
             }
+            self?.hold(imageBuffer)
             deliver?(unsafeDowncast(surface, to: IOSurface.self))
+        }
+    }
+
+    private func hold(_ buffer: CVPixelBuffer) {
+        lock.withLock {
+            recent.append(buffer)
+            if recent.count > Self.heldFrames { recent.removeFirst(recent.count - Self.heldFrames) }
         }
     }
 
     func stop() {
         let session: VTDecompressionSession? = lock.withLock {
-            defer { self.session = nil; format = nil; onFrame = nil }
+            defer { self.session = nil; format = nil; onFrame = nil; recent = [] }
             return self.session
         }
         if let session {
