@@ -173,7 +173,7 @@
   }
 
   /// The glyph families this page can draw, mirroring `RowControl` in
-  /// Domain/Plugin/PanelBody.swift. A closed set on both sides: the host
+  /// Plugins/Plugin/PanelBody.swift. A closed set on both sides: the host
   /// refuses an unknown one at parse time, and the page refuses to
   /// render one it was somehow handed anyway.
   PluginControl.kinds = ['switch', 'checkbox', 'radio'];

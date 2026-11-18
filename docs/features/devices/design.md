@@ -273,56 +273,52 @@ are device points and each family's `Touch` converts to its own units (Indigo
 divides by size; adb scales to pixels); a screen and its input come from one
 binding (`Display`).
 
-## 6 · Infrastructure — split by what it talks to
+## 6 · The tree — outside in, split by what it talks to
 
-`Domain/` answers *what*, so it is split by context (the question), as now.
-`Infrastructure/` answers *how*, so it is split by what it talks to: one
-folder per device family, each sorted inside by the Domain's context names,
-plus `Host/` for the Mac itself.
+There is no `Domain/` or `Infrastructure/` folder. Each folder answers one
+question; its public face sits at the top and how it works — private APIs,
+host I/O — in its `Internal/` ([solid](solid.md)).
 
 ```
-Infrastructure/
-├── Simulator/   CoreSimulator · SimulatorKit · simctl · IndigoHID · AXPTranslator · guest helpers
-│   ├── CoreSimulators.swift  CoreSimulator.swift   ← the only files that register its abilities
-│   ├── Kit/     DeviceHost, framework loading, the simctl runner — shared inside the family
-│   └── Input/ Screen/ Accessibility/ Hinge/ Orientation/ Logs/ Location/ Apps/ Defaults/
-│       Pasteboard/ Photos/ StatusBar/ Interface/ Shake/ Motion/ Network/ Camera/ Injection/ …
-├── Companion/   the twin: LiveCompanionPhones, TwinScreen(s), TwinPoses, VTH264Decoder
-├── CoreDevice/  physical iPhone: devicectl, and CoreDevice.framework for touch
-│   └── Kit/     Devicectl; CoreDeviceFramework (RemoteDevice, CapabilityKind) and
-│                DigitizerReport, bound to the weak-linked framework in Swift; one C call
-│                (CoreDeviceABI) for the typed-throws send
-├── Android/     adb + emulator   (later, same shape)
-├── Host/        the Mac, shared by every family: Stream/ Recording/ Render/ Camera/ (AV capture)
-│                Chrome/ Bakery/ Plugin/ Subprocess/
-└── Server/      HTTP / WebSocket transport
+Sources/
+├── Commands/        the CLI — one file per `baguette` subcommand
+├── Server/          what `baguette serve` runs: routes, WebSocket transport
+├── Devices/         the families — the only code that knows what a kind is
+│   ├── DeviceKinds.swift   the one list of every family's device source
+│   ├── Simulator/   SimulatorDevice, its roles; Internal/: CoreSimulator · SimulatorKit ·
+│   │                simctl · IndigoHID · AXPTranslator · guest helpers, by ability
+│   │                (Input/ Screen/ Accessibility/ Hinge/ Logs/ Location/ Apps/ …)
+│   ├── iPhone/      a phone on a cable and its wire formats; Internal/: devicectl,
+│   │                CoreDevice (Kit/, weak-linked; one C call in CoreDeviceABI), tunnel services
+│   └── CompanionPhone/  the twin; Internal/: LiveCompanionPhones, TwinScreen(s), TwinPoses
+├── Plugins/         Plugin/ (manifests, grants, routes) · Bakery/ (where plugins come from)
+├── Device/          module BaguetteDevice — id, kind, power, Device, Devices, Abilities
+│   ├── Chrome/      how a device looks; Internal/: chrome store, RealityKit renderer
+│   ├── Abilities/<ability>/   each role and its values; Internal/: the Mac's side of it
+│   │                (Capture/Internal: encoders and pumps; Camera/Internal: AV capture)
+│   └── Internal/    what every family shares: Subprocess, Xcode, the log
+└── Baguette/        `@main` and the Resources the page and the guest helpers ship in
 ```
+
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder.
 
 | From | May import | Never |
 |---|---|---|
-| a family (`Simulator/`, `Companion/`, `CoreDevice/`, `Android/`) | Domain, `Host/` | another family |
-| `Host/` | Domain | any family — encoders take `IOSurface` or bytes, never a `SimDevice` |
-| `Server/` | Domain, `Host/` | a family (it reaches devices through `Devices`) |
-| App | everything — it is the composition root | — |
+| a family (`Devices/Simulator/`, `iPhone/`, `CompanionPhone/`) | `Device` | another family |
+| `Device` (and its `Internal/`) | nothing of baguette's | any family — encoders take `IOSurface` or bytes, never a `SimDevice` |
+| `Server/` | `Device`, `Plugins` | a family (it reaches devices through `Devices`) |
+| `Commands/` | everything — the composition root, with `DeviceKinds` | — |
 
-The host half is already platform-neutral in code. Of the stream, recording,
-screen and render files that mention SimulatorKit, the stream, recording and
-subprocess ones do so only in comments ("SimulatorKit recycles the IOSurface").
-Those comments now state the `Screen` contract instead ("a `Screen` may
-recycle the IOSurface"). `CaptureCanvas`, `ScreenSnapshot` and
-`RenderedScreen` turned out to be host code. One reach across the fence
-remains: `Host/Render/VerifiedDeviceAssets` defaults to
-`CoreSimulators.developerDir()`. Which Xcode is installed is a fact about the
-Mac, not the simulator family, so that lookup moves to `Host/` when a second
-family needs it (CoreDevice will).
+`Device` is its own module, so the compiler holds its fence. `Commands`,
+`Server`, `Devices` and `Plugins` still build as one target, so their fences
+are kept by review until each becomes its own module (solid step 8).
 
-AGENTS.md's layering sentence changes to:
-
-> `Domain/` splits by bounded context (the question). `Infrastructure/` splits
-> by what it talks to: one folder per device family, each sorted inside by the
-> Domain's context names, plus `Host/` for the Mac itself. A family never
-> imports another family; only its `Devices` source and its `Device` decide
-> what abilities it has.
+The host half is platform-neutral in code: stream, recording, screen and
+render code states the `Screen` contract ("a `Screen` may recycle the
+IOSurface") rather than SimulatorKit's. ~~`VerifiedDeviceAssets` defaults to
+`CoreSimulators.developerDir()`~~ — which Xcode is installed is a fact about
+the Mac, so the lookup is `Xcode.developerDir()` in `Device/Internal/`, which
+the simulator family forwards to.
 
 ## 7 · What dies
 

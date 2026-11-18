@@ -43,11 +43,7 @@ struct StaticAssetRoutesTests {
     /// `Tests/BaguetteTests/Server/<this file>` → repo root →
     /// `Sources/Baguette/Resources/Web`.
     private static func sourceWebRoot() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // Server/
-            .deletingLastPathComponent()  // BaguetteTests/
-            .deletingLastPathComponent()  // Tests/
-            .deletingLastPathComponent()  // repo root
+        RepoRoot.url
             .appendingPathComponent("Sources/Baguette/Resources/Web")
     }
 

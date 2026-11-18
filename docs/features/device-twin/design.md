@@ -190,7 +190,7 @@ pipeline:
 
 ## Domain
 
-New value types and abstractions in `Domain/Companion/`, all named for
+New value types and abstractions in `Devices/CompanionPhone/`, all named for
 their role:
 
 - `CompanionPhone` — identity of a paired physical phone (udid, name, model).
@@ -232,7 +232,7 @@ the control phase. Orchestrators depend on the nouns; tests drive
 
 ## Infrastructure
 
-`Infrastructure/Companion/` holds the irreducible I/O, split per the
+`Devices/CompanionPhone/Internal/` holds the irreducible I/O, split per the
 adapter rules:
 
 - `LiveCompanionPhones` — the in-memory `CompanionPhones` implementation, membership

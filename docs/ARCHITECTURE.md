@@ -46,8 +46,8 @@ first; the other two:
    rejects a replaced dylib at the same path.
 
 The HID recipe is commented in
-`Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift`; the
-camera pipeline lives in `Sources/Baguette/Infrastructure/Host/Camera/` and
+`Sources/Devices/Simulator/Internal/Input/IndigoHIDInput.swift`; the
+camera pipeline lives in `Sources/Device/Abilities/Camera/` and
 `Injected/VirtualCamera/` (see [`features/camera/README.md`](features/camera/README.md)).
 
 ## Two consumers
@@ -76,8 +76,8 @@ standalone web UI it serves itself).
                                   → booted iOS 26 simulator
 ```
 
-Both paths share the same Domain + Infrastructure layers. The only
-difference is the App-layer entry point: `InputCommand` reads stdin
+Both paths share everything under `Devices/` and `Device/`. The only
+difference is the way in: `InputCommand` reads stdin
 and writes stdout; `Server` (under `baguette serve`) opens a
 WebSocket and uses `WebSocketFrameSink` to push encoded frames back.
 
@@ -93,45 +93,44 @@ per-session warmup that should only happen once.
 > arrow; see [`features/plugins/README.md`](features/plugins/README.md) for the
 > second one.
 
-## Three-layer code split
+## Layout, outside in
 
-Cross-layer imports flow strictly inward: App depends on Domain +
-Infrastructure; Infrastructure depends on Domain; everything depends on
-`BaguetteDevice`, which depends on nothing of baguette's — only
-Foundation / IOSurface (public Apple types) and Mockable.
+Imports flow strictly inward. The two ways in depend on the device
+families and the plugins; they depend on `BaguetteDevice`, which
+depends on nothing of baguette's — only Foundation / IOSurface (public
+Apple types) and Mockable.
 
 ```
 Sources/
-├── Device/             module BaguetteDevice — what a device is: Device,
-│                       Devices, Abilities, Chrome/, Abilities/<ability>/
-│                       (the roles and their values), all `public`
-└── Baguette/           everything else, until its own module lands
-    ├── App/                CLI dispatch + use-case orchestration
-    ├── Domain/             pure Swift, no private Apple APIs
-    ├── Infrastructure/     @Mockable protocols + concrete impls
-    └── Resources/Web/      static HTML / JS / CSS for `serve`
+├── Commands/           the CLI: one file per `baguette` subcommand
+├── Server/             what `baguette serve` runs: routes, WebSocket, WebRoot
+├── Devices/            the device families, each with its own Internal/
+│   ├── Simulator/          CoreSimulator, SimulatorKit, simctl
+│   ├── iPhone/             a phone on a cable: CoreDevice, its tunnel services
+│   └── CompanionPhone/     the companion-app twin
+├── Plugins/
+│   ├── Plugin/             manifests, grants, routes a plugin may reach
+│   └── Bakery/             where plugins come from: repos, menus, trust
+├── Device/             module BaguetteDevice — what a device is: id, kind,
+│   │                   power, Device, Devices, Abilities
+│   ├── Chrome/             how it looks: bezel, 3D model, renderers
+│   ├── Abilities/<ability>/  one role and its values (Touch, Press, Key,
+│   │                       Screen, Capture, UI, Apps, Location, …)
+│   └── Internal/           host I/O every family shares (subprocess, Xcode, log)
+└── Baguette/           `@main` (RootCommand) and Resources/Web/ for `serve`
 ```
 
-The rest follows one module per context, outside to inside, each with its
-public face at the top and its implementations in `Internal/`
-([solid](features/devices/solid.md)).
+Every folder keeps its public face at the top and its implementations
+— private APIs, host I/O — in `Internal/`
+([solid](features/devices/solid.md)). A family never imports another
+family. Why: [devices](features/devices/design.md).
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder: a test
+sits in the folder of the source it covers.
 
-`Domain/` is split into bounded-context subfolders (`Device/`,
-`Simulator/`, `CoreDevice/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`,
-`Accessibility/`, …), and `Tests/BaguetteTests/` mirrors that split.
-`Infrastructure/` is split by what it talks to: one folder per device
-family (`Simulator/` for CoreSimulator, SimulatorKit and simctl;
-`CoreDevice/` for a phone on a cable — CoreDevice, devicectl and the
-phone's own tunnel services; `Companion/` for the companion-app twin),
-each sorted inside by the same context names, plus `Host/` for what
-every family shares (encoders, recording, rendering, chrome, plugins)
-and `Server/`. A family never imports another family; `Host/` never
-imports a family. Why: [devices](features/devices/design.md).
+### Device: values and roles
 
-### Domain
-
-Pure value types with rich behaviour, plus `@Mockable` aggregate
-protocols at the boundaries the App layer wires up.
+Pure value types with rich behaviour, plus `@Mockable` role and
+aggregate protocols at the boundaries the ways in wire up.
 
 | Context | Type | Kind | Notes |
 |---|---|---|---|
@@ -166,13 +165,13 @@ protocols at the boundaries the App layer wires up.
 | Common | `Point` / `Size` / `Insets` / `Rect` | value | coordinate primitives |
 
 Adding a new gesture is one `Gesture`-conforming struct in
-`Domain/Input/` + one line in `GestureRegistry.standard`. Adding a
-new stream format is one `Stream` impl in `Infrastructure/Host/Stream/` +
-one case in `StreamFormat.makeStream` (beside the encoders, not in the
-Domain). Caller code stays unchanged
+its ability's folder (`Device/Abilities/Touch/`, …) + one line in `GestureRegistry.standard`. Adding a
+new stream format is one `Stream` impl in `Device/Abilities/Capture/Internal/` +
+one case in `StreamFormat.makeStream` (beside the encoders, not among
+the values). Caller code stays unchanged
 (OCP).
 
-### Infrastructure
+### Implementations (`Internal/`)
 
 `@Mockable` ports + concrete impls. The concrete impls do the
 ObjC-runtime / SimulatorKit / CoreGraphics work; tests substitute
@@ -203,11 +202,12 @@ feeding. The WS sink also parses the encoder's HTTP-shaped envelopes
 (MJPEG multipart, AVCC length-prefix) into per-frame WS messages
 before forwarding.
 
-### App
+### Commands and Server
 
-Thin orchestration; ArgumentParser lives here.
+Thin orchestration; ArgumentParser lives in `Commands/`, Hummingbird in
+`Server/`.
 
-- `RootCommand` — top-level `AsyncParsableCommand`, registers all
+- `RootCommand` (`Sources/Baguette/`) — top-level `AsyncParsableCommand`, registers all
   subcommands.
 - `Commands/` — one file per subcommand. `InputCommand` reads stdin
   and runs `GestureDispatcher`. `ServeCommand` boots a `Server` with
@@ -300,7 +300,7 @@ Screen (IOSurface per frame)          Stream impl                        FrameSi
 that's `WebSocketFrameSink`, which parses the envelope back into
 per-frame chunks and emits them as WS binary messages.
 
-Format-specific envelopes live in `Domain/Stream/Envelope.swift`:
+Format-specific envelopes live in `Device/Abilities/Capture/Envelope.swift`:
 
 - `MJPEGEnvelope.header` / `framed(jpeg:)` — multipart MIME prologue
   + per-frame `--frame` boundary (so an HTTP `<img src=…/stream.mjpeg>`
@@ -445,9 +445,8 @@ graph; vanilla `<script>` tags loaded in order.
 Chicago-school state-based tests throughout. 110+ tests; every
 external boundary is `@Mockable`, so tests substitute auto-generated
 fakes and assert on returned values rather than recorded calls.
-`Tests/BaguetteTests/` mirrors the same context split as `Sources/`
-(`Simulator/`, `Input/`, `Stream/`, `Chrome/`, plus `App/` for the
-App-layer dispatchers).
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder
+(`Devices/Simulator/`, `Device/Abilities/Touch/`, `Server/`, `Commands/`, …).
 
 - **Pure parsers** (`DeviceChrome`, `DeviceProfile`, `ReconfigParser`,
   `GestureRegistry`) — feed JSON / plist data, assert on the parsed
@@ -490,6 +489,6 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 - [`features/real-devices/design.md`](features/real-devices/design.md) — how a
   phone on a cable is reached: touches through CoreDevice's Universal HID, its
   H.264 screen stream, and its accessibility tree over the tunnel.
-- `../Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift` —
+- `../Sources/Devices/Simulator/Internal/Input/IndigoHIDInput.swift` —
   the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
   commented.

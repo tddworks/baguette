@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
 
-  // Glyphs matching Domain/Plugin/PanelBody.swift's `PluginIcon`. A
+  // Glyphs matching Plugins/Plugin/PanelBody.swift's `PluginIcon`. A
   // manifest names one; it can never supply markup. Keep the two in
   // sync — an icon the host doesn't have is rejected at parse time, so
   // a missing case here means a plugin that validated can't render.

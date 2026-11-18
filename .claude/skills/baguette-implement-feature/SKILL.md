@@ -96,7 +96,7 @@ tree, the words, every law and its one owner, the contexts — then answer:
 
 | Question | If yes |
 |---|---|
-| Which context owns the question it answers? (CANONICAL §5) | a role or value of what a device is or can do goes in `Sources/Device/Abilities/<ability>/` (module `BaguetteDevice`, `public`); otherwise the files go in `Domain/<Context>/`, `Infrastructure/<Family>/<Context>/` (`Simulator/`, `CoreDevice/`, `Companion/`; `Host/` for what every family shares — families never reference each other), `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
+| Which context owns the question it answers? (CANONICAL §5) | a role or value of what a device is or can do goes in `Sources/Device/Abilities/<ability>/` (module `BaguetteDevice`, `public`), its host implementation in that ability's `Internal/`; what only one family does goes in `Sources/Devices/<Family>/` (`Simulator/`, `iPhone/`, `CompanionPhone/`), its private-API adapter in `Devices/<Family>/Internal/<ability>/` — families never reference each other; plugins in `Sources/Plugins/`; the test in `Tests/BaguetteTests/` at the same path as the source; one that fits no context is a missing word — ask before inventing a folder |
 | Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; the App only parses and calls it |
 | Does it add or change a law? (CANONICAL §3) | it gets **one** owner — the node that holds the data. Grep for the rule first: if it's already written somewhere, that's the owner, or the duplicate to remove |
 | Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `Abilities` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |
@@ -122,7 +122,7 @@ Briefly produce:
 3. **Domain types** — value types (struct/enum) and which `@Mockable` abstraction is added/changed. Rich domain: behaviour lives on the value, not in a service (`DeviceButton.press`, `KeyboardKey.press` are the templates). **Name new abstractions for their domain role** — `Subprocess`, `DeviceHost`, `Accessibility`. **Never `XxxPort` / `XxxService` / `XxxManager`, and never the suffix `XxxRepository`.** If the abstraction *is* aggregate CRUD (load / save / delete by identity for an aggregate root), name it as the **plural collection noun** — `Simulators`, `Chromes`, `Books`. If the noun isn't obvious, the abstraction probably shouldn't exist yet.
 4. **Adapter changes** — how the production class (`IndigoHIDInput`, `AXPTranslatorAccessibility`, `SimDeviceLogStream`, …) handles it. Which private-API symbol, which arg shape. Flag iOS-26-specific gotchas explicitly (signature drift between idb/AXe and Xcode 26 has burned us before — see [`buttons/design.md`](../../../docs/features/buttons/design.md) for the canonical example).
 5. **I/O split (only when the adapter wraps 3rd-party I/O)** — read [AGENTS.md's "Splitting an adapter that wraps 3rd-party I/O"](../../../AGENTS.md#splitting-an-adapter-that-wraps-3rd-party-io) section and pick a pattern:
-   - **One-shot fetch** (single private-API call → operate on the value): lift the post-fetch logic into a pure static factory in `Domain/` (`AXNode.walk(from:transform:)`, `AXFrameTransform`, `LineBuffer`). The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
+   - **One-shot fetch** (single private-API call → operate on the value): lift the post-fetch logic into a pure static factory beside its ability (`AXNode.walk(from:transform:)`, `AXFrameTransform`, `LineBuffer`). The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
    - **Conversational I/O** (start / stream / signal-exit / terminate): introduce one small `@Mockable` collaborator named like a domain noun (`Subprocess`, never `LogProcessPort`). The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess`. The concrete impl (`HostSubprocess` ~30–50 LOC) is integration-only and should be excluded from coverage.
 6. **Frontend** — does the browser need to send / receive this? If yes, which IIFE(s) change.
 
@@ -173,7 +173,7 @@ Wire JSON              Domain                   Infrastructure
 
 ## Phase 1: Domain TDD
 
-Write the failing test FIRST, in `Tests/BaguetteTests/<Context>/`, named
+Write the failing test FIRST, in `Tests/BaguetteTests/<the source's folder>/`, named
 `should <outcome> [when <situation>]` in domain language — see
 [Naming tests](references/tdd-patterns.md#naming-tests).
 
@@ -254,7 +254,7 @@ hand the result to the factory." Examples:
 - `LineBuffer.append(_ bytes: Data) -> [String]`
 - `AXElementReader.string/bool/frame/children(...)`
 
-These all live in `Domain/<Context>/`, are exercised by direct unit
+These all live in `Device/Abilities/<ability>/`, are exercised by direct unit
 tests, and the Infrastructure adapter calls them after the
 irreducible private-API call.
 
@@ -312,7 +312,7 @@ For `IndigoHIDInput` (and any future direct private-symbol caller):
 
 ### When the adapter reaches a physical phone (CoreDevice, tunnel services)
 
-For anything under `Infrastructure/CoreDevice/` (research:
+For anything under `Devices/iPhone/Internal/` (research:
 [`docs/features/real-devices/design.md`](../../../docs/features/real-devices/design.md)):
 
 - **Bind CoreDevice in Swift** with `@_silgen_name` on stand-in types
@@ -326,7 +326,7 @@ For anything under `Infrastructure/CoreDevice/` (research:
   locked phone or a stalled tunnel never answers.
 - **Check a resilient type's size** (`CoreDeviceFramework.valueSize`)
   before CoreDevice writes one into a fixed buffer.
-- **Wire formats are Domain values** (`Domain/CoreDevice/`: `DTXMessage`,
+- **Wire formats are Domain values** (`Devices/iPhone/`: `DTXMessage`,
   `XPCObject`, `HTTP2Frame`, `MediaStreamOffer`, `ReceiverFeedback`,
   `AXTreeDump`), unit-tested byte for byte; the socket and the private call
   are the only untested lines, and join the coverage exclusions.
@@ -341,9 +341,9 @@ For anything under `Infrastructure/CoreDevice/` (research:
 Each new gesture / verb flows through the same checklist:
 
 1. **`GestureRegistry.standard`** — one `r.register(<Verb>.self)`
-   line in `Domain/Input/GestureRegistry.swift`.
+   line in `Device/Abilities/Touch/GestureRegistry.swift`.
 2. **CLI subcommand** — new `struct …Command: ParsableCommand` in
-   `App/Commands/GestureCommands.swift` (or a sibling). Add to
+   `Sources/Commands/GestureCommands.swift` (or a sibling). Add to
    `RootCommand.subcommands`. Update `CommandParsingTests`.
 3. **Server WS** — usually nothing: `Server.streamWS` already routes
    wire JSON through `GestureDispatcher.dispatch(line:)`. New behaviour
@@ -366,9 +366,9 @@ Each new gesture / verb flows through the same checklist:
    - Small, reusable browser logic gets a `node:test` unit test —
      see [references/js-testing.md](references/js-testing.md).
 
-A new **stream format** is one `Stream` impl in `Infrastructure/Host/Stream/`
-plus one case in `StreamFormat.makeStream` (`Infrastructure/Host/Stream/`); its byte envelope lives in
-`Domain/Stream/Envelope.swift`. No call site switches on the format.
+A new **stream format** is one `Stream` impl in `Device/Abilities/Capture/Internal/`
+plus one case in `StreamFormat.makeStream` (same folder); its byte envelope lives in
+`Device/Abilities/Capture/Envelope.swift`. No call site switches on the format.
 
 ## Phase 4: Docs + Changelog (mandatory before "done")
 
@@ -503,8 +503,8 @@ not the flag table — `make docs` writes that).
 - [ ] User has approved the design
 
 ### Phase 1 — Domain (red → green → refactor)
-- [ ] Failing test in `Tests/BaguetteTests/<Context>/`
-- [ ] Value types in `Domain/<Context>/`
+- [ ] Failing test in `Tests/BaguetteTests/<the source's folder>/`
+- [ ] Value types in `Device/Abilities/<ability>/` (or `Devices/<Family>/`)
 - [ ] Rich-domain method on the value (e.g. `.press(...)`)
 - [ ] If the feature introduces a Domain pure factory (`AXNode.walk`, `LineBuffer.append`, `AXFrameTransform.map`), it's covered at 100%
 - [ ] If a new collaborator was introduced, it's `@Mockable` and named for its domain role

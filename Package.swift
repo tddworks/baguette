@@ -44,7 +44,7 @@ let package = Package(
     targets: [
         // The one CoreDevice call Swift can't spell: a typed-throws send
         // whose error slot sits before the type metadata. Everything else
-        // is Swift (Infrastructure/CoreDevice/Kit).
+        // is Swift (Devices/iPhone/Internal/Kit).
         .target(
             name: "CoreDeviceABI",
             path: "Sources/CoreDeviceABI"
@@ -72,40 +72,44 @@ let package = Package(
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
                 "CoreDeviceABI",
             ],
-            path: "Sources/Baguette",
+            // The two ways in (Commands, Server), the device families
+            // (Devices) and the plugins, around the one `@main` in
+            // Sources/Baguette, which also keeps the resources.
+            path: "Sources",
+            sources: ["Baguette/RootCommand.swift", "Commands", "Server", "Devices", "Plugins"],
             resources: [
                 // Static HTML/CSS/JS for `baguette serve`. Each file is
                 // self-contained — open in a browser via file:// for a
                 // design preview without booting the server.
-                .copy("Resources/Web"),
+                .copy("Baguette/Resources/Web"),
                 // Data-driven 3D device definitions. Large USDZ assets are
                 // downloaded from their declared source and SHA-256 verified.
-                .copy("Resources/Models3D"),
+                .copy("Baguette/Resources/Models3D"),
                 // Plugins baguette ships (the reference accessibility
                 // audit). Resolved at runtime by `PluginRoot`, the same
                 // three-step lookup `WebRoot` uses for the web assets.
-                .copy("Resources/Plugins"),
+                .copy("Baguette/Resources/Plugins"),
                 // iOS-Simulator dylib (vendored under `VirtualCamera/`,
                 // built by `VirtualCamera/build.sh` and staged here by
                 // the top-level `build.sh`). `InjectedDylibInstaller`
                 // resolves the bundle path at runtime.
-                .copy("Resources/VirtualCamera"),
+                .copy("Baguette/Resources/VirtualCamera"),
                 // The motion counterpart — answers CMMotionActivityManager,
                 // CMPedometer and CMMotionManager from the intent baguette
                 // publishes. Same build-and-stage path, same installer.
-                .copy("Resources/VirtualMotion"),
+                .copy("Baguette/Resources/VirtualMotion"),
                 // The network counterpart — conditions an app's own
                 // URLSession traffic from the condition baguette publishes.
                 // Same build-and-stage path, same installer.
-                .copy("Resources/VirtualNetwork"),
+                .copy("Baguette/Resources/VirtualNetwork"),
                 // Lets an app baguette launches say which preferences it
                 // looks up. Same build-and-stage path, same installer, but
                 // handed to one launch rather than armed device-wide.
-                .copy("Resources/DefaultsLookups"),
+                .copy("Baguette/Resources/DefaultsLookups"),
                 // HingeControl — not a dylib but an executable spawned in
                 // the guest (`simctl spawn`) to drive iPhone Duo's hinge.
                 // Same build-and-stage path, same installer.
-                .copy("Resources/HingeControl"),
+                .copy("Baguette/Resources/HingeControl"),
             ],
             swiftSettings: [
                 // MOCKING is debug-only; release strips mock code entirely.

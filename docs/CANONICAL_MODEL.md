@@ -234,12 +234,12 @@ one owner. Across a fence only a reference passes (an id, a value of the
 shared kernel) — never another context's aggregate, its storage or its
 adapter. A device's own contexts — what it is, how it looks, what it can do
 — are the module `BaguetteDevice` (`Sources/Device/`, an ability's roles and
-values under `Abilities/<ability>/`). The rest: `Sources/Baguette/Domain/<Context>/`,
-its `Infrastructure/<Context>/` and `Tests/BaguetteTests/<Context>/` share a name. `Infrastructure/` is
-split one level higher, by what it talks to — one folder per device family
-(`Simulator/`, `Companion/`, `CoreDevice/`, `Android/`) plus `Host/` for the
-Mac — and each family sorts itself by these context names
-([devices](features/devices/design.md#6--infrastructure--split-by-what-it-talks-to)).
+values under `Abilities/<ability>/`, the Mac's side of each in its `Internal/`). What
+only one family does lives in `Sources/Devices/<Family>/` (`Simulator/`, `iPhone/`,
+`CompanionPhone/`), its private-API adapters in `Internal/`, sorted by these
+context names; plugins in `Sources/Plugins/`; the ways in are `Sources/Commands/`
+and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
+([devices](features/devices/design.md#6--the-tree--outside-in-split-by-what-it-talks-to)).
 
 | Context | Owns the question | Its root |
 |---|---|---|

@@ -58,7 +58,7 @@ jobs:
           xcrun llvm-cov export "$XCTEST" \
             -instr-profile "$PROFDATA" \
             -format=lcov \
-            -ignore-filename-regex=".build|Tests|Resources|Mock|Infrastructure/Server/|Infrastructure/Simulator/[^/]+\\.swift|Infrastructure/Simulator/Input/|Infrastructure/Simulator/Screen/|Infrastructure/Host/Screen/|Infrastructure/Host/Stream/|Infrastructure/Host/Chrome/PDFRasterizer|Infrastructure/CoreDevice/Kit/CoreDeviceFramework|Infrastructure/CoreDevice/Kit/DigitizerReport|Infrastructure/CoreDevice/Input/CoreDeviceDigitizer|Infrastructure/CoreDevice/Screen/MediaStreamScreen|Infrastructure/CoreDevice/Accessibility/|App/Commands/|App/Logger" \
+            -ignore-filename-regex=".build|Tests|Resources|Mock|Sources/Server/|Devices/Simulator/Internal/[^/]+\\.swift|Devices/Simulator/Internal/Input/|Devices/Simulator/Internal/Screen/|Abilities/Screen/Internal/|Capture/Internal/(AVCCStream|ControlChannel|H264|JPEGEncoder|MJPEGStream|SeedFilter|StdoutSink|Stream|VT|VideoFrameScaler)|Chrome/Internal/PDFRasterizer|iPhone/Internal/Kit/CoreDeviceFramework|iPhone/Internal/Kit/DigitizerReport|iPhone/Internal/Input/CoreDeviceDigitizer|iPhone/Internal/Screen/MediaStreamScreen|iPhone/Internal/Accessibility/|Sources/Commands/|Device/Internal/Logger" \
             > coverage.lcov
 
       - name: Upload coverage to Codecov

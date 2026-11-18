@@ -1,7 +1,8 @@
 # Rich domain model patterns (baguette)
 
 baguette's domain layer is value types plus `@Mockable` roles, one folder
-per bounded context (`Domain/<Context>/`; the contexts, the tree and every
+per ability (`Sources/Device/Abilities/<ability>/`) or device family
+(`Sources/Devices/<Family>/`; the contexts, the tree and every
 law's owner are in [CANONICAL_MODEL.md](../../../../docs/CANONICAL_MODEL.md)).
 Its patterns, each below:
 
@@ -252,7 +253,8 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
 
 ## Adding a domain type — checklist
 
-1. Name its context (CANONICAL §5) and create it in `Domain/<Context>/`.
+1. Name its context (CANONICAL §5) and create it in `Device/Abilities/<ability>/`, or
+   `Devices/<Family>/` when only one family has it.
 2. Name the laws it owns (CANONICAL §3). Grep for each: if it already lives
    elsewhere, that's the owner, or the duplicate to remove.
 3. A value: `struct` or `enum`, `Equatable, Sendable`, invalid input refused
@@ -261,8 +263,8 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
    (`press` · `apply` · `deliver`) that takes the role it acts on and
    forwards in one line.
 5. A role for the outside world: a `@Mockable` protocol named for the role,
-   handed out by a `Simulator` factory, implemented in `Infrastructure/<Context>/`.
+   registered on the device's `Abilities`, implemented in `Devices/<Family>/Internal/<ability>/`.
 6. A wire envelope: a sibling `Gesture` (or `parse(json:)`) with `parse`
    plus a one-line `execute`, registered on `GestureRegistry.standard`.
-7. Tests in `Tests/BaguetteTests/<Context>/`, named `should <outcome> [when
+7. Tests in `Tests/BaguetteTests/` at the source's path, named `should <outcome> [when
    <situation>]`, Swift Testing only, every branch covered without a sim.
