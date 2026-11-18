@@ -10,9 +10,9 @@ are on `feat/devices`: `Infrastructure/` split by family; the device model
 (`DeviceState`, `AbilityTable`, `Device`, `Devices`, `CombinedDevices`); the
 simulator, companion and CoreDevice families as sources; the device-level
 commands, `baguette list`, `/devices.json` and the device page's stream
-reading it. A physical iPhone on a cable shows its screen (devicectl
-screenshots, ~1 fps), turns and shares its pasteboard; everything else is
-refused by name.
+reading it. A physical iPhone on a cable takes touches (CoreDevice Universal
+HID), shows its screen (devicectl screenshots, ~1 fps), turns and shares its
+pasteboard; everything else is refused by name.
 
 This document owns **which devices exist, what each one can do, and where
 each device family's implementation lives**. Its neighbours own the rest,
@@ -167,7 +167,7 @@ The abilities, from today's `Simulator` methods plus one new one:
 |---|---|---|---|---|---|
 | `lifecycle` | `Lifecycle` (boot · shutdown) | ✓ | — | — | ✓ |
 | `screen` | `Screen` | ✓ | ✓ (devicectl screenshots, ~1 fps) | ✓ once its video arrives | ✓ |
-| `input` | `Input` | ✓ | after the spike | later (runner) | ✓ |
+| `input` | `Input` | ✓ | ✓ (CoreDevice Universal HID: touches; not buttons or keys) | later (runner) | ✓ |
 | `displays` | `Displays` (phone · panels · CarPlay) | ✓ | — | — | — |
 | `accessibility` | `Accessibility` | ✓ | ? | — | ✓ |
 | `apps` · `logs` | `Apps` · `LogStream` | ✓ | — (devicectl can't push a notification; no syslog verb) | — | ✓ |
@@ -286,8 +286,9 @@ Infrastructure/
 │   └── Input/ Screen/ Accessibility/ Hinge/ Orientation/ Logs/ Location/ Apps/ Defaults/
 │       Pasteboard/ Photos/ StatusBar/ Interface/ Shake/ Motion/ Network/ Camera/ Injection/ …
 ├── Companion/   the twin: LiveCompanionPhones, TwinScreen(s), TwinPoses, VTH264Decoder
-├── CoreDevice/  physical iPhone: devicectl + CoreDevice.framework   (after the spike)
-│   └── Kit/     the CoreDevice symbol bridge (the technique expo-device-hub's CoreDeviceShim uses)
+├── CoreDevice/  physical iPhone: devicectl, and CoreDevice.framework for touch
+│   └── Kit/     Devicectl; CoreDeviceFramework (RemoteDevice, CapabilityKind) over the
+│                CoreDeviceABI native target — the only code speaking CoreDevice's Swift ABI
 ├── Android/     adb + emulator   (later, same shape)
 ├── Host/        the Mac, shared by every family: Stream/ Recording/ Render/ Camera/ (AV capture)
 │                Chrome/ Bakery/ Plugin/ Subprocess/
@@ -373,12 +374,9 @@ AGENTS.md's layering sentence changes to:
 - ~~One protocol per ability (`Device & Locatable`)?~~ No: Mockable does not
   generate inherited requirements, and the page needs abilities as a list.
   Settled 2026-11-18 for a registration table, like `GestureRegistry`.
-- ~~Does expo-device-hub drive physical iPhones?~~ No. It drives simulators and
-  emulators only; its `CoreDeviceShim` reaches *simulators* through
-  CoreDevice's device manager (hinge and orientation vendor HID). It proves an
-  unentitled process can call CoreDevice, which the
-  [real-devices](../real-devices/design.md) spike now builds on. Checked
-  2026-11-18 against the repo's HEAD.
+- ~~Can an unentitled process touch a physical iPhone?~~ Yes, through
+  CoreDevice's Universal HID capability. Measured 2026-11-18; the research is
+  in [real-devices](../real-devices/design.md#decision).
 - ~~Is a generic method on a `@Mockable` protocol a problem?~~ Avoided:
   `require` lives on the `AbilityTable` value and in a `Devices` extension,
   so neither protocol has a generic member. `.location` resolves as an

@@ -14,7 +14,7 @@ For releases prior to this changelog, see the
 - Breaking: a command that drives the screen (`tap`, `screenshot`, `record`, `orientation`, `shake`, …) refuses a device that isn't booted up front, saying so, instead of waiting or failing inside `simctl`. → [docs](docs/features/devices/design.md)
 
 ### Added
-- A paired iPhone on a cable is a device: `baguette list` shows it, and `screenshot`, `stream`, `record`, `orientation` and `clipboard` take its UDID; the serve page streams it. Anything it can't do is refused by name. → [docs](docs/features/real-devices/README.md)
+- A paired iPhone on a cable is a device: `baguette list` shows it, and `tap`, `swipe`, `input`, `screenshot`, `stream`, `record`, `orientation` and `clipboard` take its UDID; the serve page streams it. Anything it can't do is refused by name. → [docs](docs/features/real-devices/README.md)
 
 ---
 

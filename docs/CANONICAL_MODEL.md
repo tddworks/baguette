@@ -49,7 +49,7 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
     │                                       state ◇ (off · starting · ready · unavailable)
     └── abilities → AbilityTable  ◇         WHAT IT CAN DO — require(.location) → the role; names
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
-                                            CoreDevicePhones (screen, orientation, pasteboard) ·
+                                            CoreDevicePhones (screen, input, orientation, pasteboard) ·
                                             AndroidEmulators (later)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
@@ -159,6 +159,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a secure field is compared by its number of characters; other punctuation is reformatted, not different | `TextField` |
 | a short read is of a screen, not a point; `x` and `y` come together | `DescribeUI` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
+| a physical phone's touches go to the Universal HID service it registers for its main touchscreen, `0x101` — measured, never computed | `CoreDeviceDigitizer.mainTouchscreen` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
 | an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |
 | `type` / `key` are US-layout printable ASCII; anything else fails to parse and goes through `paste` | `KeyboardKey.decompose` · `TypeText.parse` |

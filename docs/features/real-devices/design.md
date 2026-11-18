@@ -1,6 +1,6 @@
-# Real devices: CoreDevice spike
+# Real devices: CoreDevice research
 
-> Status: **spike, not started**, 2026-10-07. No code on `main`. The feature's `README.md` arrives when something ships.
+> Status: **spike run**, 2026-11-18, on an iPhone 18 Pro Max (iOS 27.0.1, Xcode 27.0). H1 and H3 pass: baguette touches a physical iPhone through CoreDevice. H2 (a live stream) is open; the screen is `devicectl` screenshots. How to use it: [README.md](README.md).
 
 ## Question
 
@@ -67,15 +67,32 @@ Run them in order; stop at the first kill of H1 and jump to [Fallback](#fallback
 
 ## Decision
 
-Filled in at the end of the spike.
+| Hypothesis | Result |
+|---|---|
+| H1 — CoreDevice is callable from our process | **Pass.** `DeviceManager`, built with every visibility class, lists physical phones beside simulators; `RemoteDevice.getImplementation(for:)` opens capabilities. No entitlement asked. |
+| H2 — frames reach us as something decodable | **Open.** `RemoteDevice.startMediaStream(with:)` exists, but `DeviceMediaStream.StartRequest` has no public initializer (only its `Codable` keys), and the frames travel over an AVConference negotiation (`MediaStreamHelper.getNegotiatorOptions`). Not attempted. The screen stays `devicectl device capture screenshot`, about one frame a second. |
+| H3 — touches go over a callable service | **Pass.** The `UniversalHIDServiceCapability` opens on the phone, and a UniversalHID `DigitizerReport` sent with `UniversalHIDService.send(report:to:)` to service `0x101` lands: a swipe paged the Home Screen and back, an edge swipe went Home. |
+| H4 — a vphone VM works unchanged | Not run (no VM on this Mac). |
 
-| Outcome | Meaning | Next |
-|---|---|---|
-| Go: H1, H2, H3 pass | Screen and input both reachable | A `CoreDevicePhones` source in [Devices](../devices/design.md), registering `screen` and `input`; real iPhones and vphone VMs both appear |
-| Partial: H1 and H2 pass, H3 fails | Watch-only real devices | Decide whether a view-only device is worth shipping; input for vphone still goes through vphoned |
-| No-go: H1 fails | CoreDevice route closed to us | [Fallback](#fallback-vphone-only-through-vphoned); physical devices stay out of scope |
+Outcome: **Go** for touch, **Partial** for the screen. Built: `CoreDevicePhones` registers `screen` (devicectl), `input` (Universal HID), `orientation` and `pasteboard` (devicectl).
 
-Result: _not run yet._
+### How a touch reaches the phone
+
+```
+DigitizerInput (gesture → reports, fractions of the screen)
+  → CoreDeviceDigitizer.report
+      → CoreDeviceFramework.device(<CoreDevice identifier>)        DeviceManager.allDevices()
+      → RemoteDevice.open(.universalHID)                           getImplementation(for:) async throws
+      → cdabi_send_digitizer_report(capability, 0x101, fingers…)   UniversalHIDService.send(report:to:)
+```
+
+- **The service is `0x101`.** The phone's Universal HID stack registers its main touchscreen as `0x100` plus the display id `devicectl device info displays` reports (`displayId: 1`). Baguette keeps it as the measured constant `CoreDeviceDigitizer.mainTouchscreen`, never computes it (the HID-target law).
+- **The developer disk image must be mounted.** A phone listed with `ddiServicesAvailable: false` takes the report without error and does nothing. Any developer service mounts it; `devicectl device info ddiServices` is the cheapest.
+- **The phone must be awake.** Injected touches don't wake a dark screen; tap-to-wake lives in the touch controller.
+- **A Lock Screen swipe from the right opens the Camera.** Check the screen before driving a phone that may have locked.
+- **Identity.** CoreDevice's API takes its own identifier (`30546CC9-…`, the `identifier` in `devicectl list devices`), not the UDID. `PhysicalPhone.coreDeviceIdentifier` carries it.
+- **The report.** A UniversalHID `DigitizerReport` and `DigitizerContact` each wrap one `Foundation.Data` (two words). UniversalHID's own initializers and setters build them; `CoreDeviceABI` checks the two-word size before sending and refuses otherwise. An edge swipe sets the inward swipe flag and "swipe locked" on every report including the lift.
+- **The calling convention.** CoreDevice ships no Swift module. `CoreDeviceABI` resolves its symbols with `dlopen` (never linked, like SimulatorKit), exposes plain C entry points, and forwards the Swift-ABI calls Swift declares with `@_silgen_name` through jumps that keep every register (self, indirect result, async context). The async `getImplementation(for:)` needs its descriptor's context size copied from CoreDevice's own `…Tu` symbol.
 
 ## Fallback: vphone only, through vphoned
 
