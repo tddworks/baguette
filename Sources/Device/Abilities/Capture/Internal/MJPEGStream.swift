@@ -9,7 +9,8 @@ public final class MJPEGStream: Stream, @unchecked Sendable {
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
     private let scaler = VideoFrameScaler()
-    private let queue = DispatchQueue(label: "baguette.mjpeg", qos: .userInteractive)
+    /// Where every frame is encoded; the stream's state is confined to it.
+    let queue = DispatchQueue(label: "baguette.mjpeg", qos: .userInteractive)
     private lazy var pump = StreamFramePump<IOSurface>(
         queue: queue, fps: config.fps, repeating: false
     ) { [weak self] in self?.encode($0) }
@@ -50,7 +51,8 @@ public final class MJPEGStream: Stream, @unchecked Sendable {
     public func requestKeyframe() { /* no-op: MJPEG is stateless */  }
     public func requestSnapshot() { /* no-op: every JPEG is a seed */  }
 
-    private func encode(_ surface: IOSurface) {
+    /// One paced screen: a JPEG part when it changed. Runs on `queue`.
+    func encode(_ surface: IOSurface) {
         guard filter.shouldEmit(surface) else { return }
         guard let pb = scaler.scale(surface, by: config.scale) else { return }
         guard let bytes = jpeg.encode(pb) else { return }

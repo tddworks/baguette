@@ -1,19 +1,19 @@
-import CoreMedia
 import CoreVideo
 import Foundation
 import IOSurface
-import VideoToolbox
 
-/// The irreducible VideoToolbox calls behind `H264Decoder` —
-/// integration-only, like `HostSubprocess`. Everything decidable
-/// without a GPU (avcC parsing, chunk classification, fan-out) lives
-/// in `AVCCParameterSets` and `TwinScreen` and is unit-covered.
+/// The `H264Decoder` on VideoToolbox, behind the device twin's video.
+///
+/// It decides; the `DecompressionSession` only decompresses: which avcC
+/// records it takes (parsed by `AVCCParameterSets`), which parameter sets
+/// its session opens with, and which pictures go on.
 public final class VTH264Decoder: H264Decoder, @unchecked Sendable {
-    public init() {}
+    public convenience init() { self.init(session: VideoToolboxDecompressionSession()) }
 
+    init(session: any DecompressionSession) { self.session = session }
+
+    private let session: any DecompressionSession
     private let lock = NSLock()
-    private var session: VTDecompressionSession?
-    private var format: CMVideoFormatDescription?
     private var onFrame: (@Sendable (IOSurface) -> Void)?
     private var reportedDecodeFailure = false
 
@@ -21,128 +21,37 @@ public final class VTH264Decoder: H264Decoder, @unchecked Sendable {
         guard let sets = AVCCParameterSets.parse(avcC: description) else {
             throw DecoderError.malformedDescription
         }
-        let format = try sets.sps[0].withUnsafeBytes { sps in
-            try sets.pps[0].withUnsafeBytes { pps in
-                var description: CMVideoFormatDescription?
-                let pointers: [UnsafePointer<UInt8>] = [
-                    sps.bindMemory(to: UInt8.self).baseAddress!,
-                    pps.bindMemory(to: UInt8.self).baseAddress!,
-                ]
-                let sizes = [sets.sps[0].count, sets.pps[0].count]
-                let status = CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                    allocator: kCFAllocatorDefault,
-                    parameterSetCount: 2,
-                    parameterSetPointers: pointers,
-                    parameterSetSizes: sizes,
-                    nalUnitHeaderLength: Int32(sets.naluHeaderLength),
-                    formatDescriptionOut: &description
-                )
-                guard status == noErr, let description else {
-                    throw DecoderError.formatRejected(status)
-                }
-                return description
+        if let refusal = session.open(
+            parameterSets: [sets.sps[0], sets.pps[0]], nalUnitHeaderLength: sets.naluHeaderLength, croppedTo: nil
+        ) {
+            switch refusal {
+            case .format(let status): throw DecoderError.formatRejected(status)
+            case .session(let status): throw DecoderError.sessionRejected(status)
             }
         }
-
-        var session: VTDecompressionSession?
-        let attributes: [CFString: Any] = [
-            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-        ]
-        let status = VTDecompressionSessionCreate(
-            allocator: kCFAllocatorDefault,
-            formatDescription: format,
-            decoderSpecification: nil,
-            imageBufferAttributes: attributes as CFDictionary,
-            outputCallback: nil,
-            decompressionSessionOut: &session
-        )
-        guard status == noErr, let session else {
-            throw DecoderError.sessionRejected(status)
-        }
-
-        lock.lock()
-        if let old = self.session { VTDecompressionSessionInvalidate(old) }
-        self.session = session
-        self.format = format
-        self.onFrame = onFrame
-        lock.unlock()
+        lock.withLock { self.onFrame = onFrame }
         log("[device] decoder configured (\(sets.naluHeaderLength)-byte NALU prefixes)")
     }
 
     public func decode(_ frame: Data) {
-        lock.lock()
-        guard let session, let format else {
-            lock.unlock()
-            return
-        }
-        let deliver = onFrame
-        lock.unlock()
-
-        var blockBuffer: CMBlockBuffer?
-        let bytes = UnsafeMutableRawPointer.allocate(byteCount: frame.count, alignment: 1)
-        frame.copyBytes(to: bytes.assumingMemoryBound(to: UInt8.self), count: frame.count)
-        guard CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault,
-            memoryBlock: bytes,
-            blockLength: frame.count,
-            blockAllocator: kCFAllocatorDefault,
-            customBlockSource: nil,
-            offsetToData: 0,
-            dataLength: frame.count,
-            flags: 0,
-            blockBufferOut: &blockBuffer
-        ) == noErr, let blockBuffer else {
-            bytes.deallocate()
-            return
-        }
-
-        var sampleBuffer: CMSampleBuffer?
-        var sampleSize = frame.count
-        guard CMSampleBufferCreateReady(
-            allocator: kCFAllocatorDefault,
-            dataBuffer: blockBuffer,
-            formatDescription: format,
-            sampleCount: 1,
-            sampleTimingEntryCount: 0,
-            sampleTimingArray: nil,
-            sampleSizeEntryCount: 1,
-            sampleSizeArray: &sampleSize,
-            sampleBufferOut: &sampleBuffer
-        ) == noErr, let sampleBuffer else { return }
-
-        VTDecompressionSessionDecodeFrame(
-            session,
-            sampleBuffer: sampleBuffer,
-            flags: [._EnableAsynchronousDecompression],
-            infoFlagsOut: nil
-        ) { [weak self] status, _, imageBuffer, _, _ in
-            guard status == noErr,
-                  let imageBuffer,
-                  let surface = CVPixelBufferGetIOSurface(imageBuffer)?.takeUnretainedValue() else {
+        guard let deliver = lock.withLock({ onFrame }) else { return }
+        session.decode(frame, asynchronously: true) { [weak self] result in
+            guard let surface = result.surface else {
                 // One line, once — a decode failure at 30 fps must not
                 // flood the log, but a silent black mirror is worse.
                 if let self, !self.reportedDecodeFailure {
                     self.reportedDecodeFailure = true
-                    log("[device] decode failed: status=\(status) surfaceBacked=\(imageBuffer != nil)")
+                    log("[device] decode failed: status=\(result.status) surfaceBacked=\(result.picture != nil)")
                 }
                 return
             }
-            deliver?(unsafeDowncast(surface, to: IOSurface.self))
+            deliver(surface)
         }
     }
 
     public func stop() {
-        lock.lock()
-        let session = self.session
-        self.session = nil
-        self.format = nil
-        self.onFrame = nil
-        lock.unlock()
-        if let session {
-            VTDecompressionSessionWaitForAsynchronousFrames(session)
-            VTDecompressionSessionInvalidate(session)
-        }
+        lock.withLock { onFrame = nil }
+        session.close()
     }
 
     public enum DecoderError: Error {

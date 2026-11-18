@@ -4,7 +4,7 @@ import Mockable
 
 /// A live H.264 decoder configured straight from a stream's SPS and PPS. Encoded frames fed to
 /// `decode` land on `onFrame` as IOSurfaces for the stream pipeline. The
-/// concrete impl wraps `VTDecompressionSession` and is integration-only.
+/// concrete impl (`VTStreamDecoder`) drives a `DecompressionSession`.
 @Mockable
 public protocol StreamDecoder: AnyObject, Sendable {
     /// Build (or rebuild) the session for these parameter sets; frames come

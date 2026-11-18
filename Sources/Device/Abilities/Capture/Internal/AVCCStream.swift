@@ -11,7 +11,9 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     private let jpeg: JPEGEncoder
     private let h264: H264Encoder
     private let scaler = VideoFrameScaler()
-    private let queue = DispatchQueue(label: "baguette.avcc", qos: .userInteractive)
+    /// Where every frame is encoded, including VideoToolbox's answers; the
+    /// stream's state is confined to it.
+    let queue = DispatchQueue(label: "baguette.avcc", qos: .userInteractive)
     private lazy var pump = StreamFramePump<IOSurface>(
         queue: queue, fps: config.fps, repeating: true
     ) { [weak self] in self?.encode($0) }
@@ -22,11 +24,16 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     private var pendingForceKeyframe = true
     private var pendingSeedSnapshot = true
 
-    public init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
+    public convenience init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
+        self.init(config: config, sink: sink, quality: quality,
+                  encoder: H264Encoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict))
+    }
+
+    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: H264Encoder) {
         currentConfig = config
         self.sink = sink
         jpeg = JPEGEncoder(quality: quality)
-        h264 = H264Encoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict)
+        h264 = encoder
     }
 
     public func start(on screen: any Screen) throws {
@@ -78,7 +85,9 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         h264.stop()
     }
 
-    private func encode(_ surface: IOSurface) {
+    /// One paced screen: a seed when one is due, then the frame to the
+    /// encoder. Runs on `queue`.
+    func encode(_ surface: IOSurface) {
         guard running else { return }
         // A Screen may recycle the IOSurface; VT must retain its own GPU copy.
         guard let pb = scaler.scale(surface, by: config.scale) else { return }
