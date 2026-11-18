@@ -27,6 +27,20 @@ struct DeviceProfileTests {
         #expect(profile.screenSize == Size(width: 440, height: 956))
     }
 
+    @Test func `should size an Apple TV screen in points when its profile dimensions are numeric strings`() throws {
+        let plist = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "chromeIdentifier": "com.apple.dt.devicekit.chrome.tv",
+                "mainScreenWidth": "3840",
+                "mainScreenHeight": "2160",
+                "mainScreenScale": "2",
+            ] as [String: Any],
+            format: .xml, options: 0
+        )
+        let profile = try DeviceProfile.parsing(plistData: plist)
+        #expect(profile.screenSize == Size(width: 1920, height: 1080))
+    }
+
     @Test func `should leave the screen size unknown when any main screen key is missing`() throws {
         let plist = try PropertyListSerialization.data(
             fromPropertyList: ["chromeIdentifier": "phone12"] as [String: Any],
