@@ -100,3 +100,24 @@ extension PhysicalPhoneTests {
         """#
     }
 }
+
+@Suite("PhysicalPhone screen")
+struct PhysicalPhoneScreenTests {
+    private func displays(_ entries: String) -> Data {
+        Data(#"{"info":{"outcome":"success"},"result":{"displays":[\#(entries)]}}"#.utf8)
+    }
+
+    @Test func `should read the phone's screen size in pixels from its primary display`() {
+        let info = displays(#"""
+            {"displayId":2,"primary":false,"nativeSize":[1920,1080]},
+            {"displayId":1,"primary":true,"name":"LCD","nativeSize":[1320,2868],"bounds":[[0,0],[1320,2868]]}
+            """#)
+
+        #expect(PhysicalPhone.screenPixels(fromDisplaysJSON: info) == Size(width: 1320, height: 2868))
+    }
+
+    @Test func `should read no screen size when the phone lists no primary display`() {
+        #expect(PhysicalPhone.screenPixels(fromDisplaysJSON: displays("")) == nil)
+        #expect(PhysicalPhone.screenPixels(fromDisplaysJSON: Data("not json".utf8)) == nil)
+    }
+}

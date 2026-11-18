@@ -21,6 +21,23 @@ struct PhysicalPhone: Equatable, Sendable {
 }
 
 extension PhysicalPhone {
+    /// The size in pixels of the phone's own screen — its primary display's
+    /// `nativeSize` in `devicectl device info displays`. The phone's stream
+    /// pads its pictures past this (1320 × 2868 arrives as 1328 × 2896) and
+    /// doesn't say so; this is what a picture is cropped back to.
+    static func screenPixels(fromDisplaysJSON data: Data) -> Size? {
+        struct Info: Decodable {
+            struct Result: Decodable { let displays: [Display] }
+            struct Display: Decodable { let primary: Bool?; let nativeSize: [Double]? }
+            let result: Result
+        }
+        guard let info = try? JSONDecoder().decode(Info.self, from: data),
+              let size = info.result.displays.first(where: { $0.primary == true })?.nativeSize,
+              size.count == 2, size[0] > 0, size[1] > 0
+        else { return nil }
+        return Size(width: size[0], height: size[1])
+    }
+
     /// The physical devices in `devicectl`'s device list, in its order.
     static func list(fromDevicectlJSON data: Data) throws -> [PhysicalPhone] {
         try JSONDecoder().decode(Listing.self, from: data).result.devices

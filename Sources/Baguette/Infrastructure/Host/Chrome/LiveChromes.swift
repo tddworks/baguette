@@ -53,7 +53,7 @@ final class LiveChromes: Chromes, @unchecked Sendable {
         lock.unlock()
 
         let resolved = loadAssets(chromeIdentifier: chromeID, profile: profile)
-            .map { $0.withScreenMask(screenMask(for: profile)).withScreenPixels(profile.screenPixels) }
+            .map { $0.withScreenMask(screenMask(for: profile)) }
 
         lock.lock()
         cache[key] = resolved

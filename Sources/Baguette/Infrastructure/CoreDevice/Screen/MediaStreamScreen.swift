@@ -75,6 +75,9 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             receiver: UInt32.random(in: 1 ... .max), host: Self.mac, made: Self.ntpNow()).bytes
 
         let identifier = self.identifier, devicectl = self.devicectl
+        // Asked while the stream starts: the size its pictures are cropped to.
+        let screenSize = Answer<Size>()
+        Thread.detachNewThread { screenSize.give(Self.screenPixels(identifier, devicectl: devicectl)) }
         let response = try device.startMediaStream {
             guard let local = Self.localTunnelAddress(identifier, devicectl: devicectl) else { throw StreamError.noTunnel }
             return Self.startRequest(offer: offer, receiverIP: local, port: port)
@@ -94,11 +97,12 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         inet_pton(AF_INET6, sourceIP, &phone.sin6_addr)
         lock.withLock { self.phone = phone; reporter = ourSSRC; source = phoneSSRC }
 
-        try receive(on: fd, phone: phone, reporter: ourSSRC, source: phoneSSRC, onFrame)
+        try receive(on: fd, phone: phone, reporter: ourSSRC, source: phoneSSRC,
+                    screen: { screenSize.wait(upTo: 3) }, onFrame)
     }
 
     private func receive(on fd: Int32, phone: sockaddr_in6, reporter: UInt32, source: UInt32,
-                         _ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
+                         screen: () -> Size?, _ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         var phone = phone
         var depacketizer = VideoDepacketizer()
         var feedback = ReceiverFeedback(reporter: reporter, source: source)
@@ -131,7 +135,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             let fresh = unit.parameterSets
             if !fresh.isEmpty, fresh != parameterSets {
                 let decoder = lock.withLock { self.decoder } ?? makeDecoder()
-                try decoder.configure(parameterSets: fresh, onFrame: onFrame)
+                try decoder.configure(parameterSets: fresh, screen: screen(), onFrame: onFrame)
                 lock.withLock { self.decoder = decoder }
                 parameterSets = fresh
             }
@@ -219,6 +223,17 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         }
     }
 
+    /// The phone's screen size in pixels, from `devicectl device info displays`.
+    private static func screenPixels(_ identifier: UUID, devicectl: Devicectl) -> Size? {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-displays-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard (try? devicectl.runAndWait([
+            "device", "info", "displays", "--device", identifier.uuidString, "--quiet", "--json-output", file.path,
+        ])) != nil, let data = try? Data(contentsOf: file) else { return nil }
+        return PhysicalPhone.screenPixels(fromDisplaysJSON: data)
+    }
+
     /// The Mac's end of the phone's tunnel, once the tunnel is up: the
     /// local address on the prefix of the phone's tunnel address, which
     /// devicectl lists (resolving its `.coredevice.local` name instead can
@@ -255,6 +270,25 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
         getnameinfo(address, length, &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
         return String(cString: host)
+    }
+
+    /// A value another thread hands over once; waiting gives up after a while.
+    private final class Answer<Value>: @unchecked Sendable {
+        private let given = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var value: Value?
+        private var waited = false
+
+        func give(_ value: Value?) {
+            lock.withLock { self.value = value }
+            given.signal()
+        }
+
+        func wait(upTo seconds: Double) -> Value? {
+            let first = lock.withLock { defer { waited = true }; return !waited }
+            if first { _ = given.wait(timeout: .now() + seconds) }
+            return lock.withLock { value }
+        }
     }
 
     enum StreamError: Error {

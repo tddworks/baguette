@@ -78,8 +78,6 @@ struct DeviceChromeAssets: Sendable, Equatable {
     /// names none or the file is unreadable; the bezel does not depend
     /// on it.
     let screenMask: ChromeImage?
-    /// The screen in pixels, from the device type's profile, when known.
-    let screenPixels: Size?
 
     init(
         chrome: DeviceChrome,
@@ -87,8 +85,7 @@ struct DeviceChromeAssets: Sendable, Equatable {
         bareComposite: ChromeImage? = nil,
         buttonImages: [String: ChromeImage] = [:],
         buttonMargins: Insets = Insets(top: 0, left: 0, bottom: 0, right: 0),
-        screenMask: ChromeImage? = nil,
-        screenPixels: Size? = nil
+        screenMask: ChromeImage? = nil
     ) {
         self.chrome = chrome
         self.composite = composite
@@ -100,24 +97,13 @@ struct DeviceChromeAssets: Sendable, Equatable {
         self.buttonImages = buttonImages
         self.buttonMargins = buttonMargins
         self.screenMask = screenMask
-        self.screenPixels = screenPixels
     }
 
     /// The same assets with the panel's mask attached.
     func withScreenMask(_ mask: ChromeImage?) -> DeviceChromeAssets {
         DeviceChromeAssets(
             chrome: chrome, composite: composite, bareComposite: bareComposite,
-            buttonImages: buttonImages, buttonMargins: buttonMargins, screenMask: mask,
-            screenPixels: screenPixels
-        )
-    }
-
-    /// The same assets, knowing the screen's size in pixels.
-    func withScreenPixels(_ pixels: Size?) -> DeviceChromeAssets {
-        DeviceChromeAssets(
-            chrome: chrome, composite: composite, bareComposite: bareComposite,
-            buttonImages: buttonImages, buttonMargins: buttonMargins, screenMask: screenMask,
-            screenPixels: pixels
+            buttonImages: buttonImages, buttonMargins: buttonMargins, screenMask: mask
         )
     }
 

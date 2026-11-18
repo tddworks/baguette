@@ -8,8 +8,6 @@
 //     display,               // optional 'phone' | 'carplay'
 //     url,                    // optional custom stream WebSocket URL
 //     canvas,
-//     visible,                // optional {width, height}: the screen's
-//                             // pixels; a larger frame shows its top-left
 //     onSize: (w, h) => …,    // first frame + on resize
 //     onFps:  (fps) => …,     // every second
 //     onLog:  (msg, isErr) => …,
@@ -104,20 +102,14 @@
       if (this.pending) {
         const f = this.pending;
         this.pending = null;
-        const frameW = f.displayWidth || f.width;
-        const frameH = f.displayHeight || f.height;
-        const shown = StreamSession.visibleSize(frameW, frameH, this.opts.visible);
-        const w = shown.width;
-        const h = shown.height;
+        const w = f.displayWidth || f.width;
+        const h = f.displayHeight || f.height;
         if (canvas.width !== w || canvas.height !== h) {
           canvas.width = w;
           canvas.height = h;
           if (onSize) onSize(w, h);
         }
-        // The whole frame at its own size, top-left; the canvas (the
-        // visible screen) clips the padding. Safari misreads a source
-        // rectangle on a WebCodecs VideoFrame, so none is passed.
-        ctx.drawImage(f, 0, 0, frameW, frameH);
+        ctx.drawImage(f, 0, 0);
         if (typeof f.close === 'function') { try { f.close(); } catch {} }
         this.frameCount++;
         if (onPaint) onPaint(w, h);
@@ -142,23 +134,6 @@
       try { this.pending.close(); } catch {}
     }
     this.pending = null;
-  };
-
-  /// The part of a frame to show: the screen's pixels from its top-left.
-  /// A phone's HEVC stream pads 1320 × 2868 to 1328 × 2896 without saying
-  /// so; a landscape frame turns the screen with it; a frame no larger
-  /// than the screen (a simulator's, a scaled stream's) shows whole.
-  StreamSession.visibleSize = function (frameWidth, frameHeight, visible) {
-    if (!visible || !visible.width || !visible.height) {
-      return { width: frameWidth, height: frameHeight };
-    }
-    const landscape = frameWidth > frameHeight;
-    const screen = landscape === (visible.width > visible.height)
-      ? visible : { width: visible.height, height: visible.width };
-    return {
-      width: Math.min(frameWidth, screen.width),
-      height: Math.min(frameHeight, screen.height),
-    };
   };
 
   function buildWSUrl(udid, format, version, display) {

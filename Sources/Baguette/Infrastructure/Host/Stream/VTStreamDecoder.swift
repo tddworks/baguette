@@ -7,8 +7,9 @@ import VideoToolbox
 /// The VideoToolbox calls behind `StreamDecoder` — integration-only. A
 /// phone's screen stream (H.264) and anything else that hands over raw
 /// parameter sets decode here; BGRA, IOSurface-backed, like every Screen.
-/// Frames are the stream's own pictures, padding included: what part of
-/// one is the screen is the page's to show (`screen.pixels`).
+/// Told the screen's size, it crops each picture to it (the picture's
+/// top-left, by a clean aperture VideoToolbox applies as it converts), so
+/// frames are the screen and never the stream's padding.
 final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
     private let lock = NSLock()
     private var session: VTDecompressionSession?
@@ -21,30 +22,43 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
     private var recent: [CVPixelBuffer] = []
     private static let heldFrames = 6
 
-    func configure(parameterSets: [Data], onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
-        let format = try Self.format(parameterSets: parameterSets)
-        var session: VTDecompressionSession?
-        let attributes: [CFString: Any] = [
+    func configure(parameterSets: [Data], screen: Size?, onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
+        var format = try Self.format(parameterSets: parameterSets)
+        let coded = CMVideoFormatDescriptionGetDimensions(format)
+        let aperture = screen.flatMap {
+            CleanAperture(screen: $0, picture: Size(width: Double(coded.width), height: Double(coded.height)))
+        }
+        var attributes: [CFString: Any] = [
             kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
             kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
         ]
+        if let aperture {
+            format = try Self.format(format, croppedTo: aperture)
+            attributes[kCVPixelBufferWidthKey] = Int(aperture.width)
+            attributes[kCVPixelBufferHeightKey] = Int(aperture.height)
+        }
+        var session: VTDecompressionSession?
         let status = VTDecompressionSessionCreate(
             allocator: kCFAllocatorDefault, formatDescription: format, decoderSpecification: nil,
             imageBufferAttributes: attributes as CFDictionary, outputCallback: nil,
             decompressionSessionOut: &session)
         guard status == noErr, let session else { throw DecoderError.sessionRejected(status) }
+        if aperture != nil {
+            VTSessionSetProperty(session, key: kVTDecompressionPropertyKey_PixelTransferProperties, value: [
+                kVTPixelTransferPropertyKey_ScalingMode: kVTScalingMode_CropSourceToCleanAperture,
+            ] as CFDictionary)
+        }
 
         let old: VTDecompressionSession? = lock.withLock {
             defer { self.session = session; self.format = format; self.onFrame = onFrame; recent = [] }
             return self.session
         }
         if let old { VTDecompressionSessionInvalidate(old) }
-        let dimensions = CMVideoFormatDescriptionGetDimensions(format)
-        log("[video] decoder configured: h264 \(dimensions.width)×\(dimensions.height)")
+        log("[video] decoder configured: h264 \(coded.width)×\(coded.height)"
+            + (aperture.map { ", cropped to \(Int($0.width))×\(Int($0.height))" } ?? ""))
     }
 
-    /// Decodes synchronously, one frame after another in arrival order:
-    /// asynchronous decompression painted a mosaic under motion.
+    /// Decodes synchronously, one frame after another in arrival order.
     func decode(_ frame: Data) {
         let (session, format, deliver) = lock.withLock { (self.session, self.format, self.onFrame) }
         guard let session, let format, !frame.isEmpty else { return }
@@ -115,6 +129,25 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
         }
         guard status == noErr, let description else { throw DecoderError.formatRejected(status) }
         return description
+    }
+
+    /// The same format, carrying the clean aperture the session crops to.
+    private static func format(_ format: CMVideoFormatDescription, croppedTo aperture: CleanAperture) throws -> CMVideoFormatDescription {
+        var extensions = (CMFormatDescriptionGetExtensions(format) as? [CFString: Any]) ?? [:]
+        extensions[kCMFormatDescriptionExtension_CleanAperture] = [
+            kCMFormatDescriptionKey_CleanApertureWidth: aperture.width,
+            kCMFormatDescriptionKey_CleanApertureHeight: aperture.height,
+            kCMFormatDescriptionKey_CleanApertureHorizontalOffset: aperture.horizontalOffset,
+            kCMFormatDescriptionKey_CleanApertureVerticalOffset: aperture.verticalOffset,
+        ] as CFDictionary
+        let coded = CMVideoFormatDescriptionGetDimensions(format)
+        var cropped: CMVideoFormatDescription?
+        let status = CMVideoFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault, codecType: CMFormatDescriptionGetMediaSubType(format),
+            width: coded.width, height: coded.height, extensions: extensions as CFDictionary,
+            formatDescriptionOut: &cropped)
+        guard status == noErr, let cropped else { throw DecoderError.formatRejected(status) }
+        return cropped
     }
 
     /// Stable pointers to each buffer, for the length of `body`.
