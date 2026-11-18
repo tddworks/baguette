@@ -31,7 +31,9 @@ struct CompanionDevice: Device {
     var name: String { phone.name }
     /// Connected means live: the companion only says hello from a running phone.
     var state: DeviceState { .ready }
-    var kind: DeviceKind { DeviceKind(platform: .iOS, reality: .physical, model: phone.model) }
+    /// The companion's hello names only the hardware (`iPhone17,2`); its
+    /// page borrows a bezel the user picks.
+    var kind: DeviceKind { DeviceKind(platform: .iOS, reality: .physical, model: phone.model, hardware: phone.model) }
 
     var abilities: AbilityTable {
         var table = AbilityTable(device: phone.name)

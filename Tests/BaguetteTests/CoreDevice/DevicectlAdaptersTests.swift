@@ -200,7 +200,7 @@ struct CoreDevicePhonesTests {
         let device = try #require(try phones.find(id: DeviceID(phoneUDID)))
 
         #expect(device.name == "han's iPhone")
-        #expect(device.kind == DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"))
+        #expect(device.kind == DeviceKind(platform: .iOS, reality: .physical, model: "iPhone 18 Pro Max", hardware: "iPhone19,7"))
         #expect(device.state == .ready)
         #expect(Array(fake.arguments[0].prefix(4)) == ["devicectl", "list", "devices", "--quiet"])
     }

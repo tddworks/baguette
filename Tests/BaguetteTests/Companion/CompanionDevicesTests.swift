@@ -18,7 +18,7 @@ struct CompanionDevicesTests {
 
         #expect(device.id == "U1")
         #expect(device.name == "Baguette's iPhone")
-        #expect(device.kind == DeviceKind(platform: .iOS, reality: .physical, model: "iPhone17,2"))
+        #expect(device.kind == DeviceKind(platform: .iOS, reality: .physical, model: "iPhone17,2", hardware: "iPhone17,2"))
         #expect(device.state == .ready)
     }
 

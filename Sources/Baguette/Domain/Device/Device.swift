@@ -35,7 +35,17 @@ struct DeviceKind: Equatable, Sendable {
 
     let platform: Platform
     let reality: Reality
-    /// The key bezels and 3D models are found by: a device-type name
-    /// ("iPhone 17 Pro"), a product type ("iPhone19,7"), an AVD's model.
+    /// What the device is, by the name bezels are found under: a device-type
+    /// or marketing name ("iPhone 18 Pro Max"), an AVD's model.
     let model: String
+    /// The hardware identifier ("iPhone19,7") 3D models are matched by,
+    /// when the device reports one.
+    let hardware: String?
+
+    init(platform: Platform, reality: Reality, model: String, hardware: String? = nil) {
+        self.platform = platform
+        self.reality = reality
+        self.model = model
+        self.hardware = hardware
+    }
 }

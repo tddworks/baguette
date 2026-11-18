@@ -2727,6 +2727,22 @@ struct Server: Sendable {
         return sim.chrome(in: chromes)
     }
 
+    /// The bezel a physical device's page frames it in: the one the user
+    /// picked (`?chrome=`), else the device's own when a bezel is installed
+    /// under its model name, else none — the page then offers the picker.
+    static func bezelName(picked: String?, model: String, chromes: any Chromes) -> String? {
+        if let picked, !picked.isEmpty { return picked }
+        return chromes.assets(forDeviceName: model) == nil ? nil : model
+    }
+
+    /// The screen mask of a bezel a physical device borrows, by the
+    /// chrome's name — the `/devices/:udid/chrome/:name/screen-mask.png`
+    /// the borrowed definition points the screen at. `nil` when the chrome
+    /// carries none (the definition then names no mask either).
+    static func borrowedScreenMask(named name: String, chromes: any Chromes) -> Data? {
+        chromes.assets(forDeviceName: name)?.screenMask?.data
+    }
+
     /// Pure data producer for `screen-mask.png`: the lit panel's mask,
     /// or `nil` when the chrome carries none.
     static func screenMaskImage(

@@ -47,7 +47,10 @@ struct CoreDevicePhone: Device {
     var id: DeviceID { DeviceID(phone.udid) }
     var name: String { phone.name }
     var state: DeviceState { phone.state }
-    var kind: DeviceKind { DeviceKind(platform: phone.platform, reality: .physical, model: phone.productType) }
+    var kind: DeviceKind {
+        DeviceKind(platform: phone.platform, reality: .physical,
+                   model: phone.marketingName, hardware: phone.productType)
+    }
 
     var abilities: AbilityTable {
         let (udid, devicectl) = (phone.udid, devicectl)

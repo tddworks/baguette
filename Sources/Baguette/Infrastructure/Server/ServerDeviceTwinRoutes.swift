@@ -115,8 +115,10 @@ extension Server {
                     ["ok": false, "error": "no connected device \(udid)"], status: .notFound
                 )
             }
-            guard let chromeName = r.uri.queryParameters.get("chrome").map({ String($0) }),
-                  !chromeName.isEmpty else {
+            guard let chromeName = Self.bezelName(
+                picked: r.uri.queryParameters.get("chrome").map { String($0) },
+                model: device.kind.model, chromes: chromes
+            ) else {
                 return Self.twinJSONResponse(
                     ["ok": false, "needsChrome": true,
                      "error": "pick a chrome with ?chrome=<device name>"],
@@ -149,6 +151,23 @@ extension Server {
         // Borrowed-bezel images. The chrome name sits in the path
         // (`/devices/:udid/chrome/:name/bezel.png`), so `udidParam`'s
         // second-to-last rule doesn't apply — positions are explicit.
+        // The borrowed bezel's screen mask. The definition names this URL
+        // whenever the chrome has a mask, and a mask that fails to load
+        // hides the whole screen — so it must always resolve.
+        router.get("/devices/:udid/chrome/:name/screen-mask.png") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let parts = r.uri.path.split(separator: "/")
+            let name = parts.count >= 4 ? String(parts[3]).removingPercentEncoding ?? "" : ""
+            guard let bytes = Self.borrowedScreenMask(named: name, chromes: chromes) else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "error": "no screen mask for \(name)"], status: .notFound)
+            }
+            return Response(
+                status: .ok,
+                headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
+                body: .init(byteBuffer: ByteBuffer(data: bytes)))
+        }
+
         router.get("/devices/:udid/chrome/:name/bezel.png") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let parts = r.uri.path.split(separator: "/")
@@ -201,7 +220,7 @@ extension Server {
                     ["ok": false, "error": "no connected device \(udid)"], status: .notFound
                 )
             }
-            if let installed = try? models.match(hardware: device.kind.model) {
+            if let installed = try? models.match(hardware: device.kind.hardware ?? device.kind.model) {
                 return Self.twinJSONResponse(
                     Self.model3DJSONObject(definition: installed.definition), status: .ok
                 )
@@ -211,7 +230,7 @@ extension Server {
                  "displayName": installed.definition.displayName]
             }
             return Self.twinJSONResponse(
-                ["model": NSNull(), "hardware": device.kind.model, "models": choices],
+                ["model": NSNull(), "hardware": device.kind.hardware ?? device.kind.model, "models": choices],
                 status: .ok
             )
         }

@@ -2099,7 +2099,10 @@
       names = (json.running || []).concat(json.available || [])
           .map((d) => d.name).filter(Boolean);
     } catch { /* evergreen list still renders */ }
-    const choices = [...new Set(evergreen.concat(names))];
+    // Phones and tablets only, each name once: a watch or TV bezel can't
+    // frame a phone's screen.
+    const choices = [...new Set(evergreen.concat(names))]
+        .filter((n) => /^iP(hone|ad)\b/.test(n));
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
@@ -2110,12 +2113,14 @@
         '<path d="M6.5 3 L9.5 3"></path></svg>';
     const card = document.createElement('div');
     card.id = 'nativeChromePicker';
+    // Over the whole view: the device frame has no size until a bezel is
+    // chosen, so a card inside it would be squeezed to a sliver.
     card.style.cssText =
-        'position:absolute;inset:0;display:flex;align-items:center;' +
-        'justify-content:center;z-index:30;background:var(--bg,#f8fafc);' +
+        'position:fixed;inset:0;display:flex;align-items:center;overflow:auto;' +
+        'justify-content:center;z-index:60;background:var(--bg,#f8fafc);' +
         'font:400 13px/1.45 -apple-system,BlinkMacSystemFont,Inter,sans-serif';
     card.innerHTML =
-        '<div style="display:flex;flex-direction:column;gap:6px;width:420px;' +
+        '<div style="display:flex;flex-direction:column;gap:6px;width:420px;flex:none;' +
         'max-width:calc(100vw - 48px);padding:24px;background:#fff;' +
         'border:1px solid #e2e8f0;border-radius:14px;' +
         'box-shadow:0 12px 32px rgba(15,23,42,.10)">' +
