@@ -8,7 +8,7 @@ description: How every boot entry point reaches one CoreSimulator call, and how 
 
 - CLI `baguette boot`, `POST /devices/<UDID>/boot` (or `/simulators/…`;
   `Server.applyPower`, which also serves `shutdown`), the list page, the farm
-  and focus mode's Boot button → the device's `.lifecycle` → `Simulator.boot()`
+  and focus mode's Boot button → the device's `.power` → `Simulator.boot()`
 - → CoreSimulator `bootWithOptions:error:` with `{"persist": true}` first
   (headless boot that survives the client disconnecting), falling back to
   `bootWithError:`.
@@ -65,7 +65,7 @@ than to a broken page.
 ## Adding a lifecycle control to focus mode
 
 1. The route probably exists: `boot` and `shutdown` are both already registered
-   via `Server.lifecycle`.
+   via `Server.applyPower`.
 2. Read whatever state you need from `fetchDeviceMeta` in `sim-native.js`;
    extend its return value rather than adding a fetch.
 3. Render through `renderPowerCard(phase, detail)`: add a phase to the `copy`

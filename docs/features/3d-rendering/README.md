@@ -141,7 +141,7 @@ browser.
 ### Live 3D socket
 
 ```http
-GET /simulators/:udid/stream.3d.<mjpeg|avcc>?rotation=-8,18,0&variant=finish:deep-blue&width=1200&height=1200&size=square&fit=cover&background=%23eef1f5&screenGlass=true
+GET /devices/:udid/stream.3d.<mjpeg|avcc>?rotation=-8,18,0&variant=finish:deep-blue&width=1200&height=1200&size=square&fit=cover&background=%23eef1f5&screenGlass=true
 Upgrade: websocket
 ```
 

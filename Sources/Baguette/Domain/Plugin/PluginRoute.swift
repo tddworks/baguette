@@ -25,9 +25,10 @@ enum PluginRoute {
         // The device list is the one plugin route with no udid in it.
         if segments == ["simulators.json"] { return .simulators }
 
-        // Everything else is `/simulators/<udid>/<leaf>`. A shorter path
-        // is a page (`/simulators`, `/simulators/<udid>`), not an API.
-        guard segments.count >= 3, segments[0] == "simulators" else { return nil }
+        // Everything else is `/devices/<udid>/<leaf>`, or a simulator's
+        // old `/simulators/<udid>/<leaf>` — one route, one capability. A
+        // shorter path is a page (`/devices/<udid>`), not an API.
+        guard segments.count >= 3, ["devices", "simulators"].contains(segments[0]) else { return nil }
 
         switch segments[2] {
         case "screenshot.jpg":    return .screenshot

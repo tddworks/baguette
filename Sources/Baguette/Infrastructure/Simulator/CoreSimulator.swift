@@ -201,6 +201,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     /// Every app baguette launches loads `DefaultsLookups.dylib` on top of
     /// what the device has armed, so it can say which preferences it looks
     /// up. A build without the dylib launches plainly.
+    func notify() -> any Notify {
+        SimctlApps(udid: udid, deviceSetPath: deviceSetPath)
+    }
+
     func apps() -> any Apps {
         SimctlApps(udid: udid, deviceSetPath: deviceSetPath, libraries: { [self] in
             guard let lookups = InjectedDylibInstaller.installIfNeeded(.defaultsLookups) else {

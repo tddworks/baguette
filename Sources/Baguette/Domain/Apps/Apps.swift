@@ -32,13 +32,6 @@ protocol Apps: Sendable {
     /// when simctl exits non-zero.
     func open(_ link: DeepLink) async throws
 
-    /// Deliver a remote notification to the app it's addressed to, as if
-    /// APNs had sent it. Success means the simulator accepted it — not
-    /// that a banner showed (`RemoteNotification.expectation` says what
-    /// to expect). Throws `AppsError.deliverFailed` with simctl's own
-    /// explanation when it refuses (app not installed, device not booted).
-    func deliver(_ notification: RemoteNotification) async throws
-
     /// Every app on the device, each carrying the URL schemes it
     /// answers to. Throws `AppsError.listFailed` when simctl exits
     /// non-zero; an app whose bundle can't be read still lists, with no

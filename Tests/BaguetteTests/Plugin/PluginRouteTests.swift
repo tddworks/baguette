@@ -11,6 +11,19 @@ import Foundation
 @Suite("PluginRoute")
 struct PluginRouteTests {
 
+    @Test func `should demand the same capability on the devices tree as on a simulator's old one`() {
+        for leaf in ["screenshot.jpg", "describe-ui.json", "input", "status-bar", "location", "openurl", "logs"] {
+            #expect(PluginRoute.capability(path: "/devices/U/\(leaf)")
+                == PluginRoute.capability(path: "/simulators/U/\(leaf)"), "\(leaf)")
+            #expect(PluginRoute.capability(path: "/devices/U/\(leaf)") != nil, "\(leaf)")
+        }
+    }
+
+    @Test func `should keep the device page and the device list out of a plugin's reach`() {
+        #expect(PluginRoute.capability(path: "/devices/U") == nil)
+        #expect(PluginRoute.capability(path: "/devices.json") == nil)
+    }
+
     @Test func `should demand the screenshot capability to read the screen`() {
         #expect(PluginRoute.capability(path: "/simulators/U/screenshot.jpg") == .screenshot)
     }

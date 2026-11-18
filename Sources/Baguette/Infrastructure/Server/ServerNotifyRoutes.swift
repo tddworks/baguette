@@ -76,14 +76,14 @@ extension Server {
         } catch {
             return .badPayload(.notJSON)
         }
-        let apps: any Apps
-        switch role(.apps, of: udid, in: devices) {
+        let notify: any Notify
+        switch role(.notify, of: udid, in: devices) {
         case .unknownDevice: return .unknownDevice
         case .refused(let refusal): return .refused(refusal)
-        case .role(let role): apps = role
+        case .role(let role): notify = role
         }
         do {
-            try await notification.deliver(to: apps)
+            try await notification.deliver(to: notify)
         } catch let refusal as AppsError {
             if case .notificationsNotAllowed = refusal { return .notAllowed(refusal.description) }
             return .deliverFailed(refusal.description)

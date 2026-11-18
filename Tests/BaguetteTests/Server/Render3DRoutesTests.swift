@@ -137,7 +137,7 @@ struct Render3DRoutesTests {
         let plan = try Server.live3DPlan(
             udid: "U",
             options: options,
-            simulators: simulators,
+            devices: SimulatorDevices(simulators),
             models: models
         )
 
@@ -155,7 +155,7 @@ struct Render3DRoutesTests {
             _ = try Server.live3DPlan(
                 udid: "ghost",
                 options: .default,
-                simulators: simulators,
+                devices: SimulatorDevices(simulators),
                 models: models
             )
         }
@@ -302,6 +302,12 @@ private extension Render3DRoutesTests {
 
     @Test func `should answer the 3D routes under the devices tree and a simulator's old one`() {
         for leaf in ["3d-model.json", "render-3d.png"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
+    }
+
+    @Test func `should answer the live 3D sockets under the devices tree and a simulator's old one`() {
+        for leaf in ["stream.3d.mjpeg", "stream.3d.avcc"] {
             #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
         }
     }

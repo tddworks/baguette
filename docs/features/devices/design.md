@@ -123,7 +123,7 @@ unsupported), and the page needs the abilities as a list it can render, which
 protocol conformances cannot give it.
 
 **Starting a device belongs to the device.** `boot` / `shutdown` is the
-`lifecycle` ability. A physical phone does not register it, so `baguette boot`
+`power` ability. A physical phone does not register it, so `baguette boot`
 on a phone is a refusal, not a special case.
 
 ## 3 · The rich types
@@ -164,7 +164,7 @@ The abilities, from today's `Simulator` methods plus one new one:
 
 | Ability | Role | iOS simulator | physical iPhone (CoreDevice) | companion phone | Android emulator |
 |---|---|---|---|---|---|
-| `lifecycle` | `Lifecycle` (boot · shutdown) | ✓ | — | — | ✓ |
+| `power` | `Power` (turnOn · turnOff) | ✓ | — | — | ✓ |
 | `screen` | `Screen` | ✓ | ✓ (devicectl screenshots, ~1 fps) | ✓ once its video arrives | ✓ |
 | `touch` | `Touch` | ✓ | ✓ (CoreDevice Universal HID) | later (runner) | ✓ |
 | `press` · `key` · `scroll` | `Press` · `Key` · `Scroll` | ✓ (one Indigo surface plays all four) | — (the digitizer sends only touches) | — | ✓ |
@@ -236,7 +236,7 @@ check a kind, and never word a refusal themselves:
 try devices.require(.location, of: id).set(coordinate)
 
 // baguette boot --udid X         (a phone refuses: "iPhone 18 Pro Max can't do lifecycle")
-try devices.require(.lifecycle, of: id).boot()
+try devices.require(.power, of: id).turnOn()
 
 // baguette tap / the stream socket
 Gesture.execute(on: try devices.require(.input, of: id))

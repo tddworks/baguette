@@ -25,6 +25,14 @@ final class LitPanelInput: HID, @unchecked Sendable {
         self.hinge = hinge
     }
 
+    /// A foldable's live input from its two panels and its hinge.
+    convenience init(displays: any Displays, hinge: any Hinge) {
+        self.init(
+            cover: displays.panel(.primary).input(),
+            unfolded: displays.panel(.secondary).input(),
+            hinge: hinge)
+    }
+
     private func input(on panel: IntegratedPanel) -> any HID { panel == .primary ? cover : unfolded }
 
     private var lit: any HID { input(on: hinge.litPanel) }

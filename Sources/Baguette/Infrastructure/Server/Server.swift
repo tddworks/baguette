@@ -443,52 +443,18 @@ struct Server: Sendable {
         router.ws(
             "/simulators/:udid/stream.3d.mjpeg",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { [simulators, models, allDevices] inbound, outbound, context in
-            var query: [String: [String]] = [:]
-            for pair in context.request.uri.queryParameters {
-                query[String(pair.key), default: []].append(String(pair.value))
-            }
-            guard let options = try? Device3DStreamOptions.parse(query) else {
-                try? await outbound.write(.text(
-                    #"{"ok":false,"error":"invalid live 3D stream options"}"#
-                ))
-                return
-            }
-            await Self.live3DStreamWS(
-                udid: Self.udidParam(context.request),
-                format: .mjpeg,
-                options: options,
-                simulators: simulators,
-                devices: allDevices,
-                models: models,
-                inbound: inbound,
-                outbound: outbound
-            )
+        ) { [models, allDevices] inbound, outbound, context in
+            await Self.deviceLive3D(
+                context.request, format: .mjpeg, devices: allDevices, models: models,
+                inbound: inbound, outbound: outbound)
         }
         router.ws(
             "/simulators/:udid/stream.3d.avcc",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { [simulators, models, allDevices] inbound, outbound, context in
-            var query: [String: [String]] = [:]
-            for pair in context.request.uri.queryParameters {
-                query[String(pair.key), default: []].append(String(pair.value))
-            }
-            guard let options = try? Device3DStreamOptions.parse(query) else {
-                try? await outbound.write(.text(
-                    #"{"ok":false,"error":"invalid live 3D stream options"}"#
-                ))
-                return
-            }
-            await Self.live3DStreamWS(
-                udid: Self.udidParam(context.request),
-                format: .avcc,
-                options: options,
-                simulators: simulators,
-                devices: allDevices,
-                models: models,
-                inbound: inbound,
-                outbound: outbound
-            )
+        ) { [models, allDevices] inbound, outbound, context in
+            await Self.deviceLive3D(
+                context.request, format: .avcc, devices: allDevices, models: models,
+                inbound: inbound, outbound: outbound)
         }
 
         // Live unified-log feed — dedicated socket so logs don't
@@ -775,14 +741,14 @@ struct Server: Sendable {
     static func live3DPlan(
         udid: String,
         options: Device3DStreamOptions,
-        simulators: any Simulators,
+        devices: any Devices,
         models: any DeviceModels
     ) throws -> DeviceRenderPlan {
-        guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             throw DeviceModelError.modelNotFound(udid)
         }
-        guard let installed = try SimulatorDevice(simulator).model3D(in: models) else {
-            throw DeviceModelError.noModelForDevice(simulator.deviceTypeName)
+        guard let installed = try device.model3D(in: models) else {
+            throw DeviceModelError.noModelForDevice(device.kind.model)
         }
         return try DeviceRenderPlan.build(
             model: installed,
@@ -1634,17 +1600,36 @@ struct Server: Sendable {
     ///      button / scroll / pinch / pan / key / type
     /// Lines not matched by any of the above are ignored — same
     /// graceful behaviour the stdin control channel has.
+    /// A device's live 3D stage, its options read off the request — the one
+    /// 3D stream for every device; `/devices/:udid/stream.3d.*` uses it for
+    /// any device that isn't posed by the companion app.
+    static func deviceLive3D(
+        _ request: Request, format: StreamFormat, devices: any Devices, models: any DeviceModels,
+        inbound: WebSocketInboundStream, outbound: WebSocketOutboundWriter
+    ) async {
+        var query: [String: [String]] = [:]
+        for pair in request.uri.queryParameters {
+            query[String(pair.key), default: []].append(String(pair.value))
+        }
+        guard let options = try? Device3DStreamOptions.parse(query) else {
+            try? await outbound.write(.text(#"{"ok":false,"error":"invalid live 3D stream options"}"#))
+            return
+        }
+        await live3DStreamWS(
+            udid: udidParam(request), format: format, options: options,
+            devices: devices, models: models, inbound: inbound, outbound: outbound)
+    }
+
     private static func live3DStreamWS(
         udid: String,
         format: StreamFormat,
         options: Device3DStreamOptions,
-        simulators: any Simulators,
         devices: any Devices,
         models: any DeviceModels,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             try? await outbound.write(.text(#"{"ok":false,"error":"unknown udid"}"#))
             return
         }
@@ -1654,7 +1639,7 @@ struct Server: Sendable {
             plan = try live3DPlan(
                 udid: udid,
                 options: options,
-                simulators: simulators,
+                devices: devices,
                 models: models
             )
             scene = try RealityKitDeviceScene(plan: plan)
@@ -1675,17 +1660,28 @@ struct Server: Sendable {
         )
         // 3D stays phone-only; ignore any display=carplay on these routes.
         let screen: any DeviceFrames
-        let input: any HID
+        let input: Abilities?
         let refresh: () -> Void
         var foldable: RenderedFoldable?
         if plan.model.definition.scene.fold != nil {
             // A foldable: both panels on the book's two screens, the
             // hinge posing it; taps follow the lit panel as everywhere.
-            let unfolded = sim.displays().panel(.secondary)
-            let cover = sim.displays().panel(.primary)
+            let displays: any Displays
+            let hinge: any Hinge
+            do {
+                displays = try device.require(.displays)
+                hinge = try device.require(.hinge)
+            } catch {
+                try? await outbound.write(.text(
+                    #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
+                ))
+                return
+            }
+            let unfolded = displays.panel(.secondary)
+            let cover = displays.panel(.primary)
             let book = RenderedFoldable(
                 unfolded: unfolded.screen(), cover: cover.screen(),
-                hinge: sim.hinge(), scene: scene, fps: options.frameMetadata ? options.frameRate : nil,
+                hinge: hinge, scene: scene, fps: options.frameMetadata ? options.frameRate : nil,
                 onPose: { pose in
                     // The lit screen moved: tell the page where it is.
                     // Atomic frames carry the placement themselves. The
@@ -1700,12 +1696,12 @@ struct Server: Sendable {
             screen = book
             // The socket outlives a fold; its hinge watch keeps the
             // lit panel each gesture asks for cached.
-            input = sim.litPanelInput()
+            input = .input(of: device.name, all: LitPanelInput(displays: displays, hinge: hinge))
             refresh = { book.refresh() }
         } else {
-            let bound: (screen: any Screen, input: any HID)
+            let bound: (screen: any Screen, input: Abilities?)
             do {
-                bound = try StreamDisplayPlan.phoneOnly.bind(to: sim)
+                bound = try StreamDisplayPlan.phoneOnly.bind(to: device)
             } catch {
                 try? await outbound.write(.text(
                     #"{"ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
@@ -1718,8 +1714,9 @@ struct Server: Sendable {
             input = bound.input
             refresh = { rendered.refresh() }
         }
-        let pasteboard = sim.pasteboard()
-        let screenInput = Abilities.input(of: sim.name, all: input)
+        let pasteboard = try? device.require(.pasteboard)
+        let accessibility = try? device.require(.accessibility)
+        let screenInput = input ?? Abilities(device: device.name)
         let dispatcher = GestureDispatcher(input: screenInput)
         // Atomic frames: a render or encode failure ends the stream with
         // an error rather than leaving a page with stale hit geometry.
@@ -1841,16 +1838,16 @@ struct Server: Sendable {
                     ))
                     continue
                 }
-                if await handleDescribeUI(line: line, accessibility: sim.accessibility(), outbound: outbound) {
+                if let accessibility, await handleDescribeUI(line: line, accessibility: accessibility, outbound: outbound) {
                     continue
                 }
-                if let frame = await PasteDispatch.dispatch(
+                if let pasteboard, let frame = await PasteDispatch.dispatch(
                     line: line, pasteboard: pasteboard, input: screenInput
                 ).resultFrame {
                     try? await outbound.write(.text(frame))
                     continue
                 }
-                if let frame = await CopyDispatch.dispatch(
+                if let pasteboard, let frame = await CopyDispatch.dispatch(
                     line: line, pasteboard: pasteboard, input: screenInput
                 ).resultFrame {
                     try? await outbound.write(.text(frame))

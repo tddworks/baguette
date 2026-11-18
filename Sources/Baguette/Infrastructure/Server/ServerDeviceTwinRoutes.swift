@@ -202,6 +202,14 @@ extension Server {
             "/devices/:udid/stream.3d.mjpeg",
             shouldUpgrade: trustedWebSocketUpgrade
         ) { inbound, outbound, context in
+            // A phone running the companion app is posed by its motion;
+            // every other device takes the one device 3D stage.
+            guard screens.find(udid: Self.udidParam(context.request)) != nil else {
+                await Self.deviceLive3D(
+                    context.request, format: .mjpeg, devices: allDevices, models: models,
+                    inbound: inbound, outbound: outbound)
+                return
+            }
             await Self.twinLive3DStreamWS(
                 udid: Self.udidParam(context.request), format: .mjpeg,
                 query: Self.twinQuery(context.request),
@@ -213,6 +221,14 @@ extension Server {
             "/devices/:udid/stream.3d.avcc",
             shouldUpgrade: trustedWebSocketUpgrade
         ) { inbound, outbound, context in
+            // A phone running the companion app is posed by its motion;
+            // every other device takes the one device 3D stage.
+            guard screens.find(udid: Self.udidParam(context.request)) != nil else {
+                await Self.deviceLive3D(
+                    context.request, format: .avcc, devices: allDevices, models: models,
+                    inbound: inbound, outbound: outbound)
+                return
+            }
             await Self.twinLive3DStreamWS(
                 udid: Self.udidParam(context.request), format: .avcc,
                 query: Self.twinQuery(context.request),

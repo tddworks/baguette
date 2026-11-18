@@ -35,13 +35,10 @@ struct LitPanelTests {
     /// The page's 3D socket stays open across a fold, so the input it
     /// is given follows the hinge rather than binding one panel.
     @Test func `should give a foldable an input that follows the fold`() {
-        let sim = MockSimulator()
         let displays = MockDisplays()
         let cover = MockDisplay(), unfolded = MockDisplay()
         let coverInput = InputMocks(), unfoldedInput = InputMocks()
         let hinge = MockHinge()
-        given(sim).displays().willReturn(displays)
-        given(sim).hinge().willReturn(hinge)
         given(displays).panel(.value(.primary)).willReturn(cover)
         given(displays).panel(.value(.secondary)).willReturn(unfolded)
         given(cover).input().willReturn(coverInput)
@@ -49,7 +46,7 @@ struct LitPanelTests {
         given(hinge).angle().willReturn(HingeAngle(degrees: 130))
         given(unfoldedInput.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
 
-        #expect(sim.litPanelInput().tap(
+        #expect(LitPanelInput(displays: displays, hinge: hinge).tap(
             at: Point(x: 1, y: 2), size: Size(width: 669, height: 951), duration: 0.05, edge: nil))
         verify(unfoldedInput.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(1)
         verify(coverInput.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(0)

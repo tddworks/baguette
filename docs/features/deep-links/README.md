@@ -107,8 +107,7 @@ curl 'localhost:8421/devices/<UDID>/schemes.json?q=my'
 
 `?q=` narrows and ranks against what's been typed; omit it for the whole
 inventory. Both routes are reachable by a plugin holding the `open-url`
-capability (under the simulator's old `/simulators/:udid/…` spelling, the one
-its grant names), and by a trusted browser under either. Failures answer
+capability, and by a trusted browser, under either spelling. Failures answer
 `{"ok":false,"error":…}` — `400` for something that isn't a URL, `404` for an
 unknown udid, `500` when simctl itself failed.
 

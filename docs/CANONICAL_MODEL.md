@@ -101,8 +101,8 @@ Simulators  ◆                               THE SIMULATOR FAMILY — a device 
     │   ├── statusBar → StatusBar  ◆        override(StatusBarOverride ◇) · clear()
     │   └── shake → Shake  ◆
     ├── APPS AND THEIR DATA
-    │   ├── apps → Apps  ◆                  install · launch · terminate · open(DeepLink ◇) ·
-    │   │                                   deliver(RemoteNotification ◇) · installed
+    │   ├── apps → Apps  ◆                  install · launch · terminate · open(DeepLink ◇) · installed
+    │   ├── notify → Notify  ◆              deliver(RemoteNotification ◇) — its own act, not app management
     │   ├── defaults → Defaults  ◆          read · write · delete — PreferenceEdit ◇ / PreferenceImport ◇
     │   │                                   apply with a Relaunch ◇ (never · always · whenNeeded)
     │   ├── pasteboard → Pasteboard  ◆      Paste ◇ (any unicode) · Copy ◇ (sim → host)
@@ -140,7 +140,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | `network set · clear · status` | `network.apply` · `clear` · `current` | injected; `clear` reaches running apps |
 | `interface appearance · contrast · text-size` | `interface` get / set | no value reads |
 | `status-bar override · clear` | `statusBar.override` · `clear` | |
-| `install` · `add-media` · `openurl` · `notify` | `apps.install` · `photos.add` · `apps.open(DeepLink)` · `RemoteNotification.deliver(to: apps)` | |
+| `install` · `add-media` · `openurl` · `notify` | `apps.install` · `photos.add` · `apps.open(DeepLink)` · `RemoteNotification.deliver(to: notify)` | |
 | `defaults write · delete · import` | `PreferenceEdit` / `PreferenceImport` `.apply(on: defaults, apps:)` | `--relaunch-if-needed` is `Relaunch.whenNeeded` |
 
 ## 3 · The laws, on the node that owns them
@@ -273,7 +273,6 @@ moves, one change at a time.
 | the phone plane's target | picked by `DisplayTouchTarget.resolve` in `SimulatorKitDisplay.input()`, inline in `input(expected:)` | `DisplayTouchTarget.resolve` for both, and one place deciding `FoldableInput` |
 | `Display.input()`'s doc | says the target is "derived from `connectedScreenId`, never a hard-coded CarPlay constant" | the registration law above (CarPlay is the constant `1`) |
 | `IntegratedPanel` on the wire | `"primary"` / `"secondary"` spelled in `DeviceFrame` and twice in `Server` | one wire name on the value |
-| `StreamFormat.makeStream` | Domain builds `MJPEGStream` / `AVCCStream` and takes `FrameSink`, all Infrastructure | the factory moves to Infrastructure; Domain keeps the format |
 | `FoldableInput` | calls `log(…)` from the App layer | Domain logs nothing; the failure is its `Bool` |
 | `LabelTap` · `ThenDescribe` | hold a law and assemble JSON in the App | a Domain value answers, and the App only projects it, as `Fill` does |
 | `GuestHingeMotor` | plays `HingeMotor` and `DeviceKeys` over one guest helper | a name for the helper's role, not "motor" |

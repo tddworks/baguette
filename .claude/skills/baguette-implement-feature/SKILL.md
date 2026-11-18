@@ -367,7 +367,7 @@ Each new gesture / verb flows through the same checklist:
      see [references/js-testing.md](references/js-testing.md).
 
 A new **stream format** is one `Stream` impl in `Infrastructure/Host/Stream/`
-plus one case in `StreamFormat.makeStream`; its byte envelope lives in
+plus one case in `StreamFormat.makeStream` (`Infrastructure/Host/Stream/`); its byte envelope lives in
 `Domain/Stream/Envelope.swift`. No call site switches on the format.
 
 ## Phase 4: Docs + Changelog (mandatory before "done")

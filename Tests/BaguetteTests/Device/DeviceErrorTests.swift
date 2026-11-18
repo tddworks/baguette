@@ -4,8 +4,8 @@ import Testing
 @Suite("DeviceError")
 struct DeviceErrorTests {
     @Test func `should name the device and the ability it can't do`() {
-        #expect("\(DeviceError.unable(ability: "lifecycle", device: "iPhone 18 Pro Max"))"
-            == "iPhone 18 Pro Max can't do lifecycle")
+        #expect("\(DeviceError.unable(ability: "power", device: "iPhone 18 Pro Max"))"
+            == "iPhone 18 Pro Max can't do power")
     }
 
     @Test func `should read in its own words wherever an error is shown as text`() {
@@ -50,6 +50,6 @@ struct DeviceErrorTests {
     }
 
     @Test func `should not need a running device to boot it`() {
-        #expect(!Ability<any Lifecycle>.lifecycle.needsReady)
+        #expect(!Ability<any Power>.power.needsReady)
     }
 }

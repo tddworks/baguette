@@ -159,7 +159,8 @@ protocols at the boundaries the App layer wires up.
 Adding a new gesture is one `Gesture`-conforming struct in
 `Domain/Input/` + one line in `GestureRegistry.standard`. Adding a
 new stream format is one `Stream` impl in `Infrastructure/Host/Stream/` +
-one case in `StreamFormat.makeStream`. Caller code stays unchanged
+one case in `StreamFormat.makeStream` (beside the encoders, not in the
+Domain). Caller code stays unchanged
 (OCP).
 
 ### Infrastructure
@@ -351,8 +352,8 @@ GET  /                                      302 → /simulators
 GET  /simulators                            sim.html
 GET  /simulators.json                       Simulators.listJSON
 GET  /simulators/:udid                      sim.html (same shell)
-POST /devices/:udid/boot                    device.require(.lifecycle).boot()
-POST /devices/:udid/shutdown                device.require(.lifecycle).shutdown()
+POST /devices/:udid/boot                    device.require(.power).turnOn()
+POST /devices/:udid/shutdown                device.require(.power).turnOff()
 GET  /devices/:udid/chrome.json             device.chrome(in:).layoutJSON()
 GET  /devices/:udid/bezel.png               composite.data
 GET  /devices/:udid/interface.json          appearance + contrast + content size

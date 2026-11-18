@@ -20,7 +20,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 
 `:udid` is a simulator UDID. Rows without a feature link are documented here only.
 
-**Moving to `/devices/:udid/…`.** A route marked *any device* answers for every device — a simulator, a phone on a cable — under `/devices/:udid/…`, and for a simulator under its old `/simulators/:udid/…` too. A device that can't do what's asked answers `422` naming it (`han's iPhone can't do orientation`); one that isn't running, `409`. Plugins keep the `/simulators/…` spelling: their grants name only it.
+**Moving to `/devices/:udid/…`.** A route marked *any device* answers for every device — a simulator, a phone on a cable — under `/devices/:udid/…`, and for a simulator under its old `/simulators/:udid/…` too. A device that can't do what's asked answers `422` naming it (`han's iPhone can't do orientation`); one that isn't running, `409`. A plugin's grant covers the same route under either spelling.
 
 | Method | Path | What | Docs |
 |---|---|---|---|
@@ -55,7 +55,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `GET` | `/devices/:udid/schemes.json?q=` *any device* | URL schemes the device's apps registered | [deep-links](features/deep-links/README.md) |
 | `POST` | `/devices/:udid/notify?bundleId=` *any device* | deliver a remote notification (body: the payload) | [notifications](features/notifications/README.md) |
 | `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
-| `WS` | `/simulators/:udid/stream.3d.mjpeg`, `.avcc` | live 3D stage | [3d-rendering](features/3d-rendering/README.md) |
+| `WS` | `/devices/:udid/stream.3d.mjpeg`, `.avcc` *any device* | live 3D stage; a phone running the companion app is posed by its motion | [3d-rendering](features/3d-rendering/README.md) |
 | `WS` | `/devices/:udid/logs?level=&style=&predicate=&bundleId=` *any device* | live unified log | [logs](features/logs/README.md) |
 | `WS` | `/devices/:udid/camera` *any device* | virtual camera control; a device with no camera baguette can feed, like a phone on a cable, is refused by name | [camera](features/camera/README.md) |
 | `GET` | `/plugins.json` | installed plugin manifests | [plugins](features/plugins/README.md) |

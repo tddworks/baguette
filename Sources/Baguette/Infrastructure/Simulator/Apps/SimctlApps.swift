@@ -10,7 +10,7 @@ import Foundation
 /// `Foundation.Process` plumbing lives in `HostSubprocess` (already
 /// vendored for `LogStream`), so this file is unit-covered end-to-end
 /// via `MockSubprocess` — only the real spawns are integration-only.
-final class SimctlApps: Apps, @unchecked Sendable {
+final class SimctlApps: Apps, Notify, @unchecked Sendable {
     private let udid: String
     private let deviceSetPath: String?
     private let subprocess: any Subprocess

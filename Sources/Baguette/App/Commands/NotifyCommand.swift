@@ -57,16 +57,16 @@ struct NotifyCommand: AsyncParsableCommand {
         }
 
         let device: any Device
-        let apps: any Apps
+        let notify: any Notify
         do {
             device = try options.devices.device(DeviceID(options.udid))
-            apps = try device.require(.apps)
+            notify = try device.require(.notify)
         } catch {
             fail(String(describing: error))
         }
 
         do {
-            try await notification.deliver(to: apps)
+            try await notification.deliver(to: notify)
         } catch {
             fail("notify failed: \(error)")
         }

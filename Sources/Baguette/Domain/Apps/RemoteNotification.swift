@@ -144,10 +144,10 @@ struct RemoteNotification: Equatable, Sendable {
         ["simctl"] + (deviceSetPath.map { ["--set", $0] } ?? []) + ["push", udid, app, payloadFile.path]
     }
 
-    /// Tell-don't-ask: the notification is delivered to the apps on the
-    /// device, which route it to its addressee.
-    func deliver(to apps: any Apps) async throws {
-        try await apps.deliver(self)
+    /// Tell-don't-ask: the device's notifications deliver it to its
+    /// addressee.
+    func deliver(to notify: any Notify) async throws {
+        try await notify.deliver(self)
     }
 }
 

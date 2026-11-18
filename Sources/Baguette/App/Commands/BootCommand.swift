@@ -15,15 +15,15 @@ struct BootCommand: AsyncParsableCommand {
 
     func run() async {
         let device: any Device
-        let lifecycle: any Lifecycle
+        let power: any Power
         do {
             device = try options.device()
-            lifecycle = try orExit { try device.require(.lifecycle) }
+            power = try orExit { try device.require(.power) }
         } catch {
             Foundation.exit(1)
         }
         do {
-            try lifecycle.boot()
+            try power.turnOn()
             log("Booted \(device.name)")
             if let advisory = SimulatorAppPreferences.lifetime().advisory {
                 warn(advisory)

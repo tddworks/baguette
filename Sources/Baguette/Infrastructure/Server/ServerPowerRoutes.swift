@@ -51,14 +51,14 @@ extension Server {
     /// Turn the device on or off. Pure, so every branch is driven without
     /// booting Hummingbird.
     static func applyPower(_ verb: PowerVerb, udid: String, devices: any Devices) -> PowerOutcome {
-        switch role(.lifecycle, of: udid, in: devices) {
+        switch role(.power, of: udid, in: devices) {
         case .unknownDevice: return .unknownDevice
         case .refused(let refusal): return .refused(refusal)
-        case .role(let lifecycle):
+        case .role(let power):
             do {
                 switch verb {
-                case .boot: try lifecycle.boot()
-                case .shutdown: try lifecycle.shutdown()
+                case .boot: try power.turnOn()
+                case .shutdown: try power.turnOff()
                 }
                 return .ok
             } catch {

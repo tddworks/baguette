@@ -39,8 +39,8 @@ POST /devices/<UDID>/files?name=<filename>
      body = raw file bytes (application/octet-stream)
 ```
 
-A simulator answers under its old `/simulators/<UDID>/files` too; plugins use
-that spelling, with `/apps` and `/media`.
+A simulator answers under its old `/simulators/<UDID>/files` too. Plugins use
+`/apps` and `/media`, which name the power they need; `/files` is closed to them.
 
 ```bash
 curl -X POST --data-binary @MyApp.ipa \

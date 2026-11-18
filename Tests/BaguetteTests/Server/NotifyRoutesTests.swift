@@ -15,9 +15,9 @@ struct NotifyRoutesTests {
 
     private let order = Data(#"{"aps":{"alert":"Your order shipped"},"deep_link":"example://orders/123"}"#.utf8)
 
-    private func host(deliverError: AppsError? = nil) -> (any Devices, MockApps) {
-        let apps = MockApps()
-        let simulators = routeDevices { $0.register(.apps) { apps } }
+    private func host(deliverError: AppsError? = nil) -> (any Devices, MockNotify) {
+        let apps = MockNotify()
+        let simulators = routeDevices { $0.register(.notify) { apps } }
         if let deliverError {
             given(apps).deliver(.any).willThrow(deliverError)
         } else {
@@ -74,12 +74,12 @@ struct NotifyRoutesTests {
         #expect(outcome == .deliverFailed("xcrun simctl push exited 22: Unable to lookup app"))
     }
 
-    @Test func `should refuse a notification for a device with no apps to deliver to, naming it`() async {
+    @Test func `should refuse a notification for a device that can't be sent one, naming it`() async {
         let outcome = await Server.notify(
             udid: "U", app: "com.x", payload: Data(#"{"aps":{"alert":"hi"}}"#.utf8),
             devices: routeDevices(name: "han's iPhone"))
 
-        #expect(outcome == .refused(.unable(ability: "apps", device: "han's iPhone")))
+        #expect(outcome == .refused(.unable(ability: "notify", device: "han's iPhone")))
     }
 
     @Test func `should answer notify under the devices tree and a simulator's old one`() {

@@ -343,17 +343,20 @@ closed set, and it is **enforced**, not documentation:
 
 | Capability | Grants |
 |---|---|
-| `describe-ui` | `GET /simulators/:udid/describe-ui.json` |
-| `input` | `POST /simulators/:udid/input` — gestures, keys, buttons |
-| `screenshot` | `GET /simulators/:udid/screenshot.jpg` |
-| `logs` | `WS /simulators/:udid/logs` |
-| `interface` | `GET /simulators/:udid/interface.json`, `POST /simulators/:udid/interface` — appearance, contrast, text size |
-| `status-bar` | `GET`/`POST`/`DELETE /simulators/:udid/status-bar` |
-| `location` | `POST`/`DELETE /simulators/:udid/location` |
-| `apps` | `POST /simulators/:udid/apps` — install an app |
-| `media` | `POST /simulators/:udid/media` — add photos / videos |
-| `open-url` | `POST /simulators/:udid/openurl`, `GET /simulators/:udid/schemes.json` — open a deep link, list registered schemes |
+| `describe-ui` | `GET /devices/:udid/describe-ui.json` |
+| `input` | `POST /devices/:udid/input` — gestures, keys, buttons |
+| `screenshot` | `GET /devices/:udid/screenshot.jpg` |
+| `logs` | `WS /devices/:udid/logs` |
+| `interface` | `GET /devices/:udid/interface.json`, `POST /devices/:udid/interface` — appearance, contrast, text size |
+| `status-bar` | `GET`/`POST`/`DELETE /devices/:udid/status-bar` |
+| `location` | `POST`/`DELETE /devices/:udid/location` |
+| `apps` | `POST /devices/:udid/apps` — install an app |
+| `media` | `POST /devices/:udid/media` — add photos / videos |
+| `open-url` | `POST /devices/:udid/openurl`, `GET /devices/:udid/schemes.json` — open a deep link, list registered schemes |
 | `simulators` | `GET /simulators.json` |
+
+Each route answers under `/devices/:udid/…` and, for a simulator, its old
+`/simulators/:udid/…`; a grant covers both.
 
 `apps` and `media` are deliberately separate: one puts a picture in the
 photo library, the other puts an executable on the device. A plugin that

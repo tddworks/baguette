@@ -15,14 +15,4 @@ enum StreamFormat: String, Sendable, Equatable, CaseIterable {
     /// carries P-frames that depend on previous frames; dropping any of
     /// them corrupts the decoder state.
     var skipsUnchangedFrames: Bool { self == .mjpeg }
-
-    /// Build the `Stream` impl for this format. Caller doesn't switch on
-    /// the format — adding a new wire format means adding a new `Stream`
-    /// type and a new case here, never editing call sites.
-    func makeStream(config: StreamConfig, sink: any FrameSink, quality: Double) -> any Stream {
-        switch self {
-        case .mjpeg: return MJPEGStream(config: config, sink: sink, quality: quality)
-        case .avcc:  return AVCCStream(config: config, sink: sink, quality: quality)
-        }
-    }
 }

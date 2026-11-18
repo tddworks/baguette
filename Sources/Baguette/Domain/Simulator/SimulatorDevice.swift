@@ -28,7 +28,7 @@ struct SimulatorDevice: Device {
     var abilities: Abilities {
         let sim = simulator
         var abilities = Abilities(device: sim.name)
-        abilities.register(.lifecycle) { SimulatorLifecycle(simulator: sim) }
+        abilities.register(.power) { SimulatorPower(simulator: sim) }
         abilities.register(.screen) { sim.screen() }
         // One HID for the four input roles: a keystroke has to ride the
         // Indigo services a gesture warmed, never a second client of its own.
@@ -52,6 +52,7 @@ struct SimulatorDevice: Device {
         abilities.register(.camera) { sim.camera() }
         abilities.register(.pasteboard) { sim.pasteboard() }
         abilities.register(.apps) { sim.apps() }
+        abilities.register(.notify) { sim.notify() }
         abilities.register(.defaults) { sim.defaults() }
         abilities.register(.photos) { sim.photos() }
         abilities.register(.shake) { sim.shake() }
@@ -95,10 +96,10 @@ private final class OneHID: @unchecked Sendable {
     }
 }
 
-private struct SimulatorLifecycle: Lifecycle {
+private struct SimulatorPower: Power {
     let simulator: any Simulator
-    func boot() throws { try simulator.boot() }
-    func shutdown() throws { try simulator.shutdown() }
+    func turnOn() throws { try simulator.boot() }
+    func turnOff() throws { try simulator.shutdown() }
 }
 
 private extension DeviceKind.Platform {

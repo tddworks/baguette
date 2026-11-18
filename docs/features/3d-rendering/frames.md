@@ -1,6 +1,6 @@
 # Atomic 3D frames
 
-Use `/simulators/:udid/stream.3d.mjpeg?frameMetadata=1` or
+Use `/devices/:udid/stream.3d.mjpeg?frameMetadata=1` or
 `stream.3d.avcc?frameMetadata=1` when the viewer maps interactions onto a
 moving device model. Streams without the option keep their existing wire format.
 

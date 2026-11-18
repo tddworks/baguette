@@ -128,6 +128,9 @@ protocol Simulator: Sendable {
     /// underlying `simctl install` invocation is stateless.
     func apps() -> any Apps
 
+    /// The simulator's notifications — `simctl push`. Fresh handle per call.
+    func notify() -> any Notify
+
     /// An installed app's persisted `UserDefaults` on this simulator —
     /// its standard domain or an App Group suite. Each call returns a
     /// fresh handle; the underlying `simctl spawn defaults` invocation is
@@ -200,14 +203,6 @@ extension Simulator {
         "{\"udid\":\"\(udid)\",\"name\":\"\(name)\",\"state\":\"\(state.description)\",\"runtime\":\"\(runtime)\"}"
     }
 
-    /// Input for a foldable's live page, whose socket outlives a fold:
-    /// each gesture goes to the panel the hinge lights when it starts.
-    func litPanelInput() -> any HID {
-        LitPanelInput(
-            cover: displays().panel(.primary).input(),
-            unfolded: displays().panel(.secondary).input(),
-            hinge: hinge())
-    }
 
 }
 

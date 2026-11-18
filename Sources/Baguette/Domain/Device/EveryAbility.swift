@@ -7,8 +7,8 @@ import Foundation
 // how it is turned or shaken, what is on it — needs a ready device; the
 // rest let their role's own adapter answer, as each did before.
 
-extension Ability where Role == any Lifecycle {
-    static var lifecycle: Self { .init(name: "lifecycle") }
+extension Ability where Role == any Power {
+    static var power: Self { .init(name: "power") }
 }
 
 extension Ability where Role == any Screen {

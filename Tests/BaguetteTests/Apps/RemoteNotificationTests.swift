@@ -169,12 +169,12 @@ struct RemoteNotificationTests {
             == ["simctl", "--set", "/custom set", "push", "U", "com.example.app", "/tmp/n.json"])
     }
 
-    @Test func `should be delivered to the apps on the device`() async throws {
-        let apps = MockApps()
-        given(apps).deliver(.any).willReturn()
+    @Test func `should be delivered by the device's notifications`() async throws {
+        let notify = MockNotify()
+        given(notify).deliver(.any).willReturn()
         let note = try RemoteNotification.from(json: order, addressedTo: "com.example.app")
-        try await note.deliver(to: apps)
-        verify(apps).deliver(.value(note)).called(1)
+        try await note.deliver(to: notify)
+        verify(notify).deliver(.value(note)).called(1)
     }
 
     // MARK: - report

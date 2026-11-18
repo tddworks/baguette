@@ -36,8 +36,7 @@ shows the result.
 | POST | `/devices/<UDID>/status-bar` | Apply the fields in the body |
 | DELETE | `/devices/<UDID>/status-bar` | Clear all overrides |
 
-A simulator answers under its old `/simulators/<UDID>/status-bar` too, and
-plugins use that spelling. A device without a status bar to override answers
+A simulator answers under its old `/simulators/<UDID>/status-bar` too. A device without a status bar to override answers
 `422`; one that isn't running, `409`.
 
 ```bash

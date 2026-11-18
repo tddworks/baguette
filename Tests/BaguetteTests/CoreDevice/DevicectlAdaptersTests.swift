@@ -233,8 +233,8 @@ struct CoreDevicePhonesTests {
             devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
 
         #expect(phone.abilities.names == ["screen", "touch", "accessibility", "pasteboard"])
-        #expect(throws: DeviceError.unable(ability: "lifecycle", device: "han's iPhone")) {
-            try phone.require(.lifecycle)
+        #expect(throws: DeviceError.unable(ability: "power", device: "han's iPhone")) {
+            try phone.require(.power)
         }
         #expect(throws: DeviceError.unable(ability: "key", device: "han's iPhone")) {
             try phone.require(.key)

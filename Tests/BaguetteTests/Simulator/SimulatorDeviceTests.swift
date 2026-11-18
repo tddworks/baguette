@@ -49,9 +49,9 @@ struct SimulatorDeviceTests {
         let device = SimulatorDevice(simulator())
 
         #expect(device.abilities.names == [
-            "lifecycle", "screen", "touch", "press", "key", "scroll", "displays", "hinge", "externalDisplays",
+            "power", "screen", "touch", "press", "key", "scroll", "displays", "hinge", "externalDisplays",
             "accessibility", "logs", "orientation", "statusBar", "interface", "location",
-            "motion", "network", "inputSurface", "camera", "pasteboard", "apps", "defaults", "photos", "shake",
+            "motion", "network", "inputSurface", "camera", "pasteboard", "apps", "notify", "defaults", "photos", "shake",
             "watchPairing",
         ])
     }
@@ -66,20 +66,20 @@ struct SimulatorDeviceTests {
         #expect(found as AnyObject === location)
     }
 
-    @Test func `should boot the simulator when its lifecycle is told to boot`() throws {
+    @Test func `should boot the simulator when it is turned on`() throws {
         let sim = simulator()
         given(sim).boot().willReturn()
 
-        try SimulatorDevice(sim).abilities.require(.lifecycle).boot()
+        try SimulatorDevice(sim).abilities.require(.power).turnOn()
 
         verify(sim).boot().called(1)
     }
 
-    @Test func `should shut the simulator down when its lifecycle is told to shut down`() throws {
+    @Test func `should shut the simulator down when it is turned off`() throws {
         let sim = simulator()
         given(sim).shutdown().willReturn()
 
-        try SimulatorDevice(sim).abilities.require(.lifecycle).shutdown()
+        try SimulatorDevice(sim).abilities.require(.power).turnOff()
 
         verify(sim).shutdown().called(1)
     }

@@ -11,9 +11,9 @@ struct ShutdownCommand: ParsableCommand {
 
     func run() throws {
         let device = try options.device()
-        let lifecycle = try orExit { try device.require(.lifecycle) }
+        let power = try orExit { try device.require(.power) }
         do {
-            try lifecycle.shutdown()
+            try power.turnOff()
             log("Shut down \(device.name)")
         } catch {
             log("Shutdown failed: \(error)")

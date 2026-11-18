@@ -63,10 +63,10 @@ struct DevicesTests {
 
     @Test func `should hand back an ability that needs no running device while the device is off`() throws {
         var abilities = Abilities(device: "iPhone 17 Pro")
-        abilities.register(.lifecycle) { MockLifecycle() }
+        abilities.register(.power) { MockPower() }
         let devices = CombinedDevices([source(device("SIM-1", state: .off, abilities: abilities))])
 
-        _ = try devices.require(.lifecycle, of: "SIM-1")
+        _ = try devices.require(.power, of: "SIM-1")
     }
 
     @Test func `should refuse an ability a device never registered before asking whether it is ready`() {
