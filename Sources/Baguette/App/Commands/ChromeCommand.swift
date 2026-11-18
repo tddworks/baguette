@@ -99,7 +99,7 @@ struct ChromeTarget: ParsableArguments {
             guard let sim = simulators.find(udid: udid) else {
                 throw ChromeCommandError.simulatorNotFound(udid: udid)
             }
-            guard let panel else { return sim.chrome(in: chromes) }
+            guard let panel else { return SimulatorDevice(sim).chrome(in: chromes) }
             return chromes.assets(forDeviceName: sim.deviceTypeName, panel: panel)
         }
         throw ChromeCommandError.missingTarget

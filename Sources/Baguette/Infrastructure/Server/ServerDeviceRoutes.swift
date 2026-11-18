@@ -17,6 +17,23 @@ extension Server {
         ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"]
     }
 
+    /// The per-button image path under both trees. Its udid is the
+    /// second segment, not the second-to-last, so `udidParam` doesn't read it.
+    static var chromeButtonRoutes: [String] {
+        ["/devices/:udid/chrome-button/:file", "/simulators/:udid/chrome-button/:file"]
+    }
+
+    /// The tree a request came in on — `devices` or `simulators` — so the
+    /// URLs it answers with stay on it.
+    static func tree(of request: Request) -> String {
+        request.uri.path.split(separator: "/").first.map(String.init) == "devices" ? "devices" : "simulators"
+    }
+
+    /// Every screenshot path, each format under both trees.
+    static var screenshotRoutes: [String] {
+        CaptureImageFormat.allCases.flatMap { deviceRoutes("screenshot.\($0.pathExtension)") }
+    }
+
     /// The role a route acts with on the device a path names — or that
     /// no device has that id, or why the one that does refuses.
     enum RouteRole<Role> {

@@ -204,115 +204,91 @@ struct Server: Sendable {
             trustedWebSocketUpgrade: trustedWebSocketUpgrade
         )
 
-        // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG.
-        router.get("/simulators/:udid/chrome.json") { [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Self.chromeJSON(udid: Self.udidParam(r), simulators: simulators, chromes: chromes)
+        // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG, for
+        // any device by its model, under both trees. Each answers with
+        // URLs on the tree it was asked on.
+        let devices = allDevices
+        for path in Self.deviceRoutes("chrome.json") {
+            router.get(RouterPath(path)) { [chromes] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                return Self.chromeJSON(
+                    udid: Self.udidParam(r), devices: devices, chromes: chromes, tree: Self.tree(of: r))
+            }
         }
-        // SDK bootstrap — the single endpoint `Baguette.use(udid)` hits
-        // to instantiate the JS-side `Simulator` facade. Strict superset
-        // of `chrome.json` (which stays for migration); once every
-        // page consumes the SDK this route becomes the only chrome read.
-        router.get("/simulators/:udid/definition.json") { [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Self.definitionJSON(
-                udid: Self.udidParam(r), simulators: simulators, chromes: chromes,
-                panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) }))
+        // SDK bootstrap — the single endpoint `Baguette.use(udid)` hits to
+        // instantiate the JS-side device facade: the device's own chrome,
+        // or the one a phone borrows with `?chrome=`.
+        for path in Self.deviceRoutes("definition.json") {
+            router.get(RouterPath(path)) { [chromes] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                return Self.definitionResponse(
+                    udid: Self.udidParam(r), tree: Self.tree(of: r),
+                    picked: r.uri.queryParameters.get("chrome").map { String($0) },
+                    panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) }),
+                    devices: devices, chromes: chromes)
+            }
         }
-        // The lit panel's framebuffer mask — the shape the simulator
-        // clips that screen to. 404 when the chrome names none; the page
-        // then rounds by `clipRadius` as it always has.
-        router.get("/simulators/:udid/screen-mask.png") { [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            guard let bytes = Self.screenMaskImage(
-                udid: Self.udidParam(r), simulators: simulators, chromes: chromes,
-                panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) })
-            ) else {
+        // The lit panel's framebuffer mask — the shape the device clips
+        // that screen to. 404 when the chrome names none; the page then
+        // rounds by `clipRadius` as it always has.
+        for path in Self.deviceRoutes("screen-mask.png") {
+            router.get(RouterPath(path)) { [chromes] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                guard let bytes = Self.screenMaskImage(
+                    udid: Self.udidParam(r), devices: devices, chromes: chromes,
+                    panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) })
+                ) else {
+                    return Response(
+                        status: .notFound,
+                        headers: [.contentType: "text/plain"],
+                        body: .init(byteBuffer: ByteBuffer(string: "no screen mask for \(Self.udidParam(r))"))
+                    )
+                }
                 return Response(
-                    status: .notFound,
-                    headers: [.contentType: "text/plain"],
-                    body: .init(byteBuffer: ByteBuffer(string: "no screen mask for \(Self.udidParam(r))"))
+                    status: .ok,
+                    headers: [.contentType: "image/png", .cacheControl: "no-cache"],
+                    body: .init(byteBuffer: ByteBuffer(data: bytes))
                 )
             }
-            return Response(
-                status: .ok,
-                headers: [.contentType: "image/png", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(data: bytes))
-            )
         }
-        router.get("/simulators/:udid/bezel.png") { [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            // ?buttons=false → bare device body (no buttons baked in).
-            // The actionable-bezel front end layers per-button images on
-            // top via the /chrome-button/<name>.png route below.
-            // Default (true) preserves today's merged composite.
-            let withButtons = r.uri.queryParameters.get("buttons")
-                .map { $0.lowercased() != "false" } ?? true
-            return Self.bezelPNG(
-                udid: Self.udidParam(r),
-                simulators: simulators,
-                chromes: chromes,
-                withButtons: withButtons,
-                panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) })
-            )
+        // ?buttons=false → bare device body (no buttons baked in); the
+        // actionable-bezel front end layers per-button images on top via
+        // the chrome-button route below. Default (true) is the merged
+        // composite.
+        for path in Self.deviceRoutes("bezel.png") {
+            router.get(RouterPath(path)) { [chromes] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                let withButtons = r.uri.queryParameters.get("buttons")
+                    .map { $0.lowercased() != "false" } ?? true
+                return Self.bezelPNG(
+                    udid: Self.udidParam(r),
+                    devices: devices,
+                    chromes: chromes,
+                    withButtons: withButtons,
+                    panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) })
+                )
+            }
         }
         // Per-button rasterized PNG — feeds the actionable-bezel UI.
-        // `:file` is the last URL segment, typically `<name>.png`
-        // matching a `ChromeButton.name` in `chrome.json` (e.g.
-        // `powerButton.png`, `actionButton.png`, `volumeUp.png`).
-        // Registered before the catch-all `/:file` so the longer
-        // template wins.
-        //
-        // UDID extraction here uses positional indexing on the path
-        // (`parts[1]`) instead of `udidParam` — that helper assumes
-        // a 3-segment path and grabs the second-to-last component,
-        // which breaks for this 4-segment template.
-        router.get("/simulators/:udid/chrome-button/:file") { [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let parts = r.uri.path.split(separator: "/")
-            let udid = parts.count >= 4
-                ? String(parts[1]).removingPercentEncoding ?? ""
-                : ""
-            let last = String(parts.last ?? "")
-                .removingPercentEncoding ?? ""
-            return Self.chromeButtonPNG(
-                udid: udid,
-                buttonFile: last,
-                simulators: simulators,
-                chromes: chromes,
-                panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) })
-            )
-        }
-
-        // One-shot still of the current framebuffer. Spins up Screen,
-        // awaits one IOSurface, encodes, and tears down — `?quality=`
-        // and `?scale=` mirror the WS stream knobs for parity, while
-        // `?size=` / `?fit=` / `?background=` speak the shared capture
-        // vocabulary (`CaptureSize`) so "App Store 6.9" means the same
-        // pixels here, in the toolbar picker, and on the CLI.
-        //
-        // Two extensions, one handler. A browser picks its decoder off
-        // the URL extension and nothing else, so `.png` has to be its
-        // own route rather than a `?format=` knob hung off `.jpg` —
-        // that's the entire reason the second registration exists.
-        for format in Self.CaptureImageFormat.allCases {
-            router.get("/simulators/:udid/screenshot.\(format.pathExtension)") {
-                [simulators] r, _ in
+        // `:file` is the last URL segment, typically `<name>.png` matching
+        // a `ChromeButton.name` in `chrome.json`. Registered before the
+        // catch-all `/:file` so the longer template wins. The udid is the
+        // second segment here (`parts[1]`), not the second-to-last.
+        for path in Self.chromeButtonRoutes {
+            router.get(RouterPath(path)) { [chromes] r, _ in
                 if let rejected = rejectUntrustedBrowser(r) { return rejected }
-                let options: Self.CaptureOptions
-                do {
-                    options = try Self.captureOptions(query: r)
-                } catch let error as Self.CaptureQueryError {
-                    return errorJSON(error.message, status: .badRequest)
-                }
-                return await Self.screenshot(
-                    udid: Self.udidParam(r),
-                    quality: r.uri.queryParameters.get("quality").flatMap(Double.init)
-                        ?? format.defaultQuality,
-                    scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
-                    format: format,
-                    options: options,
-                    simulators: simulators
+                let parts = r.uri.path.split(separator: "/")
+                let udid = parts.count >= 4
+                    ? String(parts[1]).removingPercentEncoding ?? ""
+                    : ""
+                let last = String(parts.last ?? "")
+                    .removingPercentEncoding ?? ""
+                return Self.chromeButtonPNG(
+                    udid: udid,
+                    buttonFile: last,
+                    devices: devices,
+                    chromes: chromes,
+                    panel: Self.panelQuery(r.uri.queryParameters.get("panel").map { String($0) })
                 )
             }
         }
@@ -325,100 +301,100 @@ struct Server: Sendable {
         // thumbnails. `?buttons=` matches `bezel.png`'s bare/rest
         // variants; `?size=` / `?fit=` / `?background=` are the same
         // knobs as the bare screenshot, applied to the composite.
-        router.get("/simulators/:udid/screenshot-bezel.png") {
-            [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let options: Self.CaptureOptions
-            do {
-                options = try Self.captureOptions(query: r)
-            } catch let error as Self.CaptureQueryError {
-                return errorJSON(error.message, status: .badRequest)
+        for path in Self.deviceRoutes("screenshot-bezel.png") {
+            router.get(RouterPath(path)) { [chromes] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                let options: Self.CaptureOptions
+                do {
+                    options = try Self.captureOptions(query: r)
+                } catch let error as Self.CaptureQueryError {
+                    return errorJSON(error.message, status: .badRequest)
+                }
+                return await Self.screenshotBezelPNG(
+                    udid: Self.udidParam(r),
+                    quality: r.uri.queryParameters.get("quality").flatMap(Double.init)
+                        ?? Self.CaptureImageFormat.png.defaultQuality,
+                    scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
+                    withButtons: r.uri.queryParameters.get("buttons")
+                        .map { $0.lowercased() != "false" } ?? true,
+                    options: options,
+                    devices: devices,
+                    chromes: chromes
+                )
             }
-            return await Self.screenshotBezelPNG(
-                udid: Self.udidParam(r),
-                quality: r.uri.queryParameters.get("quality").flatMap(Double.init)
-                    ?? Self.CaptureImageFormat.png.defaultQuality,
-                scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
-                withButtons: r.uri.queryParameters.get("buttons")
-                    .map { $0.lowercased() != "false" } ?? true,
-                options: options,
-                simulators: simulators,
-                chromes: chromes
-            )
         }
 
         // Data-driven 3D model metadata for the focus-mode inspector.
         // Only public IDs / labels / preview colors cross this boundary;
         // raw USD paths and variant names remain server-side.
-        router.get("/simulators/:udid/3d-model.json") { [simulators, models] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let udid = Self.udidParam(r)
-            guard let json = Self.model3DJSONString(
-                udid: udid,
-                simulators: simulators,
-                models: models
-            ) else {
-                return errorJSON("no 3D model for udid \(udid)", status: .notFound)
+        // Its 3D model, for any device, under both trees. Matched → the
+        // model's public ids and choices. A phone with none matched gets the
+        // installed models as choices instead, because baguette never
+        // silently substitutes a look-alike: the user picks, and the pick
+        // rides `?model=` on the 3D socket.
+        for path in Self.deviceRoutes("3d-model.json") {
+            router.get(RouterPath(path)) { [models] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                return Self.model3DResponse(udid: Self.udidParam(r), devices: devices, models: models)
             }
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(string: json))
-            )
         }
 
         // One-shot 3D preview. Capture one current frame and run the
         // same DeviceRenderPlan + DeviceRenderer pipeline as the CLI.
-        router.post("/simulators/:udid/render-3d.png") {
-            [simulators, models, deviceRenderer] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let udid = Self.udidParam(r)
-            guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
-                return errorJSON("unknown udid: \(udid)", status: .notFound)
-            }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { Data(buffer: $0) } ?? Data("{}".utf8)
-            let options: DeviceRenderOptions
-            do {
-                options = try DeviceRenderOptions.parsing(
-                    json: body.isEmpty ? Data("{}".utf8) : body
-                )
-            } catch {
-                return errorJSON("invalid 3D render options", status: .badRequest)
-            }
-            let screenImage: Data
-            do {
-                screenImage = try await ScreenSnapshot.capture(
-                    screen: simulator.screen(),
-                    quality: 0.95
-                )
-            } catch {
-                return errorJSON("screen capture failed: \(error)", status: .internalServerError)
-            }
-            guard let sourceSize = Self.imageDimensions(screenImage) else {
-                return errorJSON("captured screen image is invalid", status: .internalServerError)
-            }
-            switch Self.render3D(
-                udid: udid,
-                options: options,
-                screenImage: screenImage,
-                sourceSize: sourceSize,
-                simulators: simulators,
-                models: models,
-                renderer: deviceRenderer
-            ) {
-            case .rendered(let png):
-                return Response(
-                    status: .ok,
-                    headers: [.contentType: "image/png", .cacheControl: "no-cache"],
-                    body: .init(byteBuffer: ByteBuffer(data: png))
-                )
-            case .unknownDevice, .noModel:
-                return errorJSON("no 3D model for udid \(udid)", status: .notFound)
-            case .invalidConfiguration:
-                return errorJSON("invalid model variant or render configuration", status: .badRequest)
-            case .failed:
-                return errorJSON("3D rendering failed", status: .internalServerError)
+        for path in Self.deviceRoutes("render-3d.png") {
+            router.post(RouterPath(path)) { [models, deviceRenderer] r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                let udid = Self.udidParam(r)
+                let screen: any Screen
+                switch Self.role(.screen, of: udid, in: devices) {
+                case .unknownDevice: return errorJSON("unknown udid: \(udid)", status: .notFound)
+                case .refused(let refusal): return Self.refusal(refusal)
+                case .role(let role): screen = role
+                }
+                let buffer = try? await r.body.collect(upTo: 64 * 1024)
+                let body = buffer.map { Data(buffer: $0) } ?? Data("{}".utf8)
+                let options: DeviceRenderOptions
+                do {
+                    options = try DeviceRenderOptions.parsing(
+                        json: body.isEmpty ? Data("{}".utf8) : body
+                    )
+                } catch {
+                    return errorJSON("invalid 3D render options", status: .badRequest)
+                }
+                let screenImage: Data
+                do {
+                    screenImage = try await ScreenSnapshot.capture(
+                        screen: screen,
+                        quality: 0.95
+                    )
+                } catch {
+                    return errorJSON("screen capture failed: \(error)", status: .internalServerError)
+                }
+                guard let sourceSize = Self.imageDimensions(screenImage) else {
+                    return errorJSON("captured screen image is invalid", status: .internalServerError)
+                }
+                switch Self.render3D(
+                    udid: udid,
+                    options: options,
+                    screenImage: screenImage,
+                    sourceSize: sourceSize,
+                    devices: devices,
+                    models: models,
+                    renderer: deviceRenderer
+                ) {
+                case .rendered(let png):
+                    return Response(
+                        status: .ok,
+                        headers: [.contentType: "image/png", .cacheControl: "no-cache"],
+                        body: .init(byteBuffer: ByteBuffer(data: png))
+                    )
+                case .unknownDevice, .noModel:
+                    return errorJSON("no 3D model for udid \(udid)", status: .notFound)
+                case .invalidConfiguration:
+                    return errorJSON("invalid model variant or render configuration", status: .badRequest)
+                case .failed:
+                    return errorJSON("3D rendering failed", status: .internalServerError)
+                }
             }
         }
 
@@ -658,11 +634,12 @@ struct Server: Sendable {
 
     private static func chromeJSON(
         udid: String,
-        simulators: any Simulators,
-        chromes: any Chromes
+        devices: any Devices,
+        chromes: any Chromes,
+        tree: String
     ) -> Response {
         guard let json = chromeJSONString(
-            udid: udid, simulators: simulators, chromes: chromes
+            udid: udid, devices: devices, chromes: chromes, tree: tree
         ) else {
             return errorJSON("no chrome for udid \(udid)", status: .notFound)
         }
@@ -673,16 +650,33 @@ struct Server: Sendable {
         )
     }
 
-    private static func definitionJSON(
-        udid: String,
-        simulators: any Simulators,
-        chromes: any Chromes,
-        panel: IntegratedPanel? = nil
+    /// `GET …/definition.json` on either tree, for any device: its own
+    /// chrome by its model, or — for a phone with none bundled — the one
+    /// `?chrome=` borrows. Neither → 404 with `needsChrome`, so the page
+    /// renders the picker instead of a dead end.
+    static func definitionResponse(
+        udid: String, tree: String, picked: String?, panel: IntegratedPanel?,
+        devices: any Devices, chromes: any Chromes
     ) -> Response {
-        guard let json = definitionJSONString(
-            udid: udid, simulators: simulators, chromes: chromes, panel: panel
-        ) else {
+        let device: any Device
+        do {
+            device = try devices.device(DeviceID(udid))
+        } catch let refusal as DeviceError {
+            return refusal == .unknown(id: DeviceID(udid))
+                ? errorJSON("no definition for udid \(udid)", status: .notFound)
+                : Self.refusal(refusal)
+        } catch {
             return errorJSON("no definition for udid \(udid)", status: .notFound)
+        }
+        if let picked, !picked.isEmpty {
+            return borrowedDefinition(of: device, chrome: picked, chromes: chromes)
+        }
+        guard let json = definitionJSONString(
+            udid: udid, devices: devices, chromes: chromes, panel: panel, tree: tree
+        ) else {
+            return twinJSONResponse(
+                ["ok": false, "needsChrome": true, "error": "pick a chrome with ?chrome=<device name>"],
+                status: .notFound)
         }
         return Response(
             status: .ok,
@@ -701,15 +695,16 @@ struct Server: Sendable {
     /// `/simulators/<udid>/chrome-button/<name>.png` route below.
     static func chromeJSONString(
         udid: String,
-        simulators: any Simulators,
-        chromes: any Chromes
+        devices: any Devices,
+        chromes: any Chromes,
+        tree: String = "simulators"
     ) -> String? {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
-              let assets = sim.chrome(in: chromes) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let assets = device.chrome(in: chromes) else {
             return nil
         }
         return assets.layoutJSON(
-            buttonImageURLPrefix: "/simulators/\(udid)/chrome-button/"
+            buttonImageURLPrefix: "/\(tree)/\(udid)/chrome-button/"
         )
     }
 
@@ -719,25 +714,22 @@ struct Server: Sendable {
     /// (`definitionJSON`) wraps the result into a 200/404 response.
     static func definitionJSONString(
         udid: String,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
-        panel pinned: IntegratedPanel? = nil
+        panel pinned: IntegratedPanel? = nil,
+        tree: String = "simulators"
     ) -> String? {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else { return nil }
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else { return nil }
         // Resolve the panel once: it names the chrome and it says
         // whether the screen is a foldable's creased, unfolded one. A
         // page bringing the other panel in names it; otherwise the hinge.
-        let panel = pinned ?? sim.litPanel(in: chromes)
-        let assets: DeviceChromeAssets?
-        switch panel {
-        case .primary:   assets = chromes.assets(forDeviceName: sim.deviceTypeName)
-        case .secondary: assets = chromes.assets(forDeviceName: sim.deviceTypeName, panel: .secondary)
-        }
-        guard let assets else { return nil }
+        let panel = pinned ?? device.litPanel(in: chromes)
+        guard let assets = device.chrome(in: chromes, panel: panel) else { return nil }
         let def = SimulatorDefinition.compose(
-            from: sim,
+            identity: SimulatorDefinition.Identity(
+                udid: device.id.raw, name: device.name, model: device.kind.model),
             chrome: assets,
-            urlPrefix: "/simulators/\(udid)",
+            urlPrefix: "/\(tree)/\(udid)",
             panel: panel
         )
         return def.toJSON()
@@ -756,16 +748,16 @@ struct Server: Sendable {
         options: DeviceRenderOptions,
         screenImage: Data,
         sourceSize: RenderDimensions,
-        simulators: any Simulators,
+        devices: any Devices,
         models: any DeviceModels,
         renderer: any DeviceRenderer
     ) -> Render3DOutcome {
-        guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             return .unknownDevice
         }
         let installed: InstalledDeviceModel
         do {
-            guard let model = try simulator.deviceModel(in: models) else {
+            guard let model = try device.model3D(in: models) else {
                 return .noModel
             }
             installed = model
@@ -805,7 +797,7 @@ struct Server: Sendable {
         guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
             throw DeviceModelError.modelNotFound(udid)
         }
-        guard let installed = try simulator.deviceModel(in: models) else {
+        guard let installed = try SimulatorDevice(simulator).model3D(in: models) else {
             throw DeviceModelError.noModelForDevice(simulator.deviceTypeName)
         }
         return try DeviceRenderPlan.build(
@@ -903,11 +895,11 @@ struct Server: Sendable {
 
     static func model3DJSONString(
         udid: String,
-        simulators: any Simulators,
+        devices: any Devices,
         models: any DeviceModels
     ) -> String? {
-        guard !udid.isEmpty, let simulator = simulators.find(udid: udid),
-              let installed = try? simulator.deviceModel(in: models) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let installed = try? device.model3D(in: models) else {
             return nil
         }
         guard let data = try? JSONSerialization.data(
@@ -922,6 +914,25 @@ struct Server: Sendable {
     /// The public projection of one model definition — id, display
     /// name, and variant metadata; USD prim paths never leave the
     /// server. Shared by the simulator and device 3d-model routes.
+    static func model3DResponse(udid: String, devices: any Devices, models: any DeviceModels) -> Response {
+        if let json = model3DJSONString(udid: udid, devices: devices, models: models) {
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(string: json)))
+        }
+        guard let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              device.kind.reality == .physical else {
+            return errorJSON("no 3D model for udid \(udid)", status: .notFound)
+        }
+        let choices = ((try? models.all()) ?? []).map { installed in
+            ["id": installed.definition.id.rawValue, "displayName": installed.definition.displayName]
+        }
+        return twinJSONResponse(
+            ["model": NSNull(), "hardware": device.kind.hardware ?? device.kind.model, "models": choices],
+            status: .ok)
+    }
+
     static func model3DJSONObject(definition: DeviceModelDefinition) -> [String: Any] {
         let sets: [[String: Any]] = definition.variantSets.map { set in
             [
@@ -1384,20 +1395,6 @@ struct Server: Sendable {
         return out as Data
     }
 
-    private static func screenshot(
-        udid: String,
-        quality: Double,
-        scale: Int,
-        format: CaptureImageFormat,
-        options: CaptureOptions,
-        simulators: any Simulators
-    ) async -> Response {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return errorJSON("unknown udid: \(udid)", status: .notFound)
-        }
-        return await screenshot(
-            of: sim.screen(), quality: quality, scale: scale, format: format, options: options)
-    }
 
     /// A still of `screen`, encoded and sized as asked — whichever device it is.
     static func screenshot(
@@ -1442,19 +1439,22 @@ struct Server: Sendable {
         scale: Int,
         withButtons: Bool,
         options: CaptureOptions,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes
     ) async -> Response {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        let screen: any Screen
+        switch role(.screen, of: udid, in: devices) {
+        case .unknownDevice: return errorJSON("unknown udid: \(udid)", status: .notFound)
+        case .refused(let refusal): return Self.refusal(refusal)
+        case .role(let role): screen = role
         }
-        guard let assets = sim.chrome(in: chromes) else {
+        guard let device = (try? devices.find(id: DeviceID(udid))) ?? nil, let assets = device.chrome(in: chromes) else {
             return errorJSON("no bezel for udid \(udid)", status: .notFound)
         }
         let captured: Data
         do {
             captured = try await ScreenSnapshot.capture(
-                screen: sim.screen(),
+                screen: screen,
                 quality: quality,
                 scale: max(1, scale)
             )
@@ -1478,13 +1478,13 @@ struct Server: Sendable {
 
     private static func bezelPNG(
         udid: String,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
         withButtons: Bool = true,
         panel: IntegratedPanel? = nil
     ) -> Response {
         guard let bytes = bezelImage(
-            udid: udid, simulators: simulators,
+            udid: udid, devices: devices,
             chromes: chromes, withButtons: withButtons, panel: panel
         ) else {
             return Response(
@@ -1511,13 +1511,13 @@ struct Server: Sendable {
     /// — today's behaviour.
     static func bezelImage(
         udid: String,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
         withButtons: Bool,
         panel: IntegratedPanel? = nil
     ) -> Data? {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
-              let assets = chrome(of: sim, in: chromes, panel: panel) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let assets = chrome(of: device, in: chromes, panel: panel) else {
             return nil
         }
         return withButtons ? assets.composite.data : assets.bareComposite.data
@@ -1526,15 +1526,36 @@ struct Server: Sendable {
     /// The named panel's chrome when the URL names one, else the lit
     /// panel's.
     private static func chrome(
-        of sim: any Simulator, in chromes: any Chromes, panel: IntegratedPanel?
+        of device: any Device, in chromes: any Chromes, panel: IntegratedPanel?
     ) -> DeviceChromeAssets? {
-        if let panel { return sim.chrome(in: chromes, panel: panel) }
-        return sim.chrome(in: chromes)
+        if let panel { return device.chrome(in: chromes, panel: panel) }
+        return device.chrome(in: chromes)
     }
 
     /// The bezel a physical device's page frames it in: the one the user
     /// picked (`?chrome=`), else the device's own when a bezel is installed
     /// under its model name, else none — the page then offers the picker.
+    /// A device's definition in a bezel it borrows by name — a phone whose
+    /// model has no chrome bundled on this Mac. The image URLs carry the
+    /// pick in their path, keeping the bezel routes stateless.
+    static func borrowedDefinition(of device: any Device, chrome name: String, chromes: any Chromes) -> Response {
+        guard let assets = chromes.assets(forDeviceName: name) else {
+            return twinJSONResponse(
+                ["ok": false, "needsChrome": true, "error": "no chrome named \(name)"], status: .notFound)
+        }
+        let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        let definition = SimulatorDefinition.compose(
+            identity: SimulatorDefinition.Identity(udid: device.id.raw, name: device.name, model: device.kind.model),
+            chrome: assets,
+            urlPrefix: "/devices/\(device.id.raw)/chrome/\(encodedName)"
+        )
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+            body: .init(byteBuffer: ByteBuffer(string: definition.toJSON()))
+        )
+    }
+
     static func bezelName(picked: String?, model: String, chromes: any Chromes) -> String? {
         if let picked, !picked.isEmpty { return picked }
         return chromes.assets(forDeviceName: model) == nil ? nil : model
@@ -1552,12 +1573,12 @@ struct Server: Sendable {
     /// or `nil` when the chrome carries none.
     static func screenMaskImage(
         udid: String,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
         panel: IntegratedPanel? = nil
     ) -> Data? {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
-              let assets = chrome(of: sim, in: chromes, panel: panel) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let assets = chrome(of: device, in: chromes, panel: panel) else {
             return nil
         }
         return assets.screenMask?.data
@@ -1566,13 +1587,13 @@ struct Server: Sendable {
     private static func chromeButtonPNG(
         udid: String,
         buttonFile: String,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
         panel: IntegratedPanel? = nil
     ) -> Response {
         guard let bytes = chromeButtonImage(
             udid: udid, buttonFile: buttonFile,
-            simulators: simulators, chromes: chromes, panel: panel
+            devices: devices, chromes: chromes, panel: panel
         ) else {
             return Response(
                 status: .notFound,
@@ -1598,12 +1619,12 @@ struct Server: Sendable {
     static func chromeButtonImage(
         udid: String,
         buttonFile: String,
-        simulators: any Simulators,
+        devices: any Devices,
         chromes: any Chromes,
         panel: IntegratedPanel? = nil
     ) -> Data? {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid),
-              let assets = chrome(of: sim, in: chromes, panel: panel) else {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let assets = chrome(of: device, in: chromes, panel: panel) else {
             return nil
         }
         let name: String = {

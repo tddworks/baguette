@@ -54,8 +54,9 @@ struct SimulatorTests {
 
         let s = MockSimulator()
         given(s).deviceTypeName.willReturn("iPhone 17 Pro")
+        given(s).runtime.willReturn("iOS 26.4")
 
-        let result = s.chrome(in: chromes)
+        let result = SimulatorDevice(s).chrome(in: chromes)
 
         #expect(result?.chrome.identifier == "phone11")
         verify(chromes).assets(forDeviceName: .value("iPhone 17 Pro")).called(1)
@@ -81,8 +82,9 @@ struct SimulatorTests {
         let s = MockSimulator()
         given(s).name.willReturn("iPhone 17 pro max clone 1")
         given(s).deviceTypeName.willReturn("iPhone 17 Pro Max")
+        given(s).runtime.willReturn("iOS 26.4")
 
-        let result = s.chrome(in: chromes)
+        let result = SimulatorDevice(s).chrome(in: chromes)
 
         #expect(result?.chrome.identifier == "phone11")
         verify(chromes).assets(forDeviceName: .value("iPhone 17 Pro Max")).called(1)

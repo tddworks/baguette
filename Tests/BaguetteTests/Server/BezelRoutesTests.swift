@@ -22,7 +22,7 @@ struct BezelRoutesTests {
         let (sim, chromes) = Self.fixture()
         let bytes = Server.bezelImage(
             udid: "UDID-1",
-            simulators: Self.simulators(with: sim),
+            devices: Self.simulators(with: sim),
             chromes: chromes,
             withButtons: true
         )
@@ -33,7 +33,7 @@ struct BezelRoutesTests {
         let (sim, chromes) = Self.fixture()
         let bytes = Server.bezelImage(
             udid: "UDID-1",
-            simulators: Self.simulators(with: sim),
+            devices: Self.simulators(with: sim),
             chromes: chromes,
             withButtons: false
         )
@@ -56,7 +56,7 @@ struct BezelRoutesTests {
         given(chromes as! MockChromes).assets(forDeviceName: .any, panel: .value(.secondary))
             .willReturn(unfolded)
         let bytes = Server.bezelImage(
-            udid: "UDID-1", simulators: Self.simulators(with: sim),
+            udid: "UDID-1", devices: Self.simulators(with: sim),
             chromes: chromes, withButtons: true, panel: .secondary)
         #expect(bytes == Data("UNFOLDED-PNG".utf8))
         verify(sim as! MockSimulator).hinge().called(0)
@@ -76,7 +76,7 @@ struct BezelRoutesTests {
         let (sim, chromes) = Self.fixture(screenMask: ChromeImage(
             data: Data("MASK-PNG".utf8), size: Size(width: 466, height: 678)))
         let bytes = Server.screenMaskImage(
-            udid: "UDID-1", simulators: Self.simulators(with: sim), chromes: chromes)
+            udid: "UDID-1", devices: Self.simulators(with: sim), chromes: chromes)
         #expect(bytes == Data("MASK-PNG".utf8))
     }
 
@@ -111,7 +111,7 @@ struct BezelRoutesTests {
     @Test func `should serve no screen mask when the chrome carries none`() throws {
         let (sim, chromes) = Self.fixture()
         #expect(Server.screenMaskImage(
-            udid: "UDID-1", simulators: Self.simulators(with: sim), chromes: chromes) == nil)
+            udid: "UDID-1", devices: Self.simulators(with: sim), chromes: chromes) == nil)
     }
 
     @Test func `should serve no bezel for an unknown udid`() {
@@ -122,7 +122,7 @@ struct BezelRoutesTests {
 
         let bytes = Server.bezelImage(
             udid: "ghost",
-            simulators: sims,
+            devices: SimulatorDevices(sims),
             chromes: chromes,
             withButtons: true
         )
@@ -136,7 +136,7 @@ struct BezelRoutesTests {
         let bytes = Server.chromeButtonImage(
             udid: "UDID-1",
             buttonFile: "power.png",
-            simulators: Self.simulators(with: sim),
+            devices: Self.simulators(with: sim),
             chromes: chromes
         )
         #expect(bytes == Data("POWER-PNG".utf8))
@@ -147,7 +147,7 @@ struct BezelRoutesTests {
         let bytes = Server.chromeButtonImage(
             udid: "UDID-1",
             buttonFile: "siri.png",
-            simulators: Self.simulators(with: sim),
+            devices: Self.simulators(with: sim),
             chromes: chromes
         )
         #expect(bytes == nil)
@@ -161,7 +161,7 @@ struct BezelRoutesTests {
         let bytes = Server.chromeButtonImage(
             udid: "UDID-1",
             buttonFile: "power",
-            simulators: Self.simulators(with: sim),
+            devices: Self.simulators(with: sim),
             chromes: chromes
         )
         #expect(bytes == Data("POWER-PNG".utf8))
@@ -177,14 +177,14 @@ struct BezelRoutesTests {
         let chromes = MockChromes()
         given(chromes).panels(forDeviceName: .any).willReturn([.primary])
         #expect(Server.definitionJSONString(
-            udid: "ghost", simulators: sims, chromes: chromes
+            udid: "ghost", devices: SimulatorDevices(sims), chromes: chromes
         ) == nil)
     }
 
     @Test func `should describe the device's identity, screen and buttons for the SDK bootstrap`() throws {
         let (sim, chromes) = Self.fixture()
         let json = try #require(Server.definitionJSONString(
-            udid: "UDID-1", simulators: Self.simulators(with: sim), chromes: chromes
+            udid: "UDID-1", devices: Self.simulators(with: sim), chromes: chromes
         ))
         let parsed = try #require(
             JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
@@ -214,7 +214,7 @@ struct BezelRoutesTests {
         let (sim, chromes) = Self.fixture()
         let json = try #require(Server.chromeJSONString(
             udid: "UDID-1",
-            simulators: Self.simulators(with: sim),
+            devices: Self.simulators(with: sim),
             chromes: chromes
         ))
 
@@ -279,12 +279,31 @@ private extension BezelRoutesTests {
         given(sim).udid.willReturn("UDID-1")
         given(sim).name.willReturn("iPhone 17 Pro")
         given(sim).deviceTypeName.willReturn("iPhone 17 Pro")
+        given(sim).state.willReturn(.booted)
+        given(sim).runtime.willReturn("iOS 26.4")
         return (sim, chromes)
     }
 
-    static func simulators(with sim: any Simulator) -> any Simulators {
+    static func simulators(with sim: any Simulator) -> any Devices {
         let sims = MockSimulators()
         given(sims).find(udid: .value(sim.udid)).willReturn(sim)
-        return sims
+        return SimulatorDevices(sims)
+    }
+
+    @Test func `should answer the chrome routes under the devices tree and a simulator's old one`() {
+        for leaf in ["chrome.json", "definition.json", "screen-mask.png", "bezel.png", "screenshot-bezel.png"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
+        #expect(Server.chromeButtonRoutes
+            == ["/devices/:udid/chrome-button/:file", "/simulators/:udid/chrome-button/:file"])
+    }
+
+    @Test func `should hand a simulator's definition its own tree's urls`() throws {
+        let (sim, chromes) = Self.fixture()
+        let json = try #require(Server.definitionJSONString(
+            udid: "UDID-1", devices: Self.simulators(with: sim), chromes: chromes, tree: "devices"))
+            .replacingOccurrences(of: "\\/", with: "/")
+        #expect(json.contains("/devices/UDID-1/bezel.png"))
+        #expect(!json.contains("/simulators/"))
     }
 }

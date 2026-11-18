@@ -329,9 +329,9 @@ the result.
 
 The `serve` page consumes this via two endpoints:
 
-- `GET /simulators/:udid/chrome.json` — `DeviceChrome.layoutJSON`
+- `GET /devices/:udid/chrome.json` — `DeviceChrome.layoutJSON`
   (composite size, screen rect, inner corner radius, buttons).
-- `GET /simulators/:udid/bezel.png` — the rasterized composite.
+- `GET /devices/:udid/bezel.png` — the rasterized composite.
 
 `DeviceFrame` (`device-frame.js`) overlays the screen `<canvas>` on
 top of the bezel `<img>` (z-index 2 vs 1), positioned by `screen.{x,y,width,height}`
@@ -351,8 +351,8 @@ GET  /simulators.json                       Simulators.listJSON
 GET  /simulators/:udid                      sim.html (same shell)
 POST /devices/:udid/boot                    device.require(.lifecycle).boot()
 POST /devices/:udid/shutdown                device.require(.lifecycle).shutdown()
-GET  /simulators/:udid/chrome.json          DeviceChromeAssets.layoutJSON()
-GET  /simulators/:udid/bezel.png            composite.data
+GET  /devices/:udid/chrome.json             device.chrome(in:).layoutJSON()
+GET  /devices/:udid/bezel.png               composite.data
 GET  /devices/:udid/interface.json          appearance + contrast + content size
 POST /devices/:udid/interface               set any subset, answer the result
 GET  /devices/:udid/companion-screens.json   CarPlay display + paired watch

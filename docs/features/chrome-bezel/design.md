@@ -228,21 +228,21 @@ Ring", iPhone power's Siri / SOS).
 make && pkill -f baguette/serve; ./Baguette serve &
 
 # Pull the merged composite (with buttons baked) for the device:
-curl -s "http://127.0.0.1:8421/simulators/<UDID>/bezel.png" \
+curl -s "http://127.0.0.1:8421/devices/<UDID>/bezel.png" \
   -o /tmp/merged.png && sips -g pixelWidth -g pixelHeight /tmp/merged.png
 
 # Pull the bare composite (no buttons baked — what the actionable
 # overlay sits on top of):
-curl -s "http://127.0.0.1:8421/simulators/<UDID>/bezel.png?buttons=false" \
+curl -s "http://127.0.0.1:8421/devices/<UDID>/bezel.png?buttons=false" \
   -o /tmp/bare.png && sips -g pixelWidth -g pixelHeight /tmp/bare.png
 
 # Inspect the SDK bootstrap the front-end consumes (button boxes
 # in CSS-percent space, bezel image URLs, screen rect / clip radius):
-curl -s "http://127.0.0.1:8421/simulators/<UDID>/definition.json" | jq
+curl -s "http://127.0.0.1:8421/devices/<UDID>/definition.json" | jq
 
 # The legacy chrome.json route is still served for external tooling,
 # but the SDK and every consumer page now read definition.json:
-curl -s "http://127.0.0.1:8421/simulators/<UDID>/chrome.json" | jq
+curl -s "http://127.0.0.1:8421/devices/<UDID>/chrome.json" | jq
 ```
 
 Open `http://127.0.0.1:8421/simulators/<UDID>` (focus mode), flip the

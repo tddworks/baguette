@@ -139,6 +139,17 @@ extension StreamDisplayPlan {
         return try device.input()
     }
 
+    /// The planned plane's screen and input on any device, the plane
+    /// resolved once — so CarPlay is enabled once, and the screen and the
+    /// input share one binding. A device that shows a screen but takes no
+    /// touches still streams: its input is nil.
+    func bind(to device: any Device) throws -> (screen: any Screen, input: Abilities?) {
+        if let plane = try plane(on: device) {
+            return (plane.screen(), .input(of: device.name, all: plane.input()))
+        }
+        return (try device.require(.screen), try? device.input())
+    }
+
     /// The display a pinned panel or CarPlay names; nil for the device's
     /// own screen.
     private func plane(on device: any Device) throws -> (any Display)? {

@@ -32,13 +32,12 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/devices/:udid/orientation?value=` *any device* | `portrait`, `landscape-left`, `landscape-right`, `portrait-upside-down`; `504` when an iPhone Duo change is unconfirmed | [hinge](features/hinge/README.md#rotation) |
 | `POST` | `/devices/:udid/input` *any device* | one gesture envelope → its ack | [wire.md](wire.md) |
 | `GET` | `/devices/:udid/describe-ui.json?x=&y=` *any device* | accessibility tree; `x`+`y` hit-tests a point | [accessibility](features/accessibility/README.md) |
-| `GET` | `/simulators/:udid/screenshot.jpg`, `.png` | one frame (`quality`, `scale`, `size`, `fit`, `background`) | [screenshot](features/screenshot/README.md), [capture-size](features/capture-size/README.md) |
-| `GET` | `/devices/:udid/screenshot.jpg`, `.png` | the same frame from any device — a simulator or a phone on a cable | [real-devices](features/real-devices/README.md) |
-| `GET` | `/simulators/:udid/screenshot-bezel.png` | the frame inside its bezel (`buttons=`) | [screenshot](features/screenshot/README.md) |
-| `GET` | `/simulators/:udid/definition.json` | SDK bootstrap: identity, screen rect, bezel URLs, buttons | [baguette-sdk](features/baguette-sdk/README.md) |
-| `GET` | `/simulators/:udid/chrome.json`, `bezel.png`, `screen-mask.png`, `chrome-button/:file` | DeviceKit bezel layout and images (`panel=` on a foldable) | [chrome-bezel](features/chrome-bezel/README.md) |
-| `GET` | `/simulators/:udid/3d-model.json` | the device's 3D model and variants | [3d-rendering](features/3d-rendering/README.md) |
-| `POST` | `/simulators/:udid/render-3d.png` | screenshot on the 3D model | [3d-rendering](features/3d-rendering/README.md) |
+| `GET` | `/devices/:udid/screenshot.jpg`, `.png` *any device* | one frame (`quality`, `scale`, `size`, `fit`, `background`) from a simulator or a phone on a cable | [screenshot](features/screenshot/README.md), [capture-size](features/capture-size/README.md), [real-devices](features/real-devices/README.md) |
+| `GET` | `/devices/:udid/screenshot-bezel.png` *any device* | the frame inside its bezel (`buttons=`) | [screenshot](features/screenshot/README.md) |
+| `GET` | `/devices/:udid/definition.json` *any device* | SDK bootstrap: identity, screen rect, bezel URLs, buttons — the device's own bezel by its model, or `?chrome=<device name>` to borrow one (`404` with `needsChrome` when it has none) | [baguette-sdk](features/baguette-sdk/README.md) |
+| `GET` | `/devices/:udid/chrome.json`, `bezel.png`, `screen-mask.png`, `chrome-button/:file` *any device* | DeviceKit bezel layout and images (`panel=` on a foldable) | [chrome-bezel](features/chrome-bezel/README.md) |
+| `GET` | `/devices/:udid/3d-model.json` *any device* | the device's 3D model and variants, by its hardware id, model or name; a phone with none matched gets the installed models to pick from | [3d-rendering](features/3d-rendering/README.md) |
+| `POST` | `/devices/:udid/render-3d.png` *any device* | screenshot on the 3D model | [3d-rendering](features/3d-rendering/README.md) |
 | `GET` `POST` | `/devices/:udid/interface.json`, `/interface` *any device* | appearance, contrast, text size | [interface](features/interface/README.md) |
 | `POST` | `/devices/:udid/shake` *any device* | motion shake | [shake](features/shake/README.md) |
 | `GET` `POST` `DELETE` | `/devices/:udid/status-bar` *any device* | status-bar override | [status-bar](features/status-bar/README.md) |

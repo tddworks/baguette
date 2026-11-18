@@ -102,10 +102,18 @@ extension Server {
         router.get("/devices/:udid") { _, _ in Self.staticAsset("sim.html") }
 
         // A still of any device's screen — a simulator's or a phone's —
-        // with the same knobs as `/simulators/:udid/screenshot.*`.
+        // under both trees; the simulator's old spelling is the same
+        // handler. Spins up the Screen, awaits one frame, encodes, and
+        // tears down — `?quality=` and `?scale=` mirror the stream knobs,
+        // while `?size=` / `?fit=` / `?background=` speak the shared
+        // capture vocabulary (`CaptureSize`), so "App Store 6.9" means the
+        // same pixels here, in the toolbar picker and on the CLI. Two
+        // extensions, one handler: a browser picks its decoder off the URL
+        // extension alone, so `.png` is its own route, not a `?format=`.
         let allDevices = self.allDevices
         for format in Self.CaptureImageFormat.allCases {
-            router.get("/devices/:udid/screenshot.\(format.pathExtension)") { r, _ in
+          for path in Self.deviceRoutes("screenshot.\(format.pathExtension)") {
+            router.get(RouterPath(path)) { r, _ in
                 if let rejected = rejectUntrustedBrowser(r) { return rejected }
                 let options: Self.CaptureOptions
                 do {
@@ -128,55 +136,7 @@ extension Server {
                     options: options
                 )
             }
-        }
-
-        // SDK bootstrap for a physical device. A phone has no DeviceKit
-        // chrome of its own on this Mac, so the bezel is BORROWED — the
-        // user picks a device name (`?chrome=iPhone 17 Pro Max`) and the
-        // definition's image URLs carry the pick in their path, keeping
-        // the bezel routes stateless. No pick → 404 with `needsChrome`
-        // so the page renders the picker instead of a dead end.
-        router.get("/devices/:udid/definition.json") { r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let udid = Self.udidParam(r)
-            let device: any Device
-            do {
-                device = try physicalDevices.device(DeviceID(udid))
-            } catch {
-                // An id two sources claim is refused, never guessed at.
-                return Self.twinJSONResponse(["ok": false, "error": String(describing: error)], status: Self.status(for: error))
-            }
-            guard let chromeName = Self.bezelName(
-                picked: r.uri.queryParameters.get("chrome").map { String($0) },
-                model: device.kind.model, chromes: chromes
-            ) else {
-                return Self.twinJSONResponse(
-                    ["ok": false, "needsChrome": true,
-                     "error": "pick a chrome with ?chrome=<device name>"],
-                    status: .notFound
-                )
-            }
-            guard let assets = chromes.assets(forDeviceName: chromeName) else {
-                return Self.twinJSONResponse(
-                    ["ok": false, "needsChrome": true,
-                     "error": "no chrome named \(chromeName)"],
-                    status: .notFound
-                )
-            }
-            let encodedName = chromeName.addingPercentEncoding(
-                withAllowedCharacters: .urlPathAllowed) ?? chromeName
-            let definition = SimulatorDefinition.compose(
-                identity: SimulatorDefinition.Identity(
-                    udid: device.id.raw, name: device.name, model: device.kind.model
-                ),
-                chrome: assets,
-                urlPrefix: "/devices/\(udid)/chrome/\(encodedName)"
-            )
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(string: definition.toJSON()))
-            )
+          }
         }
 
         // Borrowed-bezel images. The chrome name sits in the path
@@ -235,36 +195,6 @@ extension Server {
                 status: .ok,
                 headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
                 body: .init(byteBuffer: ByteBuffer(data: image.data))
-            )
-        }
-
-        // Model resolution for the 3D twin. Matched (by hardware id,
-        // e.g. "iPhone14,3") → the same shape the simulator route
-        // serves. Unmatched → the installed models as choices, because
-        // baguette never silently substitutes a look-alike: the user
-        // picks, and the pick rides `?model=` on the 3D socket.
-        router.get("/devices/:udid/3d-model.json") { r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let udid = Self.udidParam(r)
-            let device: any Device
-            do {
-                device = try physicalDevices.device(DeviceID(udid))
-            } catch {
-                // An id two sources claim is refused, never guessed at.
-                return Self.twinJSONResponse(["ok": false, "error": String(describing: error)], status: Self.status(for: error))
-            }
-            if let installed = try? models.match(hardware: device.kind.hardware ?? device.kind.model) {
-                return Self.twinJSONResponse(
-                    Self.model3DJSONObject(definition: installed.definition), status: .ok
-                )
-            }
-            let choices = ((try? models.all()) ?? []).map { installed in
-                ["id": installed.definition.id.rawValue,
-                 "displayName": installed.definition.displayName]
-            }
-            return Self.twinJSONResponse(
-                ["model": NSNull(), "hardware": device.kind.hardware ?? device.kind.model, "models": choices],
-                status: .ok
             )
         }
 
@@ -749,7 +679,7 @@ extension Server {
         return query
     }
 
-    private static func twinJSONResponse(_ object: [String: Any], status: HTTPResponse.Status) -> Response {
+    static func twinJSONResponse(_ object: [String: Any], status: HTTPResponse.Status) -> Response {
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
             ?? Data("{}".utf8)
         return Response(

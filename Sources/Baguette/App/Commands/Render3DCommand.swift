@@ -106,7 +106,7 @@ struct Render3DCommand: AsyncParsableCommand {
                 }
                 installed = found
             } else {
-                guard let found = try simulator.deviceModel(in: models) else {
+                guard let found = try SimulatorDevice(simulator).model3D(in: models) else {
                     throw DeviceModelError.noModelForDevice(simulator.deviceTypeName)
                 }
                 installed = found

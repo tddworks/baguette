@@ -196,40 +196,6 @@ extension Simulator {
         "{\"udid\":\"\(udid)\",\"name\":\"\(name)\",\"state\":\"\(state.description)\",\"runtime\":\"\(runtime)\"}"
     }
 
-    /// Resolve the bezel layout + composite image for this
-    /// simulator. Mirrors `tap.execute(on: input)` — chrome lookup
-    /// is a separate concern from the runtime, so the aggregate is
-    /// taken as a parameter rather than living on the simulator.
-    /// Returns `nil` for devices without a matching DeviceKit chrome
-    /// (e.g. Apple TV).
-    func chrome(in chromes: any Chromes) -> DeviceChromeAssets? {
-        chrome(in: chromes, panel: litPanel(in: chromes))
-    }
-
-    /// One named panel's chrome, hinge not consulted. Image routes take
-    /// the panel from the URL the definition handed out, so a cached
-    /// `bezel.png` can never be the other panel's.
-    func chrome(in chromes: any Chromes, panel: IntegratedPanel) -> DeviceChromeAssets? {
-        switch panel {
-        case .primary:   return chromes.assets(forDeviceName: deviceTypeName)
-        case .secondary: return chromes.assets(forDeviceName: deviceTypeName, panel: .secondary)
-        }
-    }
-
-    /// Which of this device's panels the chrome, screen and tap space
-    /// describe right now.
-    ///
-    /// One panel is the only answer on every device but a foldable,
-    /// and it is answered from the profile alone. A foldable asks its
-    /// hinge — a guest round-trip — and takes no reading as folded,
-    /// which is how the device boots.
-    func litPanel(in chromes: any Chromes) -> IntegratedPanel {
-        guard chromes.panels(forDeviceName: deviceTypeName).contains(.secondary) else {
-            return .primary
-        }
-        return hinge().litPanel
-    }
-
     /// Input for a foldable's live page, whose socket outlives a fold:
     /// each gesture goes to the panel the hinge lights when it starts.
     func litPanelInput() -> any HID {
@@ -239,15 +205,6 @@ extension Simulator {
             hinge: hinge())
     }
 
-    /// Resolve the installed 3D model for this simulator. Device type
-    /// is stable across simulator renames, so a definition that targets
-    /// a named device is matched against the type name first; the
-    /// visible name remains a fallback for definitions that only know
-    /// the user-given name.
-    func deviceModel(in models: any DeviceModels) throws -> InstalledDeviceModel? {
-        try models.match(deviceType: deviceTypeName, deviceName: deviceTypeName)
-            ?? models.match(deviceType: deviceTypeName, deviceName: name)
-    }
 }
 
 /// Failure modes the host surfaces. Each maps to a CLI exit message.

@@ -10,10 +10,11 @@ struct SimulatorDeviceModelTests {
         let simulator = MockSimulator()
         given(simulator).deviceTypeName.willReturn("iPhone 17 Pro")
         given(simulator).name.willReturn("Team QA iPhone")
+        given(simulator).runtime.willReturn("iOS 26.4")
         let installed = Self.installed(matches: DeviceModelMatches(deviceNames: ["iPhone 17 Pro"]))
         let catalog = try DeviceModelCatalog(layers: [[installed]])
 
-        #expect(try simulator.deviceModel(in: catalog) == installed)
+        #expect(try SimulatorDevice(simulator).model3D(in: catalog) == installed)
     }
 
     @Test func `should resolve a model from the stable device type and visible name`() throws {
@@ -22,6 +23,7 @@ struct SimulatorDeviceModelTests {
         let installed = Self.installed()
         given(simulator).deviceTypeName.willReturn("iPhone 17 Pro")
         given(simulator).name.willReturn("Demo Phone")
+        given(simulator).runtime.willReturn("iOS 26.4")
         given(models).match(
             deviceType: .value("iPhone 17 Pro"),
             deviceName: .value("iPhone 17 Pro")
@@ -31,7 +33,7 @@ struct SimulatorDeviceModelTests {
             deviceName: .value("Demo Phone")
         ).willReturn(installed)
 
-        let found = try simulator.deviceModel(in: models)
+        let found = try SimulatorDevice(simulator).model3D(in: models)
 
         #expect(found == installed)
         verify(models).match(

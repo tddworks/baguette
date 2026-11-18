@@ -113,7 +113,7 @@ most once a session.
 ## HTTP / WebSocket
 
 ```http
-POST /simulators/:udid/render-3d.png
+POST /devices/:udid/render-3d.png
 Content-Type: application/json
 ```
 
@@ -133,7 +133,7 @@ Omitting it gives the captured screen's own dimensions. The response is
 | `422` | The matched definition cannot render the requested configuration |
 | `500` | Frame capture, model loading, asset download, or RealityKit rendering failed |
 
-`GET /simulators/:udid/3d-model.json` returns the resolved model ID, display
+`GET /devices/:udid/3d-model.json` returns the resolved model ID, display
 name, and public variant-set metadata (what the inspector is built from). USD
 prim paths, raw scene-node names, and asset URLs are never accepted from the
 browser.

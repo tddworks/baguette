@@ -18,7 +18,7 @@ the CLI — 2D and 3D alike. Saying `appstore-6.9` in the browser and
 baguette screenshot --udid <UDID> --size appstore-6.9 -o hero.png
 baguette record     --udid <UDID> --size square --duration 10 -o clip.mp4
 baguette render-3d  --udid <UDID> --size square -o device.png
-curl -o shot.png 'localhost:8421/simulators/<UDID>/screenshot.png?size=square'
+curl -o shot.png 'localhost:8421/devices/<UDID>/screenshot.png?size=square'
 ```
 
 In the page, the toolbar's size picker offers the same presets plus fit,
