@@ -1,103 +1,70 @@
-import Foundation
 import AVFoundation
 import CoreVideo
+import Foundation
 
-/// Thin production wrapper around `AVCaptureSession`. This is the
-/// integration-only file in the camera capture path — every line
-/// either talks to AVFoundation or hands off to the orchestrator.
-/// No business logic lives here; coverage is satisfied by manual
-/// smoke (run `baguette serve`, point a Mac camera at the picker,
-/// verify frames appear in the simulator).
-public final class HostVideoCapture: NSObject, VideoCapture, @unchecked Sendable {
+/// The `VideoCapture` on a Mac camera. It decides; the `CaptureSession`
+/// only captures: which preset and size the camera runs at, and how each
+/// picture becomes a `RawBGRAFrame`.
+public final class HostVideoCapture: VideoCapture, @unchecked Sendable {
+    /// Pin the output size to the shared-buffer canvas cap. Without it
+    /// AVFoundation emits at the camera's *native* resolution (1080p / 4K
+    /// on modern FaceTime HD), which exceeds
+    /// `SharedFrameLayout.maxCanvasWidth/Height` (1280×1280) and every
+    /// frame gets rejected before reaching the dylib's reader. SimCamMac
+    /// does the same — `.hd1280x720` preset + pinned width/height — see
+    /// asc-pro/SimCam/AVCameraSource.
+    static let width = 1280
+    static let height = 720
+    /// The most specific preset up to 1280×720 first. Continuity Camera
+    /// devices don't advertise every preset; degrade gracefully.
+    static let presets: [AVCaptureSession.Preset] = [.hd1280x720, .high, .medium]
 
-    private let queue = DispatchQueue(label: "baguette.camera.capture")
-    private let session = AVCaptureSession()
-    private var output: AVCaptureVideoDataOutput?
+    private let session: any CaptureSession
+    private let lock = NSLock()
     private var onFrame: (@Sendable (RawBGRAFrame) -> Void)?
+
+    public convenience init() { self.init(session: AVFoundationCaptureSession()) }
+
+    init(session: any CaptureSession) { self.session = session }
 
     public func start(
         deviceUniqueID: String,
         onFrame: @escaping @Sendable (RawBGRAFrame) -> Void
     ) async throws {
-        guard let device = AVCaptureDevice(uniqueID: deviceUniqueID) else {
+        lock.withLock { self.onFrame = onFrame }
+        let preset = Self.presets.first(where: session.supports)
+        let running: Bool
+        do {
+            running = try session.run(
+                camera: deviceUniqueID, preset: preset, width: Self.width, height: Self.height
+            ) { [weak self] picture, seconds in self?.deliver(picture, at: seconds) }
+        } catch {
+            lock.withLock { self.onFrame = nil }
+            throw error
+        }
+        guard running else {
+            lock.withLock { self.onFrame = nil }
             throw HostVideoCaptureError.deviceUnavailable(uid: deviceUniqueID)
         }
-        let input = try AVCaptureDeviceInput(device: device)
-        self.onFrame = onFrame
-
-        let out = AVCaptureVideoDataOutput()
-        // Pin the output size to the shared-buffer canvas cap. Without
-        // these keys AVFoundation emits at the camera's *native*
-        // resolution (1080p / 4K on modern FaceTime HD), which exceeds
-        // `SharedFrameLayout.maxCanvasWidth/Height` (1280×1280) and
-        // every frame gets rejected before reaching the dylib's
-        // reader. SimCamMac does the same — `.hd1280x720` preset +
-        // pinned width/height — see asc-pro/SimCam/AVCameraSource.
-        out.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey  as String: 1280,
-            kCVPixelBufferHeightKey as String: 720,
-        ]
-        out.alwaysDiscardsLateVideoFrames = true
-        out.setSampleBufferDelegate(self, queue: queue)
-
-        session.beginConfiguration()
-        // Pick the most-specific preset this device supports up to
-        // 1280×720. Continuity Camera devices don't advertise every
-        // preset; degrade gracefully.
-        for preset: AVCaptureSession.Preset in [.hd1280x720, .high, .medium] {
-            if session.canSetSessionPreset(preset) {
-                session.sessionPreset = preset
-                break
-            }
-        }
-        if session.canAddInput(input) { session.addInput(input) }
-        if session.canAddOutput(out) { session.addOutput(out) }
-        session.commitConfiguration()
-        self.output = out
-
-        session.startRunning()
     }
 
     public func stop() async {
-        session.stopRunning()
-        session.beginConfiguration()
-        session.inputs.forEach(session.removeInput)
-        session.outputs.forEach(session.removeOutput)
-        session.commitConfiguration()
-        self.output = nil
-        self.onFrame = nil
+        session.stop()
+        lock.withLock { onFrame = nil }
     }
-}
 
-extension HostVideoCapture: AVCaptureVideoDataOutputSampleBufferDelegate {
-
-    public func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        guard let onFrame = self.onFrame,
-              let pixel = CMSampleBufferGetImageBuffer(sampleBuffer)
-        else { return }
-
-        CVPixelBufferLockBaseAddress(pixel, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixel, .readOnly) }
-
-        guard let base = CVPixelBufferGetBaseAddress(pixel) else { return }
-        let w = UInt32(CVPixelBufferGetWidth(pixel))
-        let h = UInt32(CVPixelBufferGetHeight(pixel))
-        let bpr = CVPixelBufferGetBytesPerRow(pixel)
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let ms = UInt32(truncatingIfNeeded: Int64(CMTimeGetSeconds(pts) * 1000))
-
-        let raw = RawBGRAFrame(
+    /// One picture, handed on as a raw frame while its bytes are locked.
+    private func deliver(_ picture: CVPixelBuffer, at seconds: Double) {
+        guard let onFrame = lock.withLock({ onFrame }) else { return }
+        CVPixelBufferLockBaseAddress(picture, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(picture, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(picture) else { return }
+        onFrame(RawBGRAFrame(
             baseAddress: UnsafeRawPointer(base),
-            width: w, height: h,
-            bytesPerRow: bpr,
-            timestampMs: ms
-        )
-        onFrame(raw)
+            width: UInt32(CVPixelBufferGetWidth(picture)),
+            height: UInt32(CVPixelBufferGetHeight(picture)),
+            bytesPerRow: CVPixelBufferGetBytesPerRow(picture),
+            timestampMs: UInt32(truncatingIfNeeded: Int64(seconds * 1000))))
     }
 }
 

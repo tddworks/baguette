@@ -8,7 +8,7 @@ import Foundation
 ///   3. forwards the tightly-packed `CameraFrame` to the caller's `onFrame`
 ///
 /// The actual `AVCaptureSession` plumbing lives behind `HostVideoCapture`
-/// (~50 LOC, integration-only). This orchestrator is unit-covered
+/// (its AVFoundation calls in `AVFoundationCaptureSession`). This orchestrator is unit-covered
 /// end-to-end via `MockVideoCapture`.
 public final class AVCameraCapture: CameraCapture, @unchecked Sendable {
     private let video: any VideoCapture

@@ -7,7 +7,7 @@ import Mockable
 /// decompression session from an avcC parameter-set blob; encoded
 /// frames fed to `decode` land on `onFrame` as IOSurfaces, ready for
 /// the same stream pipeline every other `Screen` feeds. The concrete
-/// impl wraps `VTDecompressionSession` and is integration-only; tests
+/// impl (`VTH264Decoder`) drives a `DecompressionSession`; tests
 /// inject `MockH264Decoder`.
 @Mockable
 public protocol H264Decoder: AnyObject, Sendable {
