@@ -10,13 +10,16 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- `baguette serve`'s page and every per-device route live under `/devices/<UDID>/…`, for a simulator or a phone alike; page controls show only what the device can do. `/simulators/<UDID>/…` still answers, deprecated (`Deprecation` header), and goes in a later release. → [docs](docs/serve.md)
+- A `key`, `type`, `button` or `scroll` sent to a phone on a cable says `<phone> can't do key` (or `press`, `scroll`) instead of a bare `{"ok":false}`; the phone takes touches only. → [docs](docs/features/real-devices/README.md)
+- A companion-screen stream that finds no framebuffer now answers `noMatchingFramebuffer(…)` instead of `noMatchingPort(…)`; match the new text if a script reads it. → [docs](docs/features/companion-screens/README.md)
+
 ---
 
 ## [0.2.15] - 2026-11-18
 
 ### Changed
-- `baguette serve`'s page and every per-device route live under `/devices/<UDID>/…`, for a simulator or a phone alike; page controls show only what the device can do. `/simulators/<UDID>/…` still answers, deprecated (`Deprecation` header), and goes in a later release. → [docs](docs/serve.md)
-- A `key`, `type`, `button` or `scroll` sent to a phone on a cable says `<phone> can't do key` (or `press`, `scroll`) instead of a bare `{"ok":false}`; the phone takes touches only. → [docs](docs/features/real-devices/README.md)
 - Breaking: a command that drives the screen (`tap`, `screenshot`, `record`, `orientation`, `shake`, …) refuses a device that isn't booted up front, saying so, instead of waiting or failing inside `simctl`. → [docs](docs/features/devices/design.md)
 
 ### Added
