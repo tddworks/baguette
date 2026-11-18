@@ -56,13 +56,13 @@ struct RTPPacketTests {
     }
 }
 
-@Suite("H264Depacketizer")
-struct H264DepacketizerTests {
+@Suite("VideoDepacketizer")
+struct VideoDepacketizerTests {
     private let sps: [UInt8] = [0x67, 0x64, 0x00, 0x33, 0xAC]
     private let pps: [UInt8] = [0x68, 0xEE, 0x3C, 0x80]
 
     @Test func `should hand back an access unit once its last packet arrives`() throws {
-        var depacketizer = H264Depacketizer()
+        var depacketizer = VideoDepacketizer(codec: .h264)
 
         #expect(depacketizer.push(parsed(rtp(sequence: 1, payload: sps))) == nil)
         let pushed = depacketizer.push(parsed(rtp(marker: true, sequence: 2, payload: [0x65, 0xAA])))
@@ -73,7 +73,7 @@ struct H264DepacketizerTests {
     }
 
     @Test func `should split an aggregation packet into its NAL units`() throws {
-        var depacketizer = H264Depacketizer()
+        var depacketizer = VideoDepacketizer(codec: .h264)
         // STAP-A: header 24, then [size16, NAL]...
         let stap: [UInt8] = [0x78] + [0, UInt8(sps.count)] + sps + [0, UInt8(pps.count)] + pps
 
@@ -84,7 +84,7 @@ struct H264DepacketizerTests {
     }
 
     @Test func `should rebuild a fragmented NAL unit from its fragments`() throws {
-        var depacketizer = H264Depacketizer()
+        var depacketizer = VideoDepacketizer(codec: .h264)
         // FU-A: indicator (F|NRI|28), header (S|E|R|type).
         let first: [UInt8] = [0x7C, 0x85, 1, 2]
         let middle: [UInt8] = [0x7C, 0x05, 3]
@@ -99,7 +99,7 @@ struct H264DepacketizerTests {
     }
 
     @Test func `should drop a frame that lost a fragment rather than decode a broken one`() throws {
-        var depacketizer = H264Depacketizer()
+        var depacketizer = VideoDepacketizer(codec: .h264)
 
         _ = depacketizer.push(parsed(rtp(sequence: 10, payload: [0x7C, 0x85, 1])))
         // sequence 11 never arrives
@@ -111,7 +111,7 @@ struct H264DepacketizerTests {
     }
 
     @Test func `should start a new access unit when the timestamp moves on without a marker`() throws {
-        var depacketizer = H264Depacketizer()
+        var depacketizer = VideoDepacketizer(codec: .h264)
 
         _ = depacketizer.push(parsed(rtp(sequence: 1, timestamp: 100, payload: [0x41, 1])))
         let previous = depacketizer.push(parsed(rtp(sequence: 2, timestamp: 200, payload: [0x41, 2])))
@@ -127,12 +127,12 @@ struct AccessUnitTests {
     private let pps = Data([0x68, 0xEE, 0x3C, 0x80])
 
     @Test func `should know a frame that starts an IDR is a keyframe`() {
-        #expect(AccessUnit(nalUnits: [sps, pps, Data([0x65, 1])], timestamp: 0).isKeyframe)
-        #expect(!AccessUnit(nalUnits: [Data([0x41, 1])], timestamp: 0).isKeyframe)
+        #expect(AccessUnit(codec: .h264, nalUnits: [sps, pps, Data([0x65, 1])], timestamp: 0).isKeyframe)
+        #expect(!AccessUnit(codec: .h264, nalUnits: [Data([0x41, 1])], timestamp: 0).isKeyframe)
     }
 
     @Test func `should describe its parameter sets as the avcC a decoder is configured with`() throws {
-        let unit = AccessUnit(nalUnits: [sps, pps, Data([0x65, 1])], timestamp: 0)
+        let unit = AccessUnit(codec: .h264, nalUnits: [sps, pps, Data([0x65, 1])], timestamp: 0)
 
         let description = try #require(unit.decoderDescription)
 
@@ -143,11 +143,11 @@ struct AccessUnitTests {
     }
 
     @Test func `should have no decoder description without both parameter sets`() {
-        #expect(AccessUnit(nalUnits: [Data([0x65, 1])], timestamp: 0).decoderDescription == nil)
+        #expect(AccessUnit(codec: .h264, nalUnits: [Data([0x65, 1])], timestamp: 0).decoderDescription == nil)
     }
 
     @Test func `should frame its picture NAL units with four-byte lengths and leave the parameter sets out`() {
-        let unit = AccessUnit(nalUnits: [sps, pps, Data([0x65, 1, 2])], timestamp: 0)
+        let unit = AccessUnit(codec: .h264, nalUnits: [sps, pps, Data([0x65, 1, 2])], timestamp: 0)
 
         #expect(unit.lengthPrefixedFrame == Data([0, 0, 0, 3, 0x65, 1, 2]))
     }
@@ -189,5 +189,51 @@ struct TunnelAddressTests {
 
     @Test func `should find no address when the Mac has none on the phone's prefix`() {
         #expect(TunnelAddress.local(facing: "fdd3:48cf:f69f::1", among: ["fe80::1"]) == nil)
+    }
+}
+
+@Suite("HEVC stream")
+struct HEVCStreamTests {
+    // Two-byte HEVC NAL headers: type << 1, then layer/temporal id 1.
+    private let vps = Data([0x40, 0x01, 0x0C])
+    private let sps = Data([0x42, 0x01, 0x01])
+    private let pps = Data([0x44, 0x01, 0xC1])
+
+    @Test func `should split an HEVC aggregation packet into its parameter sets`() throws {
+        var depacketizer = VideoDepacketizer(codec: .hevc)
+        // AP: payload header type 48, then [size16, NAL]...
+        let ap = Data([0x60, 0x01] + [0, 3] + vps + [0, 3] + sps + [0, 3] + pps)
+
+        let pushed = depacketizer.push(parsed(rtp(marker: true, payload: [UInt8](ap))))
+        let unit = try #require(pushed)
+
+        #expect(unit.nalUnits == [vps, sps, pps])
+    }
+
+    @Test func `should rebuild an HEVC NAL unit from its fragments`() throws {
+        var depacketizer = VideoDepacketizer(codec: .hevc)
+        // FU: payload header type 49, FU header S|E|type (19 = IDR_W_RADL).
+        _ = depacketizer.push(parsed(rtp(sequence: 1, payload: [0x62, 0x01, 0x93, 0xAA])))
+        let pushed = depacketizer.push(parsed(rtp(marker: true, sequence: 2, payload: [0x62, 0x01, 0x53, 0xBB])))
+        let unit = try #require(pushed)
+
+        #expect(unit.nalUnits == [Data([0x26, 0x01, 0xAA, 0xBB])])
+        #expect(unit.isKeyframe)
+    }
+
+    @Test func `should name an HEVC frame's VPS, SPS and PPS as its parameter sets`() {
+        let unit = AccessUnit(codec: .hevc, nalUnits: [vps, sps, pps, Data([0x26, 0x01, 9])], timestamp: 0)
+
+        #expect(unit.parameterSets == [vps, sps, pps])
+        #expect(unit.lengthPrefixedFrame == Data([0, 0, 0, 3, 0x26, 0x01, 9]))
+    }
+
+    @Test func `should know an HEVC trailing picture is not a keyframe`() {
+        #expect(!AccessUnit(codec: .hevc, nalUnits: [Data([0x02, 0x01, 9])], timestamp: 0).isKeyframe)
+    }
+
+    @Test func `should name an H.264 frame's SPS and PPS as its parameter sets`() {
+        let sps = Data([0x67, 0x64]), pps = Data([0x68, 0xEE])
+        #expect(AccessUnit(codec: .h264, nalUnits: [sps, pps, Data([0x65, 1])], timestamp: 0).parameterSets == [sps, pps])
     }
 }

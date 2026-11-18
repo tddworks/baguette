@@ -27,6 +27,13 @@ enum CoreDeviceFramework {
         #endif
     }
 
+    /// A type by its metadata accessor (`…Ma`), for CoreDevice's resilient types.
+    static func type(_ accessor: String) -> Any.Type? {
+        typealias Accessor = @convention(thin) (Int) -> (UnsafeRawPointer, Int)
+        guard let pointer = symbol(accessor) else { return nil }
+        return unsafeBitCast(unsafeBitCast(pointer, to: Accessor.self)(0).0, to: Any.Type.self)
+    }
+
     /// A CoreDevice or UniversalHID symbol (type metadata, a conformance).
     static func symbol(_ mangledName: String) -> UnsafeRawPointer? {
         dlsym(UnsafeMutableRawPointer(bitPattern: -2), mangledName).map(UnsafeRawPointer.init)
@@ -103,6 +110,28 @@ struct RemoteDevice: @unchecked Sendable {
         done.wait()
         if let error = failure.error { throw error }
         return capability
+    }
+}
+
+extension RemoteDevice {
+    /// Start the device's live screen stream (`MediaStreamFunctions
+    /// .startMediaStream(with:)`). CoreDevice's support-info query brings
+    /// the tunnel up first; then `makeRequest` builds the `StartRequest` as
+    /// JSON (decoded through CoreDevice's own `Decodable`), now that the
+    /// tunnel's addresses exist. The answer comes back as the
+    /// `StartResponse`'s JSON. Blocks until CoreDevice answers.
+    func startMediaStream(_ makeRequest: @escaping @Sendable () throws -> [String: Any]) throws -> [String: Any] {
+        guard let requestType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV12StartRequestVMa") as? Decodable.Type,
+              let responseType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV13StartResponseVMa"),
+              let supportType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV19SupportInfoResponseVMa")
+        else { throw CoreDeviceError.unavailable }
+        let call = StartCall(object: object, requestType: requestType, responseType: responseType,
+                             supportType: supportType, makeRequest: makeRequest)
+        Task.detached { await call.run() }
+        call.done.wait()
+        if let error = call.error { throw error }
+        guard let json = call.json else { throw CoreDeviceError.unavailable }
+        return json
     }
 }
 
@@ -191,6 +220,105 @@ private class RemoteDeviceObject {
 
 private final class Failure: @unchecked Sendable {
     var error: (any Error)?
+}
+
+/// One start, carried across to the task that awaits CoreDevice.
+private final class StartCall: @unchecked Sendable {
+    let object: RemoteDeviceObject
+    let requestType: Decodable.Type
+    let responseType: Any.Type
+    let supportType: Any.Type
+    let makeRequest: @Sendable () throws -> [String: Any]
+    var json: [String: Any]?
+    var error: (any Error)?
+    let done = DispatchSemaphore(value: 0)
+
+    init(object: RemoteDeviceObject, requestType: Decodable.Type, responseType: Any.Type,
+         supportType: Any.Type, makeRequest: @escaping @Sendable () throws -> [String: Any]) {
+        self.object = object
+        self.requestType = requestType
+        self.responseType = responseType
+        self.supportType = supportType
+        self.makeRequest = makeRequest
+    }
+
+    func run() async {
+        defer { done.signal() }
+        var functions = MediaStreamFunctionsObject(words: mediaStreamFunctions(device: object))
+        let result = UnsafeMutableRawPointer.allocate(byteCount: 4096, alignment: 16)
+        defer { result.deallocate() }
+        do {
+            try await functions.supportInfo(result)
+            discard(result, as: supportType)
+            let request = try JSONDecoder().decode(
+                requestType, from: JSONSerialization.data(withJSONObject: try makeRequest()))
+            let box = RequestBox(request)
+            defer { box.release() }
+            try await functions.start(result, UnsafeRawPointer(box.pointer))
+            json = encodedJSON(result, as: responseType)
+        } catch {
+            self.error = error
+        }
+    }
+}
+
+/// A decoded request, held at an address for the call that borrows it.
+private struct RequestBox {
+    let pointer: UnsafeMutableRawPointer
+    let release: () -> Void
+
+    init(_ value: Any) {
+        func box<T>(_ value: T) -> (UnsafeMutableRawPointer, () -> Void) {
+            let typed = UnsafeMutablePointer<T>.allocate(capacity: 1)
+            typed.initialize(to: value)
+            return (UnsafeMutableRawPointer(typed), { typed.deinitialize(count: 1); typed.deallocate() })
+        }
+        (pointer, release) = _openExistential(value, do: box)
+    }
+}
+
+/// `MediaStreamFunctions(device:)` — a small resilient struct, returned
+/// indirectly; sixteen words is room enough (checked by size below).
+private typealias MediaStreamFunctionsWords = (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64,
+                                               UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
+@_silgen_name("$s10CoreDevice20MediaStreamFunctionsV6deviceAcA06RemoteB0C_tcfC")
+private func mediaStreamFunctions(device: __owned RemoteDeviceObject) -> MediaStreamFunctionsWords
+
+/// Stands at a `MediaStreamFunctions` value, so its methods get its address.
+private struct MediaStreamFunctionsObject {
+    var words: MediaStreamFunctionsWords
+}
+private extension MediaStreamFunctionsObject {
+    /// MediaStreamFunctions.mediaStreamSupportInfo { get async throws }
+    @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV05mediaD11SupportInfoAA0bcD0V0gH8ResponseVvg")
+    mutating func supportInfo(_ result: UnsafeMutableRawPointer) async throws
+    /// MediaStreamFunctions.startMediaStream(with:) async throws
+    @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV05startcD04withAA0bcD0V13StartResponseVAG0H7RequestV_tYaKF")
+    mutating func start(_ result: UnsafeMutableRawPointer, _ request: UnsafeRawPointer) async throws
+}
+
+/// A value of `type` at `pointer`, moved out and encoded as JSON.
+private func encodedJSON(_ pointer: UnsafeMutableRawPointer, as type: Any.Type) -> [String: Any]? {
+    func open<T>(_: T.Type) -> [String: Any]? {
+        let value = pointer.assumingMemoryBound(to: T.self).move()
+        guard let encodable = value as? Encodable,
+              let data = try? JSONEncoder().encode(EncodableBox(encodable))
+        else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+    return _openExistential(type, do: open)
+}
+
+/// A value of `type` at `pointer`, destroyed.
+private func discard(_ pointer: UnsafeMutableRawPointer, as type: Any.Type) {
+    func open<T>(_: T.Type) { _ = pointer.assumingMemoryBound(to: T.self).move() }
+    _openExistential(type, do: open)
+}
+
+private struct EncodableBox: Encodable {
+    let value: Encodable
+    init(_ value: Encodable) { self.value = value }
+    func encode(to encoder: Encoder) throws { try value.encode(to: encoder) }
 }
 
 #else
