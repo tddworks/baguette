@@ -80,6 +80,34 @@ struct BezelRoutesTests {
         #expect(bytes == Data("MASK-PNG".utf8))
     }
 
+    @Test func `should serve a borrowed bezel's screen mask by the chrome's name`() throws {
+        let (_, chromes) = Self.fixture(screenMask: ChromeImage(
+            data: Data("MASK-PNG".utf8), size: Size(width: 466, height: 678)))
+        #expect(Server.borrowedScreenMask(named: "iPhone 17 Pro", chromes: chromes) == Data("MASK-PNG".utf8))
+    }
+
+    @Test func `should frame a physical device in its own bezel when one is installed under its model`() {
+        let (_, chromes) = Self.fixture()
+        #expect(Server.bezelName(picked: nil, model: "iPhone 17 Pro", chromes: chromes) == "iPhone 17 Pro")
+    }
+
+    @Test func `should frame a physical device in the bezel the user picked over its own`() {
+        let (_, chromes) = Self.fixture()
+        #expect(Server.bezelName(picked: "iPhone Air", model: "iPhone 17 Pro", chromes: chromes) == "iPhone Air")
+    }
+
+    @Test func `should ask for a bezel when the device's model has none installed`() {
+        let chromes = MockChromes()
+        given(chromes).assets(forDeviceName: .any).willReturn(nil)
+        #expect(Server.bezelName(picked: nil, model: "iPhone17,2", chromes: chromes) == nil)
+        #expect(Server.bezelName(picked: "", model: "iPhone17,2", chromes: chromes) == nil)
+    }
+
+    @Test func `should serve no borrowed screen mask when the chrome carries none`() throws {
+        let (_, chromes) = Self.fixture()
+        #expect(Server.borrowedScreenMask(named: "iPhone 17 Pro", chromes: chromes) == nil)
+    }
+
     @Test func `should serve no screen mask when the chrome carries none`() throws {
         let (sim, chromes) = Self.fixture()
         #expect(Server.screenMaskImage(

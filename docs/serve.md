@@ -31,6 +31,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/simulators/:udid/input` | one gesture envelope → its ack | [wire.md](wire.md) |
 | `GET` | `/simulators/:udid/describe-ui.json?x=&y=` | accessibility tree; `x`+`y` hit-tests a point | [accessibility](features/accessibility/README.md) |
 | `GET` | `/simulators/:udid/screenshot.jpg`, `.png` | one frame (`quality`, `scale`, `size`, `fit`, `background`) | [screenshot](features/screenshot/README.md), [capture-size](features/capture-size/README.md) |
+| `GET` | `/devices/:udid/screenshot.jpg`, `.png` | the same frame from any device — a simulator or a phone on a cable | [real-devices](features/real-devices/README.md) |
 | `GET` | `/simulators/:udid/screenshot-bezel.png` | the frame inside its bezel (`buttons=`) | [screenshot](features/screenshot/README.md) |
 | `GET` | `/simulators/:udid/definition.json` | SDK bootstrap: identity, screen rect, bezel URLs, buttons | [baguette-sdk](features/baguette-sdk/README.md) |
 | `GET` | `/simulators/:udid/chrome.json`, `bezel.png`, `screen-mask.png`, `chrome-button/:file` | DeviceKit bezel layout and images (`panel=` on a foldable) | [chrome-bezel](features/chrome-bezel/README.md) |

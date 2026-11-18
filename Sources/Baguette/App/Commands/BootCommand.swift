@@ -14,14 +14,17 @@ struct BootCommand: AsyncParsableCommand {
     var noHeal = false
 
     func run() async {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
+        let device: any Device
+        let lifecycle: any Lifecycle
+        do {
+            device = try options.device()
+            lifecycle = try orExit { try device.require(.lifecycle) }
+        } catch {
             Foundation.exit(1)
         }
         do {
-            try simulator.boot()
-            log("Booted \(simulator.name)")
+            try lifecycle.boot()
+            log("Booted \(device.name)")
             if let advisory = SimulatorAppPreferences.lifetime().advisory {
                 warn(advisory)
             }
@@ -33,7 +36,10 @@ struct BootCommand: AsyncParsableCommand {
         // and — depending on a race inside backboardd — can leave the
         // legacy input surface dead for the rest of the boot. Nothing is
         // running yet, so the SpringBoard restart that fixes it is free.
-        guard !noHeal else { return }
+        // Only a simulator has an input surface Device Hub can shadow.
+        guard !noHeal,
+              let simulator = CoreSimulators(deviceSetPath: options.deviceSet).find(udid: options.udid)
+        else { return }
         do {
             if try await SimctlInputSurface().healAfterBoot(on: simulator) == .reclaimed {
                 log(HealOutcome.reclaimed.summary)

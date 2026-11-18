@@ -29,15 +29,12 @@ struct ClipboardCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let pasteboard = try orExit { try device.require(.pasteboard) }
             do {
                 // Raw, no trailing newline — mirrors `pbpaste` so the
                 // output pipes byte-faithfully.
-                print(try await simulator.pasteboard().text(), terminator: "")
+                print(try await pasteboard.text(), terminator: "")
             } catch {
                 log("clipboard get failed: \(error)")
                 throw ExitCode.failure
@@ -55,18 +52,15 @@ struct ClipboardCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let pasteboard = try orExit { try device.require(.pasteboard) }
             do {
-                try await simulator.pasteboard().syncFromHost()
+                try await pasteboard.syncFromHost()
             } catch {
                 log("clipboard sync failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Synced host pasteboard onto \(simulator.name)")
+            log("Synced host pasteboard onto \(device.name)")
         }
     }
 
@@ -80,18 +74,15 @@ struct ClipboardCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let pasteboard = try orExit { try device.require(.pasteboard) }
             do {
-                try await simulator.pasteboard().syncToHost()
+                try await pasteboard.syncToHost()
             } catch {
                 log("clipboard copy failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Copied \(simulator.name) pasteboard onto the host")
+            log("Copied \(device.name) pasteboard onto the host")
         }
     }
 }

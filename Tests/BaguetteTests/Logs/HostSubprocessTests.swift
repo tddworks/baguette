@@ -40,6 +40,25 @@ struct HostSubprocessTests {
         #expect(run.output.contains("hello from the child"))
     }
 
+    @Test func `should hand over all of the child's output before reporting its exit`() async throws {
+        // devicectl's pasteboard text is read at exit; a chunk still in the
+        // pipe then would be a truncated paste. A slow reader — a loaded
+        // machine — gives the exit every chance to overtake the output.
+        for _ in 0..<3 {
+            let subprocess = HostSubprocess()
+            let collected = Collected()
+            let finished = Finished()
+            try subprocess.run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "head -c 300000 /dev/zero | tr '\\0' a"],
+                onBytes: { Thread.sleep(forTimeInterval: 0.02); collected.append($0) },
+                onExit: { _ in finished.complete(Int32(collected.count)) }
+            )
+            let countAtExit = try await finished.value(timeout: Self.childDeadline)
+            #expect(countAtExit == 300_000)
+        }
+    }
+
     @Test func `should report a non-zero exit as its own status`() async throws {
         // Every caller's failure branch keys off this — `SimctlInterface`
         // and `SimctlStatusBar` both turn it into a typed error.
@@ -301,6 +320,7 @@ struct HostSubprocessTests {
         private let lock = NSLock()
         private var data = Data()
         func append(_ chunk: Data) { lock.lock(); data.append(chunk); lock.unlock() }
+        var count: Int { lock.lock(); defer { lock.unlock() }; return data.count }
         var string: String {
             lock.lock(); defer { lock.unlock() }
             return String(decoding: data, as: UTF8.self)

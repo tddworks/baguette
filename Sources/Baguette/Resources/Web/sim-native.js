@@ -29,9 +29,10 @@
   const udid = deepLinkUdid();
   if (!udid) return; // not deep-link mode; let sim-list run.
   window.__baguetteNativeMode = true;
-  // Physical device behind the mirror: same page, reduced surface —
-  // no boot/orientation calls, sim-only toolbar clusters hidden,
-  // gestures rejected loudly by the server until the control pipe lands.
+  // Physical device: same page, reduced surface — no boot/orientation
+  // calls, sim-only toolbar clusters hidden. Gestures go down the stream
+  // socket as for a simulator; the server sends them on when the device
+  // can take input (a phone on a cable) and refuses them otherwise.
   const deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
 
   // --- State -------------------------------------------------------
@@ -2098,7 +2099,10 @@
       names = (json.running || []).concat(json.available || [])
           .map((d) => d.name).filter(Boolean);
     } catch { /* evergreen list still renders */ }
-    const choices = [...new Set(evergreen.concat(names))];
+    // Phones and tablets only, each name once: a watch or TV bezel can't
+    // frame a phone's screen.
+    const choices = [...new Set(evergreen.concat(names))]
+        .filter((n) => /^iP(hone|ad)\b/.test(n));
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
@@ -2109,12 +2113,14 @@
         '<path d="M6.5 3 L9.5 3"></path></svg>';
     const card = document.createElement('div');
     card.id = 'nativeChromePicker';
+    // Over the whole view: the device frame has no size until a bezel is
+    // chosen, so a card inside it would be squeezed to a sliver.
     card.style.cssText =
-        'position:absolute;inset:0;display:flex;align-items:center;' +
-        'justify-content:center;z-index:30;background:var(--bg,#f8fafc);' +
+        'position:fixed;inset:0;display:flex;align-items:center;overflow:auto;' +
+        'justify-content:center;z-index:60;background:var(--bg,#f8fafc);' +
         'font:400 13px/1.45 -apple-system,BlinkMacSystemFont,Inter,sans-serif';
     card.innerHTML =
-        '<div style="display:flex;flex-direction:column;gap:6px;width:420px;' +
+        '<div style="display:flex;flex-direction:column;gap:6px;width:420px;flex:none;' +
         'max-width:calc(100vw - 48px);padding:24px;background:#fff;' +
         'border:1px solid #e2e8f0;border-radius:14px;' +
         'box-shadow:0 12px 32px rgba(15,23,42,.10)">' +
@@ -2153,8 +2159,9 @@
   }
 
   /// Physical devices carry a reduced surface: the sim-only clusters
-  /// (control / simulate / inspect) hide, and a badge says why
-  /// Interact is missing. Stream, 3D view, and capture stay.
+  /// (control / simulate / inspect) hide, and a badge says what the device
+  /// can do, from the abilities /devices.json lists for it. Stream, 3D
+  /// view, and capture stay.
   function applyDeviceModeChrome() {
     if (!deviceMode) return;
     ['control', 'simulate', 'inspect'].forEach((id) => {
@@ -2167,15 +2174,39 @@
     if (osEl && !document.getElementById('nativeDeviceBadge')) {
       const badge = document.createElement('span');
       badge.id = 'nativeDeviceBadge';
-      badge.textContent = 'DEVICE · view-only';
-      badge.title = 'A physical phone mirrored by the companion app. ' +
-        'Touch control arrives with the Twin runner.';
+      const words = window.Baguette._DeviceBadge.of([]);
+      badge.textContent = words.text;
+      badge.title = words.title;
+      fetch('/devices.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { connected: [] }))
+        .then((json) => {
+          const hit = (json.connected || []).find((d) => d.udid === udid);
+          const said = window.Baguette._DeviceBadge.of(hit && hit.capabilities);
+          badge.textContent = said.text;
+          badge.title = said.title;
+          showDeviceInspectTools(window.Baguette._DeviceBadge.inspectTools(hit && hit.capabilities));
+        })
+        .catch(() => { /* keep view-only */ });
       badge.style.cssText =
         'margin-left:8px;padding:2px 8px;border:1px solid #fde68a;' +
         'border-radius:99px;background:#fef3c7;color:#92400e;' +
         'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
       osEl.insertAdjacentElement('afterend', badge);
     }
+  }
+
+  /// Brings back the inspect cluster on a device page with only the tools
+  /// the device can back (`ids`), e.g. the accessibility inspector.
+  function showDeviceInspectTools(ids) {
+    if (!ids.length) return;
+    const cluster = document.querySelector('#simNativeView [data-cluster="inspect"]');
+    if (!cluster) return;
+    cluster.style.display = '';
+    const sep = document.querySelector('#simNativeView [data-sep-for="inspect"]');
+    if (sep) sep.style.display = '';
+    cluster.querySelectorAll('button[id]').forEach((btn) => {
+      btn.style.display = ids.includes(btn.id) ? '' : 'none';
+    });
   }
 
   /**

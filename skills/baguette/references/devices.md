@@ -19,6 +19,15 @@ Device Hub shuts every booted device down.
 
 Every command takes `--device-set <path>` for a device in a custom set.
 
+A paired iPhone on a cable lists after the simulators
+(`"reality":"physical"`) and takes the same `--udid`: `screenshot`, `stream`,
+`record` and `clipboard` work; `tap`, `swipe` and `input` touch it;
+`describe-ui` reads its frontmost app's tree (about 2 s a read, one at a time
+per phone), and `tap --label` presses an element by a touch at its centre.
+Anything else answers `<name> can't do <ability>` and exits 1. Wake and unlock
+the phone first: a touch doesn't wake a dark screen. See
+[real devices](https://github.com/tddworks/baguette/blob/main/docs/features/real-devices/README.md).
+
 ## When input acks but lands nowhere: `heal`
 
 Under Xcode 27, Device Hub can take over a device's input surface: every
@@ -78,6 +87,6 @@ rather than enable one. On the stream WebSocket it's `?display=carplay`, plus
 
 ## Not wired
 
-Physical devices (`/devices.json`, `WS /devices/:udid/stream`): the host side
-exists but no companion app ships, so gestures are rejected with
-`device control is not wired yet`. Simulators only.
+A phone over Wi-Fi through the companion app (`/devices/:udid/companion/…`):
+the host side exists but no companion app ships, so its gestures are rejected
+with `device control is not wired yet`. A phone on a cable is wired (above).

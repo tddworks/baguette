@@ -1,5 +1,5 @@
 ---
-description: The normative domain model baguette binds to — the tree from Simulators down, the words the CLI and the page use, every law and its one owner, and the bounded contexts; read before adding or changing a Domain type, an @Mockable abstraction or where a rule lives.
+description: The normative domain model baguette binds to — the tree from Devices down, the words the CLI and the page use, every law and its one owner, and the bounded contexts; read before adding or changing a Domain type, an @Mockable abstraction or where a rule lives.
 ---
 
 # baguette — the canonical model
@@ -43,8 +43,18 @@ Their exact syntax is in [commands.md](commands.md) and [wire.md](wire.md). An a
 ## 1 · The tree
 
 ```text
-Simulators  ◆                               THE DEVICES — a device set (default or --device-set): `list`
-└── Simulator  ◆                            ONE DEVICE — udid, name, state, runtime, device type
+Devices  ◆                                  EVERY DEVICE — one list from every source: `list` ·
+│                                           find(id) · require(ability, of: id)
+└── Device  ◆                               ONE DEVICE — id, name, kind ◇ (platform × reality × model),
+    │                                       state ◇ (off · starting · ready · unavailable)
+    └── abilities → AbilityTable  ◇         WHAT IT CAN DO — require(.location) → the role; names
+        sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
+                                            CoreDevicePhones (screen, input, accessibility, pasteboard) ·
+                                            AndroidEmulators (later)
+
+Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
+└── Simulator  ◆                            ONE SIMULATOR — udid, name, state, runtime, device type;
+    │                                       each role below is one of its abilities
     │                                       boot() · shutdown(); canAcceptInput DERIVED (booted)
     ├── displays → Displays  ◆              ITS SCREENS
     │   ├── phone: Display  ◆              the device's own screen — follows the lit panel
@@ -93,7 +103,7 @@ Stream  ◆             a framebuffer as MJPEG or AVCC — StreamFormat ◇ · S
 CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇
 Plugins  ◆            installed plugins — PluginManifest ◇ · PluginRoute ◇ · PluginGrants ◆
 Bakery  ◇             trusted plugin sources — Checkout ◆ · InstallPlan ◇
-Devices  ◆            physical-device twins — not wired: no companion app ships
+CompanionPhones  ◆    the companion-app twin, one source of Devices — not wired: no companion app ships
 ```
 
 ## 2 · The commands, and the node each lands on
@@ -123,6 +133,12 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 
 | Law | Owner |
 |---|---|
+| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
+| an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
+| one id names one device across every source; asking for an id two sources claim is a refusal, never a pick | `CombinedDevices` |
+| an ability that drives the running screen (screen, input, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
+| what a device family can do is decided once, where its device is built | each family's device (`CoreSimulator`, …) |
+| the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
 | every coordinate is in device points, with the plane's `width` / `height` beside it; the adapter divides by size, the domain never normalizes | `Point` · `Size` · `IndigoHIDInput.sendMouse` |
 | a display's screen and input come from one binding, so a framebuffer never pairs with another plane's digitizer | `Display` · `DisplayBinding` |
 | a HID target is a registration, never computed from a screen id; an unregistered one kills backboardd. The phone plane uses its bound panel's `0x40000000 \| screenId`, else `0x32`; CarPlay its own `1` | `IndigoHIDTouchTarget` · `DisplayTouchTarget.resolve` |
@@ -143,6 +159,12 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | a secure field is compared by its number of characters; other punctuation is reformatted, not different | `TextField` |
 | a short read is of a screen, not a point; `x` and `y` come together | `DescribeUI` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
+| a physical phone's touches go to the Universal HID service it registers for its main touchscreen, `0x101` — measured, never computed | `CoreDeviceDigitizer.mainTouchscreen` |
+| a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
+| a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
+| a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
+| a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
+| a phone's tree takes its screen from the app at its root, which fills it | `AXNode.onItsAppsScreen` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
 | an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |
 | `type` / `key` are US-layout printable ASCII; anything else fails to parse and goes through `paste` | `KeyboardKey.decompose` · `TypeText.parse` |
@@ -181,6 +203,8 @@ Devices  ◆            physical-device twins — not wired: no companion app sh
 | a HID target from `IndigoHIDTargetForScreen` or any arithmetic | a trap: only registrations are safe |
 | normalized coordinates in the domain | device points end to end; the adapter normalizes |
 | a `siri` button | it crashes backboardd |
+| a method per ability on `Device`, or a protocol per ability (`Device & Locatable`) | abilities are data in an `AbilityTable`; Mockable can't generate inherited requirements, and the page needs them as a list ([devices](features/devices/design.md)) |
+| a branch on a device's kind above Infrastructure | a family registers what it can do; nobody else asks what it is |
 | a ViewModel, or rules in the page's JS | the page is a dumb sender; `KeyboardKey.from(wireCode:)` resolves keys in Swift |
 | a second `Input` hierarchy for tests | `IndigoHIDInput` is the only adapter; tests use `MockInput` |
 
@@ -190,12 +214,17 @@ Each is a **fence**: inside it every word has one meaning, and its laws have
 one owner. Across a fence only a reference passes (an id, a value of the
 shared kernel) — never another context's aggregate, its storage or its
 adapter. `Sources/Baguette/Domain/<Context>/`, its `Infrastructure/<Context>/`
-and `Tests/BaguetteTests/<Context>/` share a name.
+and `Tests/BaguetteTests/<Context>/` share a name. `Infrastructure/` is
+split one level higher, by what it talks to — one folder per device family
+(`Simulator/`, `Companion/`, `CoreDevice/`, `Android/`) plus `Host/` for the
+Mac — and each family sorts itself by these context names
+([devices](features/devices/design.md#6--infrastructure--split-by-what-it-talks-to)).
 
 | Context | Owns the question | Its root |
 |---|---|---|
 | **Common** (shared kernel) | *in what units?* | ◇ `Point` `Size` `Rect` `GesturePhase` `HIDUsage` `DeviceEdge` `DeviceButton` |
-| **Simulator** (core) | *which devices are there, and what are they made of?* | ◆ `Simulators` → `Simulator` → `Displays` · `InputSurface` · `SimulatorInjection` |
+| **Device** (core) | *which devices are there, and what can each do?* | ◆ `Devices` → `Device` · ◇ `AbilityTable` `DeviceKind` `DeviceState` |
+| **Simulator** | *what is a simulator made of?* | ◆ `Simulators` → `Simulator` → `Displays` · `InputSurface` · `SimulatorInjection` |
 | **Screen** | *which framebuffer is this plane, which panel is it?* | ◆ `Screen` · ◇ `DisplayBinding` `ConnectedScreens` `IntegratedPanel` |
 | **Input** (core) | *how does a gesture reach the device?* | ◆ `Input` · `Gesture` · `DeviceKeys` |
 | **Hinge** | *how far open is the fold?* | ◆ `Hinge` · `HingeMotor` · ◇ `HingeAngle` `HingeCommand` |
@@ -207,7 +236,8 @@ and `Tests/BaguetteTests/<Context>/` share a name.
 | **Apps** · **Defaults** · **Pasteboard** · **Photos** | *which apps, and what data?* | one ◆ role each |
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
-| **Device** | *a physical phone's twin* | ◆ `Devices` (not wired) |
+| **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
+| **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `RTPPacket` `VideoDepacketizer` (its screen) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind
 
@@ -216,6 +246,9 @@ moves, one change at a time.
 
 | Node | The code today | Moves to |
 |---|---|---|
+| `Devices` | device-level commands, gestures, `input`, `paste` and `describe-ui` ask `Devices`; `fill`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` still take a `Simulator` (refusing other families by ability); the `/simulators/…` routes still read `Simulators`, and `/devices/:udid/…` has only the device page, its stream and `screenshot` | every command and route through `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
+| `Device.abilities` | `Simulator` declares 21 role factories every device would have to fake | registrations in `CoreSimulator`'s `AbilityTable` |
+| `CompanionPhones` | the twin has its own `Devices` / `Device` (`capabilities: [String]`) and copies of the per-device routes | one source of `Devices`, one route tree |
 | "no reading means folded" | written out as `angle()?.litPanel ?? .primary` at four call sites | `Hinge.litPanel` everywhere (#124); `Server.hingeJSON` keeps one read for both the degrees and the panel |
 | "is this device a foldable" | answered three ways: `chromes.panels(…).contains(.secondary)`, `IntegratedPanels.several(in:)`, `observed.multiplePanels` | one question, one owner |
 | the phone plane's target | picked by `DisplayTouchTarget.resolve` in `SimulatorKitDisplay.input()`, inline in `input(expected:)` | `DisplayTouchTarget.resolve` for both, and one place deciding `FoldableInput` |
@@ -237,5 +270,9 @@ moves, one change at a time.
 - **An offline render's default pose.** `DeviceRenderPlan` takes a missing
   `--hinge-degrees` as 180° (flat). That is a picture's pose, not the device's
   hinge, so the folded rule doesn't apply — the doc should say so.
+- **A phone held sideways.** Its accessibility frames come in the app's own
+  points and its tree takes a portrait screen, so `tap --label` on a phone in
+  landscape would place the touch wrong. The phone reports its orientation
+  (`devicectl device info displays`); which node takes it is open.
 - **Hinge ↔ Orientation.** `Hinge` uses `DeviceOrientation`; `Orientation`
   answers `PoseDelivery`. One should own the vocabulary.

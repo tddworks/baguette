@@ -190,11 +190,12 @@ pipeline:
 
 ## Domain
 
-New value types and abstractions in `Domain/Device/`, all named for
+New value types and abstractions in `Domain/Companion/`, all named for
 their role:
 
-- `Device` — identity of a paired physical phone (udid, name, model).
-- `Devices` — the aggregate, plural like `Simulators` and `Chromes`:
+- `CompanionPhone` — identity of a paired physical phone (udid, name, model).
+- `CompanionPhones` — the aggregate, plural like `Simulators` and `Chromes`
+  (one source of [Devices](../devices/design.md)):
   known devices, which are connected, which have an active companion.
 - `Attitude` — a quaternion value type owning the math that must be
   exact: shortest-path slerp (`q` and `-q` encode the same attitude
@@ -231,10 +232,10 @@ the control phase. Orchestrators depend on the nouns; tests drive
 
 ## Infrastructure
 
-`Infrastructure/Device/` holds the irreducible I/O, split per the
+`Infrastructure/Companion/` holds the irreducible I/O, split per the
 adapter rules:
 
-- `LiveDevices` — the in-memory `Devices` implementation, membership
+- `LiveCompanionPhones` — the in-memory `CompanionPhones` implementation, membership
   driven by companion sessions registering and unregistering.
 - The companion listener — accepts the two WebSockets, feeds
   `TwinSession`, forwards its events. Socket accept/read/write is
@@ -382,7 +383,7 @@ features. Prose still calls the phone-side app "the companion app".
 
 Each phase is independently shippable, matching pipe severability:
 
-1. **Mirror** — `Devices`, the companion listener, H.264 ingest behind
+1. **Mirror** — `CompanionPhones`, the companion listener, H.264 ingest behind
    `Screen`, `/devices/:udid/stream.*`. View-only; no runner, no
    signing burden on users beyond installing the companion.
 2. **Twin** — attitude on the motion socket driving the existing 3D

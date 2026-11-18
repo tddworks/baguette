@@ -50,25 +50,24 @@ struct InputCommand: AsyncParsableCommand {
         }
     }
 
-    func run() async {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            Foundation.exit(1)
-        }
+    func run() async throws {
+        let device = try options.device()
+        // Only a simulator has an input surface Device Hub can shadow.
+        let simulator = CoreSimulators(deviceSetPath: options.deviceSet).find(udid: options.udid)
         // Gestures go to the planned plane's Input; pasteboard is a
-        // device-level service and stays on the simulator itself.
+        // device-level role on the device itself.
         let plan: StreamDisplayPlan
         let input: any Input
         let screenGuard: InputScreenGuard?
         do {
             plan = try StreamDisplayPlan.from(cliFlag: display, requireExistingDisplay: requireExistingDisplay)
             if let expectedScreen {
-                let checked = try simulator.displays().phone.input(expected: ExpectedScreen(json: expectedScreen))
+                let checked = try orExit { try device.require(.displays) }
+                    .phone.input(expected: ExpectedScreen(json: expectedScreen))
                 input = checked.input
                 screenGuard = checked.screenGuard
             } else {
-                input = try plan.bind(to: simulator).input
+                input = try orExit { try plan.input(on: device) }
                 screenGuard = nil
             }
         } catch let error as DisplayFlagError {
@@ -77,18 +76,27 @@ struct InputCommand: AsyncParsableCommand {
         } catch let error as FramebufferSelectionError {
             log(error.message)
             Foundation.exit(1)
+        } catch let exit as ExitCode {
+            throw exit
         } catch {
             log("display bind failed: \(error)")
             Foundation.exit(1)
         }
-        let pasteboard = simulator.pasteboard()
-        let accessibility = simulator.accessibility()
+        let pasteboard = try orExit { try device.require(.pasteboard) }
+        // A device that can't read its screen still takes gestures; its
+        // describe / fill / label lines answer with that refusal.
+        let accessibility: any Accessibility
+        do {
+            accessibility = try device.require(.accessibility)
+        } catch let refusal as DeviceError {
+            accessibility = UnableAccessibility(refusal)
+        }
         let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
         // A long-lived session is worth one guest round-trip up front:
         // under Xcode 27, Device Hub can leave every gesture below
         // reporting ok while landing nowhere. Advise; the restart that
         // fixes it is the user's call mid-session.
-        if await SimctlInputSurface().shadowed(on: simulator),
+        if let simulator, await SimctlInputSurface().shadowed(on: simulator),
            let advisory = DeviceHubAttachment(attached: true).advisory(udid: simulator.udid) {
             warn(advisory)
         }
@@ -102,7 +110,10 @@ struct InputCommand: AsyncParsableCommand {
                 print(result)
             } else if let result = await FillDispatch.dispatch(
                 line: line, accessibility: accessibility, pasteboard: pasteboard, input: input,
-                inputTaken: { await SimctlInputSurface().shadowed(on: simulator) }
+                inputTaken: {
+                    guard let simulator else { return false }
+                    return await SimctlInputSurface().shadowed(on: simulator)
+                }
             ) {
                 print(result)
             } else if let result = LabelTap.dispatch(

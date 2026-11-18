@@ -118,3 +118,35 @@ struct StreamDisplayPlan: Equatable, Sendable {
         }
     }
 }
+
+extension StreamDisplayPlan {
+    /// The planned plane's screen on any device. The phone plane is the
+    /// device's own `screen` unless a panel is pinned; a pinned panel and
+    /// CarPlay come from its `displays`, which only a simulator registers.
+    /// CarPlay fails closed, as `bind(to:)` does.
+    func screen(on device: any Device) throws -> any Screen {
+        try plane(on: device)?.screen() ?? device.require(.screen)
+    }
+
+    /// The planned plane's input on any device, chosen as `screen(on:)` is.
+    func input(on device: any Device) throws -> any Input {
+        try plane(on: device)?.input() ?? device.require(.input)
+    }
+
+    /// The display a pinned panel or CarPlay names; nil for the device's
+    /// own screen.
+    private func plane(on device: any Device) throws -> (any Display)? {
+        if enableCarPlay {
+            try device.require(.externalDisplays).enableCarPlay()
+        }
+        switch kind {
+        case .phone:
+            guard let panel else { return nil }
+            return try device.require(.displays).panel(panel)
+        case .carPlay:
+            let display = try device.require(.displays).carPlay
+            _ = try display.resolve()
+            return display
+        }
+    }
+}

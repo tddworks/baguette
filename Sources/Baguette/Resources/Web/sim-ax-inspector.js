@@ -165,7 +165,8 @@
         this.tree = env.tree;
         this._setStatus('');
       } else {
-        this.tree = null;
+        // Keep what's drawn: a refresh that failed (a phone busy with
+        // another read) says nothing about the screen having changed.
         this._setStatus(env.error || 'no accessibility data');
       }
       this._draw();

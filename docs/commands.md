@@ -12,7 +12,7 @@ Every `baguette` command and flag, generated from the binary. For how to use a f
 
 ## baguette list
 
-List simulators in the default or a custom device set
+List simulators in the default or a custom device set, then connected physical devices
 
 ```
 baguette list [--json]
@@ -416,7 +416,7 @@ baguette render-3d [--udid <udid>] [--screen <screen>] [--device <device>] [--sc
 
 ## baguette describe-ui
 
-Dump the simulator's accessibility tree as JSON
+Dump a device's accessibility tree as JSON
 
 ```
 baguette describe-ui --udid <udid> [--x <x>] [--y <y>] [--output <output>] [--short]

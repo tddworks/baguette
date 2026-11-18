@@ -27,6 +27,7 @@ extension Server {
             async throws -> RouterShouldUpgrade
     ) {
         let devices = self.devices
+        let physicalDevices = self.physicalDevices
         let screens = self.twinScreens
         let models = self.models
         let chromes = self.chromes
@@ -100,6 +101,35 @@ extension Server {
         // the JS switches its base path from the URL.
         router.get("/devices/:udid") { _, _ in Self.staticAsset("sim.html") }
 
+        // A still of any device's screen — a simulator's or a phone's —
+        // with the same knobs as `/simulators/:udid/screenshot.*`.
+        let allDevices = self.allDevices
+        for format in Self.CaptureImageFormat.allCases {
+            router.get("/devices/:udid/screenshot.\(format.pathExtension)") { r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                let options: Self.CaptureOptions
+                do {
+                    options = try Self.captureOptions(query: r)
+                } catch let error as Self.CaptureQueryError {
+                    return Self.twinJSONResponse(["ok": false, "error": error.message], status: .badRequest)
+                }
+                let screen: any Screen
+                do {
+                    screen = try allDevices.require(.screen, of: DeviceID(Self.udidParam(r)))
+                } catch {
+                    return Self.twinJSONResponse(
+                        ["ok": false, "error": String(describing: error)], status: Self.status(for: error))
+                }
+                return await Self.screenshot(
+                    of: screen,
+                    quality: r.uri.queryParameters.get("quality").flatMap(Double.init) ?? format.defaultQuality,
+                    scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
+                    format: format,
+                    options: options
+                )
+            }
+        }
+
         // SDK bootstrap for a physical device. A phone has no DeviceKit
         // chrome of its own on this Mac, so the bezel is BORROWED — the
         // user picks a device name (`?chrome=iPhone 17 Pro Max`) and the
@@ -109,13 +139,17 @@ extension Server {
         router.get("/devices/:udid/definition.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
-            guard let device = devices.find(udid: udid) else {
-                return Self.twinJSONResponse(
-                    ["ok": false, "error": "no connected device \(udid)"], status: .notFound
-                )
+            let device: any Device
+            do {
+                device = try physicalDevices.device(DeviceID(udid))
+            } catch {
+                // An id two sources claim is refused, never guessed at.
+                return Self.twinJSONResponse(["ok": false, "error": String(describing: error)], status: Self.status(for: error))
             }
-            guard let chromeName = r.uri.queryParameters.get("chrome").map({ String($0) }),
-                  !chromeName.isEmpty else {
+            guard let chromeName = Self.bezelName(
+                picked: r.uri.queryParameters.get("chrome").map { String($0) },
+                model: device.kind.model, chromes: chromes
+            ) else {
                 return Self.twinJSONResponse(
                     ["ok": false, "needsChrome": true,
                      "error": "pick a chrome with ?chrome=<device name>"],
@@ -133,7 +167,7 @@ extension Server {
                 withAllowedCharacters: .urlPathAllowed) ?? chromeName
             let definition = SimulatorDefinition.compose(
                 identity: SimulatorDefinition.Identity(
-                    udid: device.udid, name: device.name, model: device.model
+                    udid: device.id.raw, name: device.name, model: device.kind.model
                 ),
                 chrome: assets,
                 urlPrefix: "/devices/\(udid)/chrome/\(encodedName)"
@@ -148,6 +182,23 @@ extension Server {
         // Borrowed-bezel images. The chrome name sits in the path
         // (`/devices/:udid/chrome/:name/bezel.png`), so `udidParam`'s
         // second-to-last rule doesn't apply — positions are explicit.
+        // The borrowed bezel's screen mask. The definition names this URL
+        // whenever the chrome has a mask, and a mask that fails to load
+        // hides the whole screen — so it must always resolve.
+        router.get("/devices/:udid/chrome/:name/screen-mask.png") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            let parts = r.uri.path.split(separator: "/")
+            let name = parts.count >= 4 ? String(parts[3]).removingPercentEncoding ?? "" : ""
+            guard let bytes = Self.borrowedScreenMask(named: name, chromes: chromes) else {
+                return Self.twinJSONResponse(
+                    ["ok": false, "error": "no screen mask for \(name)"], status: .notFound)
+            }
+            return Response(
+                status: .ok,
+                headers: [.contentType: "image/png", .cacheControl: "public, max-age=86400"],
+                body: .init(byteBuffer: ByteBuffer(data: bytes)))
+        }
+
         router.get("/devices/:udid/chrome/:name/bezel.png") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let parts = r.uri.path.split(separator: "/")
@@ -195,12 +246,14 @@ extension Server {
         router.get("/devices/:udid/3d-model.json") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let udid = Self.udidParam(r)
-            guard let device = devices.find(udid: udid) else {
-                return Self.twinJSONResponse(
-                    ["ok": false, "error": "no connected device \(udid)"], status: .notFound
-                )
+            let device: any Device
+            do {
+                device = try physicalDevices.device(DeviceID(udid))
+            } catch {
+                // An id two sources claim is refused, never guessed at.
+                return Self.twinJSONResponse(["ok": false, "error": String(describing: error)], status: Self.status(for: error))
             }
-            if let installed = try? models.match(hardware: device.model) {
+            if let installed = try? models.match(hardware: device.kind.hardware ?? device.kind.model) {
                 return Self.twinJSONResponse(
                     Self.model3DJSONObject(definition: installed.definition), status: .ok
                 )
@@ -210,7 +263,7 @@ extension Server {
                  "displayName": installed.definition.displayName]
             }
             return Self.twinJSONResponse(
-                ["model": NSNull(), "hardware": device.model, "models": choices],
+                ["model": NSNull(), "hardware": device.kind.hardware ?? device.kind.model, "models": choices],
                 status: .ok
             )
         }
@@ -243,7 +296,7 @@ extension Server {
             return Response(
                 status: .ok,
                 headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(string: devices.listJSON))
+                body: .init(byteBuffer: ByteBuffer(string: physicalDevices.connectedJSON))
             )
         }
 
@@ -282,6 +335,7 @@ extension Server {
                 format: context.request.uri.queryParameters.get("format")
                     .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
                 screens: screens,
+                physicalDevices: physicalDevices,
                 inbound: inbound,
                 outbound: outbound
             )
@@ -290,7 +344,7 @@ extension Server {
 
     private static func twinVideoWS(
         expecting pathUdid: String,
-        devices: LiveDevices,
+        devices: LiveCompanionPhones,
         screens: TwinScreens,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
@@ -340,11 +394,16 @@ extension Server {
         udid: String,
         format: StreamFormat,
         screens: TwinScreens,
+        physicalDevices: any Devices,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
         guard !udid.isEmpty, let hub = screens.find(udid: udid) else {
-            try? await outbound.write(.text(Self.twinErrorFrame("no connected device \(udid)")))
+            // No companion video: a phone CoreDevice reaches shows its
+            // screen through the same stream pipeline as a simulator.
+            await Self.deviceStreamWS(
+                udid: udid, format: format, devices: physicalDevices,
+                inbound: inbound, outbound: outbound)
             return
         }
 
@@ -412,6 +471,83 @@ extension Server {
         }
     }
 
+    /// How a route answers a device that couldn't be driven as asked.
+    static func status(for error: Error) -> HTTPResponse.Status {
+        switch error as? DeviceError {
+        case .unknown?: return .notFound
+        case .unable?: return .unprocessableContent
+        case .notReady?, .claimedTwice?: return .conflict
+        case nil: return .internalServerError
+        }
+    }
+
+    /// A physical device's screen, encoded here in the asked format, and
+    /// its touches when it can take input.
+    private static func deviceStreamWS(
+        udid: String,
+        format: StreamFormat,
+        devices: any Devices,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        let screen: any Screen
+        let input: (any Input)?
+        let accessibility: (any Accessibility)?
+        do {
+            let device = try devices.device(DeviceID(udid))
+            screen = try device.require(.screen)
+            input = try? device.require(.input)
+            accessibility = try? device.require(.accessibility)
+        } catch {
+            try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
+            return
+        }
+        let dispatcher = input.map { GestureDispatcher(input: $0) }
+        let gestures = DispatchQueue(label: "baguette.device-gestures.\(udid)")
+        let sink = WebSocketFrameSink(outbound: outbound, format: format)
+        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
+        do {
+            try stream.start(on: screen)
+        } catch {
+            try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
+            return
+        }
+        defer {
+            stream.stop()
+            screen.stop()
+        }
+        do {
+            for try await frame in inbound {
+                guard frame.opcode == .text else { continue }
+                let line = String(buffer: frame.data)
+                // The inspector's `describe_ui`, from the device's own accessibility.
+                if let accessibility, await Self.handleDescribeUI(line: line, accessibility: accessibility, outbound: outbound) {
+                    continue
+                }
+                do {
+                    if try Self.handleTwinInbound(line: line, stream: stream) { continue }
+                } catch {
+                    await sink.failAndClose(error)
+                    return
+                }
+                guard let dispatcher else {
+                    try? await outbound.write(.text(Self.twinErrorFrame("\(udid) takes no input")))
+                    continue
+                }
+                // A drag holds its fingers for its duration: send it off
+                // the event loop, one gesture after another.
+                await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+                    gestures.async {
+                        _ = dispatcher.dispatch(line: line)
+                        done.resume()
+                    }
+                }
+            }
+        } catch {
+            // socket closed; defer cleans up
+        }
+    }
+
     /// The stream-control subset of `handleInbound` — reconfig,
     /// `force_idr`, `snapshot`. Returns `false` for anything else
     /// (gestures included) so the caller can reject it loudly instead
@@ -442,7 +578,7 @@ extension Server {
         udid: String,
         format: StreamFormat,
         query: [String: [String]],
-        devices: LiveDevices,
+        devices: LiveCompanionPhones,
         models: any DeviceModels,
         screens: TwinScreens,
         poses: TwinPoses,

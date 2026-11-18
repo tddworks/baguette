@@ -29,11 +29,8 @@ struct StreamCommand: AsyncParsableCommand {
             log("Unknown format: \(format)")
             throw ExitCode.failure
         }
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let screen = try orExit { try device.require(.screen) }
         let termination = AsyncThrowingStream<Void, any Error>.makeStream()
         let onFailure: @Sendable (any Error) -> Void = { error in
             termination.continuation.finish(throwing: error)
@@ -57,7 +54,7 @@ struct StreamCommand: AsyncParsableCommand {
             signal(SIGINT, SIG_DFL)
             signal(SIGTERM, SIG_DFL)
         }
-        try await Self.capture(stream, on: simulator.screen(), onFailure: onFailure) {
+        try await Self.capture(stream, on: screen, onFailure: onFailure) {
             for try await _ in termination.stream {}
         }
     }

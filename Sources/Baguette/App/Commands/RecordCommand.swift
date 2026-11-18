@@ -120,22 +120,14 @@ struct RecordCommand: AsyncParsableCommand {
             format: try RecordingFormat.forFile(url)
         )
 
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
-        // A shut-down device has no framebuffer to wire, so it delivers
-        // nothing — and without this it would sit out the whole
-        // --duration before reporting "the screen never changed", which
-        // sends the user tapping at a simulator that isn't running.
-        guard simulator.state == .booted else {
-            log(RecordingError.deviceNotBooted(simulator.state.description).message)
-            throw ExitCode.failure
-        }
+        // A device that isn't running has no screen to record: refused up
+        // front, rather than sitting out --duration and then blaming a
+        // still screen.
+        let device = try options.device()
+        let screen = try orExit { try device.require(.screen) }
 
         let recorder = ScreenRecorder(
-            screen: simulator.screen(),
+            screen: screen,
             reel: AVAssetWriterReel(),
             plan: plan,
             output: url

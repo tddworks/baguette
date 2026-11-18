@@ -1,6 +1,23 @@
 // swift-tools-version: 6.1
 
+import Foundation
 import PackageDescription
+
+// CoreDevice (Xcode's private device stack) is weak-linked when this Mac has
+// it, so Swift binds its symbols directly with @_silgen_name. Both install
+// names are absolute and outside Xcode.app, unlike SimulatorKit below, and a
+// weak link lets a Mac without them still launch: `CoreDeviceFramework`
+// checks before any call. A machine that builds without CoreDevice compiles
+// the phone touch path out (no COREDEVICE define).
+let coreDeviceHome = "/Library/Developer/PrivateFrameworks"
+let universalHIDHome = coreDeviceHome + "/CoreDevice.framework/Versions/A/Frameworks"
+let hasCoreDevice = FileManager.default.fileExists(atPath: coreDeviceHome + "/CoreDevice.framework/CoreDevice")
+    && FileManager.default.fileExists(atPath: universalHIDHome + "/UniversalHID.framework/UniversalHID")
+let coreDeviceLinking: [LinkerSetting] = hasCoreDevice ? [.unsafeFlags([
+    "-F", coreDeviceHome, "-Xlinker", "-weak_framework", "-Xlinker", "CoreDevice",
+    "-F", universalHIDHome, "-Xlinker", "-weak_framework", "-Xlinker", "UniversalHID",
+])] : []
+let coreDeviceDefine: [SwiftSetting] = hasCoreDevice ? [.define("COREDEVICE")] : []
 
 // SimulatorKit + CoreSimulator are deliberately NOT linked here. Nothing
 // in Sources/ does `import SimulatorKit` / `import CoreSimulator` — the
@@ -25,6 +42,13 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0"),
     ],
     targets: [
+        // The one CoreDevice call Swift can't spell: a typed-throws send
+        // whose error slot sits before the type metadata. Everything else
+        // is Swift (Infrastructure/CoreDevice/Kit).
+        .target(
+            name: "CoreDeviceABI",
+            path: "Sources/CoreDeviceABI"
+        ),
         .executableTarget(
             name: "Baguette",
             dependencies: [
@@ -32,6 +56,7 @@ let package = Package(
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+                "CoreDeviceABI",
             ],
             path: "Sources/Baguette",
             resources: [
@@ -71,8 +96,8 @@ let package = Package(
             swiftSettings: [
                 // MOCKING is debug-only; release strips mock code entirely.
                 .define("MOCKING", .when(configuration: .debug)),
-            ],
-            linkerSettings: [
+            ] + coreDeviceDefine,
+            linkerSettings: coreDeviceLinking + [
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),

@@ -14,18 +14,6 @@ struct RecordingErrorTests {
             == "Unknown recording container 'webm'. Expected one of: mp4 | mov")
     }
 
-    @Test func `should name an unbooted device as the reason rather than blame a still screen`() {
-        // A shut-down simulator has no framebuffer to wire, so it
-        // delivers nothing — and "the screen never changed. Drive some
-        // input" would send the user tapping at a device that isn't
-        // running. Say what's actually wrong and what fixes it.
-        let error = RecordingError.deviceNotBooted("Shutdown")
-
-        #expect(error.message
-            == "Cannot record a Shutdown device — boot it first "
-                + "with `baguette boot --udid <UDID>`.")
-    }
-
     @Test func `should carry the reason when writing the recording fails`() {
         #expect(RecordingError.writerFailed("disk full").message
             == "Recording failed: disk full")

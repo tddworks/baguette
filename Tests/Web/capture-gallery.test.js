@@ -115,9 +115,10 @@ const SCREEN = {
 const BEZEL = { naturalWidth: 1400, naturalHeight: 2900, tag: 'bezel' };
 
 function galleryFor({
-  screen = SCREEN, frameImg = BEZEL, shot, response, vocabulary = true,
+  screen = SCREEN, frameImg = BEZEL, shot, response, vocabulary = true, target,
 } = {}) {
   const window = fakeWindow({ shot, response });
+  if (target) window.BaguetteTarget = target;
   loadBrowserModules([
     ...(vocabulary ? [
       path.join(WEB, 'capture', 'capture-size.js'),
@@ -147,6 +148,21 @@ test('asks the screenshot route for the picked size, fit and background', async 
   assert.equal(q.size, 'appstore-6.9');
   assert.equal(q.fit, 'cover');
   assert.equal(q.background, '#101010');
+});
+
+test('asks the simulator route when the page drives a simulator', async () => {
+  const { gallery, CaptureSettings, state } = galleryFor({ frameImg: null });
+  await gallery.capture({ settings: new CaptureSettings({ withFrame: false }) });
+
+  assert.match(state.urls[0], /^\/simulators\/UD-1\/screenshot\.jpg\?/);
+});
+
+test("asks a physical device's own route when the page drives one", async () => {
+  const target = { path: (udid, rest) => '/devices/' + encodeURIComponent(udid) + (rest || '') };
+  const { gallery, CaptureSettings, state } = galleryFor({ frameImg: null, target });
+  await gallery.capture({ settings: new CaptureSettings({ withFrame: false }) });
+
+  assert.match(state.urls[0], /^\/devices\/UD-1\/screenshot\.jpg\?/);
 });
 
 test('asks for a plain screenshot at native size', async () => {

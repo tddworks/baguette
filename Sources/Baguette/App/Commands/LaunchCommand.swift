@@ -24,11 +24,7 @@ struct LaunchCommand: AsyncParsableCommand {
     var thenDescribeUI = false
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let simulator = try options.simulator(for: .apps)
         let result = await AppLaunch.perform(
             bundleID: bundleId, relaunch: relaunch, thenDescribeUI: thenDescribeUI,
             apps: simulator.apps(), accessibility: simulator.accessibility(),

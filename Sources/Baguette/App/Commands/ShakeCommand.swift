@@ -19,21 +19,14 @@ struct ShakeCommand: AsyncParsableCommand {
     @OptionGroup var options: DeviceOption
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
-        guard simulator.canAcceptInput else {
-            log("Device \(simulator.name) is not booted")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let shake = try orExit { try device.require(.shake) }
         do {
-            try await simulator.shake().shake()
+            try await shake.shake()
         } catch {
             log("shake failed: \(error)")
             throw ExitCode.failure
         }
-        log("Shook \(simulator.name)")
+        log("Shook \(device.name)")
     }
 }

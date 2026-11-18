@@ -1,6 +1,6 @@
-# Real devices: CoreDevice spike
+# Real devices: CoreDevice research
 
-> Status: **spike, not started**, 2026-10-07. No code on `main`. The feature's `README.md` arrives when something ships.
+> Status: **built**, 2026-11-18, on an iPhone 18 Pro Max (iOS 27.0.1, Xcode 27.0). H1, H2 and H3 pass: baguette touches a physical iPhone and shows its live screen through CoreDevice. How to use it: [README.md](README.md).
 
 ## Question
 
@@ -24,7 +24,7 @@ DeviceHub.app ──CoreDevice──▶ guest/device: dtremotedisplayd  (from th
                                  getmediastreamserverstatus
                                  startmediastream / stopmediastream
                                  startvideooutput / startaudiooutput
-               ◀── HEVC, encoded on the device (AVConference) ──
+               ◀── H.264, encoded on the device (AVConference) ──
 ```
 
 The PR fixed four places where that path stopped on a VM. All of the fixes are in the guest:
@@ -67,15 +67,81 @@ Run them in order; stop at the first kill of H1 and jump to [Fallback](#fallback
 
 ## Decision
 
-Filled in at the end of the spike.
+| Hypothesis | Result |
+|---|---|
+| H1 — CoreDevice is callable from our process | **Pass.** `DeviceManager`, built with every visibility class, lists physical phones beside simulators; `RemoteDevice.getImplementation(for:)` opens capabilities. No entitlement asked. |
+| H2 — frames reach us as something decodable | **Pass, without AVConference's receiver.** `MediaStreamFunctions.startMediaStream(with:)` starts the phone's stream, but `avconferenced` refuses an unentitled receiver (`vcMediaStreamSetSessionConfig failed authorization`; it wants `com.apple.videoconference.allow-conferencing`, which AMFI won't let us self-sign). So baguette receives the stream itself: plain RTP over the tunnel, unencrypted, H.264 (HEVC is offered too by default, but mosaics under motion; see *Codec*). See *How the screen reaches the Mac*. |
+| H3 — touches go over a callable service | **Pass.** The `UniversalHIDServiceCapability` opens on the phone, and a UniversalHID `DigitizerReport` sent with `UniversalHIDService.send(report:to:)` to service `0x101` lands: a swipe paged the Home Screen and back, an edge swipe went Home. |
+| H4 — a vphone VM works unchanged | Not run (no VM on this Mac). |
 
-| Outcome | Meaning | Next |
-|---|---|---|
-| Go: H1, H2, H3 pass | Screen and input both reachable | Design a CoreDevice-backed device type next to `CoreSimulator` in `Simulators`; real iPhones and vphone VMs both appear |
-| Partial: H1 and H2 pass, H3 fails | Watch-only real devices | Decide whether a view-only device is worth shipping; input for vphone still goes through vphoned |
-| No-go: H1 fails | CoreDevice route closed to us | [Fallback](#fallback-vphone-only-through-vphoned); physical devices stay out of scope |
+Outcome: **Go** for touch and the live screen. Built: `CoreDevicePhones` registers `screen` (the live stream, devicectl screenshots as fallback), `input` (Universal HID) and `pasteboard` (devicectl). Not `orientation`: `devicectl device orientation set` exits 0 on a phone and answers "New Device Orientation: portrait" — a phone turns by its sensors only.
 
-Result: _not run yet._
+### How the screen reaches the Mac
+
+```
+MediaStreamScreen.start
+  → MediaStreamOffer(...).bytes                    our own offer: H.264 only, 6 Mbit/s cap (mode 5, video)
+  → RemoteDevice.startMediaStream { request }      MediaStreamFunctions: support info (tunnel up), then start
+        request: StartRequest as JSON through CoreDevice's own Decodable —
+        type video, direction output, clientSupportedFeatures 140, receiverIP/Port = our socket,
+        options DisplayByID / VideoStreamForDisplayID 1 / network type 1 / transport type 2
+  ← StartResponse.connection.streamConfig          SourceIP/SourcePort, LocalSSRC (phone), RemoteSSRC (ours)
+  → UDP [::]:port ← RTP, payload type 123         unencrypted (SRTP suites 0)
+  → VideoDepacketizer → AccessUnit                 RFC 6184: STAP-A 24, FU-A 28; SPS/PPS from the 0x92 sample description
+  → VTStreamDecoder (H.264 parameter sets) → IOSurface → the usual Stream pipeline
+  ↔ ReceiverFeedback: receiver report every 1 s (the phone ends a stream after 20 s without), an ack per
+    picture, an RCTL every 50 ms (as Device Hub sends), PLI every 300 ms until a keyframe; BYE on stop
+```
+
+- **Why not AVConference's receiver.** CoreDevice's own client (`CoreDeviceMediaStreamSupport`, `VideoStreamConfiguration.receiveMirroredPrimary(layer:)`) negotiates fine and the phone starts streaming, but configuring the receiving `AVCVideoStream` asks `avconferenced`, which checks `com.apple.videoconference.allow-conferencing` — Device Hub has it; a self-signed binary claiming it is killed by AMFI.
+- **The receiver address** is the Mac's end of the CoreDevice tunnel: resolve `<CoreDevice identifier>.coredevice.local` (the phone, `…::1` on a `utun`) and take the local address on the same prefix (`…::2`). It exists once the tunnel is up, which the support-info query does.
+- **Codec: H.264, never HEVC.** AVConference's own offer (`AVCMediaStreamNegotiator initWithMode:5`) lists H.264 (payload 123) and HEVC (payload 100), and the phone picks HEVC. That stream doesn't survive motion: in a recorded swipe every packet arrived (no sequence gaps; each picture's packet count, in the `0x9011` header extension, matched; its frame counter never skipped; references only to the previous one or two pictures in a 12-picture buffer), yet VideoToolbox and ffmpeg alike decoded it into the same mosaic, which stayed until the next keyframe. The same swipe offered H.264 only decodes whole in both. So `MediaStreamOffer` writes the offer itself, with AVConference's fields minus the HEVC entry, and the AVConference class is no longer loaded.
+- **H.264 parameter sets arrive outside the NAL units:** a payload starting `0x92` (not a NAL type) carries an `avc1` sample description whose `avcC` atom holds the SPS and PPS; the depacketizer hands them to the next IDR.
+- **Size.** Coded 1328 × 2896 for a 1320 × 2868 screen, padded right and bottom, with no crop window in the SPS; a smaller resolution in the offer is ignored. The phone's screen size comes from `devicectl device info displays` (the primary display's `nativeSize`), asked while the stream starts, and the decoder crops each picture to it — a clean aperture at the top-left, applied by VideoToolbox as it converts (`kVTScalingMode_CropSourceToCleanAperture`). So every consumer — the page, `screenshot`, `record` — gets the screen and never the padding.
+- **Stopping.** An RTCP BYE; the phone's 20 s RTCP timeout ends it anyway. `StopRequest(stopAll:)` is not used — it could end Device Hub's stream too.
+
+### How the accessibility tree reaches the Mac
+
+```
+RemoteAXAccessibility.describeAll
+  → devicectl list devices                      the tunnel address (devicectl device info details brings a down tunnel up)
+  → nettop -m tcp -n -x -p remoted -J state     remoted's one connection to the phone = its service directory's port
+  → ServiceDirectory (RemoteXPC over HTTP/2)    the handshake's Services: remoteAXService's Port
+  → DTX to that port                            _notifyOfPublishedCapabilities:, then clientNeedsAccessibility: YES
+  ← processDataFromRemoteDevice: × 2            InitialDump, then AdditionalData — the tree (AXPTranslatorResponse records)
+  → AXTreeDump answers AXPTranslator            through AXPTranslatorBridge's token dispatcher, no round trip per question
+  → AXPMacPlatformElement → AXNode.walk         the same walk as a simulator's; frames already in device points
+```
+
+- **Why not CoreDevice or remoted.** `remoted` (`remote_device_copy_service`) needs Apple-private
+  entitlements (`com.apple.private.RemoteServiceDiscovery.device-admin`). CoreDevice's
+  `CreateServiceSocketCapability.fileHandle(toServiceNamed:)` opens raw sockets to some services
+  (`dtservicehub`, `testmanagerd.remote`) but refuses `remoteAXService` — its directory entry says
+  `Entitlement: AppleInternal`. The phone itself takes a plain TCP connection to the port.
+- **The directory's port** isn't fixed; `remoted` keeps one connection to it per tunnel, and nettop shows it.
+- **The tree is a cache.** The second push holds every answer the phone's service gave: request 4
+  (the frontmost app), 5 (all of an element's attributes), 2 (one attribute), 3 (settable).
+  Answering the translator from it builds the tree in-process; a request it lacks answers empty.
+- **No press yet.** Pressing through accessibility needs a live `processDataFromHost:` request;
+  `press` answers `false`, so `tap --label` falls back to a touch at the element.
+
+### How a touch reaches the phone
+
+```
+DigitizerInput (gesture → reports, fractions of the screen)
+  → CoreDeviceDigitizer.report
+      → CoreDeviceFramework.device(<CoreDevice identifier>)        DeviceManager.allDevices()
+      → RemoteDevice.open(.universalHID)                           getImplementation(for:) async throws
+      → cdabi_send_digitizer_report(capability, 0x101, fingers…)   UniversalHIDService.send(report:to:)
+```
+
+- **The service is `0x101`.** The phone's Universal HID stack registers its main touchscreen as `0x100` plus the display id `devicectl device info displays` reports (`displayId: 1`). Baguette keeps it as the measured constant `CoreDeviceDigitizer.mainTouchscreen`, never computes it (the HID-target law).
+- **The developer disk image must be mounted.** A phone listed with `ddiServicesAvailable: false` takes the report without error and does nothing. Any developer service mounts it; `devicectl device info ddiServices` is the cheapest.
+- **The phone must be awake.** Injected touches don't wake a dark screen; tap-to-wake lives in the touch controller.
+- **A Lock Screen swipe from the right opens the Camera.** Check the screen before driving a phone that may have locked.
+- **Identity.** CoreDevice's API takes its own identifier (`30546CC9-…`, the `identifier` in `devicectl list devices`), not the UDID. `PhysicalPhone.coreDeviceIdentifier` carries it.
+- **The report.** A UniversalHID `DigitizerReport` and `DigitizerContact` each wrap one `Foundation.Data` (two words). UniversalHID's own initializers and setters build them; `CoreDeviceABI` checks the two-word size before sending and refuses otherwise. An edge swipe sets the inward swipe flag and "swipe locked" on every report including the lift.
+- **The calling convention.** CoreDevice ships no Swift module, so baguette weak-links it and its nested UniversalHID (both have absolute install names outside Xcode.app; see `Package.swift`) and binds their symbols with `@_silgen_name` on stand-in types: `CoreDeviceFramework` for the manager, devices and capabilities (the async `getImplementation(for:)` included), `DigitizerReport` for the report, whose stand-in holds one `Data` like Apple's types so Swift retains and releases it. One call stays in C (`CoreDeviceABI`): `UniversalHIDService.send(report:to:)` throws a typed error through a slot placed before the type metadata, an argument order no Swift declaration lowers to. A build machine without CoreDevice compiles the touch path out.
 
 ## Fallback: vphone only, through vphoned
 
@@ -94,7 +160,7 @@ Shape in baguette, following AGENTS.md: one `@Mockable` collaborator `Guest` for
 ## Risks and open questions
 
 - Is CoreDevice's display service gated by an entitlement only Apple-signed clients carry? H1 answers it.
-- The stream is AVConference HEVC, not the IOSurface frames our `Stream` pipeline takes today. A decode step costs latency on top of the device's encode.
+- The stream is the phone's H.264, not the IOSurface frames our `Stream` pipeline takes today. A decode step costs latency on top of the device's encode.
 - vphoned deliberately breaks compatibility between versions; any vphoned client pins a version and checks the capability flags `/v1/health` returns.
 - vphone runs patched iOS firmware in a security-research VM and needs weakened host security. Baguette stays a client and never installs or launches it.
 - No paired iPhone and no vphone VM on the maintainer Mac as of 2026-10-07; experiment 1 needs one.

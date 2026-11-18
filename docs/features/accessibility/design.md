@@ -11,7 +11,7 @@ CLI / WS  →  Simulator.accessibility()  →  Accessibility
                                                     │
                                                     ▼
                                   AXPTranslatorAccessibility
-                                  (Infrastructure/Accessibility/)
+                                  (Infrastructure/Simulator/Accessibility/)
                                                     │
                             sets up TokenDispatcher │ as the translator's
                             bridgeTokenDelegate     │ (one-time, process-wide)

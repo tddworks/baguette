@@ -72,9 +72,14 @@ struct Server: Sendable {
     /// video ingest hubs. Reference types for the same reason as
     /// `motionSessions` — membership and decoder sessions must
     /// survive between socket connections.
-    let devices: LiveDevices
+    let devices: LiveCompanionPhones
     let twinScreens: TwinScreens
     let twinPoses: TwinPoses
+    /// Every physical device the `/devices/…` page can show: companion
+    /// phones and phones CoreDevice reaches on a cable.
+    let physicalDevices: any Devices
+    /// Every device of every family — what `/devices/:udid/…` resolves.
+    let allDevices: any Devices
 
     init(
         simulators: any Simulators,
@@ -88,9 +93,10 @@ struct Server: Sendable {
         grants: PluginGrants = PluginGrants(),
         motionSessions: MotionSessions = MotionSessions(),
         cameraSessions: CameraSessions = CameraSessions(guestTerminated: { _ in false }),
-        devices: LiveDevices = LiveDevices(),
+        devices: LiveCompanionPhones = LiveCompanionPhones(),
         twinScreens: TwinScreens = TwinScreens(),
-        twinPoses: TwinPoses = TwinPoses()
+        twinPoses: TwinPoses = TwinPoses(),
+        phones: any Devices = CoreDevicePhones()
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
@@ -98,6 +104,10 @@ struct Server: Sendable {
         self.devices = devices
         self.twinScreens = twinScreens
         self.twinPoses = twinPoses
+        self.physicalDevices = CombinedDevices([
+            CompanionDevices(phones: devices, screens: twinScreens), phones,
+        ])
+        self.allDevices = CombinedDevices([SimulatorDevices(simulators), physicalDevices])
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -2595,10 +2605,22 @@ struct Server: Sendable {
         guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
             return errorJSON("unknown udid: \(udid)", status: .notFound)
         }
+        return await screenshot(
+            of: sim.screen(), quality: quality, scale: scale, format: format, options: options)
+    }
+
+    /// A still of `screen`, encoded and sized as asked — whichever device it is.
+    static func screenshot(
+        of screen: any Screen,
+        quality: Double,
+        scale: Int,
+        format: CaptureImageFormat,
+        options: CaptureOptions
+    ) async -> Response {
         let captured: Data
         do {
             captured = try await ScreenSnapshot.capture(
-                screen: sim.screen(),
+                screen: screen,
                 quality: quality,
                 scale: max(1, scale)
             )
@@ -2718,6 +2740,22 @@ struct Server: Sendable {
     ) -> DeviceChromeAssets? {
         if let panel { return sim.chrome(in: chromes, panel: panel) }
         return sim.chrome(in: chromes)
+    }
+
+    /// The bezel a physical device's page frames it in: the one the user
+    /// picked (`?chrome=`), else the device's own when a bezel is installed
+    /// under its model name, else none — the page then offers the picker.
+    static func bezelName(picked: String?, model: String, chromes: any Chromes) -> String? {
+        if let picked, !picked.isEmpty { return picked }
+        return chromes.assets(forDeviceName: model) == nil ? nil : model
+    }
+
+    /// The screen mask of a bezel a physical device borrows, by the
+    /// chrome's name — the `/devices/:udid/chrome/:name/screen-mask.png`
+    /// the borrowed definition points the screen at. `nil` when the chrome
+    /// carries none (the definition then names no mask either).
+    static func borrowedScreenMask(named name: String, chromes: any Chromes) -> Data? {
+        chromes.assets(forDeviceName: name)?.screenMask?.data
     }
 
     /// Pure data producer for `screen-mask.png`: the lit panel's mask,
@@ -3006,7 +3044,7 @@ struct Server: Sendable {
                     ))
                     continue
                 }
-                if await handleDescribeUI(line: line, sim: sim, outbound: outbound) {
+                if await handleDescribeUI(line: line, accessibility: sim.accessibility(), outbound: outbound) {
                     continue
                 }
                 if let frame = await PasteDispatch.dispatch(
@@ -3121,7 +3159,7 @@ struct Server: Sendable {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
                 if await handleDescribeUI(
-                    line: line, sim: sim, outbound: outbound
+                    line: line, accessibility: sim.accessibility(), outbound: outbound
                 ) {
                     continue
                 }
@@ -3153,16 +3191,16 @@ struct Server: Sendable {
         }
     }
 
-    /// `describe_ui` text message — needs the `Simulator` (to reach
-    /// the AX port) and the outbound writer (to ship the result
-    /// back), neither of which `handleInbound` carries. Returns
+    /// `describe_ui` text message — needs the device's accessibility
+    /// (a simulator's or a phone's) and the outbound writer (to ship the
+    /// result back), neither of which `handleInbound` carries. Returns
     /// `true` when the line was a `describe_ui` envelope (handled
     /// or rejected with an error JSON), `false` for any other
     /// shape so the caller falls through to the gesture / reconfig
     /// pipeline.
-    private static func handleDescribeUI(
+    static func handleDescribeUI(
         line: String,
-        sim: Simulator,
+        accessibility ax: @autoclosure () -> any Accessibility,
         outbound: WebSocketOutboundWriter
     ) async -> Bool {
         guard let data = line.data(using: .utf8),
@@ -3170,7 +3208,7 @@ struct Server: Sendable {
               (dict["type"] as? String) == "describe_ui" else {
             return false
         }
-        let ax = sim.accessibility()
+        let ax = ax()
         let result: AXNode?
         do {
             if let xv = (dict["x"] as? Double) ?? (dict["x"] as? Int).map(Double.init),
