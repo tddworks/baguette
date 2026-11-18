@@ -289,7 +289,8 @@ that grew decisions. Everything else it uses must be a tested value.
 After the split:
 - Domain pure factories / value types: **100%** unit-tested.
 - Orchestrator (`<Feature>Orchestrator` or `Sim<Feature>Stream`): **≥ 90%** unit-tested via the collaborator's `MockXxx`.
-- The irreducible call, in `Internal/System/`: integration-only, left out of coverage by its folder.
+- The irreducible call, in `Internal/System/`: integration-only, left out of coverage by its folder. Prove it with a test against the real thing, tagged `.tags(.system), .enabled(if: SystemTests.available)` with a `.timeLimit` (see `VideoToolboxSessionTests`).
+- A route: drive it through the real router with `InProcessServer` (`Tests/BaguetteTests/Server/Router/`), not just its static handler.
 
 If you can't get the orchestrator into a `MockXxx`-driven test, it's
 not split correctly — go back to Phase 0.

@@ -464,6 +464,12 @@ fakes and assert on returned values rather than recorded calls.
   `PDFRasterizer`, exercise cache hits / misses / failure paths.
 - **Stream startup handshake** — verify the three-step
   screen-attach + sink-write contract.
+- **Routes, in process** — `Tests/BaguetteTests/Server/Router/` runs the
+  real router through `HummingbirdTesting` (`InProcessServer`): browser
+  trust, plugin grants, both trees, refusal codes, deprecation headers.
+- **System tests** — the few that drive the real thing an
+  `Internal/System/` file wraps (VideoToolbox, …) are tagged `.system` and
+  run only off CI (`SystemTests.available`).
 
 Swift Testing only (`@Suite`, `@Test`, `#expect`); no XCTest. The
 `MOCKING` flag is `.debug`-only so release builds carry no mock

@@ -24,7 +24,4 @@ ignore:
   # The one CoreDevice call Swift can't spell, in C: a system call by
   # nature, in a target of its own.
   - "Sources/CoreDeviceABI/**"
-  # Not yet measured: the commands, until each `run()` can be handed a
-  # device in a test.
-  - "Sources/Commands/**"
   - "Tests/**"
