@@ -28,6 +28,7 @@ static const size_t kMaxCanvas = 1280;
 static AVCaptureDevice *gFakeDevice = nil;
 static AVCaptureDeviceFormat *gFakeFormat = nil;
 static AVCaptureDeviceInput *gDummyInput = nil;
+static Class gFakeConnectionClass = Nil;
 
 static void SimCamBuildObjectsOnce(void);
 
@@ -57,6 +58,50 @@ static BOOL fdev_lockForConfiguration(id s, SEL c, NSError **e) { if (e) *e = ni
 static void fdev_unlock(id s, SEL c) {}
 static CGFloat fdev_zoomOne(id s, SEL c) { return 1.0; }
 static void fdev_setZoom(id s, SEL c, CGFloat z) {}
+
+// Capability / state getters apps probe while configuring a device (NextLevel
+// reads these in `configureDevice` and KVO-observes several). The fake device
+// has no backing Fig source, so answer them deterministically instead of
+// letting the real getters read uninitialised state.
+static BOOL fdev_modeSupported2(id s, SEL c, NSInteger m) { return NO; }
+
+// Fake connection. Real AVCaptureOutputs hand back an AVCaptureConnection once
+// they are wired into a session with a live input. The virtual camera never
+// wires outputs (see h_addOutput), so `connection(with: .video)` would be nil —
+// and apps such as NextLevel bail out silently on that (its capturePhoto()
+// starts with `guard photoOutput.connection(with: .video) != nil`). Hand back a
+// connection that reports every optional capability as unsupported, so callers
+// skip their orientation / mirroring / stabilisation tweaks.
+static BOOL fconn_yes(id s, SEL c) { return YES; }
+static BOOL fconn_no(id s, SEL c) { return NO; }
+static BOOL fconn_noDouble(id s, SEL c, double a) { return NO; }
+static NSInteger fconn_zero(id s, SEL c) { return 0; }
+static NSInteger fconn_portrait(id s, SEL c) { return AVCaptureVideoOrientationPortrait; }
+static double fconn_zeroDouble(id s, SEL c) { return 0.0; }
+static void fconn_setInt(id s, SEL c, NSInteger v) {}
+static void fconn_setBool(id s, SEL c, BOOL v) {}
+static void fconn_setDouble(id s, SEL c, double v) {}
+static NSArray *fconn_ports(id s, SEL c) { return @[]; }
+
+@interface SimCamVCWeakRef : NSObject
+@property (nonatomic, weak) id obj;
+@end
+@implementation SimCamVCWeakRef
+@end
+
+static const void *kSimCamConnectionKey = &kSimCamConnectionKey;
+static const void *kSimCamConnectionOutputKey = &kSimCamConnectionOutputKey;
+
+// The real -[AVCaptureConnection dealloc] tears down internals the fabricated
+// object never had (EXC_BAD_ACCESS when the owning photo output is released,
+// e.g. on NextLevel.stop()). Skip it: the object leaks, one small allocation
+// per photo output, which is fine for a simulator-only shim.
+static void fconn_dealloc(id s, SEL c) {}
+
+static id fconn_output(id s, SEL c) {
+    SimCamVCWeakRef *ref = objc_getAssociatedObject(s, kSimCamConnectionOutputKey);
+    return ref.obj;
+}
 
 // Dummy input — returned in place of a real AVCaptureDeviceInput so the fake
 // device is never handed to the crashing initializer.
@@ -112,8 +157,43 @@ static void SimCamBuildObjectsOnce(void) {
     class_addMethod(fDev, NSSelectorFromString(@"setVideoZoomFactor:"), (IMP)fdev_setZoom, "v@:d");
     class_addMethod(fDev, NSSelectorFromString(@"minAvailableVideoZoomFactor"), (IMP)fdev_zoomOne, "d@:");
     class_addMethod(fDev, NSSelectorFromString(@"maxAvailableVideoZoomFactor"), (IMP)fdev_zoomOne, "d@:");
+    class_addMethod(fDev, @selector(isWhiteBalanceModeSupported:), (IMP)fdev_modeSupported2, "B@:q");
+    class_addMethod(fDev, @selector(isLowLightBoostSupported), (IMP)fdev_no, "B@:");
+    class_addMethod(fDev, @selector(isFlashAvailable), (IMP)fdev_no, "B@:");
+    class_addMethod(fDev, @selector(isTorchAvailable), (IMP)fdev_no, "B@:");
+    class_addMethod(fDev, @selector(isAdjustingFocus), (IMP)fdev_no, "B@:");
+    class_addMethod(fDev, @selector(isAdjustingExposure), (IMP)fdev_no, "B@:");
+    class_addMethod(fDev, @selector(isAdjustingWhiteBalance), (IMP)fdev_no, "B@:");
     objc_registerClassPair(fDev);
     gFakeDevice = [fDev alloc];
+
+    Class connCls = NSClassFromString(@"AVCaptureConnection");
+    if (connCls) {
+        Class fConn = objc_allocateClassPair(connCls, "SimCamVCConnection", 0);
+        class_addMethod(fConn, @selector(isActive), (IMP)fconn_yes, "B@:");
+        class_addMethod(fConn, @selector(isEnabled), (IMP)fconn_yes, "B@:");
+        class_addMethod(fConn, @selector(setEnabled:), (IMP)fconn_setBool, "v@:B");
+        class_addMethod(fConn, @selector(isVideoOrientationSupported), (IMP)fconn_no, "B@:");
+        class_addMethod(fConn, @selector(isVideoMirroringSupported), (IMP)fconn_no, "B@:");
+        class_addMethod(fConn, @selector(isVideoStabilizationSupported), (IMP)fconn_no, "B@:");
+        class_addMethod(fConn, @selector(isVideoMirrored), (IMP)fconn_no, "B@:");
+        class_addMethod(fConn, @selector(setVideoMirrored:), (IMP)fconn_setBool, "v@:B");
+        class_addMethod(fConn, @selector(automaticallyAdjustsVideoMirroring), (IMP)fconn_no, "B@:");
+        class_addMethod(fConn, @selector(setAutomaticallyAdjustsVideoMirroring:), (IMP)fconn_setBool, "v@:B");
+        class_addMethod(fConn, @selector(videoOrientation), (IMP)fconn_portrait, "q@:");
+        class_addMethod(fConn, @selector(setVideoOrientation:), (IMP)fconn_setInt, "v@:q");
+        class_addMethod(fConn, NSSelectorFromString(@"isVideoRotationAngleSupported:"), (IMP)fconn_noDouble, "B@:d");
+        class_addMethod(fConn, NSSelectorFromString(@"videoRotationAngle"), (IMP)fconn_zeroDouble, "d@:");
+        class_addMethod(fConn, NSSelectorFromString(@"setVideoRotationAngle:"), (IMP)fconn_setDouble, "v@:d");
+        class_addMethod(fConn, @selector(activeVideoStabilizationMode), (IMP)fconn_zero, "q@:");
+        class_addMethod(fConn, @selector(preferredVideoStabilizationMode), (IMP)fconn_zero, "q@:");
+        class_addMethod(fConn, @selector(setPreferredVideoStabilizationMode:), (IMP)fconn_setInt, "v@:q");
+        class_addMethod(fConn, @selector(inputPorts), (IMP)fconn_ports, "@@:");
+        class_addMethod(fConn, @selector(output), (IMP)fconn_output, "@@:");
+        class_addMethod(fConn, NSSelectorFromString(@"dealloc"), (IMP)fconn_dealloc, "v@:");
+        objc_registerClassPair(fConn);
+        gFakeConnectionClass = fConn;
+    }
 
     Class fIn = objc_allocateClassPair(inCls, "SimCamVCInput", 0);
     class_addMethod(fIn, @selector(device), (IMP)dinput_device, "@@:");
@@ -347,11 +427,92 @@ static void h_addOutput(id self, SEL _cmd, id output) {
 // (device-availability-gated) startRunning hook in SimCamInject.m, which
 // is why that one never gets a chance to block on a source-less graph.
 static IMP gOrigStartRunning2 = NULL;
-static void h_startRunning(id self, SEL _cmd) {
+static IMP gOrigIsRunning = NULL;
+static IMP gOrigConnectionWithMediaType = NULL;
+static IMP gOrigConnections = NULL;
+
+static BOOL SimCamIsVirtuallyRunning(id session) {
     SimCamStateInit();
     [gStateLock lock];
-    [gRunningSessions addObject:[NSValue valueWithPointer:(__bridge void *)self]];
+    BOOL running = [gRunningSessions containsObject:[NSValue valueWithPointer:(__bridge void *)session]];
     [gStateLock unlock];
+    return running;
+}
+
+// `-[AVCaptureSession isRunning]` is the source of truth apps gate on (NextLevel's
+// `canCapturePhoto`, expo-camera's ready check, KVO observers). The real getter
+// reports NO because we never run the real graph, so answer from our own state.
+static BOOL h_isRunning(id self, SEL _cmd) {
+    if (SimCamIsVirtuallyRunning(self)) return YES;
+    return ((BOOL (*)(id, SEL))gOrigIsRunning)(self, _cmd);
+}
+
+// `gRunningSessions` holds raw session pointers (no retain). A client may
+// release a running session without calling stopRunning, and a new session
+// allocated at the same address would then read as already running and never
+// get its DidStart notification. Hang a sentinel off each started session so
+// its dealloc drops the entry.
+@interface SimCamSessionSentinel : NSObject
+@property (nonatomic, strong) NSValue *key;
+@end
+@implementation SimCamSessionSentinel
+- (void)dealloc {
+    if (_key && gStateLock) {
+        [gStateLock lock];
+        [gRunningSessions removeObject:_key];
+        [gStateLock unlock];
+    }
+}
+@end
+
+static const void *kSimCamSessionSentinelKey = &kSimCamSessionSentinelKey;
+
+static void SimCamTrackSessionLifetime(id session) {
+    if (objc_getAssociatedObject(session, kSimCamSessionSentinelKey)) return;
+    SimCamSessionSentinel *sentinel = [SimCamSessionSentinel new];
+    sentinel.key = [NSValue valueWithPointer:(__bridge void *)session];
+    objc_setAssociatedObject(session, kSimCamSessionSentinelKey, sentinel,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+// Flip our running state and tell the app the way AVFoundation would: a KVO
+// change on `running` (the KVC key behind `isRunning`) and the
+// AVCaptureSession{DidStart,DidStop}RunningNotification. Apps like NextLevel
+// only report "session started" from that notification, not from startRunning
+// returning. The notification goes out asynchronously, as the real one does.
+static void SimCamSetRunning(id session, BOOL running) {
+    SimCamStateInit();
+    NSValue *key = [NSValue valueWithPointer:(__bridge void *)session];
+    [gStateLock lock];
+    BOOL was = [gRunningSessions containsObject:key];
+    [gStateLock unlock];
+    if (was == running) return;
+
+    if (running) SimCamTrackSessionLifetime(session);
+
+    [session willChangeValueForKey:@"running"];
+    [gStateLock lock];
+    if (running) [gRunningSessions addObject:key]; else [gRunningSessions removeObject:key];
+    [gStateLock unlock];
+
+    // Queue the notification right after the mutation and before the KVO
+    // post-change call: a `running` observer that reenters startRunning /
+    // stopRunning queues its own notification from inside didChangeValueForKey:,
+    // and ours must already be ahead of it on the main queue.
+    NSNotificationName name = running ? AVCaptureSessionDidStartRunningNotification
+                                      : AVCaptureSessionDidStopRunningNotification;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:name object:session];
+    });
+    [session didChangeValueForKey:@"running"];
+}
+
+// Never run the real graph — just track the session as running and let
+// the delivery timer feed its outputs. Overrides the
+// (device-availability-gated) startRunning hook in SimCamInject.m, which
+// is why that one never gets a chance to block on a source-less graph.
+static void h_startRunning(id self, SEL _cmd) {
+    SimCamSetRunning(self, YES);
     SimCamStartDelivery();
 }
 
@@ -359,10 +520,82 @@ static void h_startRunning(id self, SEL _cmd) {
 // feeding a stopped session's delegate burns CPU and hands the app
 // buffers it has said it doesn't want.
 static void h_stopRunning(id self, SEL _cmd) {
-    SimCamStateInit();
-    [gStateLock lock];
-    [gRunningSessions removeObject:[NSValue valueWithPointer:(__bridge void *)self]];
-    [gStateLock unlock];
+    SimCamSetRunning(self, NO);
+}
+
+// Only the photo output gets a fabricated connection. `capturePhoto()`-style
+// guards need one, and AVCapturePhotoOutput's own paths tolerate it. A
+// AVCaptureVideoDataOutput must keep returning nil: setting its
+// `videoSettings` makes AVFoundation call the private
+// `-[AVCaptureConnection sourceDevice]` on whatever connection it finds, and
+// on a fabricated one that dereferences a Fig source that does not exist
+// (EXC_BAD_ACCESS, seen via NextLevel's addVideoOutput). With nil it skips.
+static BOOL SimCamOutputWantsFakeConnection(id output) {
+    Class photo = NSClassFromString(@"AVCapturePhotoOutput");
+    return photo && [output isKindOfClass:photo];
+}
+
+static id SimCamFakeConnectionFor(id output) {
+    if (!gFakeConnectionClass) return nil;
+    @synchronized (output) {
+        id conn = objc_getAssociatedObject(output, kSimCamConnectionKey);
+        if (!conn) {
+            conn = [gFakeConnectionClass alloc];
+            SimCamVCWeakRef *ref = [SimCamVCWeakRef new];
+            ref.obj = output;
+            objc_setAssociatedObject(conn, kSimCamConnectionOutputKey, ref, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(output, kSimCamConnectionKey, conn, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        return conn;
+    }
+}
+
+// Outputs are never wired into the session (h_addOutput), so the real lookup
+// finds no connection. Fall back to a fabricated video connection once the
+// virtual camera is in play (gFakeDevice exists), so a photo output's
+// `connection(with: .video)` — the first thing NextLevel's capturePhoto()
+// checks — is non-nil.
+static id h_connectionWithMediaType(id self, SEL _cmd, NSString *mediaType) {
+    id real = ((id (*)(id, SEL, id))gOrigConnectionWithMediaType)(self, _cmd, mediaType);
+    if (real == nil && gFakeDevice != nil && [mediaType isEqualToString:AVMediaTypeVideo] &&
+        SimCamOutputWantsFakeConnection(self)) {
+        return SimCamFakeConnectionFor(self);
+    }
+    return real;
+}
+
+
+// Photo-output configuration setters. AVCapturePhotoOutput validates these
+// against its connection's source device (`-[AVCaptureConnection sourceDevice]`,
+// private) — on the fabricated connection that dereferences a Fig source that
+// does not exist (EXC_BAD_ACCESS from `setHighResolutionCaptureEnabled:`, which
+// NextLevel calls on every capturePhoto() when high-res is on). The virtual
+// camera has no hardware to configure, so once it is in play accept and ignore
+// them; otherwise call through.
+#define SIMCAM_PHOTO_SETTER(NAME, TYPE)                                              \
+    static IMP gOrig_##NAME = NULL;                                                  \
+    static void h_##NAME(id self, SEL _cmd, TYPE v) {                                \
+        if (gFakeDevice != nil) return;                                              \
+        ((void (*)(id, SEL, TYPE))gOrig_##NAME)(self, _cmd, v);                      \
+    }
+SIMCAM_PHOTO_SETTER(setHighResolutionCaptureEnabled, BOOL)
+SIMCAM_PHOTO_SETTER(setMaxPhotoQualityPrioritization, NSInteger)
+SIMCAM_PHOTO_SETTER(setMaxPhotoDimensions, CMVideoDimensions)
+SIMCAM_PHOTO_SETTER(setLivePhotoCaptureEnabled, BOOL)
+SIMCAM_PHOTO_SETTER(setDepthDataDeliveryEnabled, BOOL)
+SIMCAM_PHOTO_SETTER(setPortraitEffectsMatteDeliveryEnabled, BOOL)
+SIMCAM_PHOTO_SETTER(setResponsiveCaptureEnabled, BOOL)
+SIMCAM_PHOTO_SETTER(setFastCapturePrioritizationEnabled, BOOL)
+
+static void swizzleInstance(Class cls, NSString *sel, IMP newImp, IMP *orig);
+
+static NSArray *h_connections(id self, SEL _cmd) {
+    NSArray *real = ((NSArray *(*)(id, SEL))gOrigConnections)(self, _cmd);
+    if (real.count == 0 && gFakeDevice != nil && SimCamOutputWantsFakeConnection(self)) {
+        id conn = SimCamFakeConnectionFor(self);
+        return conn ? @[conn] : real;
+    }
+    return real;
 }
 
 static void h_setSBDelegate(id self, SEL _cmd, id delegate, dispatch_queue_t queue) {
@@ -422,6 +655,24 @@ void SimCamInstallVirtualCamera(void) {
     swizzleInstance(sessionCls, @"addOutput:", (IMP)h_addOutput, &gOrigAddOutput);
     swizzleInstance(sessionCls, @"startRunning", (IMP)h_startRunning, &gOrigStartRunning2);
     { IMP unused = NULL; swizzleInstance(sessionCls, @"stopRunning", (IMP)h_stopRunning, &unused); }
+    swizzleInstance(sessionCls, @"isRunning", (IMP)h_isRunning, &gOrigIsRunning);
+    {
+        Class outputCls = NSClassFromString(@"AVCaptureOutput");
+        swizzleInstance(outputCls, @"connectionWithMediaType:", (IMP)h_connectionWithMediaType, &gOrigConnectionWithMediaType);
+        swizzleInstance(outputCls, @"connections", (IMP)h_connections, &gOrigConnections);
+
+        Class photoOutCls = NSClassFromString(@"AVCapturePhotoOutput");
+#define SIMCAM_HOOK_PHOTO(NAME) swizzleInstance(photoOutCls, @#NAME ":", (IMP)h_##NAME, &gOrig_##NAME)
+        SIMCAM_HOOK_PHOTO(setHighResolutionCaptureEnabled);
+        SIMCAM_HOOK_PHOTO(setMaxPhotoQualityPrioritization);
+        SIMCAM_HOOK_PHOTO(setMaxPhotoDimensions);
+        SIMCAM_HOOK_PHOTO(setLivePhotoCaptureEnabled);
+        SIMCAM_HOOK_PHOTO(setDepthDataDeliveryEnabled);
+        SIMCAM_HOOK_PHOTO(setPortraitEffectsMatteDeliveryEnabled);
+        SIMCAM_HOOK_PHOTO(setResponsiveCaptureEnabled);
+        SIMCAM_HOOK_PHOTO(setFastCapturePrioritizationEnabled);
+#undef SIMCAM_HOOK_PHOTO
+    }
     swizzleInstance(vdoCls, @"setSampleBufferDelegate:queue:", (IMP)h_setSBDelegate, &gOrigSetSBDelegate);
 
     Class photoSettingsCls = NSClassFromString(@"AVCapturePhotoSettings");
