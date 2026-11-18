@@ -18,7 +18,7 @@ baguette install   --udid <UDID> MyApp.ipa      # or MyApp.app
 baguette add-media --udid <UDID> beach.heic
 ```
 
-In the browser: open `/simulators/<UDID>` and drag files onto the device. The
+In the browser: open `/devices/<UDID>` and drag files onto the device. The
 device's screen gets a dashed highlight; on drop each file is uploaded and a
 toast says `Installed …`, `Added …` or the server's error. Dropping a
 folder-form `.app` bundle works too: the page zips it and uploads the zip.

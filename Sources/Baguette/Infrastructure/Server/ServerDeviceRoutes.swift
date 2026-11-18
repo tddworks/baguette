@@ -1,6 +1,7 @@
 import Foundation
 import HTTPTypes
 import Hummingbird
+import HummingbirdWebSocket
 import NIOCore
 
 /// What every per-device route shares as it moves from `Simulators` to
@@ -39,6 +40,34 @@ extension Server {
         CaptureImageFormat.allCases.flatMap { deviceRoutes("screenshot.\($0.pathExtension)") }
     }
 
+    /// The `/devices/:udid/…` route that replaces an old
+    /// `/simulators/:udid/<leaf>` one, or nil for a path that isn't one —
+    /// the list page, `/simulators.json`, a device's page, anything on the
+    /// devices tree.
+    static func successor(of path: String) -> String? {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count >= 3, parts[0] == "simulators" else { return nil }
+        return "/devices/" + parts.dropFirst().joined(separator: "/")
+    }
+
+    /// Marks a response from the old `/simulators/:udid/…` spelling
+    /// deprecated, naming the `/devices` route that replaces it. The route
+    /// still answers; a script calling it learns where to move.
+    struct SimulatorTreeDeprecation<Context: RequestContext>: RouterMiddleware {
+        func handle(
+            _ request: Request,
+            context: Context,
+            next: (Request, Context) async throws -> Response
+        ) async throws -> Response {
+            var response = try await next(request, context)
+            if let successor = Server.successor(of: request.uri.path) {
+                response.headers[HTTPField.Name("Deprecation")!] = "true"
+                response.headers[HTTPField.Name("Link")!] = "<\(successor)>; rel=\"successor-version\""
+            }
+            return response
+        }
+    }
+
     /// The role a route acts with on the device a path names — or that
     /// no device has that id, or why the one that does refuses.
     enum RouteRole<Role> {
@@ -70,6 +99,33 @@ extension Server {
         case .notReady, .claimedTwice: status = .conflict
         }
         return pluginError(refusal.description, status: status)
+    }
+
+    /// `GET …/device.json` — one device as the page reads it: who it is,
+    /// its kind, its state and what it can do, so the page shows only the
+    /// controls the device has abilities for.
+    func registerDeviceListingRoute(
+        on router: Router<BasicWebSocketRequestContext>,
+        rejectUntrustedBrowser: @escaping @Sendable (Request) -> Response?
+    ) {
+        let devices = allDevices
+        for path in Self.deviceRoutes("device.json") {
+            router.get(RouterPath(path)) { r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                guard let json = Self.deviceListingJSON(udid: Self.udidParam(r), devices: devices) else {
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                }
+                return Self.jsonResponse(json)
+            }
+        }
+    }
+
+    /// The device's listing, or nil when no device has that id.
+    static func deviceListingJSON(udid: String, devices: any Devices) -> String? {
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let data = try? JSONSerialization.data(withJSONObject: device.listing, options: [.sortedKeys])
+        else { return nil }
+        return String(decoding: data, as: UTF8.self)
     }
 
     static let okJSON = Response(

@@ -5,7 +5,7 @@
 // APNs had sent it.
 //
 // The panel is a dumb sender: "Send" posts the payload text verbatim to
-// `POST /simulators/<udid>/notify?bundleId=<id>` and shows what comes back.
+// `POST /devices/<udid>/notify?bundleId=<id>` and shows what comes back.
 // The Swift side owns every rule — what a valid payload is, which app it's
 // addressed to, and the `expectation` line (delivered ≠ a banner showed),
 // which the card repeats word for word. The last app and payload are kept
@@ -87,7 +87,7 @@
     async send() {
       if (!this.udid || !this.host) return;
       const app = this.state.app.trim();
-      const url = `/simulators/${encodeURIComponent(this.udid)}/notify`
+      const url = `/devices/${encodeURIComponent(this.udid)}/notify`
         + (app ? `?bundleId=${encodeURIComponent(app)}` : '');
       this._show('Sending…', '');
       try {

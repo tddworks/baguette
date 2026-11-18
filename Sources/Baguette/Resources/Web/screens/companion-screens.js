@@ -1,6 +1,6 @@
 // CompanionScreens — the extra screens a simulator can show beside its
 // own glass, as one value. Built from
-// `/simulators/<udid>/companion-screens.json`; the rail asks it what to
+// `/devices/<udid>/companion-screens.json`; the rail asks it what to
 // draw rather than reaching into the payload and re-deriving the same
 // three questions at every call site.
 //
@@ -152,7 +152,7 @@
   }
 
   class CompanionScreens {
-    /** @param {object|null} payload  `/simulators/<udid>/companion-screens.json` */
+    /** @param {object|null} payload  `/devices/<udid>/companion-screens.json` */
     constructor(payload) {
       this.payload = payload && typeof payload === 'object' ? payload : {};
     }

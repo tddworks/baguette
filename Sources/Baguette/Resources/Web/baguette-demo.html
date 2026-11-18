@@ -19,7 +19,7 @@
 </head>
 <body>
   <h1>Baguette SDK demo</h1>
-  <p>Loads the SDK end-to-end: fetches <code>/simulators/&lt;udid&gt;/definition.json</code>,
+  <p>Loads the SDK end-to-end: fetches <code>/devices/&lt;udid&gt;/definition.json</code>,
      constructs <code>Baguette.use({...})</code>, mounts the simulator in the box below.
      Open <code>/simulators</code> in another tab to pick a UDID; baguette must be running.</p>
 
@@ -62,7 +62,7 @@
         // Open the stream WS just to get `send` — frames are
         // ignored in this demo; only input dispatch is exercised.
         const wsUrl = location.origin.replace(/^http/, 'ws')
-          + `/simulators/${encodeURIComponent(udid)}/stream?format=mjpeg&version=v2`;
+          + `/devices/${encodeURIComponent(udid)}/stream?format=mjpeg&version=v2`;
         ws = new WebSocket(wsUrl);
         ws.binaryType = 'arraybuffer';
         ws.onopen   = () => log('WS open');

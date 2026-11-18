@@ -1,4 +1,4 @@
-// sim-native.js — focus mode at /simulators/<udid>.
+// sim-native.js — focus mode at /devices/<udid>.
 //
 // Activates only when the page is loaded directly with a UDID in the
 // path. Renders a macOS-Simulator-style window chrome (traffic
@@ -14,8 +14,8 @@
   'use strict';
 
   // --- Activation gate ---------------------------------------------
-  // Match `/simulators/<udid>`; reject `/simulators` and
-  // `/simulators/`. UDIDs never contain `/`, so the second segment
+  // Match `/devices/<udid>`; reject `/simulators` and
+  // `/devices/`. UDIDs never contain `/`, so the second segment
   // being non-empty is the discriminator.
   function deepLinkUdid() {
     const parts = location.pathname.split('/').filter(Boolean);
@@ -29,11 +29,16 @@
   const udid = deepLinkUdid();
   if (!udid) return; // not deep-link mode; let sim-list run.
   window.__baguetteNativeMode = true;
-  // Physical device: same page, reduced surface — no boot/orientation
-  // calls, sim-only toolbar clusters hidden. Gestures go down the stream
-  // socket as for a simulator; the server sends them on when the device
-  // can take input (a phone on a cable) and refuses them otherwise.
-  const deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
+  // One page for every device. What it shows follows the device: each
+  // control only when the device has the ability it drives
+  // (`deviceAbilities`, from /devices/<id>/device.json), and a borrowed
+  // bezel plus a badge only for a physical device (`deviceMode`), whose
+  // model has no DeviceKit chrome of its own. Both are read at boot; the
+  // URL's tree decides neither.
+  let deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
+  let deviceAbilities = null;
+  const can = (ability) => deviceAbilities === null
+      || window.Baguette._DeviceAbilities.has(deviceAbilities, ability);
 
   // --- State -------------------------------------------------------
   let session = null;
@@ -333,6 +338,11 @@
     // 2. Resolve device name + iOS runtime from the list endpoint.
     //    The SDK definition gives us the bezel; /simulators.json gives
     //    us the human-readable identity that sits above it.
+    const listing = await fetchDeviceListing(udid);
+    if (listing) {
+      deviceAbilities = listing.abilities || [];
+      deviceMode = !!(listing.kind && listing.kind.reality === 'physical');
+    }
     const meta = await fetchDeviceMeta(udid);
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
@@ -371,7 +381,7 @@
     // flat chrome never shows for it while the guest is up — the cube
     // button turns the book instead of leaving 3D. The flat chrome
     // still carries the power card for a device that is not booted.
-    const hinge = deviceMode ? null : await readHinge();
+    const hinge = can('hinge') ? await readHinge() : null;
     foldable = !!(hinge && hinge.foldable);
     if (foldable) currentLitPanel = hinge.litPanel || 'primary';
     if (foldable && isBooted(meta.state)) {
@@ -399,7 +409,7 @@
     //    screen that isn't there is instructions rather than a pane.
     //    Also mounts first so it sits above the plugins rail in the
     //    shared right-edge stack.
-    if (!deviceMode) mountScreensRail();
+    if (can('displays')) mountScreensRail();
 
     // 5. Settle the codec picker — it's on screen even when no session
     //    ever starts, so a shutdown device can't be left offering H.264.
@@ -452,7 +462,7 @@
     // Swift side routes by extension. The drop zone + highlight are
     // scoped to the device frame so the overlay traces the phone, not
     // the whole page. See docs/features/file-upload/README.md.
-    if (window.SimFileDrop && !deviceMode) {
+    if (window.SimFileDrop && (can('apps') || can('photos'))) {
       window.__fileDrop =
           window.SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
     }
@@ -482,7 +492,7 @@
     // has ever been opened. A throttle armed from the CLI in another
     // terminal is exactly the one someone forgets about, and this page is
     // where they will be looking when the app feels slow.
-    if (!deviceMode) watchNetworkArmed();
+    if (can('network')) watchNetworkArmed();
 
   }
 
@@ -827,7 +837,7 @@
 
   async function readHinge() {
     try {
-      const res = await fetch(`/simulators/${encodeURIComponent(udid)}/hinge`);
+      const res = await fetch(`/devices/${encodeURIComponent(udid)}/hinge`);
       return res.ok ? await res.json() : null;
     } catch (e) { return null; }
   }
@@ -839,8 +849,8 @@
   let currentLitPanel = 'primary';
 
   function resetToPortrait() {
-    if (deviceMode) return; // a physical phone rotates itself
-    fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
+    if (!can('orientation')) return; // a physical phone rotates itself
+    fetch(window.BaguetteTarget.path(udid, '/orientation?value=portrait'),
         { method: 'POST' }).catch(() => { /* best-effort */ });
   }
 
@@ -1428,7 +1438,7 @@
     }, IDLE_POLL_MS);
   }
 
-  // POST /simulators/<udid>/boot, then poll until CoreSimulator agrees.
+  // POST /devices/<udid>/boot, then poll until CoreSimulator agrees.
   // The route is synchronous on the server side (it calls
   // `bootWithOptions:error:`), but "returned" only means the boot was
   // accepted — the guest keeps coming up afterwards, which is what the
@@ -1436,7 +1446,7 @@
   async function requestBoot() {
     renderPowerCard('booting');
     try {
-      const r = await fetch('/simulators/' + encodeURIComponent(udid) + '/boot',
+      const r = await fetch('/devices/' + encodeURIComponent(udid) + '/boot',
           { method: 'POST' });
       if (!r.ok) {
         // CoreSimulator refuses a boot when the device is already
@@ -1642,6 +1652,16 @@
     return _templatePromise;
   }
 
+  /** The device as the server lists it — kind and abilities — or null. */
+  async function fetchDeviceListing(targetUdid) {
+    try {
+      const r = await fetch(window.BaguetteTarget.path(targetUdid, '/device.json'), { cache: 'no-store' });
+      return r.ok ? await r.json() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function fetchDeviceMeta(targetUdid) {
     if (deviceMode) {
       try {
@@ -1842,6 +1862,21 @@
     const strip = document.getElementById('nativeToolScroll');
     if (!controls || !strip || !window.Baguette || !window.Baguette._ToolbarFold) {
       return false;
+    }
+
+    // Only the controls this device has an ability for; a cluster left
+    // with none goes too, and with it its fold menu.
+    if (deviceAbilities !== null) {
+      for (let i = TOOLBAR_CLUSTERS.length - 1; i >= 0; i--) {
+        const cluster = TOOLBAR_CLUSTERS[i];
+        cluster.members = cluster.members.filter((member) => {
+          const keep = window.Baguette._DeviceAbilities.shows(member.id, deviceAbilities);
+          const el = document.getElementById(member.id);
+          if (!keep && el) el.remove();
+          return keep;
+        });
+        if (!cluster.members.length) TOOLBAR_CLUSTERS.splice(i, 1);
+      }
     }
 
     // The scroller and its chevrons are what this replaces.
@@ -2158,55 +2193,24 @@
     });
   }
 
-  /// Physical devices carry a reduced surface: the sim-only clusters
-  /// (control / simulate / inspect) hide, and a badge says what the device
-  /// can do, from the abilities /devices.json lists for it. Stream, 3D
-  /// view, and capture stay.
+  /// A physical device's badge says what it can do, from the abilities
+  /// the server lists for it. The controls themselves already follow
+  /// those abilities (`buildToolbarClusters`), for every device.
   function applyDeviceModeChrome() {
     if (!deviceMode) return;
-    ['control', 'simulate', 'inspect'].forEach((id) => {
-      document.querySelectorAll(
-        `#simNativeView [data-cluster="${id}"], #simNativeView [data-sep-for="${id}"], ` +
-        `#simNativeView [data-fold="${id}"]`
-      ).forEach((n) => { n.style.display = 'none'; });
-    });
     const osEl = document.getElementById('nativeDeviceOS');
     if (osEl && !document.getElementById('nativeDeviceBadge')) {
       const badge = document.createElement('span');
       badge.id = 'nativeDeviceBadge';
-      const words = window.Baguette._DeviceBadge.of([]);
+      const words = window.Baguette._DeviceBadge.of(deviceAbilities || []);
       badge.textContent = words.text;
       badge.title = words.title;
-      fetch('/devices.json', { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : { connected: [] }))
-        .then((json) => {
-          const hit = (json.connected || []).find((d) => d.udid === udid);
-          const said = window.Baguette._DeviceBadge.of(hit && hit.capabilities);
-          badge.textContent = said.text;
-          badge.title = said.title;
-          showDeviceInspectTools(window.Baguette._DeviceBadge.inspectTools(hit && hit.capabilities));
-        })
-        .catch(() => { /* keep view-only */ });
       badge.style.cssText =
         'margin-left:8px;padding:2px 8px;border:1px solid #fde68a;' +
         'border-radius:99px;background:#fef3c7;color:#92400e;' +
         'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
       osEl.insertAdjacentElement('afterend', badge);
     }
-  }
-
-  /// Brings back the inspect cluster on a device page with only the tools
-  /// the device can back (`ids`), e.g. the accessibility inspector.
-  function showDeviceInspectTools(ids) {
-    if (!ids.length) return;
-    const cluster = document.querySelector('#simNativeView [data-cluster="inspect"]');
-    if (!cluster) return;
-    cluster.style.display = '';
-    const sep = document.querySelector('#simNativeView [data-sep-for="inspect"]');
-    if (sep) sep.style.display = '';
-    cluster.querySelectorAll('button[id]').forEach((btn) => {
-      btn.style.display = ids.includes(btn.id) ? '' : 'none';
-    });
   }
 
   /**
@@ -2362,7 +2366,7 @@
     // Orientation cycle — one click advances 90° CW. Cycle length
     // varies by device class: 3 on iPhone (skips upside-down,
     // which iPhone UIKit ignores), 4 on iPad. POSTs the new value
-    // through the `/simulators/<udid>/orientation?value=...` route;
+    // through the `/devices/<udid>/orientation?value=...` route;
     // server delegates to `simulator.orientation().set(...)`, which
     // dispatches a device orientation change through the appropriate backend.
     window.__nativeRotate = () => {
@@ -2373,7 +2377,7 @@
       if (foldable) {
         currentOrientation = value;
         if (render3DPanel) render3DPanel.setInterfaceOrientation(value);
-        const url = '/simulators/' + encodeURIComponent(udid)
+        const url = '/devices/' + encodeURIComponent(udid)
             + '/orientation?value=' + encodeURIComponent(value);
         fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
         return;
@@ -2384,19 +2388,19 @@
       // remap coords back to portrait so taps still land on the
       // iOS element under the cursor.
       applyOrientation(value);
-      const url = '/simulators/' + encodeURIComponent(udid)
+      const url = '/devices/' + encodeURIComponent(udid)
           + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
     };
 
     // Shake — fires a UIKit motionShake on the frontmost app
-    // (shake-to-undo etc). POSTs to `/simulators/<udid>/shake`; the
+    // (shake-to-undo etc). POSTs to `/devices/<udid>/shake`; the
     // server delegates to `simulator.shake().shake()`, backed by
     // `simctl spawn notifyutil`. Unlike rotate there's no visual state
     // to mirror — the motion event lives entirely in the guest — so
     // this is a pure fire-and-forget POST.
     window.__nativeShake = () => {
-      const url = '/simulators/' + encodeURIComponent(udid) + '/shake';
+      const url = '/devices/' + encodeURIComponent(udid) + '/shake';
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
     };
   }
@@ -2459,7 +2463,7 @@
   }
 
   // Camera sheet — same lazy-mount pattern as logs. The CameraPanel
-  // owns its WS (/simulators/<udid>/camera); closing the sheet leaves
+  // owns its WS (/devices/<udid>/camera); closing the sheet leaves
   // the panel mounted so reopening doesn't drop the streaming state
   // or device selection. The toolbar button's `.streaming` class
   // tracks the panel's reported phase so the user sees "camera on"
@@ -2627,7 +2631,7 @@
     if (!udid || networkArmedTimer) return;
     const poll = async () => {
       try {
-        const res = await fetch(`/simulators/${encodeURIComponent(udid)}/network`);
+        const res = await fetch(`/devices/${encodeURIComponent(udid)}/network`);
         if (res.ok) {
           const state = await res.json();
           markNetworkArmed(state.active, state.summary);

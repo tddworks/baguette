@@ -22,7 +22,7 @@ baguette status-bar override --udid <UDID> \
 baguette status-bar clear --udid <UDID>
 ```
 
-In the browser: open `/simulators/<UDID>` and click the signal-bars toolbar
+In the browser: open `/devices/<UDID>` and click the signal-bars toolbar
 button. The **Status Bar** card reads the device's current overrides when it
 opens and applies each change live (250 ms debounce), sending only the field you
 changed. "Clear overrides" drops them all. There's no preview; the live stream

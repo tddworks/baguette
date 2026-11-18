@@ -21,7 +21,7 @@ WebSocket, which agents can drive directly.
 The app must be (re)launched **after** Start — the camera is injected
 into apps at launch:
 
-1. Open `/simulators/<UDID>` in `baguette serve`; in the sidebar's
+1. Open `/devices/<UDID>` in `baguette serve`; in the sidebar's
    **Camera** disclosure pick a source (Webcam / Image / Video), a
    device or a file, and **Start**. Fit/Fill, Mirror and live FPS sit
    on the same card.

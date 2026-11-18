@@ -108,7 +108,9 @@ extension Device {
     }
 }
 
-private extension Device {
+extension Device {
+    /// The device as a client reads it: id, name, kind, state and what it
+    /// can do.
     var listing: [String: Any] {
         var result: [String: Any] = [
             "id": id.raw,

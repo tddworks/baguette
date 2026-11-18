@@ -3,7 +3,7 @@
 (function() {
   'use strict';
 
-  // sim-native.js owns the page when the URL is `/simulators/<udid>`
+  // sim-native.js owns the page when the URL is `/devices/<udid>`
   // and sets this flag synchronously at script-eval time. Bail out so
   // we don't paint the list shell underneath the focus-mode chrome.
   if (window.__baguetteNativeMode) {
@@ -397,11 +397,11 @@
   }
 
   async function postSimAction(action, id) {
-    // POST /simulators/<udid>/<action> — UDID lives in the path,
+    // POST /devices/<udid>/<action> — UDID lives in the path,
     // body is empty. Matches the canonical /baguette serve route
     // table (no /api/ prefix, no payload).
     const response = await fetch(
-      `/simulators/${encodeURIComponent(id)}/${encodeURIComponent(action)}`,
+      `/devices/${encodeURIComponent(id)}/${encodeURIComponent(action)}`,
       { method: 'POST' }
     );
     if (!response.ok) throw new Error(`${action} failed: ${response.status}`);

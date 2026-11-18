@@ -245,7 +245,7 @@ curl -s "http://127.0.0.1:8421/devices/<UDID>/definition.json" | jq
 curl -s "http://127.0.0.1:8421/devices/<UDID>/chrome.json" | jq
 ```
 
-Open `http://127.0.0.1:8421/simulators/<UDID>` (focus mode), flip the
+Open `http://127.0.0.1:8421/devices/<UDID>` (focus mode), flip the
 top-toolbar bezel toggle (third icon from the right) to switch
 between flat and actionable views, and hover the right-rail buttons —
 the cap should slide outward by the chrome.json `rollover − normal`

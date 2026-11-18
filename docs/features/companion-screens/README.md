@@ -19,7 +19,7 @@ CLI: [`baguette screenshot`](../../commands.md#baguette-screenshot) and
 
 ## Quick start
 
-In focus mode (`/simulators/<udid>`) both screens are offered from the
+In focus mode (`/devices/<udid>`) both screens are offered from the
 **screens rail** on the right edge, above the plugins rail. Every screen keeps
 a slot whether or not it is there:
 

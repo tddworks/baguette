@@ -8,7 +8,7 @@ description: Every HTTP and WebSocket route `baguette serve` answers, one row ea
 baguette serve                  # http://127.0.0.1:8421/simulators
 ```
 
-Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/simulators` lists devices with Boot / Shutdown; `/simulators/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).
+Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/simulators` lists devices with Boot / Shutdown; `/devices/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).
 
 One resource tree: no `/api/` prefix, the UDID is always in the path, and the format is the file extension.
 
@@ -20,14 +20,14 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 
 `:udid` is a simulator UDID. Rows without a feature link are documented here only.
 
-**Moving to `/devices/:udid/…`.** A route marked *any device* answers for every device — a simulator, a phone on a cable — under `/devices/:udid/…`, and for a simulator under its old `/simulators/:udid/…` too. A device that can't do what's asked answers `422` naming it (`han's iPhone can't do orientation`); one that isn't running, `409`. A plugin's grant covers the same route under either spelling.
+**One tree: `/devices/:udid/…`.** A route marked *any device* answers for every device — a simulator, a phone on a cable. A device that can't do what's asked answers `422` naming it (`han's iPhone can't do orientation`); one that isn't running, `409`. A plugin's grant covers the route under either spelling. The old `/simulators/:udid/…` spelling still answers, with `Deprecation: true` and a `Link` to its `/devices` successor; it goes in a later release.
 
 | Method | Path | What | Docs |
 |---|---|---|---|
 | `GET` | `/` | 302 → `/simulators` | |
 | `GET` | `/simulators` | device list page | |
 | `GET` | `/simulators.json` | `{running, available}`, same as `baguette list --json` | |
-| `GET` | `/simulators/:udid` | focus-mode page | [baguette-sdk](features/baguette-sdk/README.md) |
+| `GET` | `/devices/:udid` | focus-mode page, for any device (`/simulators/:udid` serves it too) | [baguette-sdk](features/baguette-sdk/README.md) |
 | `POST` | `/devices/:udid/boot`, `/shutdown` *any device* | boot / shut down | [boot](features/boot/README.md) |
 | `POST` | `/devices/:udid/orientation?value=` *any device* | `portrait`, `landscape-left`, `landscape-right`, `portrait-upside-down`; `504` when an iPhone Duo change is unconfirmed | [hinge](features/hinge/README.md#rotation) |
 | `POST` | `/devices/:udid/input` *any device* | one gesture envelope → its ack | [wire.md](wire.md) |

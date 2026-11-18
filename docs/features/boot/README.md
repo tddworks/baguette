@@ -5,7 +5,7 @@ description: Boot a shutdown simulator from the CLI, HTTP, the list page, the fa
 # Booting a device
 
 Every baguette surface that shows a simulator can also start one, including
-**focus mode** (`/simulators/<udid>`), where a deep link lands you. Every flag:
+**focus mode** (`/devices/<udid>`), where a deep link lands you. Every flag:
 [commands.md#baguette-boot](../../commands.md#baguette-boot).
 
 ## Quick start
@@ -15,13 +15,13 @@ baguette boot --udid <UDID>          # headless boot that survives the client di
 baguette shutdown --udid <UDID>
 ```
 
-Or open `/simulators/<UDID>` in `baguette serve` on a shutdown device: its
+Or open `/devices/<UDID>` in `baguette serve` on a shutdown device: its
 screen shows a **Boot** button.
 
 | Surface | How |
 |---------|-----|
 | CLI | `baguette boot --udid <UDID>` |
-| Focus mode | Open `/simulators/<UDID>` on a shutdown device; the screen shows **Boot** |
+| Focus mode | Open `/devices/<UDID>` on a shutdown device; the screen shows **Boot** |
 | List page | `/simulators`: boot / shutdown buttons per row |
 | Device farm | `/farm`: per-tile and bulk boot ([device farm](../device-farm/README.md)) |
 

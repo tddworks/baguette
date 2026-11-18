@@ -1,7 +1,7 @@
 'use strict';
 
 // Sim3DPanel's capture path: the JSON body it POSTs to
-// `/simulators/:udid/render-3d.png` when the user saves a frame, and the
+// `/devices/:udid/render-3d.png` when the user saves a frame, and the
 // PNG header read it does to name the file after the real dimensions.
 //
 // The panel itself (canvas, pointer orbiting, stream lifecycle) stays
@@ -238,7 +238,7 @@ test('saving posts the pose to render-3d.png and files it under its real size', 
   await panel.download();
 
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, '/simulators/BC3E-138D/render-3d.png');
+  assert.equal(requests[0].url, '/devices/BC3E-138D/render-3d.png');
   assert.equal(requests[0].init.method, 'POST');
   assert.deepEqual(requests[0].body.size, { width: 1290, height: 2796 });
   assert.equal(anchors.length, 1);

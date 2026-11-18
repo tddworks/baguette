@@ -162,6 +162,7 @@ struct Server: Sendable {
         // which are closed by construction. Requests with no grant are
         // untouched here and still answer to the origin checks below.
         router.add(middleware: PluginGrantMiddleware(grants: self.grants))
+        router.add(middleware: SimulatorTreeDeprecation())
         let rejectUntrustedBrowser: @Sendable (Request) -> Response? = { request in
             Self.rejectUntrustedBrowserRequest(
                 request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
@@ -191,6 +192,7 @@ struct Server: Sendable {
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerScreenStateRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerPowerRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerDeviceListingRoute(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerPlaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerFileRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerHingeRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)

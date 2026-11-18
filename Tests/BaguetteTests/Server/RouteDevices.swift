@@ -13,6 +13,7 @@ func routeDevices(
     given(device).id.willReturn(id)
     given(device).name.willReturn(name)
     given(device).state.willReturn(state)
+    given(device).kind.willReturn(DeviceKind(platform: .iOS, reality: .simulated, model: name))
     given(device).abilities.willReturn(abilities)
     let devices = MockDevices()
     given(devices).all.willReturn([device])

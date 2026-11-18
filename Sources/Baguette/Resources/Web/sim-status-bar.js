@@ -5,8 +5,8 @@
 // bar (time, carrier, network, Wi-Fi / cellular signal, battery).
 //
 // The panel is a dumb sender: every control change debounces into a
-// `POST /simulators/<udid>/status-bar` with the full override as JSON;
-// "Clear overrides" sends `DELETE /simulators/<udid>/status-bar`. The
+// `POST /devices/<udid>/status-bar` with the full override as JSON;
+// "Clear overrides" sends `DELETE /devices/<udid>/status-bar`. The
 // Swift side owns all domain logic (`simctl status_bar` argv, range
 // clamping). The live device stream shows the result — no client-side
 // preview. See `docs/features/status-bar/README.md`.
@@ -86,7 +86,7 @@
     // overridden fields come back; anything absent keeps its default.
     async _hydrate() {
       try {
-        const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/status-bar`);
+        const res = await fetch(`/devices/${encodeURIComponent(this.udid)}/status-bar`);
         if (!res.ok) return;
         const data = await res.json();
         Object.keys(data).forEach((k) => {
@@ -259,7 +259,7 @@
       this._dirty = new Set();
       if (!Object.keys(body).length) return;
 
-      fetch(`/simulators/${encodeURIComponent(this.udid)}/status-bar`, {
+      fetch(`/devices/${encodeURIComponent(this.udid)}/status-bar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -268,7 +268,7 @@
 
     clear() {
       if (this.udid) {
-        fetch(`/simulators/${encodeURIComponent(this.udid)}/status-bar`, { method: 'DELETE' })
+        fetch(`/devices/${encodeURIComponent(this.udid)}/status-bar`, { method: 'DELETE' })
           .catch((e) => console.warn('[status-bar] clear failed', e));
       }
       // Reset the controls to defaults so the card matches the now-live

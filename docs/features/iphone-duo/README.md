@@ -38,7 +38,7 @@ baguette describe-ui --udid <UDID> | jq .screen   # the lit panel's size, for --
 baguette hinge --udid <UDID>                 # read the angle and lit panel
 ```
 
-On the page (`/simulators/<UDID>`), a booted Duo is drawn in 3D as Device Hub
+On the page (`/devices/<UDID>`), a booted Duo is drawn in 3D as Device Hub
 draws it: Apple's own model, posed live by the hinge. Under it sits the pose
 picker (shut, open 130°, flat) and a **hinge slider**; beside it are the volume,
 power and camera-control keys, shown while the pointer is over the stage.

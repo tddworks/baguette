@@ -19,7 +19,7 @@ phone it is shown on.
    baguette serve --host 0.0.0.0
    ```
 
-2. On the phone, open `http://<mac-ip>:8421/simulators/<UDID>` and tap
+2. On the phone, open `http://<mac-ip>:8421/devices/<UDID>` and tap
    **⛶ Handheld** next to the 3D cube in the toolbar.
 
 Or link straight to it: `http://<mac-ip>:8421/simulators/<UDID>?handheld=1`.
@@ -71,4 +71,4 @@ window, laid out below the iPhone's status bar.
 
 - [stream](../stream/README.md) — the stream handheld mode shows
 - [touches](../touches/README.md) — how a finger on the glass becomes a touch
-- [deep-links](../deep-links/README.md) — the `/simulators/<UDID>` page
+- [deep-links](../deep-links/README.md) — the `/devices/<UDID>` page

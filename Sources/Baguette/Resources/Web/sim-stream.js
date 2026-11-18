@@ -113,8 +113,8 @@
     if (!_templatePromise) {
       // Absolute path: a relative `sim-stream.html` resolves against
       // the current URL, so when the page is loaded directly at
-      // `/simulators/<udid>` it would request
-      // `/simulators/sim-stream.html` — which the `/simulators/:udid`
+      // `/devices/<udid>` it would request
+      // `/devices/sim-stream.html` — which the `/devices/:udid`
       // route happily answers with sim.html. The parser then can't
       // find `#simPluginView` and downstream `getElementById` calls
       // (`simStreamTitle`, etc.) start returning null.
@@ -253,7 +253,7 @@
     renderGallery();
     mountCaptureSizeMenu();
 
-    // Live unified-log panel — opens its own WS to /simulators/<udid>/logs.
+    // Live unified-log panel — opens its own WS to /devices/<udid>/logs.
     // Independent of the stream socket so logs survive even when the
     // user pauses the frame stream, and vice-versa.
     const logHost = document.getElementById('simLogPanel');
@@ -281,7 +281,7 @@
     }
 
     // Camera control card — opens its own WS to
-    // /simulators/<udid>/camera and pumps Mac webcam frames into the
+    // /devices/<udid>/camera and pumps Mac webcam frames into the
     // shared-memory buffer the VirtualCamera dylib reads. Independent
     // of the stream socket and the logs socket — closing the page
     // tears all three down.
@@ -678,14 +678,14 @@
   }
 
   // --- Affordance handler ---
-  // Stream click on the list page navigates to `/simulators/<udid>`
+  // Stream click on the list page navigates to `/devices/<udid>`
   // — the focus-mode page owned by sim-native.js — instead of
   // swapping the inline #simPluginView in place. The deep-link route
   // is the canonical "stream this device" surface (browser back
   // returns to the list, share-link works, no inline-view flash).
   window.simAffordanceHandlers = window.simAffordanceHandlers || {};
   window.simAffordanceHandlers['stream'] = (id) => {
-    location.href = '/simulators/' + encodeURIComponent(id);
+    location.href = '/devices/' + encodeURIComponent(id);
   };
 
   // --- Hash trigger ---

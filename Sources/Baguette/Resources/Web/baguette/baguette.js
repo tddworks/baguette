@@ -39,11 +39,11 @@
     if (typeof send !== 'function') throw new Error('Baguette.use: send must be a function');
 
     const base = host || location.origin;
-    // `definitionURL` lets a non-simulator surface (a physical device
-    // borrowing a chrome) point the bootstrap somewhere else.
+    // `definitionURL` lets a surface point the bootstrap somewhere else —
+    // a physical device borrowing a chrome with `?chrome=`.
     const url  = definitionURL
         ? `${base}${definitionURL}`
-        : `${base}/simulators/${encodeURIComponent(udid)}/definition.json`;
+        : `${base}/devices/${encodeURIComponent(udid)}/definition.json`;
     const res  = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) {
       throw new Error(`Baguette.use: definition fetch failed (${res.status})`);

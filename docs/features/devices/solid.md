@@ -37,7 +37,7 @@ each context is a module, so the compiler holds the direction.
 How a call travels — `baguette tap --device <id> …` or a click on the page:
 
 ```
-          Commands (CLI)          Serve (page, routes)          Plugins
+          Commands (CLI)          Server (page, routes)         Plugins
                 │                        │                         │  a plugin names a device by id
                 └───────────┬────────────┴─────────────────────────┘
                             │  parse, then ask for an ability by device id
@@ -67,7 +67,7 @@ How a call travels — `baguette tap --device <id> …` or a click on the page:
 ```
 Sources/
 ├── Commands/            THE WAY IN — the CLI: `tap`, `screenshot`, `describe-ui` …
-├── Serve/               THE WAY IN — `baguette serve`: the page, its routes and sockets
+├── Server/              THE WAY IN — the server `baguette serve` runs: the page, its routes and sockets
 │
 ├── Devices/             THE DEVICES BAGUETTE DRIVES — one kind each, all filling a Device
 │   ├── Simulator/            an iOS simulator         (simctl, SimulatorKit, IndigoHID)
@@ -90,7 +90,7 @@ Sources/
 
 | Context | Its question | Uses |
 |---|---|---|
-| `Commands` · `Serve` | how do people get in? | everything below |
+| `Commands` · `Server` | how do people get in? | everything below — and `Commands` holds `serve`, the one command that starts the `Server`; most commands never touch it |
 | `Devices` | how is each kind of device really driven? | `Device` |
 | `Plugins` | what extends baguette, and from where? | `Device` (a plugin names a device by its id) |
 | `Device` | what is a device: how it looks, and what it can do? | nothing |
@@ -101,6 +101,12 @@ Sources/
   `Location/`. Abilities depend on each other only where the meaning does.
 - **Each ability declares its own key** (`Ability.screen` in `Screen/`), so
   `Device` itself imports none of them and a new ability touches nothing else.
+- **Every context is a module: its public face at the top, its implementations
+  in `Internal/`.** The top level holds what other modules may name — roles,
+  values, the device source — and is `public`; `Internal/` holds how it works —
+  simctl, SimulatorKit, devicectl, the HTTP plumbing — at Swift's default
+  `internal`, so no other module can reach it. There is no `Infrastructure`
+  folder: an adapter lives in `Internal/` of the context it implements.
 - **A kind in `Devices/` exports one thing: its device source.** Everything
   else in it is internal. `Devices/` holds the laws that span every kind (one
   id names one device; a kind registers only what it can do) and the one list
@@ -160,7 +166,7 @@ is refused by name: `han's iPhone can't do key`, `iPhone 17 has no back`.
 | **O** | the kinds of device are listed once; a new ability, navigation or button is a new case **inside a kind's registration**, never a `switch` outside `Devices/` | `Devices/`' list of kinds — a test pins that `Commands` and `Serve` read the same list |
 | **L** | an implementation does everything its role promises; what a device can't do is unregistered or not `available`, and refused by name — never `false` | `Abilities` · each role's `available`; a contract test per role, run against every kind's implementation |
 | **I** | no kind implements a member it can't perform | §3's sizes; a kind's registration names only roles it fully implements |
-| **D** | `Commands` and `Serve` reach a device only through `Devices.require(ability, of: id)`; they never construct a kind's code | the module graph: `Commands` and `Serve` see only a kind's device source |
+| **D** | `Commands` and `Server` reach a device only through `Devices.require(ability, of: id)`; they never construct a kind's code | the module graph: `Commands` and `Serve` see only a kind's device source |
 
 ## 5 · Adding Android, under this design
 
@@ -168,7 +174,7 @@ is refused by name: `han's iPhone can't do key`, `iPhone 17 has no back`.
 |---|---|
 | the kind | **new** `Devices/Android/` — its device source (registers the abilities it implements), its adb and emulator code, its pure parsing (adb's listing, the UI dump → elements, key codes), all internal |
 | registering it | **one line** in `Devices/`' list of kinds |
-| `Commands`, `Serve`, the page | **nothing** — they ask `Devices` for abilities; the page shows what `/devices.json` lists |
+| `Commands`, `Server`, the page | **nothing** — they ask `Devices` for abilities; the page shows what `/devices.json` lists |
 | `Device/` and its abilities | **nothing** — `back` already exists among `Press`'s navigations; Android lists it as available |
 
 Contrast with today: the two composition roots, `DeviceButton` and its four
@@ -186,7 +192,7 @@ questions), written before its slice is built:
 | each ability | `docs/features/<ability>/design.md` (many exist: touches, keyboard, location, hinge, …) | the ability's role, its values, its rules |
 | `Devices` | `docs/features/devices/design.md` (this folder) | the kinds, their list, the laws across them; one section per kind, or a design per kind (`real-devices`, `android`) |
 | `Plugins` | `docs/features/plugins/design.md` | plugin and bakery |
-| `Commands` · `Serve` | `docs/commands.md` · `docs/serve.md` | the way in; they hold no rule |
+| `Commands` · `Server` | `docs/commands.md` · `docs/serve.md` | the way in; they hold no rule |
 
 ## 7 · The refactor, step by step
 
@@ -202,10 +208,10 @@ from [CANONICAL §6](../../CANONICAL_MODEL.md#6--where-the-code-is-still-behind)
 | 2 | **every command through `Devices`** ✓ | `fill`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` take a `Simulator`; commands build `CoreSimulators(…)` and `SimctlInputSurface()`; `Network`, `Motion` and `InputSurface` take `on simulator:` | each asks `options.require(.x)`; every role is bound to its device when registered, so none takes a device; the input surface's repair is `.inputSurface`, an ability only a simulator registers; `options.simulator(for:)` is gone. `CoreSimulators(…)` stays only where the kinds are listed (`DeviceKinds`, `serve`, `list`, `chrome`, `render-3d`, `diag`) | "should register every simulator role as an ability"; the roles' tests, bound |
 | 3 | **split `Input`** ✓ | `IndigoHIDInput`, `DigitizerInput` (3 × `false`), `LitPanelInput`, `FoldableInput`; `GestureDispatcher` built in 5 places; acts named `Press`, `Key`, `Scroll` after their abilities | `Touch`, `Press`, `Key`, `Scroll` registered as abilities; each act names the one it needs (`Gesture.ability`); the iPhone registers `Touch` only (`DigitizerTouch`); the acts are `ButtonPress`, `Keystroke`, `WheelEvent`; `AbilityTable` is `Abilities`; a simulator's four share one `HID` per screen; the wire doesn't change. `Type` stays on `Key` until a device types without keys | "should refuse a key for a device without one, naming it"; "should play every input role on a screen with one HID…" |
 | 4 | **split `DeviceButton`** ✓ | 4 `switch`es, all in `IndigoHIDInput.swift` (250, 256, 285, 425) | `DeviceButton` is a `Navigation` or a `HardwareButton`; `Press` lists what's `available`, and `ButtonPress` is refused by name for anything else (`Gesture.missing(from:)`); the switches are inside the simulator's `Press`, the `(0, 0)` sentinel gone; `standardHIDUsage` is the hardware button's; `press --button` keeps its words (`back` comes with Android) | "should refuse a navigation the device doesn't have, naming it"; "should read every wire button name as a navigation or a hardware button" |
-| 5 | **routes through `Devices`** (several PRs) | 48 routes under `/simulators/:udid/…`, 8 under `/devices/…`; `Server.swift` 3,781 lines | one route group per PR into `/devices/:id/…` through `Devices`; `/simulators/:udid/…` as its alias; `Server.swift` split by group as each moves. Shared: `Server.deviceRoutes(_:)` (both spellings), `Server.role(_:of:in:)`, a refusal answering `422` (can't) or `409` (not running). Groups: **screen state** (orientation · shake · status bar) ✓ · **power** (boot · shutdown) ✓ · **place and motion** (location · motion · network) ✓ · **files and apps** (files · apps · media · camera-source · openurl · schemes · defaults · relaunch · notify) ✓ · **hinge** ✓ · **chrome** (chrome · definition · bezel · mask · chrome-button · 3D model · render) ✓ · **screenshots** ✓ · **interface** ✓ · **companion screens** ✓ · **logs** ✓ · **input and describe-ui** ✓ · **the 2D stream** ✓ (one `Server.deviceStream` for every device, gestures on its `GestureQueues` lane; `IndigoHIDInput` hops to the main thread for each message build alone) · **the 3D stream** ✓ (one `Server.deviceLive3D`; a phone running the companion app keeps its motion-posed twin); **the camera socket** ✓ (a `Camera` role, bound to its simulator, that `CameraSession` connects) | "should answer a device under the devices tree and a simulator under its old one", per group |
+| 5 | **routes through `Devices`** ✓ (several PRs) | 48 routes under `/simulators/:udid/…`, 8 under `/devices/…`; `Server.swift` 3,781 lines | one route group per PR into `/devices/:id/…` through `Devices`; `/simulators/:udid/…` as its alias; `Server.swift` split by group as each moves. Shared: `Server.deviceRoutes(_:)` (both spellings), `Server.role(_:of:in:)`, a refusal answering `422` (can't) or `409` (not running). Groups: **screen state** (orientation · shake · status bar) ✓ · **power** (boot · shutdown) ✓ · **place and motion** (location · motion · network) ✓ · **files and apps** (files · apps · media · camera-source · openurl · schemes · defaults · relaunch · notify) ✓ · **hinge** ✓ · **chrome** (chrome · definition · bezel · mask · chrome-button · 3D model · render) ✓ · **screenshots** ✓ · **interface** ✓ · **companion screens** ✓ · **logs** ✓ · **input and describe-ui** ✓ · **the 2D stream** ✓ (one `Server.deviceStream` for every device, gestures on its `GestureQueues` lane; `IndigoHIDInput` hops to the main thread for each message build alone) · **the 3D stream** ✓ (one `Server.deviceLive3D`; a phone running the companion app keeps its motion-posed twin). The page: one `/devices/<id>` page for every device, each control shown by the device's abilities (`device-abilities.js`, `/devices/<id>/device.json`); `/simulators/<id>/…` answers with `Deprecation: true` until a later release; **the camera socket** ✓ (a `Camera` role, bound to its simulator, that `CameraSession` connects) | "should answer a device under the devices tree and a simulator under its old one", per group |
 | 6 | **`Notify` out of `Apps`; `Lifecycle` → `Power`** ✓ | `Apps.deliver`; `SimulatorLifecycle` | `Notify` (`deliver`), registered by a simulator beside `Apps`; `Power` (`turnOn` · `turnOff`), `SimulatorPower`; the `.power` and `.notify` abilities | "should be delivered by the device's notifications"; "should boot the simulator when it is turned on" |
 | 7 | **encoders built outside `Device`** ✓ | `StreamFormat.makeStream` (Domain) builds Infrastructure encoders | the format stays in the Domain; `makeStream` lives beside the encoders; no other Domain file builds an Infrastructure type | Domain builds nothing outside it |
-| 8 | **contexts as modules, outside to inside** (one per PR) | one target, 407 files | `Device` (Chrome, abilities) → the kinds (Simulator, iPhone, CompanionPhone) → `Plugins` → `Commands`, `Serve`; roles and values `public`, the rest internal | the compiler holds the direction |
+| 8 | **contexts as modules, outside to inside** (one per PR) | one target, 407 files | `Device` (Chrome, abilities) → the kinds (Simulator, iPhone, CompanionPhone) → `Plugins` → `Commands`, `Server`; roles and values `public`, the rest internal | the compiler holds the direction Spike (measured): the `Device` module's dependency closure is 97 of the Domain's 250 files and ~1,950 declarations to make `public`. Fixed on the way: `SimulatorState.deviceState`, `SimulatorCamera` and `Attitude` pointed outward and moved. Still to move inward first: `Displays`, `ExternalDisplays`, `WatchPairing`, `InputSurface` — ability roles filed under `Simulator/` |
 | 9 | **Android** | — | its own storm and design, then `Devices/Android/` and one line | §5 |
 
 Steps 1–2 are the cheapest and remove most of §1's cost; 3–4 end the

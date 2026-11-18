@@ -132,7 +132,7 @@
     params.set('style', style);
     if (bundleId) params.set('bundleId', bundleId);
     return proto + '//' + location.host
-      + '/simulators/' + encodeURIComponent(udid) + '/logs?'
+      + '/devices/' + encodeURIComponent(udid) + '/logs?'
       + params.toString();
   }
 

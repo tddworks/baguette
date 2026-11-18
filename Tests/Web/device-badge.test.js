@@ -14,7 +14,7 @@ function DeviceBadge() {
 }
 
 test('should call a device that takes touches touchable', () => {
-  const badge = DeviceBadge().of(['screen', 'input', 'pasteboard']);
+  const badge = DeviceBadge().of(['screen', 'touch', 'pasteboard']);
   assert.equal(badge.text, 'DEVICE · touch');
 });
 
@@ -24,19 +24,12 @@ test('should call a device without input view-only', () => {
 });
 
 test('should name what a device can do in its title', () => {
-  const badge = DeviceBadge().of(['screen', 'input']);
-  assert.match(badge.title, /screen, input/);
+  const badge = DeviceBadge().of(['screen', 'touch']);
+  assert.match(badge.title, /screen, touch/);
 });
 
 test('should read a device with no abilities listed as view-only', () => {
   assert.equal(DeviceBadge().of(undefined).text, 'DEVICE · view-only');
 });
 
-test('should offer the accessibility inspector to a device that can do accessibility', () => {
-  assert.deepEqual(DeviceBadge().inspectTools(['screen', 'input', 'accessibility']), ['nativeAxToggle']);
-});
 
-test('should offer no inspect tools to a device without accessibility', () => {
-  assert.deepEqual(DeviceBadge().inspectTools(['screen', 'input']), []);
-  assert.deepEqual(DeviceBadge().inspectTools(undefined), []);
-});

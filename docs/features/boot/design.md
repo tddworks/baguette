@@ -20,7 +20,7 @@ device's name and runtime; it reads `state` from the same response. No new
 endpoint, no change to the definition payload.
 
 ```
-GET /simulators/<udid>          ← deep link
+GET /devices/<udid>             ← deep link
       │
       ▼
 GET /simulators.json            ← name · runtime · state
