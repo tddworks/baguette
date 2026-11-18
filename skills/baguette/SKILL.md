@@ -97,7 +97,10 @@ screen reacted: use `--then-describe-ui` (`"then_describe_ui":true`) or a screen
   armed; relaunch the app once (a later `network set` or `clear` needs none).
 - An idle screen may emit no frame, so `screenshot` times out; nudge it with
   a tap first.
-- Simulators only: physical-device control isn't wired.
+- A paired iPhone on a cable takes the same `--udid` for screen, touches,
+  `describe-ui` (~2 s a read) and `clipboard`; its `tap --label` lands as a
+  touch. No buttons, keys, apps or lifecycle: those answer `can't do <ability>`
+  (`references/devices.md`).
 
 ## A smoke test
 

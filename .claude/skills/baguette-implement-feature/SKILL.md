@@ -95,7 +95,7 @@ tree, the words, every law and its one owner, the contexts — then answer:
 | Which context owns the question it answers? (CANONICAL §5) | the files go in `Domain/<Context>/`, `Infrastructure/<Context>/`, `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
 | Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; the App only parses and calls it |
 | Does it add or change a law? (CANONICAL §3) | it gets **one** owner — the node that holds the data. Grep for the rule first: if it's already written somewhere, that's the owner, or the duplicate to remove |
-| Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, reached from the `Simulator` aggregate (`sim.xxx()`), never built by the App or `Server` |
+| Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `AbilityTable` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |
 | Does what differ between devices become a branch? | make it data: profile, chrome, model, a registration table |
 
 When the doc doesn't cover it, write the change into CANONICAL_MODEL.md first
