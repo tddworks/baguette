@@ -16,7 +16,8 @@ import ObjectiveC
 final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
-    private let binding: DisplayBinding?
+    /// The plane this screen streams; `nil` streams the largest.
+    let binding: DisplayBinding?
     private let queue = DispatchQueue(label: "baguette.screen", qos: .userInteractive)
 
     private var ioClient: NSObject?
@@ -90,7 +91,7 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private func wireFramebuffer() throws {
         guard let io = ioClient else { throw ScreenError.ioUnavailable }
 
-        var         candidates = findFramebufferDescriptors(io: io)
+        var candidates = findFramebufferDescriptors(io: io)
         if FramebufferRefresh.shouldUpdate(hasFramebuffers: !candidates.isEmpty) {
             io.perform(NSSelectorFromString("updateIOPorts"))
             candidates = findFramebufferDescriptors(io: io)
@@ -146,17 +147,11 @@ final class SimulatorKitScreen: Screen, @unchecked Sendable {
         }
         let props: @convention(block) () -> Void = {}
 
-        guard let imp = class_getMethodImplementation(type(of: desc), regSel) else {
-            throw ScreenError.callbackUnavailable
-        }
-        typealias Fn = @convention(c) (
-            AnyObject, Selector, AnyObject, AnyObject, AnyObject, AnyObject, AnyObject
-        ) -> Void
-        unsafeBitCast(imp, to: Fn.self)(
+        guard invokeVoidWithFiveObjs(
             desc, regSel,
             uuid, queue as AnyObject,
             frame as AnyObject, surfaces as AnyObject, props as AnyObject
-        )
+        ) else { throw ScreenError.callbackUnavailable }
     }
 
     /// Queue a capture unless one is already waiting to run.

@@ -3,7 +3,9 @@ import Foundation
 import ObjectiveC
 
 /// Production `Simulators` — backed by CoreSimulator + SimulatorKit private
-/// classes via the ObjC runtime. No ObjC bridging module needed.
+/// classes via the ObjC runtime. No ObjC bridging module needed. Loading
+/// the frameworks and reaching the service context are
+/// `CoreSimulatorFramework`'s; reading the device set is here.
 ///
 /// Constructed once per CLI invocation with an optional custom device set
 /// path; the default Xcode set is used when `deviceSetPath` is `nil`.
@@ -21,7 +23,9 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
 
     init(
         deviceSetPath: String? = nil,
-        serviceContext: @escaping @Sendable () -> NSObject? = { CoreSimulators.sharedServiceContext() },
+        serviceContext: @escaping @Sendable () -> NSObject? = {
+            CoreSimulatorFramework.sharedContext(developerDir: CoreSimulators.developerDir())
+        },
         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         self.deviceSetPath = deviceSetPath
@@ -85,15 +89,6 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
             return customDeviceSet(context: ctx, path: path)
         }
         return defaultDeviceSet(context: ctx).map { ($0, nil) }
-    }
-
-    private static func sharedServiceContext() -> NSObject? {
-        guard let cls = NSClassFromString("SimServiceContext") else { return nil }
-        let sel = NSSelectorFromString("sharedServiceContextForDeveloperDir:error:")
-        var err: NSError?
-        let ctx = invokeClassObjWithObjAndError(cls, sel, Self.developerDir() as NSString, &err)
-        if ctx == nil, let err { logErr("sharedServiceContext: \(err)") }
-        return ctx
     }
 
     private func defaultDeviceSet(context: NSObject) -> NSObject? {
@@ -191,89 +186,40 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     static func loadFrameworks() {
         guard !loaded else { return }
         loaded = true
-        let dev = developerDir()
+        for line in frameworkLoadProblems(developerDir: developerDir(), open: CoreSimulatorFramework.open) {
+            logErr(line)
+        }
+    }
+
+    /// Loads CoreSimulator and the selected Xcode's SimulatorKit through
+    /// `open` (an image's path in, its load error out), answering what
+    /// went wrong, a line at a time.
+    static func frameworkLoadProblems(developerDir dev: String, open: (String) -> String?) -> [String] {
+        var problems: [String] = []
         // CoreSimulator lives outside Xcode, in a system path that
         // Xcode 27 left alone.
         let coreSim = "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator"
-        if dlopen(coreSim, RTLD_NOW | RTLD_GLOBAL) == nil {
-            logErr("CoreSimulator load failed: \(dlerrorString())")
+        if let error = open(coreSim) {
+            problems.append("CoreSimulator load failed: \(error)")
         }
         guard let simKit = SimulatorKitFramework.path(developerDir: dev) else {
             // No Xcode on this machine carries SimulatorKit at either
             // known location. Say so — a raw dyld error here names one
             // path the user never had and reads as a broken install.
-            logErr("SimulatorKit not found. Searched:")
+            problems.append("SimulatorKit not found. Searched:")
             for candidate in SimulatorKitFramework.candidatePaths(developerDir: dev) {
-                logErr("  \(candidate)")
+                problems.append("  \(candidate)")
             }
-            logErr("Set DEVELOPER_DIR to an Xcode that has it, or see")
-            logErr("https://github.com/tddworks/baguette/issues/28")
-            return
+            problems.append("Set DEVELOPER_DIR to an Xcode that has it, or see")
+            problems.append("https://github.com/tddworks/baguette/issues/28")
+            return problems
         }
-        if dlopen(simKit, RTLD_NOW | RTLD_GLOBAL) == nil {
-            logErr("SimulatorKit load failed: \(dlerrorString())")
+        if let error = open(simKit) {
+            problems.append("SimulatorKit load failed: \(error)")
         }
+        return problems
     }
 
     /// The Xcode whose SimulatorKit this process drives.
     static func developerDir() -> String { Xcode.developerDir() }
-}
-
-// MARK: - shared ObjC-runtime helpers
-
-func invokeBoolWithError(
-    _ target: NSObject, _ sel: Selector, _ err: inout NSError?
-) -> Bool {
-    guard let imp = class_getMethodImplementation(type(of: target), sel) else { return false }
-    typealias Fn =
-        @convention(c) (
-            AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>
-        ) -> Bool
-    return unsafeBitCast(imp, to: Fn.self)(target, sel, &err)
-}
-
-func invokeBoolWithObjAndError(
-    _ target: NSObject, _ sel: Selector, _ arg: AnyObject, _ err: inout NSError?
-) -> Bool {
-    guard let imp = class_getMethodImplementation(type(of: target), sel) else { return false }
-    typealias Fn =
-        @convention(c) (
-            AnyObject, Selector, AnyObject, AutoreleasingUnsafeMutablePointer<NSError?>
-        ) -> Bool
-    return unsafeBitCast(imp, to: Fn.self)(target, sel, arg, &err)
-}
-
-func invokeObjWithError(
-    _ target: NSObject, _ sel: Selector, _ err: inout NSError?
-) -> NSObject? {
-    guard let imp = class_getMethodImplementation(type(of: target), sel) else { return nil }
-    typealias Fn =
-        @convention(c) (
-            AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>
-        ) -> AnyObject?
-    return unsafeBitCast(imp, to: Fn.self)(target, sel, &err) as? NSObject
-}
-
-func invokeObjWithObjAndError(
-    _ target: NSObject, _ sel: Selector, _ arg: AnyObject, _ err: inout NSError?
-) -> NSObject? {
-    guard let imp = class_getMethodImplementation(type(of: target), sel) else { return nil }
-    typealias Fn =
-        @convention(c) (
-            AnyObject, Selector, AnyObject, AutoreleasingUnsafeMutablePointer<NSError?>
-        ) -> AnyObject?
-    return unsafeBitCast(imp, to: Fn.self)(target, sel, arg, &err) as? NSObject
-}
-
-func invokeClassObjWithObjAndError(
-    _ cls: AnyClass, _ sel: Selector, _ arg: AnyObject, _ err: inout NSError?
-) -> NSObject? {
-    guard let metaCls = object_getClass(cls),
-        let imp = class_getMethodImplementation(metaCls, sel)
-    else { return nil }
-    typealias Fn =
-        @convention(c) (
-            AnyClass, Selector, AnyObject, AutoreleasingUnsafeMutablePointer<NSError?>
-        ) -> AnyObject?
-    return unsafeBitCast(imp, to: Fn.self)(cls, sel, arg, &err) as? NSObject
 }

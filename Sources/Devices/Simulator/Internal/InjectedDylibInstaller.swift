@@ -8,7 +8,8 @@ import Foundation
 ///
 /// Pure work (sha → dest path) lives in `InjectedDylibInstallPlan`. This
 /// file owns the filesystem side — bundle lookup, mkdir, write, permissions
-/// — kept thin so the pure factory is exercised end-to-end by tests.
+/// — measured against scratch folders. Where the running executable is
+/// comes from `ExecutableImage`, the one call it can't make in a test.
 ///
 /// Generalised from the camera's installer when motion became a second
 /// injected dylib: everything here was identical except the file name.
@@ -32,25 +33,24 @@ enum InjectedDylibInstaller {
     ///
     /// Crucially does NOT use `Bundle.module` — that accessor `fatalError`s
     /// when the bundle is missing, which crashes Homebrew installs.
-    static func bundledDylibURL(_ dylib: InjectedDylib) -> URL? {
-        if let env = ProcessInfo.processInfo.environment[dylib.environmentOverride],
+    static func bundledDylibURL(
+        _ dylib: InjectedDylib,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        executableDirectory: URL? = ExecutableImage.directory()
+    ) -> URL? {
+        if let env = environment[dylib.environmentOverride],
            FileManager.default.fileExists(atPath: env) {
             return URL(fileURLWithPath: env)
         }
-        if let dev = sourceTreeDylib(dylib) { return dev }
-        if let bundled = sidecarBundleDylib(dylib) { return bundled }
-        if let sibling = executableSiblingDylib(dylib) { return sibling }
+        guard let exeDir = executableDirectory else { return nil }
+        if let dev = sourceTreeDylib(dylib, from: exeDir) { return dev }
+        if let bundled = sidecarBundleDylib(dylib, in: exeDir) { return bundled }
+        if let sibling = executableSiblingDylib(dylib, in: exeDir) { return sibling }
         return nil
     }
 
-    private static func executableDirectory() -> URL? {
-        var info = Dl_info()
-        guard dladdr(#dsohandle, &info) != 0, let cstr = info.dli_fname else { return nil }
-        return URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
-    }
-
-    private static func sourceTreeDylib(_ dylib: InjectedDylib) -> URL? {
-        guard var url = executableDirectory() else { return nil }
+    private static func sourceTreeDylib(_ dylib: InjectedDylib, from exeDir: URL) -> URL? {
+        var url = exeDir
         for _ in 0..<6 {
             let candidate = url.appendingPathComponent(dylib.sourceTreePath)
             if FileManager.default.fileExists(atPath: candidate.path) {
@@ -61,8 +61,7 @@ enum InjectedDylibInstaller {
         return nil
     }
 
-    private static func sidecarBundleDylib(_ dylib: InjectedDylib) -> URL? {
-        guard let exeDir = executableDirectory() else { return nil }
+    private static func sidecarBundleDylib(_ dylib: InjectedDylib, in exeDir: URL) -> URL? {
         let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
         guard FileManager.default.fileExists(atPath: bundleURL.path),
               let bundle = Bundle(url: bundleURL) else { return nil }
@@ -73,8 +72,7 @@ enum InjectedDylibInstaller {
         )
     }
 
-    private static func executableSiblingDylib(_ dylib: InjectedDylib) -> URL? {
-        guard let exeDir = executableDirectory() else { return nil }
+    private static func executableSiblingDylib(_ dylib: InjectedDylib, in exeDir: URL) -> URL? {
         let url = exeDir.appendingPathComponent(dylib.fileName)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
@@ -82,9 +80,13 @@ enum InjectedDylibInstaller {
     /// Read the bundled bytes, compute the install plan, apply it
     /// (idempotent), return the destination path. Returns `nil` if the dylib
     /// isn't bundled in this build configuration.
-    static func installIfNeeded(_ dylib: InjectedDylib,
-                                supportDir: String = defaultSupportDir) -> String? {
-        guard let url = bundledDylibURL(dylib),
+    static func installIfNeeded(
+        _ dylib: InjectedDylib,
+        supportDir: String = defaultSupportDir,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        executableDirectory: URL? = ExecutableImage.directory()
+    ) -> String? {
+        guard let url = bundledDylibURL(dylib, environment: environment, executableDirectory: executableDirectory),
               let bytes = try? Data(contentsOf: url) else { return nil }
         let plan = InjectedDylibInstallPlan.compute(bytes: bytes, supportDir: supportDir,
                                                     dylib: dylib)
