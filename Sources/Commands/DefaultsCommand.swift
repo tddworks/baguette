@@ -60,10 +60,10 @@ struct DefaultsCommand: ParsableCommand {
             } catch let exit as ExitCode {
                 throw exit
             } catch {
-                log("defaults read failed: \(error)")
+                tell("defaults read failed: \(error)")
                 throw ExitCode.failure
             }
-            print(answer)
+            say(answer)
         }
 
         /// What `read` prints from `defaults`: text, or typed JSON with
@@ -182,10 +182,10 @@ struct DefaultsCommand: ParsableCommand {
             } catch let exit as ExitCode {
                 throw exit
             } catch {
-                log("defaults write failed: \(error)")
+                tell("defaults write failed: \(error)")
                 throw ExitCode.failure
             }
-            log(said(applied))
+            tell(said(applied))
         }
 
         /// The line logged once the value is stored.
@@ -221,10 +221,10 @@ struct DefaultsCommand: ParsableCommand {
             } catch let exit as ExitCode {
                 throw exit
             } catch {
-                log("defaults delete failed: \(error)")
+                tell("defaults delete failed: \(error)")
                 throw ExitCode.failure
             }
-            log(said(applied))
+            tell(said(applied))
         }
 
         /// The line logged once the key is gone — or wasn't there.
@@ -258,10 +258,10 @@ struct DefaultsCommand: ParsableCommand {
             } catch let exit as ExitCode {
                 throw exit
             } catch {
-                log("defaults export failed: \(error)")
+                tell("defaults export failed: \(error)")
                 throw ExitCode.failure
             }
-            print(answer)
+            say(answer)
         }
 
         /// The suite's preferences as `defaults import` reads them back.
@@ -304,7 +304,7 @@ struct DefaultsCommand: ParsableCommand {
             let applied: PreferenceImport.Applied
             do {
                 let data = file == "-"
-                    ? FileHandle.standardInput.readDataToEndOfFile()
+                    ? Terminal.current.readAll()
                     : try Data(contentsOf: URL(fileURLWithPath: file))
                 let restore = try preferenceImport(from: data)
                 let roles = try target.roles()
@@ -312,10 +312,10 @@ struct DefaultsCommand: ParsableCommand {
             } catch let exit as ExitCode {
                 throw exit
             } catch {
-                log("defaults import failed: \(error)")
+                tell("defaults import failed: \(error)")
                 throw ExitCode.failure
             }
-            log(said(applied))
+            tell(said(applied))
         }
 
         /// The line logged once the file's values are written.

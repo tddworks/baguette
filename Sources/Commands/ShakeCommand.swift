@@ -25,9 +25,9 @@ struct ShakeCommand: AsyncParsableCommand {
         do {
             try await shake.shake()
         } catch {
-            log("shake failed: \(error)")
+            tell("shake failed: \(error)")
             throw ExitCode.failure
         }
-        log("Shook \(device.name)")
+        tell("Shook \(device.name)")
     }
 }

@@ -31,25 +31,25 @@ struct HingeCLICommand: ParsableCommand {
         let (_, hinge) = try options.require(.hinge)
         if pose == nil && angle == nil {
             let current = hinge.angle()
-            print(#"{"ok":true,"angleDegrees":\#(current.map { String($0.degrees) } ?? "null")}"#)
+            say(#"{"ok":true,"angleDegrees":\#(current.map { String($0.degrees) } ?? "null")}"#)
             return
         }
         let command: HingeCommand
         do {
             command = try HingeCommand.parse(pose: pose, angle: angle, duration: duration)
         } catch let error as HingeCommandError {
-            log(Server.hingeCommandMessage(error))
-            Foundation.exit(2)
+            tell(Server.hingeCommandMessage(error))
+            throw ExitCode(2)
         }
         do {
             try hinge.fold(to: command.degrees, over: command.duration)
         } catch {
             let delivery = PoseDelivery(failure: error)
-            log(delivery == .unconfirmed
+            tell(delivery == .unconfirmed
                 ? "Hinge move unconfirmed: \(error) Read the hinge before retrying."
                 : "Hinge could not be driven: \(error)")
-            Foundation.exit(delivery.exitStatus)
+            throw ExitCode(delivery.exitStatus)
         }
-        print(#"{"ok":true,"angleDegrees":\#(command.degrees)}"#)
+        say(#"{"ok":true,"angleDegrees":\#(command.degrees)}"#)
     }
 }

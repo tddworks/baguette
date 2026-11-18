@@ -77,16 +77,16 @@ struct StatusBarCommand: ParsableCommand {
             let device = try options.device()
             let statusBar = try orExit { try device.require(.statusBar) }
             guard !override.isEmpty else {
-                log("status-bar override: set at least one field")
+                tell("status-bar override: set at least one field")
                 throw ExitCode.failure
             }
             do {
                 try await statusBar.override(override)
             } catch {
-                log("status-bar override failed: \(error)")
+                tell("status-bar override failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Set \(device.name) status bar")
+            tell("Set \(device.name) status bar")
         }
     }
 
@@ -105,10 +105,10 @@ struct StatusBarCommand: ParsableCommand {
             do {
                 try await statusBar.clear()
             } catch {
-                log("status-bar clear failed: \(error)")
+                tell("status-bar clear failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Cleared \(device.name) status bar overrides")
+            tell("Cleared \(device.name) status bar overrides")
         }
     }
 }

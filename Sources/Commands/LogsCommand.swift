@@ -52,37 +52,32 @@ struct LogsCommand: AsyncParsableCommand {
     func run() async throws {
         let filter: LogFilter
         do { filter = try self.filter() } catch let refusal as ArgumentRefusal {
-            log(refusal.message)
+            tell(refusal.message)
             throw ExitCode.failure
         }
 
         let device = try options.device()
         let logs = try orExit { try device.require(.logs) }
 
-        // Use FileHandle directly — `print` adds a trailing newline that
-        // doubles up after our line split.
+        // Raw bytes, unbuffered — `print` would hold lines back when
+        // stdout is a pipe. Taken here: the stream calls back on its
+        // own thread, outside this run's task.
+        let output = CommandOutput.current
         let session = LogsSession(
             stream: logs,
-            write: { line in
-                if let data = (line + "\n").data(using: .utf8) {
-                    try? FileHandle.standardOutput.write(contentsOf: data)
-                }
-            },
-            warn: { log($0) }
+            write: { line in output.write(Data((line + "\n").utf8)) },
+            warn: { output.warn($0) }
         )
 
-        // SIGINT handler: clean stop + exit 0. We install a
-        // DispatchSourceSignal so the default handler doesn't kill
-        // us mid-pipe.
-        signal(SIGINT, SIG_IGN)
-        let sigSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
-        sigSource.setEventHandler { session.stop() }
-        sigSource.resume()
+        // SIGINT: clean stop + exit 0, rather than the default handler
+        // killing us mid-pipe.
+        let interrupts = Terminal.current.onInterrupt([SIGINT]) { session.stop() }
+        defer { withExtendedLifetime(interrupts) {} }
 
         do {
             try await session.follow(filter)
         } catch {
-            log("logs: \(error)")
+            tell("logs: \(error)")
             throw ExitCode.failure
         }
     }

@@ -27,7 +27,7 @@ struct StreamCommand: AsyncParsableCommand {
 
     func run() async throws {
         guard let streamFormat = StreamFormat(rawValue: format) else {
-            log("Unknown format: \(format)")
+            tell("Unknown format: \(format)")
             throw ExitCode.failure
         }
         let device = try options.device()
@@ -43,18 +43,8 @@ struct StreamCommand: AsyncParsableCommand {
         )
         // AsyncParsableCommand runs on the cooperative executor;
         // dispatchMain() requires the process's main thread.
-        let sources = [SIGINT, SIGTERM].map { number in
-            signal(number, SIG_IGN)
-            let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
-            source.setEventHandler { termination.continuation.finish() }
-            source.resume()
-            return source
-        }
-        defer {
-            for source in sources { source.cancel() }
-            signal(SIGINT, SIG_DFL)
-            signal(SIGTERM, SIG_DFL)
-        }
+        let restore = Terminal.current.onInterrupt([SIGINT, SIGTERM]) { termination.continuation.finish() }
+        defer { restore() }
         try await Self.capture(stream, on: screen, onFailure: onFailure) {
             for try await _ in termination.stream {}
         }

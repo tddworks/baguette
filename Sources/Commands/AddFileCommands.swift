@@ -25,16 +25,16 @@ struct InstallCommand: AsyncParsableCommand {
         let apps = try orExit { try device.require(.apps) }
         let url = URL(fileURLWithPath: path)
         guard let app = AppBundle.at(url) else {
-            log("Not an installable app (expected .ipa or .app): \(path)")
+            tell("Not an installable app (expected .ipa or .app): \(path)")
             throw ExitCode.failure
         }
         do {
             try await apps.install(app)
         } catch {
-            log("install failed: \(error)")
+            tell("install failed: \(error)")
             throw ExitCode.failure
         }
-        log("Installed \(url.lastPathComponent) on \(device.name)")
+        tell("Installed \(url.lastPathComponent) on \(device.name)")
     }
 }
 
@@ -61,15 +61,15 @@ struct AddMediaCommand: AsyncParsableCommand {
         let photos = try orExit { try device.require(.photos) }
         let url = URL(fileURLWithPath: path)
         guard let media = MediaItem.at(url) else {
-            log("Not a supported image or video: \(path)")
+            tell("Not a supported image or video: \(path)")
             throw ExitCode.failure
         }
         do {
             try await photos.add(media)
         } catch {
-            log("add-media failed: \(error)")
+            tell("add-media failed: \(error)")
             throw ExitCode.failure
         }
-        log("Added \(url.lastPathComponent) to \(device.name) Photos")
+        tell("Added \(url.lastPathComponent) to \(device.name) Photos")
     }
 }

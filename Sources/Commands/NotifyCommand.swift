@@ -43,18 +43,18 @@ struct NotifyCommand: AsyncParsableCommand {
         let payload: Data
         if let file {
             guard let read = FileManager.default.contents(atPath: file) else {
-                fail("cannot read \(file)")
+                try fail("cannot read \(file)")
             }
             payload = read
         } else {
-            payload = FileHandle.standardInput.readDataToEndOfFile()
+            payload = Terminal.current.readAll()
         }
 
         let notification: RemoteNotification
         do {
             notification = try RemoteNotification.from(json: payload, addressedTo: bundleId)
         } catch {
-            fail(String(describing: error))
+            try fail(String(describing: error))
         }
 
         let device: any Device
@@ -63,29 +63,29 @@ struct NotifyCommand: AsyncParsableCommand {
             device = try options.devices.device(DeviceID(options.udid))
             notify = try device.require(.notify)
         } catch {
-            fail(String(describing: error))
+            try fail(String(describing: error))
         }
 
         do {
             try await notification.deliver(to: notify)
         } catch {
-            fail("notify failed: \(error)")
+            try fail("notify failed: \(error)")
         }
 
         if json {
-            print(notification.deliveredJSON)
+            say(notification.deliveredJSON)
         } else {
-            log("Notified \(notification.app) on \(device.name). \(notification.expectation)")
+            tell("Notified \(notification.app) on \(device.name). \(notification.expectation)")
         }
     }
 
     /// Report a failure on the channel the caller reads, then exit non-zero.
-    private func fail(_ message: String) -> Never {
+    private func fail(_ message: String) throws -> Never {
         if json {
-            print(#"{"ok":false,"error":"\#(GestureDispatcher.jsonEscape(message))"}"#)
+            say(#"{"ok":false,"error":"\#(GestureDispatcher.jsonEscape(message))"}"#)
         } else {
-            log(message)
+            tell(message)
         }
-        Self.exit(withError: ExitCode.failure)
+        throw ExitCode.failure
     }
 }

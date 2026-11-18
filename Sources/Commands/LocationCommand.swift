@@ -47,16 +47,16 @@ struct LocationCommand: ParsableCommand {
             let device = try options.device()
             let location = try orExit { try device.require(.location) }
             guard let coordinate else {
-                log("location set: latitude must be -90…90 and longitude -180…180")
+                tell("location set: latitude must be -90…90 and longitude -180…180")
                 throw ExitCode.failure
             }
             do {
                 try await location.set(coordinate)
             } catch {
-                log("location set failed: \(error)")
+                tell("location set failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Set \(device.name) location to \(coordinate.argument)")
+            tell("Set \(device.name) location to \(coordinate.argument)")
         }
     }
 
@@ -96,16 +96,16 @@ struct LocationCommand: ParsableCommand {
             let device = try options.device()
             let location = try orExit { try device.require(.location) }
             guard let route else {
-                log("location start: give two or more valid lat,lon waypoints")
+                tell("location start: give two or more valid lat,lon waypoints")
                 throw ExitCode.failure
             }
             do {
                 try await location.start(route)
             } catch {
-                log("location start failed: \(error)")
+                tell("location start failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Started \(device.name) route over \(route.waypoints.count) waypoints")
+            tell("Started \(device.name) route over \(route.waypoints.count) waypoints")
         }
     }
 
@@ -151,16 +151,16 @@ struct LocationCommand: ParsableCommand {
             let device = try options.device()
             let location = try orExit { try device.require(.location) }
             guard let walk else {
-                log("location walk: give a valid lat,lon origin and a speed above 0")
+                tell("location walk: give a valid lat,lon origin and a speed above 0")
                 throw ExitCode.failure
             }
             do {
                 try await location.start(walk.route())
             } catch {
-                log("location walk failed: \(error)")
+                tell("location walk failed: \(error)")
                 throw ExitCode.failure
             }
-            log("""
+            tell("""
                 Walking \(device.name) from \(walk.origin.argument) \
                 on bearing \(walk.bearing.degrees)° (\(walk.bearing.cardinal)) at \(walk.speed) m/s
                 """)
@@ -182,10 +182,10 @@ struct LocationCommand: ParsableCommand {
             do {
                 try await location.clear()
             } catch {
-                log("location clear failed: \(error)")
+                tell("location clear failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Cleared \(device.name) simulated location")
+            tell("Cleared \(device.name) simulated location")
         }
     }
 }

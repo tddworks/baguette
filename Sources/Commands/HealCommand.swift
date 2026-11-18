@@ -26,10 +26,10 @@ struct HealCommand: AsyncParsableCommand {
         let (_, surface) = try options.require(.inputSurface)
         do {
             let outcome = try await surface.heal()
-            log(outcome.summary)
+            tell(outcome.summary)
         } catch {
-            log("Heal failed: \(error)")
-            Foundation.exit(1)
+            tell("Heal failed: \(error)")
+            throw ExitCode.failure
         }
     }
 }

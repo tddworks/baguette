@@ -32,7 +32,7 @@ struct FillCommand: AsyncParsableCommand {
         let outcome = await Fill(label: label, text: text).execute(
             accessibility: accessibility, pasteboard: pasteboard, input: input,
             inputTaken: { await surface?.shadowed() ?? false })
-        print(FillDispatch.answer(
+        say(FillDispatch.answer(
             outcome, thenDescribe: thenDescribeUI, accessibility: accessibility, style: options.affordanceStyle))
         if !outcome.isOK { throw ExitCode.failure }
     }

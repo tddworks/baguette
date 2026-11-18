@@ -152,10 +152,7 @@ struct RecordCommand: AsyncParsableCommand {
         // whichever fires first opens the gate exactly once, so the
         // reel is always flushed and the file always plays.
         let gate = RecordingGate()
-        signal(SIGINT, SIG_IGN)
-        let interrupt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
-        interrupt.setEventHandler { gate.open(.interrupt) }
-        interrupt.resume()
+        let restoreInterrupt = Terminal.current.onInterrupt([SIGINT]) { gate.open(.interrupt) }
 
         var timer: DispatchSourceTimer?
         if let duration {
@@ -173,16 +170,14 @@ struct RecordCommand: AsyncParsableCommand {
         do {
             try recorder.start()
         } catch {
-            interrupt.cancel()
             timer?.cancel()
-            signal(SIGINT, SIG_DFL)
-            log("Recording failed to start: \(error)")
+            restoreInterrupt()
+            tell("Recording failed to start: \(error)")
             throw ExitCode.failure
         }
 
         await gate.wait()
         let interrupted = gate.openedBy == .interrupt
-        interrupt.cancel()
         timer?.cancel()
         // Flushing a long recording takes seconds, and a Ctrl-C during
         // the flush kills the process mid-`finishWriting` — the one way
@@ -191,15 +186,16 @@ struct RecordCommand: AsyncParsableCommand {
         // and a second press is plausibly deliberate. On the --duration
         // path they haven't pressed at all, and their first press must
         // not be the one that breaks the file; SIGINT stays ignored
-        // until the reel is closed.
-        if interrupted { signal(SIGINT, SIG_DFL) }
-        defer { signal(SIGINT, SIG_DFL) }
+        // until the reel is closed (a second press meanwhile only knocks
+        // on the gate that is already open).
+        if interrupted { restoreInterrupt() }
+        defer { restoreInterrupt() }
 
         do {
             let summary = try await recorder.finish()
-            log(Self.report(summary))
+            tell(Self.report(summary))
         } catch let error as RecordingError {
-            log(error.message)
+            tell(error.message)
             throw ExitCode.failure
         }
     }

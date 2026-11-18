@@ -45,8 +45,9 @@ struct LifetimeCommand: ParsableCommand {
         return nil
     }
 
-    func run() {
-        let current = SimulatorAppPreferences.lifetime()
+    func run() throws {
+        let settings = SimulatorAppSettings.current
+        let current = settings.lifetime()
 
         guard let desired else {
             report(current)
@@ -55,20 +56,20 @@ struct LifetimeCommand: ParsableCommand {
 
         let change = current.change(
             to: desired,
-            simulatorAppRunning: SimulatorAppPreferences.simulatorAppIsRunning
+            simulatorAppRunning: settings.appRunning()
         )
 
         switch change {
         case .unchanged:
-            log("Already set — \(Self.headline(desired))")
+            tell("Already set — \(Self.headline(desired))")
         case .applied(let restartSimulatorApp):
             do {
-                try SimulatorAppPreferences.write(desired)
+                try settings.write(desired)
             } catch {
-                log("Could not change the lifetime policy: \(error)")
-                Foundation.exit(1)
+                tell("Could not change the lifetime policy: \(error)")
+                throw ExitCode.failure
             }
-            log(Self.headline(desired))
+            tell(Self.headline(desired))
             if restartSimulatorApp {
                 warn("""
                     Simulator.app is running and may overwrite this when it \
@@ -79,7 +80,7 @@ struct LifetimeCommand: ParsableCommand {
     }
 
     private func report(_ lifetime: SimulatorLifetime) {
-        for line in Self.report(lifetime, colored: terminalColorized(STDOUT_FILENO)) { print(line) }
+        for line in Self.report(lifetime, colored: terminalColorized(STDOUT_FILENO)) { say(line) }
     }
 
     /// The policy in force, as the read-only command prints it.
@@ -111,4 +112,17 @@ struct LifetimeCommand: ParsableCommand {
             ? "Simulator.app will leave booted devices running."
             : "Simulator.app will shut devices down on window close and quit."
     }
+}
+
+/// Simulator.app's own settings, as `lifetime`, `boot` and `serve` read
+/// them: the lifetime policy in force, writing a new one, and whether the
+/// app is running (it may hold a cached copy). Injected so those commands
+/// can be run in a test without reading or rewriting this Mac's settings.
+struct SimulatorAppSettings: Sendable {
+    let lifetime: @Sendable () -> SimulatorLifetime
+    let write: @Sendable (SimulatorLifetime) throws -> Void
+    let appRunning: @Sendable () -> Bool
+
+    /// This run's settings: this Mac's, unless a test stands in.
+    @TaskLocal static var current: SimulatorAppSettings = .host
 }

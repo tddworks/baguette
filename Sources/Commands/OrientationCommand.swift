@@ -23,13 +23,13 @@ struct OrientationCommand: ParsableCommand {
         let delivery = orientation.set(value)
         switch delivery {
         case .delivered:
-            log("Set \(device.name) → \(value.wireName)")
+            tell("Set \(device.name) → \(value.wireName)")
         case .rejected:
-            log("Orientation change rejected (event port or guest pose helper unavailable?)")
+            tell("Orientation change rejected (event port or guest pose helper unavailable?)")
         case .unconfirmed:
-            log("Orientation change unconfirmed; read the device state before retrying")
+            tell("Orientation change unconfirmed; read the device state before retrying")
         }
-        if delivery != .delivered { Foundation.exit(delivery.exitStatus) }
+        if delivery != .delivered { throw ExitCode(delivery.exitStatus) }
     }
 }
 

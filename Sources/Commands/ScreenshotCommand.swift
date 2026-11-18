@@ -112,7 +112,7 @@ struct ScreenshotCommand: AsyncParsableCommand {
         } catch let error as FramebufferSelectionError {
             // Otherwise this surfaces as its own enum dump, which names
             // the failure but not the remedy.
-            log(error.message)
+            tell(error.message)
             throw ExitCode.failure
         }
         let frame = try await ScreenSnapshot.captureWithGeometry(

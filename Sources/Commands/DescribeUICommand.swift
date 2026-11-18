@@ -45,15 +45,14 @@ struct DescribeUICommand: AsyncParsableCommand {
         let accessibility = try orExit { try options.devices.require(.accessibility, of: DeviceID(options.udid)) }
         let read = try DescribeUI.parse(x: x, y: y, short: short)
         guard let tree = try read.read(from: accessibility) else {
-            log("describe-ui: no accessibility data (device not ready, or no frontmost app)")
+            tell("describe-ui: no accessibility data (device not ready, or no frontmost app)")
             throw ExitCode.failure
         }
-        let bytes = Data(read.json(of: tree, style: options.affordanceStyle).utf8)
+        let json = read.json(of: tree, style: options.affordanceStyle)
         if let output {
-            try bytes.write(to: URL(fileURLWithPath: output))
+            try Data(json.utf8).write(to: URL(fileURLWithPath: output))
         } else {
-            try FileHandle.standardOutput.write(contentsOf: bytes)
-            try FileHandle.standardOutput.write(contentsOf: Data("\n".utf8))
+            say(json)
         }
     }
 }
