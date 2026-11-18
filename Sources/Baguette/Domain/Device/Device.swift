@@ -29,7 +29,7 @@ struct DeviceID: Hashable, Sendable, ExpressibleByStringLiteral, CustomStringCon
 
 /// What a device is: its platform, whether it is real, and its model.
 struct DeviceKind: Equatable, Sendable {
-    enum Platform: String, Sendable { case iOS, android }
+    enum Platform: String, Sendable { case iOS, watchOS, tvOS, visionOS, android }
     /// Apple's `devicectl` column: whether the device is a real one.
     enum Reality: String, Sendable { case simulated, physical, emulated }
 

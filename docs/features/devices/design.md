@@ -10,7 +10,9 @@ pair, and `Infrastructure/` sorted by context. Done so far: `Infrastructure/`
 is split by family (slice 1); the twin's pair is renamed
 `CompanionPhones` / `CompanionPhone` in `Domain/Companion/`; and the Domain
 model is built (slices 2–4: `DeviceState`, `AbilityTable`, `Device`,
-`Devices`, `CombinedDevices`). No family conforms to it yet. The
+`Devices`, `CombinedDevices`); and the simulator family presents itself
+through it (slice 5: `SimulatorDevices` / `SimulatorDevice`). No command or
+route reads it yet. The
 [build sequence](#9--build-sequence) moves it one green slice at a time.
 
 This document owns **which devices exist, what each one can do, and where
@@ -207,7 +209,7 @@ protocol Devices: AnyObject, Sendable {
 
 ```swift
 struct DeviceKind: Equatable, Sendable {
-    enum Platform: String { case iOS, android }
+    enum Platform: String { case iOS, watchOS, tvOS, visionOS, android }
     enum Reality: String  { case simulated, physical, emulated }
     let platform: Platform, reality: Reality
     let model: String         // "iPhone 17 Pro Max" · "iPhone19,7" · "Pixel 9" — the bezel / 3D key
@@ -324,8 +326,9 @@ AGENTS.md's layering sentence changes to:
   become registrations in `CoreSimulator`'s table and `DeviceState`.
   `Simulator` itself remains only as long as simulator-only domain types
   (`SimulatorDefinition`, injection) need it.
-- the `Simulators` protocol → `Devices`. `CoreSimulators` conforms to both
-  while callers move, then to `Devices` only.
+- the `Simulators` protocol → `Devices`. `SimulatorDevices` wraps it while
+  callers move; once `Simulator` loses its role factories, `CoreSimulator`
+  and `CoreSimulators` conform directly and the two adapters go.
 - the twin's `Devices` protocol, `Device` struct and its `capabilities: [String]`.
   `CompanionPhones` / `CompanionPhone` replace them.
 - the twin's copies of the per-device routes (`definition.json`, chrome,
@@ -356,6 +359,11 @@ AGENTS.md's layering sentence changes to:
 - **Enforce the import rules with SwiftPM targets?** Folders first. One target
   per family would make §6 a compile error, but every Domain type would need
   `public`. Revisit after Android.
+- **Should every simulator register `hinge`?** Today it does, as
+  `Simulator.hinge()` exists on every one; a non-foldable's hinge reads as
+  folded. Registering it only where `Chromes` lists two panels would make the
+  page's hinge card honest. Decided when the page renders cards from
+  abilities (slice 7).
 - **The camera.** `CameraSessions` stays per server; the simulator's guest
   side (`SimctlCameraGuest`) likely becomes a `camera` ability. Decided when it
   moves.
@@ -388,7 +396,7 @@ Each slice is green on its own. Test names are the `should …` sentences.
 | 2 | `DeviceID`, `DeviceKind`, `DeviceState` | "should accept gestures only when the device is ready"; "should read a booted simulator as ready" |
 | 3 | `Ability`, `AbilityTable` | "should refuse an ability the device never registered"; "should hand back the role registered for an ability"; "should name the abilities in the order they were registered" |
 | 4 | `Devices`, `CombinedDevices`, `require(_:of:)`, `listJSON` | "should list every device from every source when sources are combined"; "should refuse to combine two devices that claim one id"; "should refuse a device id no source knows"; "should list each device's kind and abilities" |
-| 5 | `CoreSimulator` is a `Device`; `CoreSimulators` is a `Devices` | "should register every simulator role as an ability" |
+| 5 | `SimulatorDevice` / `SimulatorDevices` present any `Simulator` / `Simulators` as a `Device` / `Devices` — adapters, because `Simulator.state` and `Device.state` (and both `all`s) are different types under one name | "should register every simulator role as an ability"; "should boot the simulator when its lifecycle is told to boot" |
 | 6 | the twin becomes `CompanionPhones`; its route copies fold into the one tree | "should let a companion phone show its screen but refuse input" |
 | 7 | commands and routes move to `devices.require(_:of:)`, one context at a time; the page renders cards from `abilities` | each command's existing tests, now through `MockDevices`; `make test-web` for the card list |
 | 8 | delete what §7 names | the build |
