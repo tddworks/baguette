@@ -40,11 +40,7 @@ struct DescribeUICommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let simulator = try options.simulator(for: .accessibility)
         let read = try DescribeUI.parse(x: x, y: y, short: short)
         guard let tree = try read.read(from: simulator.accessibility()) else {
             log("describe-ui: no accessibility data (sim not booted, or no frontmost app)")

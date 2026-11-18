@@ -1,13 +1,13 @@
 import ArgumentParser
 import Foundation
 
-/// Resolve a simulator by UDID + device set, or exit(1) with an error log.
+/// Resolve the simulator a gesture goes to, or exit(1) saying why: unknown,
+/// or a device that can't take input.
 private func resolve(udid: String, deviceSet: String?) -> Simulator {
-    let simulators = CoreSimulators(deviceSetPath: deviceSet)
-    guard let simulator = simulators.find(udid: udid) else {
-        log("Device \(udid) not found")
-        Foundation.exit(1)
-    }
+    var options = DeviceOption()
+    options.udid = udid
+    options.deviceSet = deviceSet
+    guard let simulator = try? options.simulator(for: .input) else { Foundation.exit(1) }
     return simulator
 }
 

@@ -30,13 +30,7 @@ struct DefaultsCommand: ParsableCommand {
         }
 
         func simulator() throws -> any Simulator {
-            guard let simulator = CoreSimulators(deviceSetPath: device.deviceSet)
-                .find(udid: device.udid)
-            else {
-                log("Device \(device.udid) not found")
-                throw ExitCode.failure
-            }
-            return simulator
+            try device.simulator(for: .defaults)
         }
     }
 

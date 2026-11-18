@@ -21,12 +21,8 @@ struct HealCommand: AsyncParsableCommand {
 
     @OptionGroup var options: DeviceOption
 
-    func run() async {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            Foundation.exit(1)
-        }
+    func run() async throws {
+        let simulator = try options.simulator(for: .input)
         do {
             let outcome = try await SimctlInputSurface().heal(on: simulator)
             log(outcome.summary)

@@ -50,12 +50,8 @@ struct InputCommand: AsyncParsableCommand {
         }
     }
 
-    func run() async {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            Foundation.exit(1)
-        }
+    func run() async throws {
+        let simulator = try options.simulator(for: .input)
         // Gestures go to the planned plane's Input; pasteboard is a
         // device-level service and stays on the simulator itself.
         let plan: StreamDisplayPlan

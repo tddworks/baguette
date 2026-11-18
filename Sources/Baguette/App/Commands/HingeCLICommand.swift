@@ -26,11 +26,7 @@ struct HingeCLICommand: ParsableCommand {
     var duration: String?
 
     func run() throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            Foundation.exit(1)
-        }
+        let simulator = try options.simulator(for: .hinge)
         guard simulator.canAcceptInput else {
             log("Device \(simulator.name) is not booted")
             Foundation.exit(1)

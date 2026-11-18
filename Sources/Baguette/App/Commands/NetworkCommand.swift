@@ -176,12 +176,7 @@ struct NetworkCommand: ParsableCommand {
     }
 
     private static func resolve(_ options: DeviceOption) throws -> any Simulator {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
-        return simulator
+        try options.simulator(for: .network)
     }
 }
 

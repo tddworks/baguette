@@ -46,3 +46,18 @@ func orExit<T>(_ body: () throws -> T) throws -> T {
         throw ExitCode.failure
     }
 }
+
+extension DeviceOption {
+    /// The simulator `--udid` names, for a command only the simulator
+    /// family runs so far. Any other device is refused by the ability the
+    /// command needs ("han's iPhone can't do input"), never "not found".
+    func simulator<Role>(for ability: Ability<Role>) throws -> any Simulator {
+        if let simulator = CoreSimulators(deviceSetPath: deviceSet).find(udid: udid) {
+            return simulator
+        }
+        let device = try device()
+        _ = try orExit { try device.require(ability) }
+        log("\(device.name) can't do \(ability.name) from this command yet")
+        throw ExitCode.failure
+    }
+}
