@@ -419,7 +419,8 @@ extension Server {
         }
     }
 
-    /// A physical device's screen, encoded here in the asked format.
+    /// A physical device's screen, encoded here in the asked format, and
+    /// its touches when it can take input.
     private static func deviceStreamWS(
         udid: String,
         format: StreamFormat,
@@ -428,15 +429,19 @@ extension Server {
         outbound: WebSocketOutboundWriter
     ) async {
         let screen: any Screen
+        let input: (any Input)?
         do {
             guard let device = devices.all.first(where: { $0.id.raw == udid }) else {
                 throw DeviceError.unknown(id: DeviceID(udid))
             }
             screen = try device.require(.screen)
+            input = try? device.require(.input)
         } catch {
             try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))
             return
         }
+        let dispatcher = input.map { GestureDispatcher(input: $0) }
+        let gestures = DispatchQueue(label: "baguette.device-gestures.\(udid)")
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
         do {
@@ -454,14 +459,22 @@ extension Server {
                 guard frame.opcode == .text else { continue }
                 let line = String(buffer: frame.data)
                 do {
-                    if try !Self.handleTwinInbound(line: line, stream: stream) {
-                        try? await outbound.write(.text(
-                            Self.twinErrorFrame("\(udid) takes no input yet")
-                        ))
-                    }
+                    if try Self.handleTwinInbound(line: line, stream: stream) { continue }
                 } catch {
                     await sink.failAndClose(error)
                     return
+                }
+                guard let dispatcher else {
+                    try? await outbound.write(.text(Self.twinErrorFrame("\(udid) takes no input")))
+                    continue
+                }
+                // A drag holds its fingers for its duration: send it off
+                // the event loop, one gesture after another.
+                await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+                    gestures.async {
+                        _ = dispatcher.dispatch(line: line)
+                        done.resume()
+                    }
                 }
             }
         } catch {

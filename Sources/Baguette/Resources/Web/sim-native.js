@@ -29,9 +29,10 @@
   const udid = deepLinkUdid();
   if (!udid) return; // not deep-link mode; let sim-list run.
   window.__baguetteNativeMode = true;
-  // Physical device behind the mirror: same page, reduced surface —
-  // no boot/orientation calls, sim-only toolbar clusters hidden,
-  // gestures rejected loudly by the server until the control pipe lands.
+  // Physical device: same page, reduced surface — no boot/orientation
+  // calls, sim-only toolbar clusters hidden. Gestures go down the stream
+  // socket as for a simulator; the server sends them on when the device
+  // can take input (a phone on a cable) and refuses them otherwise.
   const deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
 
   // --- State -------------------------------------------------------
@@ -2153,8 +2154,9 @@
   }
 
   /// Physical devices carry a reduced surface: the sim-only clusters
-  /// (control / simulate / inspect) hide, and a badge says why
-  /// Interact is missing. Stream, 3D view, and capture stay.
+  /// (control / simulate / inspect) hide, and a badge says what the device
+  /// can do, from the abilities /devices.json lists for it. Stream, 3D
+  /// view, and capture stay.
   function applyDeviceModeChrome() {
     if (!deviceMode) return;
     ['control', 'simulate', 'inspect'].forEach((id) => {
@@ -2167,9 +2169,18 @@
     if (osEl && !document.getElementById('nativeDeviceBadge')) {
       const badge = document.createElement('span');
       badge.id = 'nativeDeviceBadge';
-      badge.textContent = 'DEVICE · view-only';
-      badge.title = 'A physical phone mirrored by the companion app. ' +
-        'Touch control arrives with the Twin runner.';
+      const words = window.Baguette._DeviceBadge.of([]);
+      badge.textContent = words.text;
+      badge.title = words.title;
+      fetch('/devices.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { connected: [] }))
+        .then((json) => {
+          const hit = (json.connected || []).find((d) => d.udid === udid);
+          const said = window.Baguette._DeviceBadge.of(hit && hit.capabilities);
+          badge.textContent = said.text;
+          badge.title = said.title;
+        })
+        .catch(() => { /* keep view-only */ });
       badge.style.cssText =
         'margin-left:8px;padding:2px 8px;border:1px solid #fde68a;' +
         'border-radius:99px;background:#fef3c7;color:#92400e;' +
