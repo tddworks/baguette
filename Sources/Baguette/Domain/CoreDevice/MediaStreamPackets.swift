@@ -1,8 +1,7 @@
 import Foundation
 
 // A physical phone's live screen arrives as an RTP stream (RFC 3550) of
-// H.264 (RFC 6184) — HEVC (RFC 7798) when offered — unencrypted, over the
-// CoreDevice tunnel. These values
+// H.264 (RFC 6184), unencrypted, over the CoreDevice tunnel. These values
 // turn its packets back into frames; the socket and decoder are elsewhere.
 // Research: docs/features/real-devices/design.md.
 
@@ -40,58 +39,30 @@ struct RTPPacket: Equatable, Sendable {
     }
 }
 
-/// The video codec a phone's stream carries: H.264, the only one
-/// `MediaStreamOffer` offers. HEVC (payload 100) is what the phone picks
-/// when offered both, and it mosaics under motion.
-enum VideoCodec: Sendable {
-    case h264, hevc
-
-    /// A NAL unit's type, from its one-byte (H.264) or two-byte (HEVC) header.
-    func type(of nal: Data) -> UInt8 {
-        guard let first = nal.first else { return 0 }
-        return self == .h264 ? first & 0x1F : (first >> 1) & 0x3F
-    }
-
-    fileprivate var parameterSetTypes: [UInt8] { self == .h264 ? [7, 8] : [32, 33, 34] }
-    /// Parameter sets and access-unit delimiters, which a frame leaves out.
-    fileprivate var nonPictureTypes: [UInt8] { self == .h264 ? [7, 8, 9] : [32, 33, 34, 35] }
-    fileprivate func isKeyframe(_ type: UInt8) -> Bool {
-        self == .h264 ? type == 5 : (16...23).contains(type)
-    }
-}
-
-/// The NAL units of one picture, as the phone encoded them.
+/// The NAL units of one H.264 picture, as the phone encoded it.
 struct AccessUnit: Equatable, Sendable {
-    let codec: VideoCodec
     let nalUnits: [Data]
     let timestamp: UInt32
 
-    /// A picture decodable on its own (H.264 IDR, HEVC IRAP).
-    var isKeyframe: Bool { nalUnits.contains { codec.isKeyframe(codec.type(of: $0)) } }
+    /// A NAL unit's type, from its one-byte header.
+    static func type(of nal: Data) -> UInt8 { (nal.first ?? 0) & 0x1F }
 
-    /// The parameter sets this unit carries, in decoder order — SPS and PPS,
-    /// or VPS, SPS and PPS — or empty when it carries none of them all.
+    /// A picture decodable on its own: it holds an IDR slice.
+    var isKeyframe: Bool { nalUnits.contains { Self.type(of: $0) == 5 } }
+
+    /// The SPS and PPS this unit carries, in decoder order — or none
+    /// unless it carries both.
     var parameterSets: [Data] {
-        let sets = codec.parameterSetTypes.compactMap { type in nalUnits.first { codec.type(of: $0) == type } }
-        return sets.count == codec.parameterSetTypes.count ? sets : []
+        let sets = [7, 8].compactMap { type in nalUnits.first { Self.type(of: $0) == type } }
+        return sets.count == 2 ? sets : []
     }
 
-    /// The avcC record an H.264 decoder is configured with, when this unit
-    /// carries both parameter sets (the phone sends them before each IDR).
-    var decoderDescription: Data? {
-        guard codec == .h264, case let sets = parameterSets, sets.count == 2, sets[0].count >= 4 else { return nil }
-        let s = [UInt8](sets[0]), p = [UInt8](sets[1])
-        var record: [UInt8] = [1, s[1], s[2], s[3], 0xFF, 0xE1]
-        record += [UInt8(s.count >> 8), UInt8(s.count & 0xFF)] + s
-        record += [1, UInt8(p.count >> 8), UInt8(p.count & 0xFF)] + p
-        return Data(record)
-    }
-
-    /// The picture's NAL units, each behind a four-byte length — the frame
-    /// a decoder configured from `parameterSets` takes.
+    /// The picture's NAL units, each behind a four-byte length, leaving out
+    /// parameter sets and delimiters — the frame a decoder configured from
+    /// `parameterSets` takes.
     var lengthPrefixedFrame: Data {
         var frame = Data()
-        for nal in nalUnits where !codec.nonPictureTypes.contains(codec.type(of: nal)) {
+        for nal in nalUnits where ![7, 8, 9].contains(Self.type(of: nal)) {
             var length = UInt32(nal.count).bigEndian
             frame.append(Data(bytes: &length, count: 4))
             frame.append(nal)
@@ -100,25 +71,20 @@ struct AccessUnit: Equatable, Sendable {
     }
 }
 
-/// Reassembles RTP payloads into access units: single NAL units,
-/// aggregation and fragmentation packets — RFC 6184 for H.264 (STAP-A 24,
-/// FU-A 28), RFC 7798 for HEVC (AP 48, FU 49). A frame that loses a packet
-/// is dropped whole rather than decoded broken.
+/// Reassembles H.264 RTP payloads (RFC 6184) into access units: single
+/// NAL units, aggregation (STAP-A 24) and fragmentation (FU-A 28) packets,
+/// plus the sample description the phone sends ahead of its pictures. A
+/// frame that loses a packet is dropped whole rather than decoded broken.
 struct VideoDepacketizer: Sendable {
-    let codec: VideoCodec
     private var nalUnits: [Data] = []
     private var fragment: Data?
     private var timestamp: UInt32?
     private var lastSequence: UInt16?
     private var damaged = false
-    /// The SPS and PPS from the phone's last configuration packet (H.264).
+    /// The SPS and PPS from the phone's last sample description.
     private var configuration: [Data] = []
     /// Frames thrown away for a lost or broken packet, since the start.
     private(set) var droppedFrames = 0
-
-    init(codec: VideoCodec) {
-        self.codec = codec
-    }
 
     /// The finished access unit, when `packet` completes one (its marker
     /// bit) or starts the next (a new timestamp).
@@ -135,23 +101,17 @@ struct VideoDepacketizer: Sendable {
 
     private mutating func take(_ payload: Data) {
         let bytes = [UInt8](payload)
-        let headerSize = codec == .h264 ? 1 : 2
-        guard bytes.count >= headerSize else { return }
-        if codec == .h264, bytes[0] == 0x92 {
+        guard let first = bytes.first else { return }
+        if first == 0x92 {
             configuration = Self.parameterSets(inSampleDescription: payload)
             return
         }
-        switch (codec, codec.type(of: payload)) {
-        case (.h264, 24), (.hevc, 48):
-            aggregate(bytes, from: headerSize)
-        case (.h264, 28):
+        switch first & 0x1F {
+        case 24:
+            aggregate(bytes, from: 1)
+        case 28:
             guard bytes.count >= 2 else { damaged = true; return }
-            fragmentPart(bytes, fuHeader: bytes[1], from: 2,
-                         header: [bytes[0] & 0xE0 | bytes[1] & 0x1F])
-        case (.hevc, 49):
-            guard bytes.count >= 3 else { damaged = true; return }
-            fragmentPart(bytes, fuHeader: bytes[2], from: 3,
-                         header: [bytes[0] & 0x81 | (bytes[2] & 0x3F) << 1, bytes[1]])
+            fragmentPart(bytes, fuHeader: bytes[1], from: 2, header: [first & 0xE0 | bytes[1] & 0x1F])
         default:
             nalUnits.append(payload)
         }
@@ -179,9 +139,9 @@ struct VideoDepacketizer: Sendable {
         defer { nalUnits = []; fragment = nil; damaged = false }
         if damaged || fragment != nil { droppedFrames += 1; return nil }
         guard !nalUnits.isEmpty, let timestamp else { return nil }
-        let unit = AccessUnit(codec: codec, nalUnits: nalUnits, timestamp: timestamp)
+        let unit = AccessUnit(nalUnits: nalUnits, timestamp: timestamp)
         guard unit.isKeyframe, unit.parameterSets.isEmpty, !configuration.isEmpty else { return unit }
-        return AccessUnit(codec: codec, nalUnits: configuration + nalUnits, timestamp: timestamp)
+        return AccessUnit(nalUnits: configuration + nalUnits, timestamp: timestamp)
     }
 
     /// The SPS and PPS of the avcC atom in the sample description an H.264

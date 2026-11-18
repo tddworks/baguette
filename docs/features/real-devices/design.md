@@ -87,10 +87,10 @@ MediaStreamScreen.start
         options DisplayByID / VideoStreamForDisplayID 1 / network type 1 / transport type 2
   ← StartResponse.connection.streamConfig          SourceIP/SourcePort, LocalSSRC (phone), RemoteSSRC (ours)
   → UDP [::]:port ← RTP, payload type 123         unencrypted (SRTP suites 0)
-  → VideoDepacketizer(.h264) → AccessUnit          RFC 6184: STAP-A 24, FU-A 28; SPS/PPS from the 0x92 sample description
+  → VideoDepacketizer → AccessUnit                 RFC 6184: STAP-A 24, FU-A 28; SPS/PPS from the 0x92 sample description
   → VTStreamDecoder (H.264 parameter sets) → IOSurface → the usual Stream pipeline
-  ↔ RTCP receiver report every 1 s (the phone ends a stream after 20 s without), PLI until the first keyframe,
-    an APP ack per picture and an RCTL every 50 ms (as Device Hub sends), BYE on stop
+  ↔ ReceiverFeedback: receiver report every 1 s (the phone ends a stream after 20 s without), an ack per
+    picture, an RCTL every 50 ms (as Device Hub sends), PLI every 300 ms until a keyframe; BYE on stop
 ```
 
 - **Why not AVConference's receiver.** CoreDevice's own client (`CoreDeviceMediaStreamSupport`, `VideoStreamConfiguration.receiveMirroredPrimary(layer:)`) negotiates fine and the phone starts streaming, but configuring the receiving `AVCVideoStream` asks `avconferenced`, which checks `com.apple.videoconference.allow-conferencing` — Device Hub has it; a self-signed binary claiming it is killed by AMFI.

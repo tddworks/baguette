@@ -100,45 +100,22 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     private func receive(on fd: Int32, phone: sockaddr_in6, reporter: UInt32, source: UInt32,
                          _ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         var phone = phone
-        var depacketizer = VideoDepacketizer(codec: .h264)
-        var parameterSets: [Data] = []
-        var highest: UInt32 = 0
-        var lastReport = Date.distantPast
-        var lastControl = Date.distantPast
-        var firstSequence: UInt16?
-        var lastSequence: UInt16 = 0
-        var pictures: UInt16 = 0
-        var firstPacket: Date?
+        var depacketizer = VideoDepacketizer()
+        var feedback = ReceiverFeedback(reporter: reporter, source: source)
         var gate = DecodeGate()
-        var lastKeyframeRequest = Date.distantPast
-        var stats = (packets: 0, frames: 0, requests: 0, since: Date())
+        var parameterSets: [Data] = []
+        var firstPacket: Date?
+        var stats = (packets: 0, frames: 0, since: Date())
         var buffer = [UInt8](repeating: 0, count: 65_536)
         let opened = Date()
         while isRunning {
-            // The phone stops streaming after 20 s without a report; send one a second.
-            if Date().timeIntervalSince(lastReport) >= 1 {
-                send(RTCPReceiverReport(reporter: reporter, source: source, highestSequence: highest).bytes, to: &phone, on: fd)
-                lastReport = Date()
-            }
-            // The phone's encoder picks its reference pictures by this; without
-            // it, fast motion smears the picture and decoding never complains.
-            if let firstSequence, Date().timeIntervalSince(lastControl) >= 0.05 {
-                let clock = UInt16(truncatingIfNeeded: Int(Date().timeIntervalSince(opened) * 1000))
-                send(RTCPReceiverReport.receiverControl(
-                    reporter: reporter, clock: clock, pictures: pictures,
-                    packets: lastSequence &- firstSequence), to: &phone, on: fd)
-                lastControl = Date()
-            }
-            // Ask again and again while waiting: a request can be lost too.
-            if gate.needsKeyframe, Date().timeIntervalSince(lastKeyframeRequest) >= 0.3 {
-                send(RTCPReceiverReport.pictureLossIndication(reporter: reporter, source: source), to: &phone, on: fd)
-                lastKeyframeRequest = Date()
-                stats.requests += 1
+            for report in feedback.due(at: Date().timeIntervalSince(opened), wantingKeyframe: gate.needsKeyframe) {
+                send(report, to: &phone, on: fd)
             }
             if Date().timeIntervalSince(stats.since) >= 5 {
                 log("[coredevice] stream: \(stats.packets) packets, \(stats.frames) frames, "
-                    + "\(depacketizer.droppedFrames) dropped in all, \(stats.requests) keyframe requests in 5 s")
-                stats = (0, 0, 0, Date())
+                    + "\(depacketizer.droppedFrames) dropped in all")
+                stats = (0, 0, Date())
             }
             let count = recv(fd, &buffer, buffer.count, 0)
             guard count > 0 else {
@@ -149,18 +126,12 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             guard !RTPPacket.isRTCP(data), let packet = RTPPacket(data) else { continue }
             if firstPacket == nil { firstPacket = Date() }
             stats.packets += 1
-            highest = max(highest, highest & 0xFFFF_0000 | UInt32(packet.sequence))
-            if firstSequence == nil { firstSequence = packet.sequence }
-            lastSequence = packet.sequence
-            if packet.marker {
-                pictures &+= 1
-                send(RTCPReceiverReport.pictureReceived(reporter: reporter, timestamp: packet.timestamp), to: &phone, on: fd)
-            }
+            for report in feedback.heard(packet) { send(report, to: &phone, on: fd) }
             guard let unit = depacketizer.push(packet) else { continue }
             let fresh = unit.parameterSets
             if !fresh.isEmpty, fresh != parameterSets {
                 let decoder = lock.withLock { self.decoder } ?? makeDecoder()
-                try decoder.configure(codec: unit.codec, parameterSets: fresh, onFrame: onFrame)
+                try decoder.configure(parameterSets: fresh, onFrame: onFrame)
                 lock.withLock { self.decoder = decoder }
                 parameterSets = fresh
             }

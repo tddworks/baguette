@@ -5,7 +5,7 @@ import IOSurface
 import VideoToolbox
 
 /// The VideoToolbox calls behind `StreamDecoder` — integration-only. A
-/// phone's screen stream (HEVC) and anything else that hands over raw
+/// phone's screen stream (H.264) and anything else that hands over raw
 /// parameter sets decode here; BGRA, IOSurface-backed, like every Screen.
 /// Frames are the stream's own pictures, padding included: what part of
 /// one is the screen is the page's to show (`screen.pixels`).
@@ -21,8 +21,8 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
     private var recent: [CVPixelBuffer] = []
     private static let heldFrames = 6
 
-    func configure(codec: VideoCodec, parameterSets: [Data], onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
-        let format = try Self.format(codec: codec, parameterSets: parameterSets)
+    func configure(parameterSets: [Data], onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
+        let format = try Self.format(parameterSets: parameterSets)
         var session: VTDecompressionSession?
         let attributes: [CFString: Any] = [
             kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
@@ -40,7 +40,7 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
         }
         if let old { VTDecompressionSessionInvalidate(old) }
         let dimensions = CMVideoFormatDescriptionGetDimensions(format)
-        log("[video] decoder configured: \(codec) \(dimensions.width)×\(dimensions.height)")
+        log("[video] decoder configured: h264 \(dimensions.width)×\(dimensions.height)")
     }
 
     /// Decodes synchronously, one frame after another in arrival order:
@@ -104,22 +104,14 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
         }
     }
 
-    private static func format(codec: VideoCodec, parameterSets: [Data]) throws -> CMVideoFormatDescription {
+    private static func format(parameterSets: [Data]) throws -> CMVideoFormatDescription {
         let buffers = parameterSets.map { [UInt8]($0) }
         var description: CMVideoFormatDescription?
         let status: OSStatus = withPointers(to: buffers) { pointers in
-            switch codec {
-            case .h264:
-                return CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                    allocator: kCFAllocatorDefault, parameterSetCount: pointers.count,
-                    parameterSetPointers: pointers, parameterSetSizes: buffers.map(\.count),
-                    nalUnitHeaderLength: 4, formatDescriptionOut: &description)
-            case .hevc:
-                return CMVideoFormatDescriptionCreateFromHEVCParameterSets(
-                    allocator: kCFAllocatorDefault, parameterSetCount: pointers.count,
-                    parameterSetPointers: pointers, parameterSetSizes: buffers.map(\.count),
-                    nalUnitHeaderLength: 4, extensions: nil, formatDescriptionOut: &description)
-            }
+            CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                allocator: kCFAllocatorDefault, parameterSetCount: pointers.count,
+                parameterSetPointers: pointers, parameterSetSizes: buffers.map(\.count),
+                nalUnitHeaderLength: 4, formatDescriptionOut: &description)
         }
         guard status == noErr, let description else { throw DecoderError.formatRejected(status) }
         return description
