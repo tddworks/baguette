@@ -6,11 +6,6 @@ import Foundation
 enum RecordingError: Error, Equatable {
     /// The `--output` filename doesn't name a container baguette writes.
     case unsupportedContainer(String)
-    /// The device isn't running, so it has no framebuffer to record.
-    /// Caught up front: without this the recording would sit out its
-    /// whole `--duration` and then report `noFramesCaptured`, which
-    /// blames a still screen for a device that was never on.
-    case deviceNotBooted(String)
     /// The recording ended without a single frame. SimulatorKit only
     /// fires its framebuffer callback on a frame *change*, so a
     /// quiescent simulator delivers nothing at all — that is far more
@@ -24,9 +19,6 @@ enum RecordingError: Error, Equatable {
         case .unsupportedContainer(let container):
             return "Unknown recording container '\(container)'. "
                 + "Expected one of: \(RecordingFormat.containerList)"
-        case .deviceNotBooted(let state):
-            return "Cannot record a \(state) device — boot it first "
-                + "with `baguette boot --udid <UDID>`."
         case .noFramesCaptured:
             return "No frames captured — the simulator screen never changed. "
                 + "Drive some input while recording."

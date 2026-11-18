@@ -9,15 +9,12 @@ struct ShutdownCommand: ParsableCommand {
 
     @OptionGroup var options: DeviceOption
 
-    func run() {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            Foundation.exit(1)
-        }
+    func run() throws {
+        let device = try options.device()
+        let lifecycle = try orExit { try device.require(.lifecycle) }
         do {
-            try simulator.shutdown()
-            log("Shut down \(simulator.name)")
+            try lifecycle.shutdown()
+            log("Shut down \(device.name)")
         } catch {
             log("Shutdown failed: \(error)")
             Foundation.exit(1)

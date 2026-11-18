@@ -20,23 +20,20 @@ struct InstallCommand: AsyncParsableCommand {
     var path: String
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let apps = try orExit { try device.require(.apps) }
         let url = URL(fileURLWithPath: path)
         guard let app = AppBundle.at(url) else {
             log("Not an installable app (expected .ipa or .app): \(path)")
             throw ExitCode.failure
         }
         do {
-            try await simulator.apps().install(app)
+            try await apps.install(app)
         } catch {
             log("install failed: \(error)")
             throw ExitCode.failure
         }
-        log("Installed \(url.lastPathComponent) on \(simulator.name)")
+        log("Installed \(url.lastPathComponent) on \(device.name)")
     }
 }
 
@@ -59,22 +56,19 @@ struct AddMediaCommand: AsyncParsableCommand {
     var path: String
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let photos = try orExit { try device.require(.photos) }
         let url = URL(fileURLWithPath: path)
         guard let media = MediaItem.at(url) else {
             log("Not a supported image or video: \(path)")
             throw ExitCode.failure
         }
         do {
-            try await simulator.photos().add(media)
+            try await photos.add(media)
         } catch {
             log("add-media failed: \(error)")
             throw ExitCode.failure
         }
-        log("Added \(url.lastPathComponent) to \(simulator.name) Photos")
+        log("Added \(url.lastPathComponent) to \(device.name) Photos")
     }
 }

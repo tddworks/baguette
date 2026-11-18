@@ -16,20 +16,13 @@ struct OrientationCommand: ParsableCommand {
     @Argument(help: "Target orientation: portrait, landscape-left, landscape-right, portrait-upside-down")
     var value: DeviceOrientation
 
-    func run() {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            Foundation.exit(1)
-        }
-        guard simulator.canAcceptInput else {
-            log("Device \(simulator.name) is not booted")
-            Foundation.exit(1)
-        }
-        let delivery = simulator.orientation().set(value)
+    func run() throws {
+        let device = try options.device()
+        let orientation = try orExit { try device.require(.orientation) }
+        let delivery = orientation.set(value)
         switch delivery {
         case .delivered:
-            log("Set \(simulator.name) → \(value.wireName)")
+            log("Set \(device.name) → \(value.wireName)")
         case .rejected:
             log("Orientation change rejected (event port or guest pose helper unavailable?)")
         case .unconfirmed:

@@ -101,17 +101,13 @@ struct ScreenshotCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
         // CarPlay plans enable the panel and fail closed on an unbound
-        // plane; phone plans take the legacy screen untouched.
+        // plane; phone plans take the device's own screen.
         let plan = try StreamDisplayPlan.from(cliFlag: display)
-        let bound: (screen: any Screen, input: any Input)
+        let screen: any Screen
         do {
-            bound = try plan.bind(to: simulator)
+            screen = try orExit { try plan.screen(on: device) }
         } catch let error as FramebufferSelectionError {
             // Otherwise this surfaces as its own enum dump, which names
             // the failure but not the remedy.
@@ -119,7 +115,7 @@ struct ScreenshotCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
         let frame = try await ScreenSnapshot.captureWithGeometry(
-            screen: bound.screen,
+            screen: screen,
             quality: quality,
             scale: max(1, scale),
             size: try CaptureSize.parse(size),

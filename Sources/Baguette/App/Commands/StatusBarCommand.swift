@@ -73,22 +73,19 @@ struct StatusBarCommand: ParsableCommand {
         }
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let statusBar = try orExit { try device.require(.statusBar) }
             guard !override.isEmpty else {
                 log("status-bar override: set at least one field")
                 throw ExitCode.failure
             }
             do {
-                try await simulator.statusBar().override(override)
+                try await statusBar.override(override)
             } catch {
                 log("status-bar override failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Set \(simulator.name) status bar")
+            log("Set \(device.name) status bar")
         }
     }
 
@@ -102,18 +99,15 @@ struct StatusBarCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let statusBar = try orExit { try device.require(.statusBar) }
             do {
-                try await simulator.statusBar().clear()
+                try await statusBar.clear()
             } catch {
                 log("status-bar clear failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Cleared \(simulator.name) status bar overrides")
+            log("Cleared \(device.name) status bar overrides")
         }
     }
 }

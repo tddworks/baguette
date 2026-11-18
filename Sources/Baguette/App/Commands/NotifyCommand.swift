@@ -56,13 +56,17 @@ struct NotifyCommand: AsyncParsableCommand {
             fail(String(describing: error))
         }
 
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            fail("Device \(options.udid) not found")
+        let device: any Device
+        let apps: any Apps
+        do {
+            device = try options.devices.device(DeviceID(options.udid))
+            apps = try device.require(.apps)
+        } catch {
+            fail(String(describing: error))
         }
 
         do {
-            try await notification.deliver(to: simulator.apps())
+            try await notification.deliver(to: apps)
         } catch {
             fail("notify failed: \(error)")
         }
@@ -70,7 +74,7 @@ struct NotifyCommand: AsyncParsableCommand {
         if json {
             print(notification.deliveredJSON)
         } else {
-            log("Notified \(notification.app) on \(simulator.name). \(notification.expectation)")
+            log("Notified \(notification.app) on \(device.name). \(notification.expectation)")
         }
     }
 

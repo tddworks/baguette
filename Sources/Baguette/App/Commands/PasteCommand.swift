@@ -24,15 +24,13 @@ struct PasteCommand: AsyncParsableCommand {
     var press: Bool = true
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let pasteboard = try orExit { try device.require(.pasteboard) }
+        let input = try orExit { try device.require(.input) }
         let ok: Bool
         do {
             ok = try await Paste(text: text, press: press)
-                .execute(pasteboard: simulator.pasteboard(), input: simulator.input())
+                .execute(pasteboard: pasteboard, input: input)
         } catch {
             log("paste failed: \(error)")
             throw ExitCode.failure

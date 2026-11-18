@@ -69,6 +69,24 @@ struct DevicectlTests {
         }
     }
 
+    @Test func `should keep devicectl's process alive until it exits`() async throws {
+        let exit = ExitLatch()
+        let devicectl = Devicectl(makeSubprocess: {
+            let sub = MockSubprocess()
+            given(sub).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any)
+                .willProduce { _, _, _, onExit in exit.hold(onExit) }
+            exit.track(sub)
+            return sub
+        })
+
+        let task = Task { try await devicectl.run(["list", "devices"]) }
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(exit.subprocessAlive)
+
+        exit.fire(0)
+        _ = try await task.value
+    }
+
     @Test func `should run devicectl to the end when the caller can't wait asynchronously`() throws {
         let fake = FakeDevicectl()
         fake.output = Data("done".utf8)
@@ -233,6 +251,16 @@ struct CoreDevicePhonesTests {
             try phone.require(.lifecycle)
         }
     }
+}
+
+private final class ExitLatch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var onExit: (@Sendable (Int32) -> Void)?
+    func hold(_ onExit: @escaping @Sendable (Int32) -> Void) { lock.withLock { self.onExit = onExit } }
+    func fire(_ status: Int32) { lock.withLock { onExit }?(status) }
+    private weak var subprocess: AnyObject?
+    func track(_ subprocess: AnyObject) { lock.withLock { self.subprocess = subprocess } }
+    var subprocessAlive: Bool { lock.withLock { subprocess != nil } }
 }
 
 private final class FrameCounter: @unchecked Sendable {

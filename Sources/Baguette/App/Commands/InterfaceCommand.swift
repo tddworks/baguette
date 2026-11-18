@@ -103,12 +103,9 @@ struct InterfaceCommand: ParsableCommand {
     /// The device's interface handle, or a clean CLI failure when the
     /// udid names nothing.
     fileprivate static func resolve(_ options: DeviceOption) throws -> any Interface {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
-        return simulator.interface()
+        let device = try options.device()
+        let interface = try orExit { try device.require(.interface) }
+        return interface
     }
 
     /// Run a setter, turning a thrown `InterfaceError` into a logged

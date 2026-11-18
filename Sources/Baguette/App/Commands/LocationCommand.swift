@@ -43,22 +43,19 @@ struct LocationCommand: ParsableCommand {
         }
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let location = try orExit { try device.require(.location) }
             guard let coordinate else {
                 log("location set: latitude must be -90…90 and longitude -180…180")
                 throw ExitCode.failure
             }
             do {
-                try await simulator.location().set(coordinate)
+                try await location.set(coordinate)
             } catch {
                 log("location set failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Set \(simulator.name) location to \(coordinate.argument)")
+            log("Set \(device.name) location to \(coordinate.argument)")
         }
     }
 
@@ -95,22 +92,19 @@ struct LocationCommand: ParsableCommand {
         }
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let location = try orExit { try device.require(.location) }
             guard let route else {
                 log("location start: give two or more valid lat,lon waypoints")
                 throw ExitCode.failure
             }
             do {
-                try await simulator.location().start(route)
+                try await location.start(route)
             } catch {
                 log("location start failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Started \(simulator.name) route over \(route.waypoints.count) waypoints")
+            log("Started \(device.name) route over \(route.waypoints.count) waypoints")
         }
     }
 
@@ -153,23 +147,20 @@ struct LocationCommand: ParsableCommand {
         }
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let location = try orExit { try device.require(.location) }
             guard let walk else {
                 log("location walk: give a valid lat,lon origin and a speed above 0")
                 throw ExitCode.failure
             }
             do {
-                try await simulator.location().start(walk.route())
+                try await location.start(walk.route())
             } catch {
                 log("location walk failed: \(error)")
                 throw ExitCode.failure
             }
             log("""
-                Walking \(simulator.name) from \(walk.origin.argument) \
+                Walking \(device.name) from \(walk.origin.argument) \
                 on bearing \(walk.bearing.degrees)° (\(walk.bearing.cardinal)) at \(walk.speed) m/s
                 """)
         }
@@ -185,18 +176,15 @@ struct LocationCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-            guard let simulator = simulators.find(udid: options.udid) else {
-                log("Device \(options.udid) not found")
-                throw ExitCode.failure
-            }
+            let device = try options.device()
+            let location = try orExit { try device.require(.location) }
             do {
-                try await simulator.location().clear()
+                try await location.clear()
             } catch {
                 log("location clear failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Cleared \(simulator.name) simulated location")
+            log("Cleared \(device.name) simulated location")
         }
     }
 }

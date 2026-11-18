@@ -47,17 +47,14 @@ struct LogsCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let logs = try orExit { try device.require(.logs) }
 
         let filter = LogFilter(
             level: lvl, style: sty,
             predicate: predicate, bundleId: bundleId
         )
-        let stream = simulator.logs()
+        let stream = logs
 
         // SIGINT handler: clean stop + exit 0. We install a
         // DispatchSourceSignal so the default handler doesn't kill

@@ -26,11 +26,8 @@ struct OpenURLCommand: AsyncParsableCommand {
     var url: String
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let apps = try orExit { try device.require(.apps) }
         guard let link = DeepLink.from(url) else {
             log("Not a URL (expected a scheme, e.g. myapp://path): \(url)")
             throw ExitCode.failure
@@ -46,12 +43,12 @@ struct OpenURLCommand: AsyncParsableCommand {
         }
 
         do {
-            try await simulator.apps().open(link)
+            try await apps.open(link)
         } catch {
             log("openurl failed: \(error)")
             throw ExitCode.failure
         }
-        log("Opened \(link.url.absoluteString) on \(simulator.name)")
+        log("Opened \(link.url.absoluteString) on \(device.name)")
     }
 }
 
@@ -75,15 +72,12 @@ struct SchemesCommand: AsyncParsableCommand {
     var json = false
 
     func run() async throws {
-        let simulators = CoreSimulators(deviceSetPath: options.deviceSet)
-        guard let simulator = simulators.find(udid: options.udid) else {
-            log("Device \(options.udid) not found")
-            throw ExitCode.failure
-        }
+        let device = try options.device()
+        let apps = try orExit { try device.require(.apps) }
 
         let installed: [InstalledApp]
         do {
-            installed = try await simulator.apps().installed()
+            installed = try await apps.installed()
         } catch {
             log("listing apps failed: \(error)")
             throw ExitCode.failure
@@ -91,7 +85,7 @@ struct SchemesCommand: AsyncParsableCommand {
 
         let suggestions = SchemeSuggestion.matching("", in: installed)
         guard !suggestions.isEmpty else {
-            log("No app on \(simulator.name) registers a URL scheme")
+            log("No app on \(device.name) registers a URL scheme")
             return
         }
 

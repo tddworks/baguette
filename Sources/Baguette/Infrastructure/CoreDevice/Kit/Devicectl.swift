@@ -41,8 +41,12 @@ struct Devicectl: Sendable {
     ) {
         let output = Output()
         let argv = ["devicectl"] + arguments
+        // A subprocess ends its child when it is released, so the exit
+        // handler holds it until devicectl has finished.
+        let subprocess = makeSubprocess()
         let onBytes: @Sendable (Data) -> Void = { output.append($0) }
         let onExit: @Sendable (Int32) -> Void = { status in
+            withExtendedLifetime(subprocess) {}
             let bytes = output.data
             if status == 0 {
                 completion(.success(bytes))
@@ -51,7 +55,6 @@ struct Devicectl: Sendable {
             }
         }
         do {
-            let subprocess = makeSubprocess()
             if let stdin {
                 try subprocess.run(executable: xcrun, arguments: argv, stdin: stdin, onBytes: onBytes, onExit: onExit)
             } else {
