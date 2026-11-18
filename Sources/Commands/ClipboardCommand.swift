@@ -35,9 +35,9 @@ struct ClipboardCommand: ParsableCommand {
             do {
                 // Raw, no trailing newline — mirrors `pbpaste` so the
                 // output pipes byte-faithfully.
-                print(try await pasteboard.text(), terminator: "")
+                CommandOutput.current.write(Data(try await pasteboard.text().utf8))
             } catch {
-                log("clipboard get failed: \(error)")
+                tell("clipboard get failed: \(error)")
                 throw ExitCode.failure
             }
         }
@@ -58,10 +58,10 @@ struct ClipboardCommand: ParsableCommand {
             do {
                 try await pasteboard.syncFromHost()
             } catch {
-                log("clipboard sync failed: \(error)")
+                tell("clipboard sync failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Synced host pasteboard onto \(device.name)")
+            tell("Synced host pasteboard onto \(device.name)")
         }
     }
 
@@ -80,10 +80,10 @@ struct ClipboardCommand: ParsableCommand {
             do {
                 try await pasteboard.syncToHost()
             } catch {
-                log("clipboard copy failed: \(error)")
+                tell("clipboard copy failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Copied \(device.name) pasteboard onto the host")
+            tell("Copied \(device.name) pasteboard onto the host")
         }
     }
 }

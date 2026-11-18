@@ -14,24 +14,24 @@ struct BootCommand: AsyncParsableCommand {
           help: "Leave the input surface alone even if Xcode 27's Device Hub has shadowed it (see `baguette heal`).")
     var noHeal = false
 
-    func run() async {
+    func run() async throws {
         let device: any Device
         let power: any Power
         do {
             device = try options.device()
             power = try orExit { try device.require(.power) }
         } catch {
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
         do {
             try power.turnOn()
-            log("Booted \(device.name)")
-            if let advisory = SimulatorAppPreferences.lifetime().advisory {
+            tell("Booted \(device.name)")
+            if let advisory = SimulatorAppSettings.current.lifetime().advisory {
                 warn(advisory)
             }
         } catch {
-            log("Boot failed: \(error)")
-            Foundation.exit(1)
+            tell("Boot failed: \(error)")
+            throw ExitCode.failure
         }
         // Under Xcode 27, Device Hub attaches to the device as it boots
         // and — depending on a race inside backboardd — can leave the
@@ -41,7 +41,7 @@ struct BootCommand: AsyncParsableCommand {
         guard !noHeal, let surface = try? options.device().require(.inputSurface) else { return }
         do {
             if try await surface.healAfterBoot() == .reclaimed {
-                log(HealOutcome.reclaimed.summary)
+                tell(HealOutcome.reclaimed.summary)
             }
         } catch {
             warn("Input surface heal failed: \(error) — run `baguette heal --udid \(options.udid)` to retry")

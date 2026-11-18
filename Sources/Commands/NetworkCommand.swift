@@ -122,10 +122,10 @@ struct NetworkCommand: ParsableCommand {
             do {
                 try await network.apply(applied)
             } catch {
-                log("network set failed: \(error)")
+                tell("network set failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Network conditioned on \(device.name): \(applied.summary). "
+            tell("Network conditioned on \(device.name): \(applied.summary). "
                 + "Relaunch the app to pick it up.")
         }
     }
@@ -144,10 +144,10 @@ struct NetworkCommand: ParsableCommand {
             do {
                 try await network.clear()
             } catch {
-                log("network clear failed: \(error)")
+                tell("network clear failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Network conditioning cleared on \(device.name)")
+            tell("Network conditioning cleared on \(device.name)")
         }
     }
 
@@ -169,10 +169,10 @@ struct NetworkCommand: ParsableCommand {
         func run() async throws {
             let (device, network) = try options.require(.network)
             guard let applied = try await network.current() else {
-                log("\(device.name): no network conditioning applied.")
+                tell("\(device.name): no network conditioning applied.")
                 return
             }
-            log("\(device.name) network: \(applied.summary)")
+            tell("\(device.name) network: \(applied.summary)")
         }
     }
 }

@@ -1,6 +1,7 @@
 import BaguetteDevice
 import ArgumentParser
 import Foundation
+import Mockable
 
 /// `baguette diag-digitizer-trackpad --udid <UDID>`
 ///
@@ -22,8 +23,8 @@ import Foundation
 /// "reason":"…"}` — so a future automation harness can grep for the
 /// verdict without parsing prose.
 ///
-/// Lives entirely in this command file. No production code path
-/// reaches this code; it is integration-only by design.
+/// The calls into SimulatorKit and IOKit are `IndigoMessages`
+/// (`Internal/System/`); what the probe makes of their answers is here.
 struct DiagDigitizerTrackpadCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "diag-digitizer-trackpad",
@@ -151,6 +152,12 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
     @Option(help: "Hold time between cycle down and up (ms)")
     var holdMs: UInt32 = 50
 
+
+    /// SimulatorKit's Indigo messages and how long to wait between events:
+    /// this Mac's, unless a test stands in.
+    @TaskLocal static var messages: any IndigoMessages = HostIndigoMessages()
+    @TaskLocal static var pause: @Sendable (_ milliseconds: UInt32) -> Void = HostIndigoMessages.pause
+
     func run() {
         let mask = parseHexU32(eventMask) ?? 0x04
         if let endY = swipeEndY {
@@ -159,38 +166,24 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
             // events use mask `0x04` (Position only) per
             // SimulatorKit / digitizer convention.
             let downStartId: UInt32 = identifier == 0 ? 0xC0DE : identifier
-            let down = Self.probe(
-                udid: options.udid, deviceSet: options.deviceSet,
-                x: x, y: y, pressure: pressure,
-                index: index, identifier: downStartId,
-                eventMask: mask, range: range, touch: touch,
-                withParent: withParent, patchTarget: patchTarget,
-                patchEdge: edgeBitFromName(patchEdge),
-                dispatch: doDispatch, dump: false
-            )
-            print("DOWN  : " + jsonLine(down))
+            let down = probe(y: y, pressure: pressure, identifier: downStartId,
+                             eventMask: mask, range: range, touch: touch, dump: false)
+            say("DOWN  : " + jsonLine(down))
             for i in 1...swipeSteps {
-                usleep(swipeStepMs * 1000)
+                Self.pause(swipeStepMs)
                 let t = Double(i) / Double(swipeSteps)
                 let yAt = y + (endY - y) * t
                 // Move events keep Range+Touch on so iOS sees a
                 // sustained touch with a position change. Bare
                 // Position (0x04) made iOS think the finger had
                 // lifted between moves.
-                let mv = Self.probe(
-                    udid: options.udid, deviceSet: options.deviceSet,
-                    x: x, y: yAt, pressure: pressure,
-                    index: index, identifier: downStartId,
-                    eventMask: 0x07, range: true, touch: true,
-                    withParent: withParent, patchTarget: patchTarget,
-                    patchEdge: edgeBitFromName(patchEdge),
-                    dispatch: doDispatch, dump: false
-                )
+                let mv = probe(y: yAt, pressure: pressure, identifier: downStartId,
+                               eventMask: 0x07, range: true, touch: true, dump: false)
                 if i == swipeSteps / 2 || i == swipeSteps {
-                    print(String(format: "MOVE %02d: ", i) + jsonLine(mv))
+                    say(String(format: "MOVE %02d: ", i) + jsonLine(mv))
                 }
             }
-            usleep(swipeStepMs * 1000)
+            Self.pause(swipeStepMs)
             // Optional dwell at endY — keeps the touch state alive
             // (iOS treats the period between move events as the
             // finger held still). Required to discriminate App
@@ -198,29 +191,15 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
             if swipeDwellMs > 0 {
                 let pulses = max(1, Int(swipeDwellMs / 50))
                 for _ in 0..<pulses {
-                    _ = Self.probe(
-                        udid: options.udid, deviceSet: options.deviceSet,
-                        x: x, y: endY, pressure: pressure,
-                        index: index, identifier: downStartId,
-                        eventMask: 0x07, range: true, touch: true,
-                        withParent: withParent, patchTarget: patchTarget,
-                        patchEdge: edgeBitFromName(patchEdge),
-                        dispatch: doDispatch, dump: false
-                    )
-                    usleep(50_000)
+                    _ = probe(y: endY, pressure: pressure, identifier: downStartId,
+                              eventMask: 0x07, range: true, touch: true, dump: false)
+                    Self.pause(50)
                 }
-                print("DWELL : \(swipeDwellMs)ms held at y=\(endY)")
+                say("DWELL : \(swipeDwellMs)ms held at y=\(endY)")
             }
-            let up = Self.probe(
-                udid: options.udid, deviceSet: options.deviceSet,
-                x: x, y: endY, pressure: 0.0,
-                index: index, identifier: downStartId,
-                eventMask: 0x06, range: false, touch: false,
-                withParent: withParent, patchTarget: patchTarget,
-                patchEdge: edgeBitFromName(patchEdge),
-                dispatch: doDispatch, dump: false
-            )
-            print("UP    : " + jsonLine(up))
+            let up = probe(y: endY, pressure: 0.0, identifier: downStartId,
+                           eventMask: 0x06, range: false, touch: false, dump: false)
+            say("UP    : " + jsonLine(up))
             return
         }
         if cycle {
@@ -229,88 +208,50 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
             // clears them (mask=Touch|Position so iOS sees a
             // touch-state change, with `touch=false` + `range=false`
             // signalling lift-off).
-            let down = Self.probe(
-                udid: options.udid, deviceSet: options.deviceSet,
-                x: x, y: y, pressure: pressure,
-                index: index, identifier: identifier,
-                eventMask: mask, range: range, touch: touch,
-                withParent: withParent, patchTarget: patchTarget,
-                patchEdge: edgeBitFromName(patchEdge),
-                dispatch: doDispatch, dump: dumpBytes
-            )
-            print("DOWN: " + jsonLine(down))
-            if let hex = down.hex { print(hex) }
-            usleep(holdMs * 1000)
+            let down = probe(y: y, pressure: pressure, identifier: identifier,
+                             eventMask: mask, range: range, touch: touch, dump: dumpBytes)
+            say("DOWN: " + jsonLine(down))
+            if let hex = down.hex { say(hex) }
+            Self.pause(holdMs)
             // Send the matching up. eventMask = 0x06 (Touch|Position)
             // so iOS gets a clear "touch ended" signal, with
             // touch=false/range=false to mark the finger as lifted.
-            let up = Self.probe(
-                udid: options.udid, deviceSet: options.deviceSet,
-                x: x, y: y, pressure: 0.0,
-                index: index, identifier: identifier,
-                eventMask: 0x06, range: false, touch: false,
-                withParent: withParent, patchTarget: patchTarget,
-                patchEdge: edgeBitFromName(patchEdge),
-                dispatch: doDispatch, dump: dumpBytes
-            )
-            print("UP:   " + jsonLine(up))
-            if let hex = up.hex { print(hex) }
+            let up = probe(y: y, pressure: 0.0, identifier: identifier,
+                           eventMask: 0x06, range: false, touch: false, dump: dumpBytes)
+            say("UP:   " + jsonLine(up))
+            if let hex = up.hex { say(hex) }
             return
         }
-        let outcome = Self.probe(
-            udid: options.udid, deviceSet: options.deviceSet,
-            x: x, y: y, pressure: pressure,
-            index: index, identifier: identifier,
-            eventMask: mask, range: range, touch: touch,
-            withParent: withParent, patchTarget: patchTarget,
-            patchEdge: edgeBitFromName(patchEdge),
-            dispatch: doDispatch, dump: dumpBytes
-        )
-        print(jsonLine(outcome))
-        if let hex = outcome.hex { print(hex) }
+        let outcome = probe(y: y, pressure: pressure, identifier: identifier,
+                            eventMask: mask, range: range, touch: touch, dump: dumpBytes)
+        say(jsonLine(outcome))
+        if let hex = outcome.hex { say(hex) }
 
         if compareWithMouse {
-            print("--- mouse-event message edge=0 ---")
-            if let h0 = Self.dumpMouseEventMessage(x: x, y: y, edge: 0) {
-                print(h0)
+            // The mouse-event message at the same point, built (never
+            // sent) with the 9-arg recipe production uses: dumping it at
+            // edge=0 and edge=3 shows which byte is the edge slot.
+            say("--- mouse-event message edge=0 ---")
+            if let h0 = Self.messages.mouse(x: x, y: y, edge: 0) {
+                say("size=\(h0.count)\n\(Self.hexDump(h0))")
             }
-            print("--- mouse-event message edge=3 (bottom) ---")
-            if let h3 = Self.dumpMouseEventMessage(x: x, y: y, edge: 3) {
-                print(h3)
+            say("--- mouse-event message edge=3 (bottom) ---")
+            if let h3 = Self.messages.mouse(x: x, y: y, edge: 3) {
+                say("size=\(h3.count)\n\(Self.hexDump(h3))")
             }
         }
     }
 
-    /// Build (but do not dispatch) a mouse-event message at (x, y)
-    /// using the same legacy 9-arg signature `IndigoHIDInput` uses
-    /// in production, with `edge` placed in the x4 register. Used
-    /// only for byte-level comparison: dumping at edge=0 vs edge=3
-    /// reveals which byte is the edge slot in the message buffer.
-    private static func dumpMouseEventMessage(x: Double, y: Double, edge: UInt32) -> String? {
-        let dev = CoreSimulators.developerDir()
-        guard let kitPath = SimulatorKitFramework.path(developerDir: dev),
-              let kit = dlopen(kitPath, RTLD_NOW) else { return nil }
-        guard let sym = dlsym(kit, "IndigoHIDMessageForMouseNSEvent") else { return nil }
-        // 9-arg shape — same `MouseFn` typealias as IndigoHIDInput.
-        typealias MouseFn = @convention(c) (
-            UnsafePointer<CGPoint>, UnsafePointer<CGPoint>?,
-            UInt32, UInt32, UInt32,
-            Double, Double, Double, Double
-        ) -> UnsafeMutableRawPointer?
-        let mfn = unsafeBitCast(sym, to: MouseFn.self)
-        var pt = CGPoint(x: x, y: y)
-        let msg = withUnsafePointer(to: &pt) { p1 in
-            // target=0x32 digitizer, eventType=1 down, x4 = edge,
-            // NSSize=1.0×1.0, the trailing two doubles are unused
-            // by the actual function (extra args under the 9-arg
-            // shape).
-            mfn(p1, nil, 0x32, 1, edge, 1.0, 1.0, 1.0, 1.0)
-        }
-        guard let msg else { return nil }
-        let size = malloc_size(msg)
-        let dump = hexDump(msg, length: size)
-        free(msg)
-        return "size=\(size)\n\(dump)"
+    /// One probe at `y` with this command's finger, parent and patches.
+    private func probe(y: Double, pressure: Double, identifier: UInt32,
+                       eventMask: UInt32, range: Bool, touch: Bool, dump: Bool) -> Outcome {
+        Self.probe(
+            DigitizerFinger(index: index, identifier: identifier, eventMask: eventMask,
+                            x: x, y: y, pressure: pressure, range: range, touch: touch,
+                            withParent: withParent),
+            patchTarget: patchTarget, patchEdge: edgeBitFromName(patchEdge),
+            dispatch: doDispatch, dump: dump,
+            udid: options.udid, deviceSet: options.deviceSet, messages: Self.messages)
     }
 
     private func jsonLine(_ outcome: Outcome) -> String {
@@ -342,251 +283,72 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
 
     struct Outcome {
         let accepted: Bool
-        let messageSize: Int   // malloc_size() of the wrapper output, 0 when nil
+        let messageSize: Int   // the wrapper output's allocation, 0 when nil
         let dispatched: Bool
         let reason: String
         let hex: String?       // hex dump of the wrapper output (when --dump)
     }
 
-    /// All the dlsym + IOKit + SimulatorKit dance, kept as a static
-    /// so the probe is mechanically reusable (an integration test or
-    /// a higher-level scratch script can invoke this without going
-    /// through ArgumentParser). Default — `dispatch=false` — only
-    /// asks "does the wrapper accept this event shape?". Set
-    /// `dispatch=true` once the wrapper output looks plausible.
-    static func probe(udid: String, deviceSet: String?,
-                      x: Double, y: Double, pressure: Double,
-                      index: UInt32, identifier: UInt32,
-                      eventMask: UInt32, range: Bool, touch: Bool,
-                      withParent: Bool, patchTarget: Bool,
-                      patchEdge: UInt8,
-                      dispatch: Bool, dump: Bool) -> Outcome {
-        // 1. Open SimulatorKit — same dlopen the production HID input
-        //    already does. We need the trackpad wrapper symbol.
-        let dev = CoreSimulators.developerDir()
-        guard let kitPath = SimulatorKitFramework.path(developerDir: dev) else {
-            return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                           reason: "SimulatorKit not found under \(dev) — see issue #28",
-                           hex: nil)
+    /// Ask the trackpad wrapper for a message from `finger`, patch it as
+    /// asked, and — only when `dispatch` — send it. Default (`dispatch =
+    /// false`) only asks "does the wrapper accept this event shape?"; set
+    /// it once the wrapper output looks plausible.
+    static func probe(_ finger: DigitizerFinger,
+                      patchTarget: Bool, patchEdge: UInt8,
+                      dispatch: Bool, dump: Bool,
+                      udid: String, deviceSet: String?,
+                      messages: any IndigoMessages) -> Outcome {
+        var message: [UInt8]
+        switch messages.trackpad(from: finger) {
+        case .refused(let reason):
+            return Outcome(accepted: false, messageSize: 0, dispatched: false, reason: reason, hex: nil)
+        case .built(let built):
+            message = built
         }
-        guard let kit = dlopen(kitPath, RTLD_NOW) else {
-            return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                           reason: "dlopen SimulatorKit failed: \(String(cString: dlerror()))",
-                           hex: nil)
-        }
-        guard let wrapSym = dlsym(kit, "IndigoHIDMessageForTrackpadEventFromHIDEventRef") else {
-            return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                           reason: "IndigoHIDMessageForTrackpadEventFromHIDEventRef unresolved",
-                           hex: nil)
-        }
-        // The wrapper takes a CFTypeRef IOHIDEventRef and returns a
-        // newly malloc'd Indigo message (or nil on rejection).
-        typealias WrapFn = @convention(c) (UnsafeRawPointer) -> UnsafeMutableRawPointer?
-        let wrapFn = unsafeBitCast(wrapSym, to: WrapFn.self)
+        let size = message.count
 
-        // 2. Resolve IOHIDEventCreateDigitizerFingerEvent. It lives
-        //    inside the dyld shared cache (HID/IOKit) — RTLD_DEFAULT
-        //    is enough.
-        guard let createSym = dlsym(UnsafeMutableRawPointer(bitPattern: -2),
-                                    "IOHIDEventCreateDigitizerFingerEvent") else {
-            return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                           reason: "IOHIDEventCreateDigitizerFingerEvent unresolved",
-                           hex: nil)
-        }
-        // Real signature (from IOHIDEvent.h):
-        //   IOHIDEventRef IOHIDEventCreateDigitizerFingerEvent(
-        //     CFAllocatorRef allocator,
-        //     AbsoluteTime timeStamp,
-        //     uint32_t index, uint32_t identifier,
-        //     IOHIDDigitizerEventMask eventMask,
-        //     IOHIDFloat x, y, z, tipPressure, twist,
-        //     Boolean range, Boolean touch,
-        //     IOOptionBits options
-        //   )
-        // ARM64 ABI: 8 ints in x0..x7, 5 doubles in d0..d4.
-        typealias CreateFn = @convention(c) (
-            CFAllocator?,                              // x0
-            UInt64,                                    // x1
-            UInt32, UInt32, UInt32,                    // x2..x4
-            Double, Double, Double, Double, Double,    // d0..d4
-            Bool, Bool, UInt32                         // x5..x7
-        ) -> Unmanaged<CFTypeRef>?
-        let createFn = unsafeBitCast(createSym, to: CreateFn.self)
-
-        // 3. Build the digitizer-finger event with caller-supplied
-        //    parameters. Real `IOHIDDigitizerEventMask` bit values:
-        //    Range = 0x01, Touch = 0x02, Position = 0x04, Stop = 0x08,
-        //    Peak = 0x10, Identity = 0x20, Attribute = 0x40,
-        //    Cancel = 0x80. A full touch-down event uses 0x07
-        //    (Range | Touch | Position); a pure position update is
-        //    0x04. The first crash sent 0xD0 (Cancel | Attribute |
-        //    Peak) thinking it was Touch | Position | Range — a
-        //    garbage mask that asked the digitizer to *cancel* an
-        //    in-progress touch on a digitizer with no in-progress
-        //    touch, which is undefined behaviour in `backboardd`.
-        let unmanaged = createFn(
-            nil,                            // CFAllocator (default)
-            mach_absolute_time(),           // timestamp
-            index, identifier,
-            eventMask,
-            x, y, 0.0,                      // x, y, z (normalised)
-            pressure,
-            0.0,                            // twist
-            range,
-            touch,
-            0                               // options
-        )
-        guard let unmanaged else {
-            return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                           reason: "IOHIDEventCreateDigitizerFingerEvent returned nil",
-                           hex: nil)
-        }
-        let fingerCF = unmanaged.takeRetainedValue()
-
-        // 3b. If `--with-parent`, wrap the finger in a digitizer
-        //     parent event with the finger appended as a child.
-        //     Real iOS touches arrive as parent+child pairs (the
-        //     mouse-event message is a 2-record envelope); a bare
-        //     finger event produces a 1-record envelope iOS ignores.
-        let eventCF: CFTypeRef
-        if withParent {
-            // IOHIDEventCreateDigitizerEvent signature (from
-            // IOHIDEvent.h):
-            //   IOHIDEventRef IOHIDEventCreateDigitizerEvent(
-            //     CFAllocatorRef, AbsoluteTime,
-            //     IOHIDDigitizerTransducerType,
-            //     uint32_t index, uint32_t identifier,
-            //     IOHIDDigitizerEventMask,
-            //     uint32_t buttonMask,
-            //     IOHIDFloat x, y, z,
-            //     IOHIDFloat tipPressure, barrelPressure,
-            //     Boolean range, Boolean touch,
-            //     IOOptionBits options
-            //   )
-            // ARM64: 9 ints (x0..x7 + 1 spilled) + 5 doubles (d0..d4).
-            guard let createParentSym = dlsym(UnsafeMutableRawPointer(bitPattern: -2),
-                                              "IOHIDEventCreateDigitizerEvent") else {
-                return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                               reason: "IOHIDEventCreateDigitizerEvent unresolved",
-                               hex: nil)
-            }
-            typealias CreateParentFn = @convention(c) (
-                CFAllocator?, UInt64,                          // x0, x1
-                UInt32,                                        // x2 transducer
-                UInt32, UInt32, UInt32, UInt32,                // x3..x6
-                Double, Double, Double, Double, Double,        // d0..d4
-                Bool, Bool, UInt32                             // x7, stack…
-            ) -> Unmanaged<CFTypeRef>?
-            let createParent = unsafeBitCast(createParentSym, to: CreateParentFn.self)
-            // Transducer type 2 = kIOHIDDigitizerTransducerTypeFinger.
-            let parentUM = createParent(
-                nil, mach_absolute_time(),
-                2,                                 // transducer = Finger
-                index, identifier,
-                eventMask,
-                0,                                 // buttonMask
-                x, y, 0.0,                         // x, y, z
-                pressure, 0.0,                     // tipPressure, barrelPressure
-                range, touch,
-                0
-            )
-            guard let parentUM else {
-                return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                               reason: "IOHIDEventCreateDigitizerEvent returned nil",
-                               hex: nil)
-            }
-            let parent = parentUM.takeRetainedValue()
-
-            // Append the finger child to the parent.
-            guard let appendSym = dlsym(UnsafeMutableRawPointer(bitPattern: -2),
-                                        "IOHIDEventAppendEvent") else {
-                return Outcome(accepted: false, messageSize: 0, dispatched: false,
-                               reason: "IOHIDEventAppendEvent unresolved",
-                               hex: nil)
-            }
-            typealias AppendFn = @convention(c) (CFTypeRef, CFTypeRef, UInt32) -> Void
-            let append = unsafeBitCast(appendSym, to: AppendFn.self)
-            append(parent, fingerCF, 0)
-            eventCF = parent
-        } else {
-            eventCF = fingerCF
-        }
-
-        // 4. Hand the digitizer event to the trackpad wrapper.
-        //    Non-nil = the wrapper accepted the event shape; nil
-        //    means rejected. The first run with mask=0xD0 returned
-        //    non-nil + crashed on dispatch, so wrapper acceptance
-        //    alone isn't sufficient — message contents have to
-        //    survive downstream HID processing too.
-        let raw = Unmanaged.passUnretained(eventCF as AnyObject).toOpaque()
-        let msg = wrapFn(raw)
-        guard let msg else {
-            return Outcome(
-                accepted: false, messageSize: 0, dispatched: false,
-                reason: "IndigoHIDMessageForTrackpadEventFromHIDEventRef returned nil",
-                hex: nil
-            )
-        }
-        let size = malloc_size(msg)
-
-        // 4b. Patch target slots if asked. The wrapper leaves
-        //     uninitialised bytes at offset 0x6c (first record)
-        //     and 0x10c (second record); iOS reads `0x32` =
-        //     `IndigoHIDTouchTarget` from those slots to route
-        //     the touch to the digitizer subsystem. Without the
-        //     patch, the message arrives in an unconsumed channel
-        //     and gets dropped silently.
+        // The wrapper leaves uninitialised bytes at offset 0x6c (first
+        // record) and 0x10c (second record); iOS reads `0x32` =
+        // `IndigoHIDTouchTarget` from those slots to route the touch to
+        // the digitizer subsystem. Without the patch, the message
+        // arrives in an unconsumed channel and gets dropped silently.
         if patchTarget {
-            let target: UInt32 = 0x32
-            msg.storeBytes(of: target, toByteOffset: 0x6c, as: UInt32.self)
-            if size >= 0x110 {
-                msg.storeBytes(of: target, toByteOffset: 0x10c, as: UInt32.self)
-            }
+            let target: [UInt8] = [0x32, 0, 0, 0]
+            if size >= 0x70 { message.replaceSubrange(0x6c..<0x70, with: target) }
+            if size >= 0x110 { message.replaceSubrange(0x10c..<0x110, with: target) }
         }
+        // First record's edge slot at 0x3a/0x3b, second record's at
+        // 0xda/0xdb. Byte 0x3a is the "edges present" flag (0x04 when
+        // any edge is set), byte 0x3b is the per-edge bitmask.
         if patchEdge != 0 {
-            // First record's edge slot at 0x3a/0x3b, second
-            // record's at 0xda/0xdb. Byte 0x3a is the "edges
-            // present" flag (0x04 when any edge is set), byte
-            // 0x3b is the per-edge bitmask.
-            msg.storeBytes(of: UInt8(0x04), toByteOffset: 0x3a, as: UInt8.self)
-            msg.storeBytes(of: patchEdge,   toByteOffset: 0x3b, as: UInt8.self)
-            if size >= 0xdc {
-                msg.storeBytes(of: UInt8(0x04), toByteOffset: 0xda, as: UInt8.self)
-                msg.storeBytes(of: patchEdge,   toByteOffset: 0xdb, as: UInt8.self)
-            }
+            if size >= 0x3c { message.replaceSubrange(0x3a..<0x3c, with: [0x04, patchEdge]) }
+            if size >= 0xdc { message.replaceSubrange(0xda..<0xdc, with: [0x04, patchEdge]) }
         }
 
-        let hex = dump ? hexDump(msg, length: size) : nil
-
-        // 5. Optional dispatch — only when the caller explicitly
-        //    asks. Default leaves the simulator untouched so we can
-        //    sweep mask/flag combinations safely.
-        if !dispatch {
-            free(msg)
+        let hex = dump ? hexDump(message) : nil
+        // Default leaves the simulator untouched so mask/flag
+        // combinations can be swept safely.
+        guard dispatch else {
             return Outcome(
                 accepted: true, messageSize: size, dispatched: false,
-                reason: "wrapper accepted; dispatch skipped (use --dispatch to send)",
-                hex: hex
-            )
+                reason: "wrapper accepted; dispatch skipped (use --dispatch to send)", hex: hex)
         }
-        let dispatched = Self.dispatch(message: msg, udid: udid, deviceSet: deviceSet)
+        let dispatched = messages.send(message, udid: udid, deviceSet: deviceSet)
         return Outcome(
             accepted: true, messageSize: size, dispatched: dispatched,
             reason: dispatched
                 ? "wrapper accepted; message dispatched (size=\(size) bytes)"
                 : "wrapper accepted but dispatch failed (HID client / device lookup)",
-            hex: hex
-        )
+            hex: hex)
     }
 
     /// Pretty-print a buffer as 16-byte rows of hex + ASCII gutter.
     /// Used to inspect wrapper output structure without a debugger.
-    private static func hexDump(_ ptr: UnsafeMutableRawPointer, length: Int) -> String {
+    static func hexDump(_ bytes: [UInt8]) -> String {
         var out = ""
-        let bytes = ptr.assumingMemoryBound(to: UInt8.self)
         var offset = 0
-        while offset < length {
-            let row = min(16, length - offset)
+        while offset < bytes.count {
+            let row = min(16, bytes.count - offset)
             var line = String(format: "  %04x  ", offset)
             for i in 0..<row { line += String(format: "%02x ", bytes[offset + i]) }
             for _ in row..<16 { line += "   " }
@@ -600,39 +362,44 @@ struct DiagDigitizerTrackpadCommand: ParsableCommand {
         }
         return out
     }
+}
 
-    /// Send a built Indigo message via `SimDeviceLegacyHIDClient.send`.
-    /// Mirrors the production path in `IndigoHIDInput` so the probe's
-    /// dispatch is byte-identical to a real button press; only the
-    /// message contents differ.
-    private static func dispatch(message: UnsafeMutableRawPointer,
-                                 udid: String, deviceSet: String?) -> Bool {
-        let simulators = CoreSimulators(deviceSetPath: deviceSet)
-        guard let device = simulators.resolveDevice(udid: udid) else { return false }
-        guard let cls = NSClassFromString("_TtC12SimulatorKit24SimDeviceLegacyHIDClient") else { return false }
-        let initSel = NSSelectorFromString("initWithDevice:error:")
-        guard let imp = class_getMethodImplementation(cls, initSel) else { return false }
-        typealias InitFn = @convention(c) (
-            AnyObject, Selector, AnyObject, AutoreleasingUnsafeMutablePointer<NSError?>
-        ) -> AnyObject?
-        let initFn = unsafeBitCast(imp, to: InitFn.self)
-        guard let metaCls = object_getClass(cls) else { return false }
-        let allocSel = NSSelectorFromString("alloc")
-        guard let allocImp = class_getMethodImplementation(metaCls, allocSel) else { return false }
-        typealias AllocFn = @convention(c) (AnyClass, Selector) -> AnyObject?
-        let allocFn = unsafeBitCast(allocImp, to: AllocFn.self)
-        guard let allocated = allocFn(cls, allocSel) else { return false }
-        var err: NSError?
-        guard let client = initFn(allocated, initSel, device, &err) else { return false }
+/// One digitizer finger event, as `IOHIDEventCreateDigitizerFingerEvent`
+/// takes it — optionally wrapped in a digitizer parent, the shape real iOS
+/// touches arrive in. Real `IOHIDDigitizerEventMask` bits: Range = 0x01,
+/// Touch = 0x02, Position = 0x04, Stop = 0x08, Peak = 0x10, Identity =
+/// 0x20, Attribute = 0x40, Cancel = 0x80.
+struct DigitizerFinger: Equatable, Sendable {
+    let index: UInt32
+    let identifier: UInt32
+    let eventMask: UInt32
+    let x: Double
+    let y: Double
+    let pressure: Double
+    let range: Bool
+    let touch: Bool
+    let withParent: Bool
+}
 
-        let sendSel = NSSelectorFromString("sendWithMessage:freeWhenDone:completionQueue:completion:")
-        guard let sendImp = class_getMethodImplementation(object_getClass(client)!, sendSel) else { return false }
-        typealias SendFn = @convention(c) (
-            AnyObject, Selector, UnsafeMutableRawPointer, ObjCBool, AnyObject?, AnyObject?
-        ) -> Void
-        let sendFn = unsafeBitCast(sendImp, to: SendFn.self)
-        let nilObj: AnyObject? = nil
-        sendFn(client, sendSel, message, ObjCBool(true), nilObj, nilObj)
-        return true
-    }
+/// What SimulatorKit's trackpad wrapper made of a digitizer event: the
+/// Indigo message it built, or why there is none.
+enum TrackpadMessage: Equatable, Sendable {
+    case built([UInt8])
+    case refused(String)
+}
+
+/// SimulatorKit's Indigo messages, as the trackpad probe asks for them:
+/// one built from a digitizer event, one built from a mouse event for
+/// comparison, and sending one to a device.
+@Mockable
+protocol IndigoMessages: Sendable {
+    /// The message `IndigoHIDMessageForTrackpadEventFromHIDEventRef`
+    /// builds from `finger`, or why it — or IOKit before it — wouldn't.
+    func trackpad(from finger: DigitizerFinger) -> TrackpadMessage
+    /// The message production's 9-arg mouse-event recipe builds at
+    /// (x, y) with `edge`; nil when SimulatorKit can't be reached.
+    func mouse(x: Double, y: Double, edge: UInt32) -> [UInt8]?
+    /// Send `message` to the device; false when it or its HID client
+    /// can't be found.
+    func send(_ message: [UInt8], udid: String, deviceSet: String?) -> Bool
 }

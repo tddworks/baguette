@@ -33,10 +33,10 @@ struct PasteCommand: AsyncParsableCommand {
             ok = try await Paste(text: text, press: press)
                 .execute(pasteboard: pasteboard, input: input)
         } catch {
-            log("paste failed: \(error)")
+            tell("paste failed: \(error)")
             throw ExitCode.failure
         }
-        print("{\"ok\":\(ok),\"action\":\"paste\"}")
+        say("{\"ok\":\(ok),\"action\":\"paste\"}")
         if !ok {
             throw ExitCode.failure
         }

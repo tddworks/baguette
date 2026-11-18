@@ -72,16 +72,16 @@ struct InputCommand: AsyncParsableCommand {
                 screenGuard = nil
             }
         } catch let error as DisplayFlagError {
-            log(error.message)
-            Foundation.exit(1)
+            tell(error.message)
+            throw ExitCode.failure
         } catch let error as FramebufferSelectionError {
-            log(error.message)
-            Foundation.exit(1)
+            tell(error.message)
+            throw ExitCode.failure
         } catch let exit as ExitCode {
             throw exit
         } catch {
-            log("display bind failed: \(error)")
-            Foundation.exit(1)
+            tell("display bind failed: \(error)")
+            throw ExitCode.failure
         }
         let session = InputSession(
             input: input,
@@ -98,12 +98,12 @@ struct InputCommand: AsyncParsableCommand {
            let advisory = DeviceHubAttachment(attached: true).advisory(udid: device.id.raw) {
             warn(advisory)
         }
-        log("Input session started, reading from stdin")
-        while let line = readLine() {
-            print(await session.answer(line))
+        tell("Input session started, reading from stdin")
+        while let line = Terminal.current.readLine() {
+            say(await session.answer(line))
             fflush(stdout)
         }
-        log("stdin closed, input session ending")
+        tell("stdin closed, input session ending")
     }
 }
 

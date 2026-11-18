@@ -31,7 +31,7 @@ struct LaunchCommand: AsyncParsableCommand {
             bundleID: bundleId, relaunch: relaunch, thenDescribeUI: thenDescribeUI,
             apps: apps, accessibility: accessibility,
             affordances: options.affordanceStyle)
-        print(result)
+        say(result)
         if !result.hasPrefix(#"{"ok":true"#) { throw ExitCode.failure }
     }
 }

@@ -17,8 +17,9 @@ struct BakeryCommand: AsyncParsableCommand {
     )
 
     /// The `~/.baguette` root, shared by every subcommand and with the
-    /// server + plugin scanner via `BaguetteHome`.
-    static var home: URL { BaguetteHome.url }
+    /// server + plugin scanner via `BaguetteHome`. A test hands a run a
+    /// home of its own here.
+    @TaskLocal static var home: URL = BaguetteHome.url
 
     static func installer() -> BakeryInstall {
         BakeryInstall(checkout: GitCheckout(), home: home)
@@ -40,7 +41,7 @@ struct BakeryCommand: AsyncParsableCommand {
         func run() async throws {
             try await Self.add(
                 reference: reference, accept: accept, using: BakeryCommand.installer(),
-                confirm: TrustPrompt.confirm, output: .standard)
+                confirm: TrustPrompt.confirm, output: .current)
         }
 
         static func add(
@@ -81,7 +82,7 @@ struct BakeryCommand: AsyncParsableCommand {
         )
 
         func run() throws {
-            try Self.list(registry: BakeryCommand.registry, output: .standard)
+            try Self.list(registry: BakeryCommand.registry, output: .current)
         }
 
         static func list(registry: FileSystemBakeries, output: CommandOutput) throws {
@@ -106,7 +107,7 @@ struct BakeryCommand: AsyncParsableCommand {
         @Argument(help: "owner/repo or a git URL.") var reference: String
 
         func run() throws {
-            try Self.remove(reference: reference, registry: BakeryCommand.registry, output: .standard)
+            try Self.remove(reference: reference, registry: BakeryCommand.registry, output: .current)
         }
 
         static func remove(reference: String, registry: FileSystemBakeries, output: CommandOutput) throws {
@@ -125,7 +126,7 @@ struct BakeryCommand: AsyncParsableCommand {
         )
 
         func run() async throws {
-            try await Self.outdated(registry: BakeryCommand.registry, checkout: GitCheckout(), output: .standard)
+            try await Self.outdated(registry: BakeryCommand.registry, checkout: GitCheckout(), output: .current)
         }
 
         static func outdated(
@@ -166,7 +167,7 @@ struct BakeryCommand: AsyncParsableCommand {
         func run() async throws {
             try await Self.update(
                 reference: reference, using: BakeryCommand.installer(),
-                registry: BakeryCommand.registry, output: .standard)
+                registry: BakeryCommand.registry, output: .current)
         }
 
         static func update(
@@ -190,14 +191,8 @@ struct BakeryCommand: AsyncParsableCommand {
 }
 
 /// A one-line y/N confirmation on stdin. Thin I/O — the *decision* is
-/// `TrustDecision`; this just asks.
+/// `TrustDecision`; this just asks (`confirm`, in `Internal/System/`).
 enum TrustPrompt {
-    static func confirm(_ message: String) -> Bool {
-        print(message)
-        print("Add it? [y/N] ", terminator: "")
-        return accepts(readLine())
-    }
-
     /// Whether an answer is consent: `y` or `yes`, in any case; no answer
     /// (end of input) is a refusal.
     static func accepts(_ answer: String?) -> Bool {

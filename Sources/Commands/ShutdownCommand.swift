@@ -15,10 +15,10 @@ struct ShutdownCommand: ParsableCommand {
         let power = try orExit { try device.require(.power) }
         do {
             try power.turnOff()
-            log("Shut down \(device.name)")
+            tell("Shut down \(device.name)")
         } catch {
-            log("Shutdown failed: \(error)")
-            Foundation.exit(1)
+            tell("Shutdown failed: \(error)")
+            throw ExitCode.failure
         }
     }
 }

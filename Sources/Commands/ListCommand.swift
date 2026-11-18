@@ -14,17 +14,18 @@ struct ListCommand: ParsableCommand {
     var json: Bool = false
 
     func run() {
-        let simulators = CoreSimulators(deviceSetPath: deviceSet)
+        let kinds = DeviceOption.kinds(deviceSet: deviceSet)
+        let simulators = kinds.simulators
         if json {
-            print(simulators.listJSON)
+            say(simulators.listJSON)
         } else {
             for sim in simulators.all {
-                print(sim.json)
+                say(sim.json)
             }
             // Then every device that isn't a simulator — a phone on a
             // cable — in the same line shape.
-            for device in allDevices(deviceSet: deviceSet).all where device.kind.reality != .simulated {
-                print(device.json)
+            for device in kinds.devices.all where device.kind.reality != .simulated {
+                say(device.json)
             }
         }
     }

@@ -42,7 +42,7 @@ struct InterfaceCommand: ParsableCommand {
                     try await interface.setAppearance(value)
                 }
             } else {
-                print(try await interface.appearance().rawValue)
+                say(try await interface.appearance().rawValue)
             }
         }
     }
@@ -66,7 +66,7 @@ struct InterfaceCommand: ParsableCommand {
                     try await interface.setIncreaseContrast(value)
                 }
             } else {
-                print(try await interface.increaseContrast().rawValue)
+                say(try await interface.increaseContrast().rawValue)
             }
         }
     }
@@ -94,7 +94,7 @@ struct InterfaceCommand: ParsableCommand {
                     try await interface.setContentSize(value)
                 }
             } else {
-                print(try await interface.contentSize().rawValue)
+                say(try await interface.contentSize().rawValue)
             }
         }
     }
@@ -117,7 +117,7 @@ struct InterfaceCommand: ParsableCommand {
         do {
             try await body()
         } catch {
-            log("interface update failed: \(error)")
+            tell("interface update failed: \(error)")
             throw ExitCode.failure
         }
     }

@@ -30,13 +30,13 @@ struct ChromeCommand: ParsableCommand {
         @OptionGroup var target: ChromeTarget
 
         func run() throws {
-            let chromes = defaultChromes()
+            let chromes = ChromeCommand.chromes
             guard let json = try target
                 .resolveAssets(in: chromes)?
                 .layoutJSON() else {
                 throw ChromeCommandError.notFound(target: target.label)
             }
-            print(json)
+            say(json)
         }
     }
 
@@ -49,21 +49,21 @@ struct ChromeCommand: ParsableCommand {
         @OptionGroup var target: ChromeTarget
 
         func run() throws {
-            let chromes = defaultChromes()
+            let chromes = ChromeCommand.chromes
             guard let png = try target
                 .resolveAssets(in: chromes)?
                 .composite.data else {
                 throw ChromeCommandError.notFound(target: target.label)
             }
-            FileHandle.standardOutput.write(png)
+            CommandOutput.current.write(png)
         }
     }
 }
 
 /// Either-or device targeting shared by `layout` and `composite`.
-/// `--udid` goes through CoreSimulators (so the rich-domain
-/// `simulator.chrome(in:)` does the work); `--device-name` skips
-/// CoreSimulators entirely — useful for testing chrome reads on a
+/// `--udid` goes through every device family (so the rich-domain
+/// `device.chrome(in:)` does the work); `--device-name` skips
+/// the devices entirely — useful for testing chrome reads on a
 /// machine that doesn't have a booted device set.
 struct ChromeTarget: ParsableArguments {
     @Option(name: .long, help: "Simulator UDID (resolved via CoreSimulator)")
@@ -96,12 +96,11 @@ struct ChromeTarget: ParsableArguments {
             return chromes.assets(forDeviceName: deviceName, panel: panel)
         }
         if let udid {
-            let simulators = CoreSimulators(deviceSetPath: deviceSet)
-            guard let sim = simulators.find(udid: udid) else {
+            guard let device = try allDevices(deviceSet: deviceSet).find(id: DeviceID(udid)) else {
                 throw ChromeCommandError.simulatorNotFound(udid: udid)
             }
-            guard let panel else { return SimulatorDevice(sim).chrome(in: chromes) }
-            return chromes.assets(forDeviceName: sim.deviceTypeName, panel: panel)
+            guard let panel else { return device.chrome(in: chromes) }
+            return chromes.assets(forDeviceName: device.kind.model, panel: panel)
         }
         throw ChromeCommandError.missingTarget
     }
@@ -119,17 +118,17 @@ extension IntegratedPanel: ExpressibleByArgument {
     }
 }
 
-/// Production wiring — used by both subcommands. Behind a free
-/// function so changing the wiring (e.g. adding a custom DeviceKit
-/// search path) lands in one place.
-private func defaultChromes() -> any Chromes {
-    LiveChromes(
+extension ChromeCommand {
+    /// The chrome both subcommands read: Xcode's DeviceKit bundles, unless
+    /// a test stands in. One place, so changing the wiring (e.g. adding a
+    /// custom DeviceKit search path) lands once.
+    @TaskLocal static var chromes: any Chromes = LiveChromes(
         store: FileSystemChromeStore(),
         rasterizer: CoreGraphicsPDFRasterizer()
     )
 }
 
-enum ChromeCommandError: Error, CustomStringConvertible {
+enum ChromeCommandError: Error, Equatable, CustomStringConvertible {
     case missingTarget
     case simulatorNotFound(udid: String)
     case notFound(target: String)

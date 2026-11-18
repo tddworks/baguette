@@ -83,9 +83,14 @@ struct Render3DCommand: AsyncParsableCommand {
         }
     }
 
+    /// The 3D models a run reads and what draws them, when a test stands
+    /// in; unset, the installed models and RealityKit.
+    @TaskLocal static var models: (any DeviceModels)?
+    @TaskLocal static var renderer: (any DeviceRenderer)?
+
     func run() async throws {
-        let models = try LiveDeviceModels(rootURLs: DeviceModelRoots.standard())
-        let renderer = RealityKitDeviceRenderer()
+        let models = try Self.models ?? LiveDeviceModels(rootURLs: DeviceModelRoots.standard())
+        let renderer = Self.renderer ?? RealityKitDeviceRenderer()
         let screenImage: Data
         let installed: InstalledDeviceModel
 
@@ -97,8 +102,7 @@ struct Render3DCommand: AsyncParsableCommand {
             }
             installed = found
         } else if let udid {
-            let simulators = CoreSimulators(deviceSetPath: deviceSet)
-            guard let simulator = simulators.find(udid: udid) else {
+            guard let simulator = try allDevices(deviceSet: deviceSet).find(id: DeviceID(udid)) else {
                 throw SimulatorError.notFound(udid: udid)
             }
             if let device {
@@ -107,13 +111,14 @@ struct Render3DCommand: AsyncParsableCommand {
                 }
                 installed = found
             } else {
-                guard let found = try SimulatorDevice(simulator).model3D(in: models) else {
-                    throw DeviceModelError.noModelForDevice(simulator.deviceTypeName)
+                guard let found = try simulator.model3D(in: models) else {
+                    throw DeviceModelError.noModelForDevice(simulator.kind.model)
                 }
                 installed = found
             }
+            // The screen as it is, booted or not: the capture says why it failed.
             screenImage = try await ScreenSnapshot.capture(
-                screen: simulator.screen(),
+                screen: try orExit { try simulator.abilities.require(.screen) },
                 quality: 0.95
             )
         } else {
@@ -143,7 +148,7 @@ struct Render3DCommand: AsyncParsableCommand {
         if let output {
             try png.write(to: URL(fileURLWithPath: output), options: .atomic)
         } else {
-            try FileHandle.standardOutput.write(contentsOf: png)
+            CommandOutput.current.write(png)
         }
     }
 

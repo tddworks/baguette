@@ -98,7 +98,7 @@ struct MotionCommand: ParsableCommand {
             try await MotionCommand.publish(
                 kind: kind, confidence: activityOptions.motionConfidence,
                 speed: resolvedSpeed, on: motion)
-            log("Motion armed on \(device.name): \(kind.rawValue) at "
+            tell("Motion armed on \(device.name): \(kind.rawValue) at "
                 + "\(resolvedSpeed) m/s. Relaunch the app to pick it up.")
         }
     }
@@ -125,7 +125,7 @@ struct MotionCommand: ParsableCommand {
             try await MotionCommand.publish(
                 kind: kind, confidence: activityOptions.motionConfidence,
                 speed: resolvedSpeed, on: motion)
-            log("\(device.name) motion: \(kind.rawValue) at \(resolvedSpeed) m/s")
+            tell("\(device.name) motion: \(kind.rawValue) at \(resolvedSpeed) m/s")
         }
     }
 
@@ -153,10 +153,10 @@ struct MotionCommand: ParsableCommand {
                                 distanceBefore: ledger.metres))
                 try await motion.clear()
             } catch {
-                log("motion stop failed: \(error)")
+                tell("motion stop failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Motion stopped on \(device.name)")
+            tell("Motion stopped on \(device.name)")
         }
     }
 
@@ -175,7 +175,7 @@ struct MotionCommand: ParsableCommand {
         do {
             try await motion.publish(intent)
         } catch {
-            log("motion failed: \(error)")
+            tell("motion failed: \(error)")
             throw ExitCode.failure
         }
     }

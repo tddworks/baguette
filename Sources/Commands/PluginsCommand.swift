@@ -29,6 +29,7 @@ struct PluginsCommand: ParsableCommand {
 
         var plugins: FileSystemPlugins {
             FileSystemPlugins.standard(
+                installedRoot: BakeryCommand.home.appendingPathComponent("plugins"),
                 extraRoots: pluginDirs.map { URL(fileURLWithPath: $0) }
             )
         }
@@ -44,7 +45,7 @@ struct PluginsCommand: ParsableCommand {
         @OptionGroup var roots: RootsOption
 
         func run() throws {
-            print(PluginsCommand.listing(try roots.plugins.all()))
+            say(PluginsCommand.listing(try roots.plugins.all()))
         }
     }
 
@@ -58,7 +59,7 @@ struct PluginsCommand: ParsableCommand {
         @Argument(help: "Plugin name.") var name: String
 
         func run() throws {
-            try Self.show(name: name, in: roots.plugins, output: .standard)
+            try Self.show(name: name, in: roots.plugins, output: .current)
         }
 
         static func show(name: String, in plugins: any Plugins, output: CommandOutput) throws {
@@ -79,7 +80,7 @@ struct PluginsCommand: ParsableCommand {
         @Argument(help: "Path to the plugin directory.") var path: String
 
         func run() throws {
-            try Self.validate(directory: path, output: .standard)
+            try Self.validate(directory: path, output: .current)
         }
 
         static func validate(directory path: String, output: CommandOutput) throws {
@@ -132,7 +133,7 @@ struct PluginsCommand: ParsableCommand {
                 ),
                 plugins: roots.plugins
             )
-            try Self.report(outcome, output: .standard)
+            try Self.report(outcome, output: .current)
         }
 
         /// The plugin's answer on stdout — failing when it reported
@@ -163,7 +164,7 @@ struct PluginsCommand: ParsableCommand {
         func run() async throws {
             try await Self.install(
                 target: target, accept: accept, using: BakeryCommand.installer(),
-                confirm: TrustPrompt.confirm, output: .standard)
+                confirm: TrustPrompt.confirm, output: .current)
         }
 
         static func install(
@@ -206,7 +207,7 @@ struct PluginsCommand: ParsableCommand {
 
         func run() throws {
             try BakeryCommand.installer().remove(name: name)
-            print("✓ removed \(name)")
+            say("✓ removed \(name)")
         }
     }
 
@@ -220,7 +221,7 @@ struct PluginsCommand: ParsableCommand {
         func run() async throws {
             try await Self.update(
                 name: name, using: BakeryCommand.installer(), registry: BakeryCommand.registry,
-                output: .standard)
+                output: .current)
         }
 
         static func update(

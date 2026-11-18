@@ -30,12 +30,12 @@ struct OpenURLCommand: AsyncParsableCommand {
         let device = try options.device()
         let apps = try orExit { try device.require(.apps) }
         guard let link = DeepLink.from(url) else {
-            log("Not a URL (expected a scheme, e.g. myapp://path): \(url)")
+            tell("Not a URL (expected a scheme, e.g. myapp://path): \(url)")
             throw ExitCode.failure
         }
 
         if link.routing == .browser {
-            log("""
+            tell("""
                 Warning: \(link.scheme):// lands in Safari on the simulator, not your app. \
                 If an app claims the domain, iOS then shows an "Open in …?" dialog that \
                 needs a tap, so this never completes unattended. For an automated check, \
@@ -46,10 +46,10 @@ struct OpenURLCommand: AsyncParsableCommand {
         do {
             try await apps.open(link)
         } catch {
-            log("openurl failed: \(error)")
+            tell("openurl failed: \(error)")
             throw ExitCode.failure
         }
-        log("Opened \(link.url.absoluteString) on \(device.name)")
+        tell("Opened \(link.url.absoluteString) on \(device.name)")
     }
 }
 
@@ -80,13 +80,13 @@ struct SchemesCommand: AsyncParsableCommand {
         do {
             installed = try await apps.installed()
         } catch {
-            log("listing apps failed: \(error)")
+            tell("listing apps failed: \(error)")
             throw ExitCode.failure
         }
 
         let suggestions = SchemeSuggestion.matching("", in: installed)
         guard !suggestions.isEmpty else {
-            log("No app on \(device.name) registers a URL scheme")
+            tell("No app on \(device.name) registers a URL scheme")
             return
         }
 
@@ -98,14 +98,14 @@ struct SchemesCommand: AsyncParsableCommand {
             let data = try JSONSerialization.data(
                 withJSONObject: rows, options: [.prettyPrinted, .sortedKeys]
             )
-            print(String(decoding: data, as: UTF8.self))
+            say(String(decoding: data, as: UTF8.self))
         } else {
             let width = suggestions.map(\.completion.count).max() ?? 0
             for suggestion in suggestions {
                 let padded = suggestion.completion.padding(
                     toLength: width, withPad: " ", startingAt: 0
                 )
-                print("\(padded)  \(suggestion.appName)")
+                say("\(padded)  \(suggestion.appName)")
             }
         }
     }
