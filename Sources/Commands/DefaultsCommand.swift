@@ -53,23 +53,28 @@ struct DefaultsCommand: ParsableCommand {
         var json = false
 
         func run() async throws {
-            let preferences: Preferences
-            let suite: PreferenceSuite
-            let lookups: PreferenceLookups?
+            let answer: String
             do {
-                suite = try target.preferenceSuite()
-                let defaults = try target.roles().defaults
-                preferences = try await defaults.read(suite)
-                lookups = key == nil ? try await defaults.lookups(of: suite.bundleID) : nil
+                _ = try target.preferenceSuite()
+                answer = try await self.answer(from: target.roles().defaults)
             } catch let exit as ExitCode {
                 throw exit
             } catch {
                 log("defaults read failed: \(error)")
                 throw ExitCode.failure
             }
+            print(answer)
+        }
+
+        /// What `read` prints from `defaults`: text, or typed JSON with
+        /// `--json`. Reading everything also asks the running app what it
+        /// looks up that nothing stores; reading one key doesn't.
+        func answer(from defaults: any Defaults) async throws -> String {
+            let suite = try target.preferenceSuite()
+            let preferences = try await defaults.read(suite)
+            let lookups = key == nil ? try await defaults.lookups(of: suite.bundleID) : nil
             guard json else {
-                print(Self.text(preferences, key: key, unset: lookups?.unset(in: preferences, suite: suite) ?? []))
-                return
+                return Self.text(preferences, key: key, unset: lookups?.unset(in: preferences, suite: suite) ?? [])
             }
             var object = key.map(preferences.json(forKey:)) ?? preferences.json(in: suite)
             if key == nil {
@@ -78,7 +83,7 @@ struct DefaultsCommand: ParsableCommand {
             let data = try JSONSerialization.data(
                 withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]
             )
-            print(String(decoding: data, as: UTF8.self))
+            return String(decoding: data, as: UTF8.self)
         }
 
         /// One `key = value (type)` line per preference, in key order;
@@ -180,8 +185,13 @@ struct DefaultsCommand: ParsableCommand {
                 log("defaults write failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Wrote \(key) for \(target.suite ?? target.bundleID)"
-                + RelaunchOption.said(applied.relaunched, bundleID: target.bundleID))
+            log(said(applied))
+        }
+
+        /// The line logged once the value is stored.
+        func said(_ applied: PreferenceEdit.Applied) -> String {
+            "Wrote \(key) for \(target.suite ?? target.bundleID)"
+                + RelaunchOption.said(applied.relaunched, bundleID: target.bundleID)
         }
     }
 
@@ -214,8 +224,13 @@ struct DefaultsCommand: ParsableCommand {
                 log("defaults delete failed: \(error)")
                 throw ExitCode.failure
             }
-            log((applied.changed ? "Removed \(key)" : "\(key) was not set; nothing removed")
-                + RelaunchOption.said(applied.relaunched, bundleID: target.bundleID))
+            log(said(applied))
+        }
+
+        /// The line logged once the key is gone — or wasn't there.
+        func said(_ applied: PreferenceEdit.Applied) -> String {
+            (applied.changed ? "Removed \(key)" : "\(key) was not set; nothing removed")
+                + RelaunchOption.said(applied.relaunched, bundleID: target.bundleID)
         }
     }
 
@@ -236,20 +251,27 @@ struct DefaultsCommand: ParsableCommand {
         }
 
         func run() async throws {
-            let object: [String: Any]
+            let answer: String
             do {
-                let suite = try target.preferenceSuite()
-                object = export(try await target.roles().defaults.read(suite), from: suite)
+                _ = try target.preferenceSuite()
+                answer = try await self.answer(from: target.roles().defaults)
             } catch let exit as ExitCode {
                 throw exit
             } catch {
                 log("defaults export failed: \(error)")
                 throw ExitCode.failure
             }
+            print(answer)
+        }
+
+        /// The suite's preferences as `defaults import` reads them back.
+        func answer(from defaults: any Defaults) async throws -> String {
+            let suite = try target.preferenceSuite()
+            let object = export(try await defaults.read(suite), from: suite)
             let data = try JSONSerialization.data(
                 withJSONObject: object, options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
             )
-            print(String(decoding: data, as: UTF8.self))
+            return String(decoding: data, as: UTF8.self)
         }
     }
 
@@ -293,9 +315,14 @@ struct DefaultsCommand: ParsableCommand {
                 log("defaults import failed: \(error)")
                 throw ExitCode.failure
             }
+            log(said(applied))
+        }
+
+        /// The line logged once the file's values are written.
+        func said(_ applied: PreferenceImport.Applied) -> String {
             let written = applied.written
-            log("Imported \(written) value\(written == 1 ? "" : "s") into \(target.suite ?? target.bundleID)"
-                + RelaunchOption.said(applied.relaunched, bundleID: target.bundleID))
+            return "Imported \(written) value\(written == 1 ? "" : "s") into \(target.suite ?? target.bundleID)"
+                + RelaunchOption.said(applied.relaunched, bundleID: target.bundleID)
         }
     }
 }

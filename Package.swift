@@ -132,6 +132,10 @@ let package = Package(
                 "Baguette",
                 "BaguetteDevice",
                 .product(name: "Mockable", package: "Mockable"),
+                // In-process router + socket drivers for the serve routes.
+                // Test target only: the release binary never links them.
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+                .product(name: "HummingbirdWSTesting", package: "hummingbird-websocket"),
             ],
             path: "Tests/BaguetteTests",
             resources: [

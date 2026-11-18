@@ -83,16 +83,13 @@ struct InputCommand: AsyncParsableCommand {
             log("display bind failed: \(error)")
             Foundation.exit(1)
         }
-        let pasteboard = try orExit { try device.require(.pasteboard) }
-        // A device that can't read its screen still takes gestures; its
-        // describe / fill / label lines answer with that refusal.
-        let accessibility: any Accessibility
-        do {
-            accessibility = try device.require(.accessibility)
-        } catch let refusal as DeviceError {
-            accessibility = UnableAccessibility(refusal)
-        }
-        let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
+        let session = InputSession(
+            input: input,
+            pasteboard: try orExit { try device.require(.pasteboard) },
+            accessibility: InputSession.accessibility(of: device),
+            screenGuard: screenGuard,
+            inputTaken: { await surface?.shadowed() ?? false }
+        )
         // A long-lived session is worth one guest round-trip up front:
         // under Xcode 27, Device Hub can leave every gesture below
         // reporting ok while landing nowhere. Advise; the restart that
@@ -103,38 +100,75 @@ struct InputCommand: AsyncParsableCommand {
         }
         log("Input session started, reading from stdin")
         while let line = readLine() {
-            // `paste` / `copy` need the async pasteboard surface, so
-            // they are intercepted ahead of the sync gesture pipeline
-            // — same shape as `describe_ui` on the WS path. Awaiting
-            // in-line preserves the one-line-in/one-ack-out order.
-            if let result = DescribeUIDispatch.dispatch(line: line, accessibility: accessibility) {
-                print(result)
-            } else if let result = await FillDispatch.dispatch(
-                line: line, accessibility: accessibility, pasteboard: pasteboard, input: input,
-                inputTaken: { await surface?.shadowed() ?? false }
-            ) {
-                print(result)
-            } else if let result = LabelTap.dispatch(
-                line: line, accessibility: accessibility, gesture: { dispatcher.dispatch(line: $0) }
-            ) {
-                print(result)
-            } else if let result = ThenDescribe.dispatch(
-                line: line, accessibility: accessibility, gesture: { dispatcher.dispatch(line: $0) }
-            ) {
-                print(result)
-            } else if let ack = await PasteDispatch.dispatch(
-                line: line, pasteboard: pasteboard, input: input
-            ).ackJSON {
-                print(ack)
-            } else if let ack = await CopyDispatch.dispatch(
-                line: line, pasteboard: pasteboard, input: input
-            ).ackJSON {
-                print(ack)
-            } else {
-                print(dispatcher.dispatch(line: line))
-            }
+            print(await session.answer(line))
             fflush(stdout)
         }
         log("stdin closed, input session ending")
+    }
+}
+
+/// One `baguette input` session: each stdin line answered by the role it
+/// is for, one answer per line, in order.
+struct InputSession: Sendable {
+    let input: Abilities
+    let pasteboard: any Pasteboard
+    let accessibility: any Accessibility
+    let inputTaken: @Sendable () async -> Bool
+    private let dispatcher: GestureDispatcher
+
+    init(
+        input: Abilities, pasteboard: any Pasteboard, accessibility: any Accessibility,
+        screenGuard: InputScreenGuard?, inputTaken: @escaping @Sendable () async -> Bool
+    ) {
+        self.input = input
+        self.pasteboard = pasteboard
+        self.accessibility = accessibility
+        self.inputTaken = inputTaken
+        self.dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
+    }
+
+    /// The screen reader a session holds: the device's own, or — for a
+    /// device that can't read its screen — one answering each describe or
+    /// fill line with that refusal, while gestures go on.
+    static func accessibility(of device: any Device) -> any Accessibility {
+        do {
+            return try device.require(.accessibility)
+        } catch let refusal as DeviceError {
+            return UnableAccessibility(refusal)
+        } catch {
+            return UnableAccessibility(.unable(ability: "accessibility", device: device.name))
+        }
+    }
+
+    /// The answer to one line. `paste` / `copy` need the async pasteboard,
+    /// so they — like `describe_ui`, `fill` and label presses — are read
+    /// ahead of the sync gesture pipeline.
+    func answer(_ line: String) async -> String {
+        if let result = DescribeUIDispatch.dispatch(line: line, accessibility: accessibility) {
+            return result
+        }
+        if let result = await FillDispatch.dispatch(
+            line: line, accessibility: accessibility, pasteboard: pasteboard, input: input,
+            inputTaken: inputTaken
+        ) {
+            return result
+        }
+        if let result = LabelTap.dispatch(
+            line: line, accessibility: accessibility, gesture: { dispatcher.dispatch(line: $0) }
+        ) {
+            return result
+        }
+        if let result = ThenDescribe.dispatch(
+            line: line, accessibility: accessibility, gesture: { dispatcher.dispatch(line: $0) }
+        ) {
+            return result
+        }
+        if let ack = await PasteDispatch.dispatch(line: line, pasteboard: pasteboard, input: input).ackJSON {
+            return ack
+        }
+        if let ack = await CopyDispatch.dispatch(line: line, pasteboard: pasteboard, input: input).ackJSON {
+            return ack
+        }
+        return dispatcher.dispatch(line: line)
     }
 }

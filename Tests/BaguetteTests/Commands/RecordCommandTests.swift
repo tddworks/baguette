@@ -121,4 +121,29 @@ struct RecordCommandTests {
         #expect(failure(minimum + ["--size", "1920x1080"]) == nil)
         #expect(failure(minimum + ["--size", "3:2"]) == nil)
     }
+
+    @Test func `should plan the take from every flag given`() throws {
+        var cmd = try RecordCommand.parse(minimum + [
+            "--size", "1920x1080", "--fit", "COVER", "--background", "#AABBCC",
+            "--fps", "60", "--duration", "5", "--bitrate", "4000000",
+        ])
+        try cmd.validate()
+
+        #expect(try cmd.plan() == RecordingPlan(
+            size: try CaptureSize.parse("1920x1080"), fit: .cover, background: HexColor("#aabbcc"),
+            fps: 60, bitrateBps: 4_000_000, duration: 5, format: .mp4))
+    }
+
+    @Test func `should plan a QuickTime take when the output is a .mov`() throws {
+        let cmd = try RecordCommand.parse(["--udid", "U", "-o", "/tmp/clip.mov"])
+
+        #expect(try cmd.plan().format == .mov)
+    }
+
+    @Test func `should report a finished take's frames, length, size and file`() {
+        let summary = RecordingSummary(
+            output: URL(fileURLWithPath: "/tmp/demo.mp4"), frameCount: 120, duration: 4.0, width: 1170, height: 2532)
+
+        #expect(RecordCommand.report(summary) == "Recorded 120 frames · 4.00s · 1170×2532 → /tmp/demo.mp4")
+    }
 }

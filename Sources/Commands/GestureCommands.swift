@@ -12,39 +12,63 @@ private func resolve(udid: String, deviceSet: String?) -> any Device {
     return device
 }
 
-private extension Device {
-    /// Its gestures, or exit(1) saying it can't take them (or isn't ready).
-    func screenInput() -> Abilities {
-        do { return try input() } catch {
-            log("\(error)")
-            Foundation.exit(1)
-        }
-    }
-    /// The role `gesture` is an act of, or exit(1) saying it can't take it
-    /// — the ability, or what the act needs of it (a navigation it lacks).
-    func role<G: Gesture>(for gesture: G) -> G.Role {
-        let role = requireOrExit(G.ability)
-        if let missing = gesture.missing(from: role) {
-            log("\(DeviceError.unable(ability: missing, device: name))")
-            Foundation.exit(1)
-        }
-        return role
-    }
-    /// Its fingers, or exit(1).
-    func touch() -> any Touch { requireOrExit(.touch) }
-    /// What is on its screen, for `--label` and `--then-describe-ui`.
-    func accessibility() -> any Accessibility { requireOrExit(.accessibility) }
+/// A command-line value the command can't act on, in the words it logs
+/// before exiting 1 — decided before any device is asked.
+struct ArgumentRefusal: Error, Equatable {
+    let message: String
+    init(_ message: String) { self.message = message }
+}
 
-    private func requireOrExit<Role>(_ ability: Ability<Role>) -> Role {
-        do { return try require(ability) } catch {
-            log("\(error)")
-            Foundation.exit(1)
-        }
+/// How a one-shot gesture command answers on stdout, and which answers
+/// exit 0.
+enum GestureAnswer {
+    static func line(ok: Bool, action: String) -> String {
+        "{\"ok\":\(ok),\"action\":\"\(action)\"}"
+    }
+
+    /// A `--then-describe-ui` answer: success leads the object.
+    static func succeeded(_ answer: String) -> Bool { answer.hasPrefix(#"{"ok":true"#) }
+
+    /// A `--label` press answer: success anywhere in it.
+    static func pressed(_ answer: String) -> Bool { answer.contains(#""ok":true"#) }
+}
+
+/// Its value, or exit(1) logging why: a refusal in its own words.
+private func orExitNow<T>(_ body: () throws -> T) -> T {
+    do { return try body() } catch let refusal as ArgumentRefusal {
+        log(refusal.message)
+        Foundation.exit(1)
+    } catch {
+        log("\(error)")
+        Foundation.exit(1)
     }
 }
 
+extension Device {
+    /// The role `gesture` is an act of, or a refusal naming the device:
+    /// the ability it lacks, or what the act needs of it (a navigation).
+    func role<G: Gesture>(for gesture: G) throws -> G.Role {
+        let role = try require(G.ability)
+        if let missing = gesture.missing(from: role) {
+            throw DeviceError.unable(ability: missing, device: name)
+        }
+        return role
+    }
+}
+
+private extension Device {
+    /// Its gestures, or exit(1) saying it can't take them (or isn't ready).
+    func screenInput() -> Abilities { orExitNow { try input() } }
+    /// The role `gesture` is an act of, or exit(1) saying it can't take it.
+    func roleOrExit<G: Gesture>(for gesture: G) -> G.Role { orExitNow { try role(for: gesture) } }
+    /// Its fingers, or exit(1).
+    func touch() -> any Touch { orExitNow { try require(.touch) } }
+    /// What is on its screen, for `--label` and `--then-describe-ui`.
+    func accessibility() -> any Accessibility { orExitNow { try require(.accessibility) } }
+}
+
 private func runOrExit(_ ok: Bool, action: String) {
-    print("{\"ok\":\(ok),\"action\":\"\(action)\"}")
+    print(GestureAnswer.line(ok: ok, action: action))
     Foundation.exit(ok ? 0 : 1)
 }
 
@@ -79,50 +103,59 @@ struct TapCommand: ParsableCommand {
         }
     }
 
-    func run() {
-        if let label { return runByLabel(label) }
-        guard let x, let y, let width, let height else { Foundation.exit(1) }
+    /// The tap at the point given — refused for an edge that isn't one.
+    /// `validate()` has already required the whole point.
+    func gesture() throws -> Tap {
         var landing: DeviceEdge?
         if let edge {
             guard let parsed = DeviceEdge(rawValue: edge) else {
-                log("Unknown edge: \(edge) (allowed: \(DeviceEdge.allowed))")
-                Foundation.exit(1)
+                throw ArgumentRefusal("Unknown edge: \(edge) (allowed: \(DeviceEdge.allowed))")
             }
             landing = parsed
         }
+        return Tap(at: Point(x: x ?? 0, y: y ?? 0), size: Size(width: width ?? 0, height: height ?? 0),
+                   duration: duration, edge: landing)
+    }
+
+    /// The `--label` press as the one wire line `LabelTap` reads.
+    var labelLine: String {
+        var envelope: [String: Any] = ["type": Tap.wireType, "label": label ?? "", "duration": duration]
+        if let edge { envelope["edge"] = edge }
+        if thenDescribeUI { envelope["then_describe_ui"] = true }
+        if touch { envelope["touch"] = true }
+        let bytes = (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
+    func run() {
+        if label != nil { return runByLabel() }
+        let gesture = orExitNow { try gesture() }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = Tap(at: Point(x: x, y: y), size: Size(width: width, height: height),
-                          duration: duration, edge: landing)
         if thenDescribeUI {
-            let role = sim.role(for: gesture)
+            let role = sim.roleOrExit(for: gesture)
             let result = ThenDescribe.perform(
-                action: "tap", at: Point(x: x, y: y), accessibility: sim.accessibility(),
+                action: "tap", at: gesture.at, accessibility: sim.accessibility(),
                 affordances: options.affordanceStyle
             ) {
                 gesture.execute(on: role)
             }
             print(result)
-            Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
+            Foundation.exit(GestureAnswer.succeeded(result) ? 0 : 1)
         }
-        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "tap")
+        runOrExit(gesture.execute(on: sim.roleOrExit(for: gesture)), action: "tap")
     }
 
-    private func runByLabel(_ label: String) {
+    private func runByLabel() {
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        var envelope: [String: Any] = ["type": Tap.wireType, "label": label, "duration": duration]
-        if let edge { envelope["edge"] = edge }
-        if thenDescribeUI { envelope["then_describe_ui"] = true }
-        if touch { envelope["touch"] = true }
-        let bytes = (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
         let dispatcher = GestureDispatcher(input: sim.screenInput())
         let result = LabelTap.dispatch(
-            line: String(decoding: bytes, as: UTF8.self),
+            line: labelLine,
             accessibility: sim.accessibility(),
             gesture: { dispatcher.dispatch(line: $0) },
             affordances: options.affordanceStyle
         ) ?? #"{"ok":false}"#
         print(result)
-        Foundation.exit(result.contains(#""ok":true"#) ? 0 : 1)
+        Foundation.exit(GestureAnswer.pressed(result) ? 0 : 1)
     }
 }
 
@@ -207,16 +240,20 @@ struct SwipeCommand: ParsableCommand {
     @Flag(help: "Wait for the screen to settle, then answer with whether it moved, what can be done next and what the screen says.")
     var thenDescribeUI = false
 
-    func run() {
-        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = Swipe(
+    var gesture: Swipe {
+        Swipe(
             from: Point(x: startX, y: startY),
             to:   Point(x: endX, y: endY),
             size: Size(width: width, height: height),
             duration: duration
         )
+    }
+
+    func run() {
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        let gesture = self.gesture
         if thenDescribeUI {
-            let role = sim.role(for: gesture)
+            let role = sim.roleOrExit(for: gesture)
             let result = ThenDescribe.perform(
                 action: "swipe", unchangedHint: ThenDescribe.swipeUnchanged, accessibility: sim.accessibility(),
                 affordances: options.affordanceStyle
@@ -224,9 +261,9 @@ struct SwipeCommand: ParsableCommand {
                 gesture.execute(on: role)
             }
             print(result)
-            Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
+            Foundation.exit(GestureAnswer.succeeded(result) ? 0 : 1)
         }
-        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "swipe")
+        runOrExit(gesture.execute(on: sim.roleOrExit(for: gesture)), action: "swipe")
     }
 }
 
@@ -247,16 +284,19 @@ struct PinchCommand: ParsableCommand {
     @Option var height: Double
     @Option var duration: Double = 0.6
 
-    func run() {
-        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = Pinch(
+    var gesture: Pinch {
+        Pinch(
             center: Point(x: cx, y: cy),
             startSpread: startSpread,
             endSpread: endSpread,
             size: Size(width: width, height: height),
             duration: duration
         )
-        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "pinch")
+    }
+
+    func run() {
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        runOrExit(gesture.execute(on: sim.roleOrExit(for: gesture)), action: "pinch")
     }
 }
 
@@ -279,16 +319,19 @@ struct PanCommand: ParsableCommand {
     @Option var height: Double
     @Option var duration: Double = 0.5
 
-    func run() {
-        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = Pan(
+    var gesture: Pan {
+        Pan(
             first:  Point(x: x1, y: y1),
             second: Point(x: x2, y: y2),
             dx: dx, dy: dy,
             size: Size(width: width, height: height),
             duration: duration
         )
-        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "pan")
+    }
+
+    func run() {
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        runOrExit(gesture.execute(on: sim.roleOrExit(for: gesture)), action: "pan")
     }
 }
 
@@ -304,14 +347,17 @@ struct PressCommand: ParsableCommand {
     @Option(help: "Device button: \(ButtonPress.allowed)") var button: String
     @Option(help: "Hold duration in seconds (0 = short tap)") var duration: Double = 0
 
-    func run() {
+    func gesture() throws -> ButtonPress {
         guard let device = DeviceButton(rawValue: button) else {
-            log("Unknown button: \(button) (allowed: \(ButtonPress.allowed))")
-            Foundation.exit(1)
+            throw ArgumentRefusal("Unknown button: \(button) (allowed: \(ButtonPress.allowed))")
         }
+        return ButtonPress(button: device, duration: duration)
+    }
+
+    func run() {
+        let gesture = orExitNow { try gesture() }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = ButtonPress(button: device, duration: duration)
-        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "press")
+        runOrExit(gesture.execute(on: sim.roleOrExit(for: gesture)), action: "press")
     }
 }
 
@@ -330,23 +376,25 @@ struct KeyCommand: ParsableCommand {
     var modifiers: String = ""
     @Option(help: "Hold duration in seconds (0 = short tap)") var duration: Double = 0
 
-    func run() {
+    func keystroke() throws -> Keystroke {
         guard let key = KeyboardKey.from(wireCode: code) else {
-            log("Unknown key code: \(code)")
-            Foundation.exit(1)
+            throw ArgumentRefusal("Unknown key code: \(code)")
         }
         var mods: Set<KeyModifier> = []
         for raw in modifiers.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) })
         where !raw.isEmpty {
             guard let m = KeyModifier(rawValue: raw) else {
-                log("Unknown modifier: \(raw) (allowed: shift | control | option | command)")
-                Foundation.exit(1)
+                throw ArgumentRefusal("Unknown modifier: \(raw) (allowed: shift | control | option | command)")
             }
             mods.insert(m)
         }
+        return Keystroke(key: key, modifiers: mods, duration: duration)
+    }
+
+    func run() {
+        let keystroke = orExitNow { try keystroke() }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let keystroke = Keystroke(key: key, modifiers: mods, duration: duration)
-        runOrExit(keystroke.execute(on: sim.role(for: keystroke)), action: "key")
+        runOrExit(keystroke.execute(on: sim.roleOrExit(for: keystroke)), action: "key")
     }
 }
 
@@ -362,18 +410,19 @@ struct TypeCommand: ParsableCommand {
     @Option(help: "Text to type. Non-ASCII / dead-key characters are rejected.")
     var text: String
 
-    func run() {
-        let gesture: TypeText
+    func gesture() throws -> TypeText {
         do {
-            gesture = try TypeText.parse(["text": text])
+            return try TypeText.parse(["text": text])
         } catch let error as GestureError {
-            log("Cannot type: \(error.message)")
-            Foundation.exit(1)
+            throw ArgumentRefusal("Cannot type: \(error.message)")
         } catch {
-            log("Cannot type: \(error)")
-            Foundation.exit(1)
+            throw ArgumentRefusal("Cannot type: \(error)")
         }
+    }
+
+    func run() {
+        let gesture = orExitNow { try gesture() }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "type")
+        runOrExit(gesture.execute(on: sim.roleOrExit(for: gesture)), action: "type")
     }
 }

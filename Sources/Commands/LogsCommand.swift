@@ -38,85 +38,114 @@ struct LogsCommand: AsyncParsableCommand {
             help: "Convenience: filter to a specific process by bundle / image name. ANDs with --predicate when both given.")
     var bundleId: String?
 
-    func run() async throws {
+    /// The filter the flags ask for, or a refusal naming the values allowed.
+    func filter() throws -> LogFilter {
         guard let lvl = LogFilter.Level(wire: level) else {
-            log("logs: invalid --level '\(level)' (use \(Self.levels))")
-            throw ExitCode.failure
+            throw ArgumentRefusal("logs: invalid --level '\(level)' (use \(Self.levels))")
         }
         guard let sty = LogFilter.Style(wire: style) else {
-            log("logs: invalid --style '\(style)' (use \(Self.styles))")
+            throw ArgumentRefusal("logs: invalid --style '\(style)' (use \(Self.styles))")
+        }
+        return LogFilter(level: lvl, style: sty, predicate: predicate, bundleId: bundleId)
+    }
+
+    func run() async throws {
+        let filter: LogFilter
+        do { filter = try self.filter() } catch let refusal as ArgumentRefusal {
+            log(refusal.message)
             throw ExitCode.failure
         }
 
         let device = try options.device()
         let logs = try orExit { try device.require(.logs) }
 
-        let filter = LogFilter(
-            level: lvl, style: sty,
-            predicate: predicate, bundleId: bundleId
+        // Use FileHandle directly — `print` adds a trailing newline that
+        // doubles up after our line split.
+        let session = LogsSession(
+            stream: logs,
+            write: { line in
+                if let data = (line + "\n").data(using: .utf8) {
+                    try? FileHandle.standardOutput.write(contentsOf: data)
+                }
+            },
+            warn: { log($0) }
         )
-        let stream = logs
 
         // SIGINT handler: clean stop + exit 0. We install a
         // DispatchSourceSignal so the default handler doesn't kill
         // us mid-pipe.
         signal(SIGINT, SIG_IGN)
         let sigSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
-
-        // One-shot continuation: whichever wakes first (SIGINT,
-        // termination handler, or onTerminate) ends the await. The
-        // `Once` helper enforces single-resume so we don't trip
-        // the "continuation resumed twice" runtime trap.
-        final class Once: @unchecked Sendable {
-            private let lock = NSLock()
-            private var fired = false
-            private var cont: CheckedContinuation<Void, Never>?
-            func install(_ c: CheckedContinuation<Void, Never>) {
-                lock.lock(); defer { lock.unlock() }
-                if fired { c.resume() } else { cont = c }
-            }
-            func fire() {
-                lock.lock()
-                if fired { lock.unlock(); return }
-                fired = true
-                let c = cont; cont = nil
-                lock.unlock()
-                c?.resume()
-            }
-        }
-        let once = Once()
-
-        sigSource.setEventHandler { [stream] in
-            stream.stop()
-            once.fire()
-        }
+        sigSource.setEventHandler { session.stop() }
         sigSource.resume()
 
         do {
-            try stream.start(
-                filter: filter,
-                onLine: { line in
-                    // Use FileHandle directly — `print` adds a
-                    // trailing newline that doubles up after our
-                    // line split.
-                    if let data = (line + "\n").data(using: .utf8) {
-                        try? FileHandle.standardOutput.write(contentsOf: data)
-                    }
-                },
-                onTerminate: { error in
-                    if let error {
-                        log("logs: stream ended: \(error)")
-                    }
-                    once.fire()
-                }
-            )
+            try await session.follow(filter)
         } catch {
             log("logs: \(error)")
             throw ExitCode.failure
         }
+    }
+}
 
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            once.install(c)
+/// One `baguette logs` run: a device's log stream, followed until it ends
+/// on its own or the user stops it — whichever comes first ends the
+/// follow, exactly once.
+final class LogsSession: @unchecked Sendable {
+    private let stream: any LogStream
+    private let write: @Sendable (String) -> Void
+    private let warn: @Sendable (String) -> Void
+
+    private let lock = NSLock()
+    private var ended = false
+    private var waiting: CheckedContinuation<Void, Never>?
+
+    init(
+        stream: any LogStream,
+        write: @escaping @Sendable (String) -> Void,
+        warn: @escaping @Sendable (String) -> Void
+    ) {
+        self.stream = stream
+        self.write = write
+        self.warn = warn
+    }
+
+    /// Start the stream and write each line until the session ends.
+    /// Throws when the stream can't start.
+    func follow(_ filter: LogFilter) async throws {
+        try stream.start(
+            filter: filter,
+            onLine: { [write] line in write(line) },
+            onTerminate: { [weak self, warn] error in
+                if let error { warn("logs: stream ended: \(error)") }
+                self?.end()
+            }
+        )
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if ended {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiting = continuation
+                lock.unlock()
+            }
         }
+    }
+
+    /// Stop the stream and end the session.
+    func stop() {
+        stream.stop()
+        end()
+    }
+
+    private func end() {
+        lock.lock()
+        if ended { lock.unlock(); return }
+        ended = true
+        let continuation = waiting
+        waiting = nil
+        lock.unlock()
+        continuation?.resume()
     }
 }
