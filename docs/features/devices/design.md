@@ -9,8 +9,8 @@ routes and the gesture commands still read `Simulators` (see §9). Slices 0–8
 are on `feat/devices`: `Infrastructure/` split by family; the device model
 (`DeviceState`, `AbilityTable`, `Device`, `Devices`, `CombinedDevices`); the
 simulator, companion and CoreDevice families as sources; the device-level
-commands, `baguette list`, `/devices.json` and the device page's stream
-reading it. A physical iPhone on a cable takes touches (CoreDevice Universal
+commands, `baguette list`, `/devices.json`, and the device page's stream and
+touches reading it. A physical iPhone on a cable takes touches (CoreDevice Universal
 HID), shows its screen (devicectl screenshots, ~1 fps), shares its pasteboard; everything else is refused by name.
 
 This document owns **which devices exist, what each one can do, and where

@@ -28,7 +28,8 @@ for a simulator ([wire.md](../../wire.md)); `"edge":"bottom"` on a
 `touch1-*` swipe goes Home.
 
 In `baguette serve`, the phone appears under **Devices** on the list page; its
-page (`/devices/<udid>`) asks for a borrowed bezel, then shows its screen.
+page (`/devices/<udid>`) asks for a borrowed bezel, then shows its screen and
+turns clicks and drags into touches. Its badge says `DEVICE · touch`.
 
 ## What a phone can do
 
@@ -52,7 +53,7 @@ $ baguette boot --udid 00008160-…
 ```
 GET /devices.json                            → {"connected":[{"udid":…,"name":…,"model":…,"capabilities":["screen","input","pasteboard"]}]}
 GET /devices/<udid>/definition.json?chrome=iPhone 17 Pro Max   → the page's bezel and screen geometry
-WS  /devices/<udid>/stream?format=mjpeg|avcc → frames; stream controls only
+WS  /devices/<udid>/stream?format=mjpeg|avcc → frames down; stream controls and gestures up (the wire.md envelopes)
 ```
 
 ## Gotchas
