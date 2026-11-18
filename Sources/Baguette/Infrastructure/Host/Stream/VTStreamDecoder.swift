@@ -7,18 +7,17 @@ import VideoToolbox
 /// The VideoToolbox calls behind `StreamDecoder` — integration-only. A
 /// phone's screen stream (HEVC) and anything else that hands over raw
 /// parameter sets decode here; BGRA, IOSurface-backed, like every Screen.
+/// Frames are the stream's own pictures, padding included: what part of
+/// one is the screen is the page's to show (`screen.pixels`).
 final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
     private let lock = NSLock()
     private var session: VTDecompressionSession?
     private var format: CMVideoFormatDescription?
     private var onFrame: (@Sendable (IOSurface) -> Void)?
     private var reportedDecodeFailure = false
-    /// The last few decoded frames, kept alive. VideoToolbox's pool reuses
-    /// a frame's IOSurface as soon as its pixel buffer is released; the
-    /// stream pipeline reads the newest surface a moment later (its encoder
-    /// runs on its own tick), and a surface being decoded into meanwhile
-    /// reads as a mosaic of two frames. Holding a short ring keeps every
-    /// surface a consumer can still be reading out of the pool.
+    /// The last few decoded frames, kept alive. VideoToolbox reuses a
+    /// frame's IOSurface as soon as its pixel buffer is released; the stream
+    /// pipeline reads the newest surface a moment later, on its own tick.
     private var recent: [CVPixelBuffer] = []
     private static let heldFrames = 6
 
@@ -36,7 +35,7 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
         guard status == noErr, let session else { throw DecoderError.sessionRejected(status) }
 
         let old: VTDecompressionSession? = lock.withLock {
-            defer { self.session = session; self.format = format; self.onFrame = onFrame }
+            defer { self.session = session; self.format = format; self.onFrame = onFrame; recent = [] }
             return self.session
         }
         if let old { VTDecompressionSessionInvalidate(old) }
@@ -44,6 +43,8 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
         log("[video] decoder configured: \(codec) \(dimensions.width)×\(dimensions.height)")
     }
 
+    /// Decodes synchronously, one frame after another in arrival order:
+    /// asynchronous decompression painted a mosaic under motion.
     func decode(_ frame: Data) {
         let (session, format, deliver) = lock.withLock { (self.session, self.format, self.onFrame) }
         guard let session, let format, !frame.isEmpty else { return }
@@ -68,18 +69,19 @@ final class VTStreamDecoder: StreamDecoder, @unchecked Sendable {
         ) == noErr, let sampleBuffer else { return }
 
         VTDecompressionSessionDecodeFrame(
-            session, sampleBuffer: sampleBuffer, flags: [._EnableAsynchronousDecompression], infoFlagsOut: nil
+            session, sampleBuffer: sampleBuffer, flags: [], infoFlagsOut: nil
         ) { [weak self] status, _, imageBuffer, _, _ in
+            guard let self else { return }
             guard status == noErr, let imageBuffer,
                   let surface = CVPixelBufferGetIOSurface(imageBuffer)?.takeUnretainedValue() else {
                 // Once: a failure at 60 fps must not flood the log.
-                if let self, !self.reportedDecodeFailure {
+                if !self.reportedDecodeFailure {
                     self.reportedDecodeFailure = true
                     log("[video] decode failed: status=\(status)")
                 }
                 return
             }
-            self?.hold(imageBuffer)
+            self.hold(imageBuffer)
             deliver?(unsafeDowncast(surface, to: IOSurface.self))
         }
     }

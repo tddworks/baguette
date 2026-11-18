@@ -104,19 +104,27 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         var highest: UInt32 = 0
         var lastReport = Date.distantPast
         var firstPacket: Date?
-        var keyframes = 0
+        var gate = DecodeGate()
+        var lastKeyframeRequest = Date.distantPast
+        var stats = (packets: 0, frames: 0, requests: 0, since: Date())
         var buffer = [UInt8](repeating: 0, count: 65_536)
         let opened = Date()
-        send(RTCPReceiverReport.pictureLossIndication(reporter: reporter, source: source), to: &phone, on: fd)
-
         while isRunning {
             // The phone stops streaming after 20 s without a report; send one a second.
             if Date().timeIntervalSince(lastReport) >= 1 {
                 send(RTCPReceiverReport(reporter: reporter, source: source, highestSequence: highest).bytes, to: &phone, on: fd)
-                if keyframes == 0 {
-                    send(RTCPReceiverReport.pictureLossIndication(reporter: reporter, source: source), to: &phone, on: fd)
-                }
                 lastReport = Date()
+            }
+            // Ask again and again while waiting: a request can be lost too.
+            if gate.needsKeyframe, Date().timeIntervalSince(lastKeyframeRequest) >= 0.3 {
+                send(RTCPReceiverReport.pictureLossIndication(reporter: reporter, source: source), to: &phone, on: fd)
+                lastKeyframeRequest = Date()
+                stats.requests += 1
+            }
+            if Date().timeIntervalSince(stats.since) >= 5 {
+                log("[coredevice] stream: \(stats.packets) packets, \(stats.frames) frames, "
+                    + "\(depacketizer.droppedFrames) dropped in all, \(stats.requests) keyframe requests in 5 s")
+                stats = (0, 0, 0, Date())
             }
             let count = recv(fd, &buffer, buffer.count, 0)
             guard count > 0 else {
@@ -126,6 +134,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             let data = Data(buffer[0..<count])
             guard !RTPPacket.isRTCP(data), let packet = RTPPacket(data) else { continue }
             if firstPacket == nil { firstPacket = Date() }
+            stats.packets += 1
             highest = max(highest, highest & 0xFFFF_0000 | UInt32(packet.sequence))
             guard let unit = depacketizer.push(packet) else { continue }
             let fresh = unit.parameterSets
@@ -135,8 +144,8 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
                 lock.withLock { self.decoder = decoder }
                 parameterSets = fresh
             }
-            if unit.isKeyframe { keyframes += 1 }
-            guard !parameterSets.isEmpty, keyframes > 0 else { continue }
+            guard gate.admits(unit, droppedSince: depacketizer.droppedFrames), !parameterSets.isEmpty else { continue }
+            stats.frames += 1
             lock.withLock { self.decoder }?.decode(unit.lengthPrefixedFrame)
         }
     }

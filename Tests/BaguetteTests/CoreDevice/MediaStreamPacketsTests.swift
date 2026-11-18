@@ -237,3 +237,55 @@ struct HEVCStreamTests {
         #expect(AccessUnit(codec: .h264, nalUnits: [sps, pps, Data([0x65, 1])], timestamp: 0).parameterSets == [sps, pps])
     }
 }
+
+@Suite("DecodeGate")
+struct DecodeGateTests {
+    private let keyframe = AccessUnit(codec: .hevc, nalUnits: [Data([0x26, 0x01, 1])], timestamp: 0)
+    private let delta = AccessUnit(codec: .hevc, nalUnits: [Data([0x02, 0x01, 1])], timestamp: 0)
+
+    @Test func `should wait for a keyframe before decoding anything`() {
+        var gate = DecodeGate()
+
+        let answer1 = gate.admits(delta, droppedSince: 0)
+        #expect(!answer1)
+        #expect(gate.needsKeyframe)
+        let answer2 = gate.admits(keyframe, droppedSince: 0)
+        #expect(answer2)
+        #expect(!gate.needsKeyframe)
+    }
+
+    @Test func `should decode frames that follow a keyframe while nothing is lost`() {
+        var gate = DecodeGate()
+        _ = gate.admits(keyframe, droppedSince: 0)
+
+        let answer3 = gate.admits(delta, droppedSince: 0)
+        #expect(answer3)
+    }
+
+    @Test func `should stop decoding after a lost frame until the next keyframe`() {
+        var gate = DecodeGate()
+        _ = gate.admits(keyframe, droppedSince: 0)
+
+        let answer4 = gate.admits(delta, droppedSince: 1)
+        #expect(!answer4)
+        #expect(gate.needsKeyframe)
+        let answer5 = gate.admits(delta, droppedSince: 1)
+        #expect(!answer5)
+        let answer6 = gate.admits(keyframe, droppedSince: 1)
+        #expect(answer6)
+        let answer7 = gate.admits(delta, droppedSince: 1)
+        #expect(answer7)
+    }
+}
+
+@Suite("VideoDepacketizer losses")
+struct VideoDepacketizerLossTests {
+    @Test func `should count each frame it drops for a lost packet`() {
+        var depacketizer = VideoDepacketizer(codec: .hevc)
+
+        _ = depacketizer.push(parsed(rtp(sequence: 1, payload: [0x62, 0x01, 0x81, 1])))
+        _ = depacketizer.push(parsed(rtp(marker: true, sequence: 3, payload: [0x62, 0x01, 0x41, 2])))
+
+        #expect(depacketizer.droppedFrames == 1)
+    }
+}

@@ -109,6 +109,8 @@ struct VideoDepacketizer: Sendable {
     private var timestamp: UInt32?
     private var lastSequence: UInt16?
     private var damaged = false
+    /// Frames thrown away for a lost or broken packet, since the start.
+    private(set) var droppedFrames = 0
 
     init(codec: VideoCodec) {
         self.codec = codec
@@ -167,8 +169,27 @@ struct VideoDepacketizer: Sendable {
 
     private mutating func finish() -> AccessUnit? {
         defer { nalUnits = []; fragment = nil; damaged = false }
-        guard !damaged, fragment == nil, !nalUnits.isEmpty, let timestamp else { return nil }
+        if damaged || fragment != nil { droppedFrames += 1; return nil }
+        guard !nalUnits.isEmpty, let timestamp else { return nil }
         return AccessUnit(codec: codec, nalUnits: nalUnits, timestamp: timestamp)
+    }
+}
+
+/// Whether a frame may go to the decoder. A frame predicted from one the
+/// decoder never saw paints stale blocks (a mosaic) until the next
+/// keyframe — and a phone's stream sends keyframes only when asked — so
+/// after any lost frame, nothing is decoded until a keyframe arrives, and
+/// `needsKeyframe` says to ask for one. The last good picture stays up.
+struct DecodeGate: Sendable {
+    private(set) var needsKeyframe = true
+    private var droppedSeen = 0
+
+    /// - Parameter droppedSince: the depacketizer's running count of
+    ///   dropped frames; a rise means a frame was lost since the last call.
+    mutating func admits(_ unit: AccessUnit, droppedSince dropped: Int) -> Bool {
+        if dropped != droppedSeen { droppedSeen = dropped; needsKeyframe = true }
+        if unit.isKeyframe { needsKeyframe = false }
+        return !needsKeyframe
     }
 }
 
