@@ -1,5 +1,5 @@
 ---
-description: Drive a physical iPhone on a cable the way you drive a simulator — tap, swipe, screenshot, stream, record, rotate, use its pasteboard — through Xcode's devicectl and CoreDevice. Use when an app must be checked on real hardware.
+description: Drive a physical iPhone on a cable the way you drive a simulator — tap, swipe, screenshot, stream, record, use its pasteboard — through Xcode's devicectl and CoreDevice. Use when an app must be checked on real hardware.
 ---
 
 # Real devices
@@ -20,7 +20,6 @@ baguette swipe      --udid 00008160-… --start-x 380 --start-y 478 --end-x 60 -
 baguette screenshot --udid 00008160-… --output /tmp/phone.jpg
 baguette stream     --udid 00008160-… > phone.mjpeg
 baguette record     --udid 00008160-… --output phone.mp4 --duration 10
-baguette orientation landscape-left --udid 00008160-…
 baguette clipboard get --udid 00008160-…
 ```
 
@@ -37,7 +36,6 @@ page (`/devices/<udid>`) asks for a borrowed bezel, then shows its screen.
 |---|---|---|
 | touches (`tap`, `swipe`, `pinch`, `pan`, `input`) | CoreDevice's Universal HID | edge swipes too; no buttons, keys or scroll yet |
 | screen (`screenshot`, `stream`, `record`) | `devicectl device capture screenshot` | about one frame a second, not a live stream |
-| orientation | `devicectl device orientation set` | |
 | pasteboard (`clipboard`, text in `paste`) | `devicectl device pasteboard` | |
 
 Anything else answers with what's missing and exits 1:
@@ -52,7 +50,7 @@ $ baguette boot --udid 00008160-…
 ## HTTP and WebSocket
 
 ```
-GET /devices.json                            → {"connected":[{"udid":…,"name":…,"model":…,"capabilities":["screen","input","orientation","pasteboard"]}]}
+GET /devices.json                            → {"connected":[{"udid":…,"name":…,"model":…,"capabilities":["screen","input","pasteboard"]}]}
 GET /devices/<udid>/definition.json?chrome=iPhone 17 Pro Max   → the page's bezel and screen geometry
 WS  /devices/<udid>/stream?format=mjpeg|avcc → frames; stream controls only
 ```
@@ -69,6 +67,9 @@ WS  /devices/<udid>/stream?format=mjpeg|avcc → frames; stream controls only
   unavailable: not connected`.
 - **`press`, `key`, `type` and scroll answer `"ok":false`.** They are other HID
   services; only the touchscreen is wired. Text goes through `paste`.
+- **No orientation.** `devicectl device orientation set` exits 0 on a phone
+  and leaves it as its sensors hold it, so a phone doesn't claim it: turn the
+  phone by hand.
 - **No apps, location, status bar or push.** `devicectl` covers part of each
   (install, a single location point); a phone registers an ability only when
   it can do all of it.

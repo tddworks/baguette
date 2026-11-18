@@ -31,9 +31,10 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
 }
 
 /// A real phone as a `Device`. The one place deciding what the CoreDevice
-/// family can do: its screen, orientation and pasteboard through devicectl,
-/// and touches through CoreDevice's Universal HID service. Apps and
-/// location wait on verbs devicectl lacks (a push, a route).
+/// family can do: its screen and pasteboard through devicectl, and touches
+/// through CoreDevice's Universal HID service. Not orientation: devicectl's
+/// `orientation set` exits 0 on a phone and leaves it as its sensors hold it.
+/// Apps and location wait on verbs devicectl lacks (a push, a route).
 struct CoreDevicePhone: Device {
     private let phone: PhysicalPhone
     private let devicectl: Devicectl
@@ -55,7 +56,6 @@ struct CoreDevicePhone: Device {
         if let identifier = phone.coreDeviceIdentifier {
             table.register(.input) { DigitizerInput(digitizer: CoreDeviceDigitizer(identifier: identifier)) }
         }
-        table.register(.orientation) { DevicectlOrientation(udid: udid, devicectl: devicectl) }
         table.register(.pasteboard) { DevicectlPasteboard(udid: udid, devicectl: devicectl) }
         return table
     }

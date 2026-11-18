@@ -49,7 +49,7 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
     │                                       state ◇ (off · starting · ready · unavailable)
     └── abilities → AbilityTable  ◇         WHAT IT CAN DO — require(.location) → the role; names
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
-                                            CoreDevicePhones (screen, input, orientation, pasteboard) ·
+                                            CoreDevicePhones (screen, input, pasteboard) ·
                                             AndroidEmulators (later)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)

@@ -97,34 +97,6 @@ struct DevicectlTests {
     }
 }
 
-@Suite("DevicectlOrientation")
-struct DevicectlOrientationTests {
-    @Test(arguments: [
-        (DeviceOrientation.portrait, "portrait"),
-        (.portraitUpsideDown, "portraitUpsideDown"),
-        (.landscapeLeft, "landscapeLeft"),
-        (.landscapeRight, "landscapeRight"),
-    ])
-    func `should turn the phone with devicectl orientation set`(orientation: DeviceOrientation, name: String) {
-        let fake = FakeDevicectl()
-        let delivery = DevicectlOrientation(udid: phoneUDID, devicectl: Devicectl(makeSubprocess: fake.make))
-            .set(orientation)
-
-        #expect(delivery == .delivered)
-        #expect(fake.arguments == [["devicectl", "device", "orientation", "set", "--device", phoneUDID, name]])
-    }
-
-    @Test func `should report a turn devicectl refused as rejected`() {
-        let fake = FakeDevicectl()
-        fake.status = 1
-
-        let delivery = DevicectlOrientation(udid: phoneUDID, devicectl: Devicectl(makeSubprocess: fake.make))
-            .set(.landscapeLeft)
-
-        #expect(delivery == .rejected)
-    }
-}
-
 @Suite("DevicectlPasteboard")
 struct DevicectlPasteboardTests {
     @Test func `should put text on the phone's pasteboard through devicectl's stdin`() async throws {
@@ -247,7 +219,7 @@ struct CoreDevicePhonesTests {
                           coreDeviceIdentifier: UUID()),
             devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
 
-        #expect(phone.abilities.names == ["screen", "input", "orientation", "pasteboard"])
+        #expect(phone.abilities.names == ["screen", "input", "pasteboard"])
         #expect(throws: DeviceError.unable(ability: "lifecycle", device: "han's iPhone")) {
             try phone.require(.lifecycle)
         }
@@ -260,7 +232,7 @@ struct CoreDevicePhonesTests {
                           coreDeviceIdentifier: nil),
             devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
 
-        #expect(phone.abilities.names == ["screen", "orientation", "pasteboard"])
+        #expect(phone.abilities.names == ["screen", "pasteboard"])
     }
 }
 

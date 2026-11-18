@@ -11,8 +11,7 @@ are on `feat/devices`: `Infrastructure/` split by family; the device model
 simulator, companion and CoreDevice families as sources; the device-level
 commands, `baguette list`, `/devices.json` and the device page's stream
 reading it. A physical iPhone on a cable takes touches (CoreDevice Universal
-HID), shows its screen (devicectl screenshots, ~1 fps), turns and shares its
-pasteboard; everything else is refused by name.
+HID), shows its screen (devicectl screenshots, ~1 fps), shares its pasteboard; everything else is refused by name.
 
 This document owns **which devices exist, what each one can do, and where
 each device family's implementation lives**. Its neighbours own the rest,
@@ -171,7 +170,8 @@ The abilities, from today's `Simulator` methods plus one new one:
 | `displays` | `Displays` (phone · panels · CarPlay) | ✓ | — | — | — |
 | `accessibility` | `Accessibility` | ✓ | ? | — | ✓ |
 | `apps` · `logs` | `Apps` · `LogStream` | ✓ | — (devicectl can't push a notification; no syslog verb) | — | ✓ |
-| `orientation` · `pasteboard` | as today | ✓ | ✓ (devicectl) | — | ✓ |
+| `orientation` | as today | ✓ | — (devicectl's `set` exits 0 and leaves a phone as its sensors hold it) | — | ✓ |
+| `pasteboard` | as today | ✓ | ✓ (devicectl) | — | ✓ |
 | `location` | as today | ✓ | — (devicectl sets one point, no route) | — | ✓ |
 | `interface` · `defaults` · `photos` · `shake` | as today | ✓ | — | — | ? |
 | `statusBar` · `motion` · `network` · `hinge` · `externalDisplays` · `watchPairing` | as today | ✓ | — | — | — |
@@ -365,9 +365,10 @@ AGENTS.md's layering sentence changes to:
   folded. Registering it only where `Chromes` lists two panels would make the
   page's hinge card honest. Decided when the page renders cards from
   abilities (slice 7).
-- **devicectl's orientation names.** `DevicectlOrientation` passes
-  `landscapeLeft` for `DeviceOrientation.landscapeLeft`, assuming devicectl
-  names poses as UIKit does. Not yet checked by turning a phone.
+- ~~devicectl's orientation names~~ Moot: on a physical phone
+  `devicectl device orientation set` exits 0 and the phone stays as its
+  sensors hold it ("New Device Orientation: portrait"), so a phone registers
+  no `orientation`. Checked 2026-11-18 on an iPhone 18 Pro Max.
 - **The camera.** `CameraSessions` stays per server; the simulator's guest
   side (`SimctlCameraGuest`) likely becomes a `camera` ability. Decided when it
   moves.
@@ -401,5 +402,5 @@ Each slice is green on its own. Test names are the `should …` sentences.
 | 6 | the twin renamed `CompanionPhones`; `CompanionDevices` makes it a source; `/devices.json`, `definition.json`, `3d-model.json` and `/stream` read every physical device | "should show a companion's screen once its video has arrived"; "should list each ready physical device as connected, with what it can do" — **done** |
 | 7 | readiness on the key (`Ability.needsReady`), device-level commands through `Devices`, display plans bound to any device, simulator-only commands refusing other families by ability | "should refuse an ability that needs a running device while the device is off"; "should show a device's own screen when the plan is the phone plane" — **done**; the `/simulators/…` routes and the page's cards from `abilities` remain |
 | 8 | delete what §7 names | `RecordingError.deviceNotBooted` gone (a second owner of readiness); the rest waits on slice 7's remainder |
-| 9 | `CoreDevicePhones` through public `devicectl`: screen, orientation, pasteboard | "should list a paired phone on a cable as ready"; "should register what a physical phone can do, and nothing it can't" — **done**; a live stream and input wait on the CoreDevice spike |
+| 9 | `CoreDevicePhones`: screen and pasteboard through `devicectl`, touches through CoreDevice's Universal HID | "should list a paired phone on a cable as ready"; "should register what a physical phone can do, and nothing it can't"; "should land a tap as a finger down then up at the same spot" — **done**; a live stream waits on H2 |
 | 10 | `AndroidEmulators` | its own design |

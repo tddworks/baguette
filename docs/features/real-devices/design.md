@@ -74,7 +74,7 @@ Run them in order; stop at the first kill of H1 and jump to [Fallback](#fallback
 | H3 — touches go over a callable service | **Pass.** The `UniversalHIDServiceCapability` opens on the phone, and a UniversalHID `DigitizerReport` sent with `UniversalHIDService.send(report:to:)` to service `0x101` lands: a swipe paged the Home Screen and back, an edge swipe went Home. |
 | H4 — a vphone VM works unchanged | Not run (no VM on this Mac). |
 
-Outcome: **Go** for touch, **Partial** for the screen. Built: `CoreDevicePhones` registers `screen` (devicectl), `input` (Universal HID), `orientation` and `pasteboard` (devicectl).
+Outcome: **Go** for touch, **Partial** for the screen. Built: `CoreDevicePhones` registers `screen` (devicectl), `input` (Universal HID) and `pasteboard` (devicectl). Not `orientation`: `devicectl device orientation set` exits 0 on a phone and answers "New Device Orientation: portrait" — a phone turns by its sensors only.
 
 ### How a touch reaches the phone
 
