@@ -76,6 +76,16 @@ struct XPCObjectTests {
         ]))
     }
 
+    @Test func `should refuse a string without its terminating NUL`() {
+        var reader = XPCObject.Reader(Data([0x00, 0x90, 0, 0, 4, 0, 0, 0, 0x41, 0x42, 0x43, 0x44]))
+        #expect(throws: XPCObject.Malformed(what: "string")) { try reader.object() }
+    }
+
+    @Test func `should read no string from a value that isn't one`() {
+        #expect(XPCObject.uint64(5).string == nil)
+        #expect(XPCObject.string("x")["key"] == nil)
+    }
+
     @Test func `should refuse bytes that end inside a value`() {
         var reader = XPCObject.Reader(Data([0x00, 0x90, 0, 0, 9, 0, 0, 0, 0x41]))
         #expect(throws: XPCObject.Malformed.self) { try reader.object() }
@@ -97,6 +107,13 @@ struct XPCMessageTests {
         let bytes = XPCMessage(flags: 0x1, id: 1, body: .string("Handshake")).bytes
 
         #expect(try XPCMessage.read(from: bytes.prefix(bytes.count - 1)) == nil)
+    }
+
+    @Test func `should refuse a message whose body isn't XPC's`() {
+        var bytes = XPCMessage(flags: 0x1, id: 1, body: .string("Handshake")).bytes
+        bytes[24] = 0
+
+        #expect(throws: XPCObject.Malformed(what: "body header")) { try XPCMessage.read(from: bytes) }
     }
 
     @Test func `should carry no body when a message is only its header`() throws {

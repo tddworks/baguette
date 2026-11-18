@@ -17,5 +17,8 @@ struct UnableAccessibilityTests {
         let accessibility = UnableAccessibility(refusal)
 
         #expect(throws: refusal) { try accessibility.wake() }
+        #expect(throws: refusal) {
+            try accessibility.press(AXNode(role: "AXButton", frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 1, height: 1))))
+        }
     }
 }

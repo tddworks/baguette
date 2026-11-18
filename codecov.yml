@@ -11,8 +11,8 @@ coverage:
 
 # Mirror the lcov exclusions in .github/workflows/ci.yml: IO / 3rd-party
 # shims around CoreSimulator, SimulatorKit, IOKit HID, Hummingbird,
-# VideoToolbox, CoreImage, IOSurface and stdin/stdout sinks need a booted
-# simulator or live socket to exercise — and the thin command-layer files
+# VideoToolbox, CoreImage, IOSurface, CoreDevice and stdin/stdout sinks need a
+# booted simulator, a phone on a cable or a live socket to exercise — and the thin command-layer files
 # that do nothing but wire those shims together follow the same rule.
 ignore:
   - "Sources/Baguette/Resources/**"
@@ -23,6 +23,13 @@ ignore:
   - "Sources/Baguette/Infrastructure/Host/Screen/**"
   - "Sources/Baguette/Infrastructure/Host/Stream/**"
   - "Sources/Baguette/Infrastructure/Host/Chrome/PDFRasterizer.swift"
+  # A phone's private CoreDevice calls and live tunnel sockets: their
+  # formats and rules are pure values in Domain/CoreDevice, tested there.
+  - "Sources/Baguette/Infrastructure/CoreDevice/Kit/CoreDeviceFramework.swift"
+  - "Sources/Baguette/Infrastructure/CoreDevice/Kit/DigitizerReport.swift"
+  - "Sources/Baguette/Infrastructure/CoreDevice/Input/CoreDeviceDigitizer.swift"
+  - "Sources/Baguette/Infrastructure/CoreDevice/Screen/MediaStreamScreen.swift"
+  - "Sources/Baguette/Infrastructure/CoreDevice/Accessibility/**"
   - "Sources/Baguette/App/Commands/**"
   - "Sources/Baguette/App/Logger.swift"
   - "Tests/**"

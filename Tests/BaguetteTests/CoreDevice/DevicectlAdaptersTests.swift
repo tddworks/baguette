@@ -69,6 +69,16 @@ struct DevicectlTests {
         }
     }
 
+    @Test func `should report devicectl when it can't even start`() async {
+        struct NoXcrun: Error, Equatable {}
+        let sub = MockSubprocess()
+        given(sub).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any).willThrow(NoXcrun())
+
+        await #expect(throws: NoXcrun()) {
+            try await Devicectl(makeSubprocess: { sub }).run(["list", "devices"])
+        }
+    }
+
     @Test func `should keep devicectl's process alive until it exits`() async throws {
         let exit = ExitLatch()
         let devicectl = Devicectl(makeSubprocess: {

@@ -81,6 +81,14 @@ struct AXTreeDumpTests {
         #expect(dump.answer(type: 9, attribute: 0, element: button) == nil)
     }
 
+    @Test func `should skip what the phone pushed that the translator never asks for`() throws {
+        let unasked = FakeAX(["associatedRequestType": NSNumber(value: 11), "associatedTranslationObject": button])
+        let dump = try #require(AXTreeDump(envelope: envelope("AXPTreeDumpTypeAdditionalData", records + [unasked])))
+
+        #expect(dump.answer(type: 11, attribute: 0, element: button) == nil)
+        #expect(dump.answer(type: 2, attribute: 2001, element: button) == .value(attribute: 2001, "New Project" as NSString))
+    }
+
     @Test func `should read no tree from a reply that isn't a tree dump`() {
         #expect(AXTreeDump(envelope: FakeAX(["resultData": NSDictionary()])) == nil)
         #expect(AXTreeDump(envelope: envelope("AXPTreeDumpTypeAdditionalData", [])) == nil)

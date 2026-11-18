@@ -1,4 +1,4 @@
-import Foundation
+ import Foundation
 
 /// Xcode's private device stack (`CoreDevice.framework`), reached in-process
 /// for what `devicectl` has no verb for — today, a phone's touchscreen.
@@ -335,6 +335,9 @@ private struct EncodableBox: Encodable {
 struct RemoteDevice: Sendable {
     var identifier: UUID { UUID() }
     func open(_ kind: CapabilityKind) throws -> OpenedCapability { throw CoreDeviceError.unavailable }
+    func startMediaStream(_ makeRequest: @escaping @Sendable () throws -> [String: Any]) throws -> [String: Any] {
+        throw CoreDeviceError.unavailable
+    }
 }
 
 #endif
