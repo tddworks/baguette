@@ -27,7 +27,7 @@ struct ScreenTargetTests {
             var kind: DisplayKind { .phone }
             func resolve() throws -> DisplayBinding { throw ObservedScreenError.unavailable }
             func screen() -> any Screen { MockScreen() }
-            func input() -> any Input { MockInput() }
+            func input() -> any HID { InputMocks() }
         }
         #expect(throws: ObservedScreenError.unavailable) { try Unobservable().observedScreen() }
     }

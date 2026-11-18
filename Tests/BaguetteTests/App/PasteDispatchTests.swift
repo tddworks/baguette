@@ -11,11 +11,11 @@ import Mockable
 @Suite("PasteDispatch")
 struct PasteDispatchTests {
 
-    private func surfaces() -> (MockPasteboard, MockInput) {
+    private func surfaces() -> (MockPasteboard, InputMocks) {
         let pasteboard = MockPasteboard()
-        let input = MockInput()
+        let input = InputMocks()
         given(pasteboard).setText(.any).willReturn(())
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
         return (pasteboard, input)
     }
 
@@ -29,7 +29,7 @@ struct PasteDispatchTests {
             #"{"no_type":true}"#,
         ] {
             let outcome = await PasteDispatch.dispatch(
-                line: line, pasteboard: pasteboard, input: input
+                line: line, pasteboard: pasteboard, input: input.abilities
             )
             #expect(outcome == .notPaste)
         }
@@ -40,11 +40,11 @@ struct PasteDispatchTests {
         let (pasteboard, input) = surfaces()
         let outcome = await PasteDispatch.dispatch(
             line: #"{"type":"paste","text":"hello"}"#,
-            pasteboard: pasteboard, input: input
+            pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .ok)
         verify(pasteboard).setText(.value("hello")).called(1)
-        verify(input).key(.any, modifiers: .value([.command]), duration: .any).called(1)
+        verify(input.key).key(.any, modifiers: .value([.command]), duration: .any).called(1)
     }
 
     @Test func `should paste using the pasteboard of the simulator`() async {
@@ -54,7 +54,7 @@ struct PasteDispatchTests {
 
         let outcome = await PasteDispatch.dispatch(
             line: #"{"type":"paste","text":"hi"}"#,
-            pasteboard: sim.pasteboard(), input: input
+            pasteboard: sim.pasteboard(), input: input.abilities
         )
         #expect(outcome == .ok)
     }
@@ -63,7 +63,7 @@ struct PasteDispatchTests {
         let (pasteboard, input) = surfaces()
         let outcome = await PasteDispatch.dispatch(
             line: #"{"type":"paste"}"#,
-            pasteboard: pasteboard, input: input
+            pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .failed("missing field: text"))
         verify(pasteboard).setText(.any).called(0)
@@ -71,26 +71,26 @@ struct PasteDispatchTests {
 
     @Test func `should report a simctl failure when pasting`() async {
         let pasteboard = MockPasteboard()
-        let input = MockInput()
+        let input = InputMocks()
         given(pasteboard).setText(.any)
             .willThrow(PasteboardError.simctlFailed(status: 1))
 
         let outcome = await PasteDispatch.dispatch(
             line: #"{"type":"paste","text":"hello"}"#,
-            pasteboard: pasteboard, input: input
+            pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .failed("xcrun simctl pasteboard command exited 1"))
     }
 
     @Test func `should report a failed Cmd+V press when pasting`() async {
         let pasteboard = MockPasteboard()
-        let input = MockInput()
+        let input = InputMocks()
         given(pasteboard).setText(.any).willReturn(())
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(false)
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(false)
 
         let outcome = await PasteDispatch.dispatch(
             line: #"{"type":"paste","text":"hello"}"#,
-            pasteboard: pasteboard, input: input
+            pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .failed("Cmd+V dispatch failed"))
     }

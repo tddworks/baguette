@@ -32,7 +32,7 @@ struct Fill: Equatable, Sendable {
     func execute(
         accessibility: any Accessibility,
         pasteboard: any Pasteboard,
-        input: any Input,
+        input: Abilities,
         timing: Timing = Timing(),
         inputTaken: @Sendable () async -> Bool = { false }
     ) async -> FillOutcome {
@@ -46,7 +46,7 @@ struct Fill: Equatable, Sendable {
     private func attempt(
         accessibility: any Accessibility,
         pasteboard: any Pasteboard,
-        input: any Input,
+        input: Abilities,
         timing: Timing
     ) async -> FillOutcome {
         let found = AXTarget.wait(
@@ -76,7 +76,7 @@ struct Fill: Equatable, Sendable {
             // to find it, and there's no second `Pay` to fear in focusing a field.
             if let screen = found.screen, let point = node.touchPoint(on: screen) {
                 let size = Size(width: screen.width, height: screen.height)
-                _ = Tap(at: point, size: size, duration: 0.05).execute(on: input)
+                _ = try? Tap(at: point, size: size, duration: 0.05).execute(on: input)
                 if !waitUntil(timing.focus, focused) {
                     _ = try? accessibility.press(node)
                     guard waitUntil(timing.focus, focused) else { return .neverFocused(name: name) }
@@ -87,7 +87,10 @@ struct Fill: Equatable, Sendable {
             }
         }
 
-        guard clear(on: input) else { return .failed("couldn't send a key to \(name)") }
+        // Clearing, typing and pasting are all keys: a device without them can't fill.
+        let keyboard: any Key
+        do { keyboard = try input.require(.key) } catch { return .failed("\(error)") }
+        guard clear(on: keyboard) else { return .failed("couldn't send a key to \(name)") }
         guard !text.isEmpty else { return .cleared(name: name) }
 
         func paste() async -> FillOutcome? {
@@ -121,7 +124,7 @@ struct Fill: Equatable, Sendable {
             if let failure = await paste() { return failure }
             return outcome(readBack())
         }
-        guard typed.execute(on: input) else { return .failed("couldn't send a key to \(name)") }
+        guard typed.execute(on: keyboard) else { return .failed("couldn't send a key to \(name)") }
 
         // A field that's gone took the keys somewhere else: what has focus now isn't it.
         guard let first = readBack() else { return outcome(nil) }
@@ -130,7 +133,7 @@ struct Fill: Equatable, Sendable {
 
         // Autocorrect or smart punctuation may have changed the keys; a paste is taken
         // as it is. Safe to do once, unlike a tap: it leaves the same text in the field.
-        guard clear(on: input) else { return .failed("couldn't send a key to \(name)") }
+        guard clear(on: keyboard) else { return .failed("couldn't send a key to \(name)") }
         if let failure = await paste() { return failure }
         return outcome(readBack())
     }
@@ -147,11 +150,11 @@ struct Fill: Equatable, Sendable {
 
     /// Select all, then delete. Always, because an empty field reads as its placeholder,
     /// so what a field shows can't say whether it's empty.
-    private func clear(on input: any Input) -> Bool {
+    private func clear(on keyboard: any Key) -> Bool {
         guard let selectAll = KeyboardKey.from(wireCode: "KeyA"), let delete = KeyboardKey.from(wireCode: "Backspace")
         else { return false }
-        return selectAll.press(modifiers: [.command], duration: TypeText.keyHold, on: input)
-            && delete.press(duration: TypeText.keyHold, on: input)
+        return selectAll.press(modifiers: [.command], duration: TypeText.keyHold, on: keyboard)
+            && delete.press(duration: TypeText.keyHold, on: keyboard)
     }
 }
 

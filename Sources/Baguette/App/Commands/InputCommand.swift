@@ -53,18 +53,18 @@ struct InputCommand: AsyncParsableCommand {
     func run() async throws {
         let device = try options.device()
         // Only a simulator has an input surface Device Hub can shadow.
-        let simulator = CoreSimulators(deviceSetPath: options.deviceSet).find(udid: options.udid)
-        // Gestures go to the planned plane's Input; pasteboard is a
+        let surface = try? device.require(.inputSurface)
+        // Gestures go to the planned plane's input; pasteboard is a
         // device-level role on the device itself.
         let plan: StreamDisplayPlan
-        let input: any Input
+        let input: Abilities
         let screenGuard: InputScreenGuard?
         do {
             plan = try StreamDisplayPlan.from(cliFlag: display, requireExistingDisplay: requireExistingDisplay)
             if let expectedScreen {
                 let checked = try orExit { try device.require(.displays) }
                     .phone.input(expected: ExpectedScreen(json: expectedScreen))
-                input = checked.input
+                input = .input(of: device.name, all: checked.input)
                 screenGuard = checked.screenGuard
             } else {
                 input = try orExit { try plan.input(on: device) }
@@ -96,8 +96,8 @@ struct InputCommand: AsyncParsableCommand {
         // under Xcode 27, Device Hub can leave every gesture below
         // reporting ok while landing nowhere. Advise; the restart that
         // fixes it is the user's call mid-session.
-        if let simulator, await SimctlInputSurface().shadowed(on: simulator),
-           let advisory = DeviceHubAttachment(attached: true).advisory(udid: simulator.udid) {
+        if let surface, await surface.shadowed(),
+           let advisory = DeviceHubAttachment(attached: true).advisory(udid: device.id.raw) {
             warn(advisory)
         }
         log("Input session started, reading from stdin")
@@ -110,10 +110,7 @@ struct InputCommand: AsyncParsableCommand {
                 print(result)
             } else if let result = await FillDispatch.dispatch(
                 line: line, accessibility: accessibility, pasteboard: pasteboard, input: input,
-                inputTaken: {
-                    guard let simulator else { return false }
-                    return await SimctlInputSurface().shadowed(on: simulator)
-                }
+                inputTaken: { await surface?.shadowed() ?? false }
             ) {
                 print(result)
             } else if let result = LabelTap.dispatch(

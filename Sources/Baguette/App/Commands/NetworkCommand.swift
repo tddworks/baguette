@@ -115,16 +115,16 @@ struct NetworkCommand: ParsableCommand {
         @OptionGroup var condition: ConditionOptions
 
         func run() async throws {
-            let simulator = try NetworkCommand.resolve(options)
+            let (device, network) = try options.require(.network)
             // `validate()` guarantees this.
             let applied = condition.condition ?? .unconditioned
             do {
-                try await simulator.network().apply(applied, on: simulator)
+                try await network.apply(applied)
             } catch {
                 log("network set failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Network conditioned on \(simulator.name): \(applied.summary). "
+            log("Network conditioned on \(device.name): \(applied.summary). "
                 + "Relaunch the app to pick it up.")
         }
     }
@@ -139,14 +139,14 @@ struct NetworkCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulator = try NetworkCommand.resolve(options)
+            let (device, network) = try options.require(.network)
             do {
-                try await simulator.network().clear(on: simulator)
+                try await network.clear()
             } catch {
                 log("network clear failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Network conditioning cleared on \(simulator.name)")
+            log("Network conditioning cleared on \(device.name)")
         }
     }
 
@@ -166,17 +166,13 @@ struct NetworkCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulator = try NetworkCommand.resolve(options)
-            guard let applied = try await simulator.network().current(on: simulator) else {
-                log("\(simulator.name): no network conditioning applied.")
+            let (device, network) = try options.require(.network)
+            guard let applied = try await network.current() else {
+                log("\(device.name): no network conditioning applied.")
                 return
             }
-            log("\(simulator.name) network: \(applied.summary)")
+            log("\(device.name) network: \(applied.summary)")
         }
-    }
-
-    private static func resolve(_ options: DeviceOption) throws -> any Simulator {
-        try options.simulator(for: .network)
     }
 }
 

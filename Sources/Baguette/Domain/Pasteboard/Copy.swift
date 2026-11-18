@@ -45,11 +45,11 @@ struct Copy: Equatable, Sendable {
     /// copied — so the return value carries the keystroke's success
     /// (`true` when `press` is false) while the host clipboard is left
     /// holding the sim's pasteboard regardless.
-    func execute(pasteboard: any Pasteboard, input: any Input) async throws -> Bool {
+    func execute(pasteboard: any Pasteboard, input: Abilities) async throws -> Bool {
         var pressed = true
         if press {
             pressed = KeyboardKey.from(wireCode: "KeyC")!
-                .press(modifiers: [.command], on: input)
+                .press(modifiers: [.command], on: try input.require(.key))
             if settleNanos > 0 {
                 try? await Task.sleep(nanoseconds: settleNanos)
             }

@@ -22,12 +22,12 @@ struct GestureRegistryTests {
 
     @Test func `should read a button envelope as a press`() throws {
         let g = try GestureRegistry.standard.parse(["type": "button", "button": "home"])
-        #expect(g is Press)
+        #expect(g is ButtonPress)
     }
 
     @Test func `should read a scroll envelope by its wire type`() throws {
         let g = try GestureRegistry.standard.parse(["type": "scroll", "deltaX": 5, "deltaY": -2])
-        #expect(g is Scroll)
+        #expect(g is WheelEvent)
     }
 
     @Test func `should read a pinch envelope by its wire type`() throws {

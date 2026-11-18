@@ -144,7 +144,7 @@ extension KeyboardKey {
     /// Press-and-release this key with optional modifiers held.
     /// Adapter sends modifier-down → key-down → key-up → modifier-up.
     @discardableResult
-    func press(modifiers: Set<KeyModifier> = [], duration: Double = 0, on input: any Input) -> Bool {
-        input.key(self, modifiers: modifiers, duration: duration)
+    func press(modifiers: Set<KeyModifier> = [], duration: Double = 0, on keyboard: any Key) -> Bool {
+        keyboard.key(self, modifiers: modifiers, duration: duration)
     }
 }

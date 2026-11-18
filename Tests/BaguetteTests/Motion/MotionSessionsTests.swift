@@ -18,8 +18,8 @@ struct MotionSessionsTests {
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let motion = MockMotion()
-        given(motion).publish(.any, on: .any).willReturn(())
-        given(motion).clear(on: .any).willReturn(())
+        given(motion).publish(.any).willReturn(())
+        given(motion).clear().willReturn(())
         return (MotionSessions(makeMotion: { _ in motion }), sim)
     }
 

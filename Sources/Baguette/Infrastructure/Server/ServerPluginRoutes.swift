@@ -227,7 +227,7 @@ extension Server {
         udid: String, body: String, simulators: any Simulators
     ) async -> InputOutcome {
         guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
-        let input = sim.input()
+        let input = Abilities.input(of: sim.name, all: sim.input())
         let ack = await MainActor.run {
             GestureDispatcher(input: input).dispatch(line: body)
         }

@@ -58,14 +58,14 @@ struct StreamDisplayPlanBindTests {
     @Test func `should bind the phone screen and input without touching external displays`() throws {
         let sim = MockSimulator()
         let screen = MockScreen()
-        let input = MockInput()
+        let input = InputMocks()
         given(sim).screen().willReturn(screen)
         given(sim).input().willReturn(input)
 
         let bound = try StreamDisplayPlan(kind: .phone, enableCarPlay: false).bind(to: sim)
 
         #expect(bound.screen as? MockScreen === screen)
-        #expect(bound.input as? MockInput === input)
+        #expect(bound.input as? InputMocks === input)
         verify(sim).externalDisplays().called(0)
         verify(sim).displays().called(0)
     }
@@ -79,7 +79,7 @@ struct StreamDisplayPlanBindTests {
         let displays = MockDisplays()
         let display = MockDisplay()
         let screen = MockScreen()
-        let input = MockInput()
+        let input = InputMocks()
         given(sim).displays().willReturn(displays)
         given(displays).panel(.value(.secondary)).willReturn(display)
         given(display).screen().willReturn(screen)
@@ -90,7 +90,7 @@ struct StreamDisplayPlanBindTests {
         let bound = try plan.bind(to: sim)
 
         #expect(bound.screen as? MockScreen === screen)
-        #expect(bound.input as? MockInput === input)
+        #expect(bound.input as? InputMocks === input)
         verify(sim).screen().called(0)
     }
 
@@ -108,7 +108,7 @@ struct StreamDisplayPlanBindTests {
         let displays = MockDisplays()
         let carPlay = MockDisplay()
         let screen = MockScreen()
-        let input = MockInput()
+        let input = InputMocks()
         let binding = DisplayBinding(
             kind: .carPlay,
             connectedScreenId: 2,
@@ -126,7 +126,7 @@ struct StreamDisplayPlanBindTests {
         let bound = try StreamDisplayPlan(kind: .carPlay, enableCarPlay: true).bind(to: sim)
 
         #expect(bound.screen as? MockScreen === screen)
-        #expect(bound.input as? MockInput === input)
+        #expect(bound.input as? InputMocks === input)
         verify(external).enableCarPlay().called(1)
         verify(carPlay).resolve().called(1)
         verify(sim).screen().called(0)

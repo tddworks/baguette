@@ -123,41 +123,41 @@ struct KeyboardKeyDecomposeTests {
 @Suite("Key")
 struct KeyGestureTests {
     @Test func `should read a key press with no modifiers and no hold`() throws {
-        let g = try Key.parse(["code": "KeyA"])
+        let g = try Keystroke.parse(["code": "KeyA"])
         #expect(g.key == KeyboardKey.from(wireCode: "KeyA"))
         #expect(g.modifiers == [])
         #expect(g.duration == 0)
     }
 
     @Test func `should read a key press's modifiers`() throws {
-        let g = try Key.parse(["code": "KeyA", "modifiers": ["shift", "command"]])
+        let g = try Keystroke.parse(["code": "KeyA", "modifiers": ["shift", "command"]])
         #expect(g.modifiers == Set([.shift, .command]))
     }
 
     @Test func `should read a key press's hold duration`() throws {
-        let g = try Key.parse(["code": "Enter", "duration": 0.5])
+        let g = try Keystroke.parse(["code": "Enter", "duration": 0.5])
         #expect(g.duration == 0.5)
     }
 
     @Test func `should reject a key press when the key code is unknown`() {
         #expect(throws: GestureError.self) {
-            try Key.parse(["code": "F13"])
+            try Keystroke.parse(["code": "F13"])
         }
     }
 
     @Test func `should reject a key press when a modifier is unknown`() {
         #expect(throws: GestureError.self) {
-            try Key.parse(["code": "KeyA", "modifiers": ["meta"]])
+            try Keystroke.parse(["code": "KeyA", "modifiers": ["meta"]])
         }
     }
 
     @Test func `should press the key on the simulator with its modifiers and hold`() {
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
         let key = KeyboardKey.from(wireCode: "KeyA")!
-        _ = Key(key: key, modifiers: [.shift], duration: 0.1).execute(on: input)
-        verify(input).key(
+        _ = Keystroke(key: key, modifiers: [.shift], duration: 0.1).execute(on: input)
+        verify(input.key).key(
             .value(key),
             modifiers: .value([.shift]),
             duration: .value(0.1)
@@ -178,21 +178,21 @@ struct TypeTextGestureTests {
     }
 
     @Test func `should hold each typed key for 30 ms`() {
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
         _ = TypeText(text: "aB").execute(on: input)
 
-        verify(input).key(.any, modifiers: .any, duration: .value(0.03)).called(2)
+        verify(input.key).key(.any, modifiers: .any, duration: .value(0.03)).called(2)
     }
 
     @Test func `should keep a single key press at its own hold`() throws {
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
-        _ = try Key.parse(["code": "KeyA"]).execute(on: input)
+        _ = try Keystroke.parse(["code": "KeyA"]).execute(on: input)
 
-        verify(input).key(.any, modifiers: .any, duration: .value(0)).called(1)
+        verify(input.key).key(.any, modifiers: .any, duration: .value(0)).called(1)
     }
 
     @Test func `should read the text to type`() throws {
@@ -213,25 +213,25 @@ struct TypeTextGestureTests {
     }
 
     @Test func `should type text as one key press per character`() {
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
         let keyA = KeyboardKey.from(wireCode: "KeyA")!
         _ = TypeText(text: "Aa").execute(on: input)
 
-        verify(input).key(
+        verify(input.key).key(
             .value(keyA), modifiers: .value([.shift]), duration: .any
         ).called(1)
-        verify(input).key(
+        verify(input.key).key(
             .value(keyA), modifiers: .value([]), duration: .any
         ).called(1)
     }
 
     @Test func `should succeed without pressing anything when the text is empty`() {
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
         #expect(TypeText(text: "").execute(on: input) == true)
-        verify(input).key(.any, modifiers: .any, duration: .any).called(0)
+        verify(input.key).key(.any, modifiers: .any, duration: .any).called(0)
     }
 }

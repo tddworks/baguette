@@ -30,12 +30,12 @@ struct DisplaysTests {
     @Test func `should take screen and input from the same display`() {
         let display = MockDisplay()
         let screen = MockScreen()
-        let input = MockInput()
+        let input = InputMocks()
         given(display).screen().willReturn(screen)
         given(display).input().willReturn(input)
 
         #expect(display.screen() as? MockScreen === screen)
-        #expect(display.input() as? MockInput === input)
+        #expect(display.input() as? InputMocks === input)
     }
 
     @Test func `should look up the phone and carPlay displays by kind`() {

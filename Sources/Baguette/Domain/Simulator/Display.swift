@@ -21,7 +21,7 @@ protocol Display: Sendable {
 
     /// Fresh Input whose digitizer target is derived from
     /// `binding.connectedScreenId` (never a hard-coded CarPlay constant).
-    func input() -> any Input
+    func input() -> any HID
 
     /// The screen an observation describes right now: native panel
     /// points, the observed interface orientation and the connected
@@ -37,13 +37,13 @@ protocol Display: Sendable {
     /// against the expectation, and re-observed by the guard before each
     /// contact goes down or moves. A contact always lifts on the binding
     /// that received it.
-    func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard)
+    func input(expected: ExpectedScreen) throws -> (input: any HID, screenGuard: InputScreenGuard)
 }
 
 extension Display {
     func observedScreen() throws -> AXScreen { throw ObservedScreenError.unavailable }
     func recheckedScreen() throws -> AXScreen { try observedScreen() }
-    func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard) {
+    func input(expected: ExpectedScreen) throws -> (input: any HID, screenGuard: InputScreenGuard) {
         throw ObservedScreenError.unavailable
     }
 }

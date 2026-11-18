@@ -491,12 +491,12 @@ extension Server {
         outbound: WebSocketOutboundWriter
     ) async {
         let screen: any Screen
-        let input: (any Input)?
+        let input: Abilities?
         let accessibility: (any Accessibility)?
         do {
             let device = try devices.device(DeviceID(udid))
             screen = try device.require(.screen)
-            input = try? device.require(.input)
+            input = try? device.input()
             accessibility = try? device.require(.accessibility)
         } catch {
             try? await outbound.write(.text(Self.twinErrorFrame(String(describing: error))))

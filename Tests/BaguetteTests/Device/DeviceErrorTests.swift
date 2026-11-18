@@ -38,7 +38,10 @@ struct DeviceErrorTests {
 
     @Test func `should need a running device for an ability that drives its screen`() {
         #expect(Ability<any Screen>.screen.needsReady)
-        #expect(Ability<any Input>.input.needsReady)
+        #expect(Ability<any Touch>.touch.needsReady)
+        #expect(Ability<any Press>.press.needsReady)
+        #expect(Ability<any Key>.key.needsReady)
+        #expect(Ability<any Scroll>.scroll.needsReady)
         #expect(Ability<any Displays>.displays.needsReady)
         #expect(Ability<any Hinge>.hinge.needsReady)
         #expect(Ability<any Orientation>.orientation.needsReady)

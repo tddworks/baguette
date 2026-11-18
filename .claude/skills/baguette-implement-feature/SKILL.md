@@ -21,13 +21,15 @@ description: |
 
 baguette is a **CLI + WebSocket server**, not a SwiftUI app. There is no
 ViewModel layer, no async actors in the input path — gestures are
-synchronous `Bool`-returning calls into the `@Mockable` `Input`
-abstraction whose only concrete adapter is `IndigoHIDInput`. The frontend
+synchronous `Bool`-returning calls into one of four `@Mockable` input
+roles — `Touch`, `Press`, `Key`, `Scroll` — each a device ability.
+A simulator's `IndigoHIDInput` plays all four (its `HID`); a phone on a
+cable plays `Touch` only and registers nothing else. The frontend
 is hand-written vanilla JS IIFEs (no bundler) that talk to the server
 via one WebSocket per stream.
 
 **Naming abstractions**: every `@Mockable protocol` in this codebase is
-a **domain noun for the role it plays** — `Input`, `Screen`,
+a **domain noun for the role it plays** — `Touch`, `Key`, `Screen`,
 `Accessibility`, `LogStream`, `DeviceHost`, `Subprocess`, `Chromes`,
 `Simulators`. The pattern-label suffixes **"Port" / "Service" /
 "Manager" never appear**. If you reach for `XxxPort`, the abstraction
@@ -97,7 +99,7 @@ tree, the words, every law and its one owner, the contexts — then answer:
 | Which context owns the question it answers? (CANONICAL §5) | the files go in `Domain/<Context>/`, `Infrastructure/<Family>/<Context>/` (`Simulator/`, `CoreDevice/`, `Companion/`; `Host/` for what every family shares — families never reference each other), `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
 | Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; the App only parses and calls it |
 | Does it add or change a law? (CANONICAL §3) | it gets **one** owner — the node that holds the data. Grep for the rule first: if it's already written somewhere, that's the owner, or the duplicate to remove |
-| Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `AbilityTable` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |
+| Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `Abilities` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |
 | Does what differ between devices become a branch? | make it data: profile, chrome, model, a registration table |
 
 When the doc doesn't cover it, write the change into CANONICAL_MODEL.md first
@@ -182,15 +184,18 @@ Patterns that already exist — match them:
 - **Rich domain methods** — verbs live on the value:
   ```swift
   extension DeviceButton {
-      func press(duration: Double = 0, on input: any Input) -> Bool {
-          input.button(self, duration: duration)
+      func press(duration: Double = 0, on buttons: any Press) -> Bool {
+          buttons.button(self, duration: duration)
       }
   }
   ```
-- **Gesture protocol** — a domain value (a tap, a press) that parses
-  itself from the wire: `static let wireType` + `static func parse` +
-  `func execute(on input: any Input)`. The body of `execute` should be
-  one line that delegates to a rich-domain method.
+- **Gesture protocol** — one act of one input ability (a tap, a
+  keystroke, a button press) that parses itself from the wire:
+  `static let wireType` + `static func parse` + `static var ability`
+  (the role it needs: `.touch`, `.press`, `.key`, `.scroll`) +
+  `func execute(on role:)`. The body of `execute` should be one line that
+  delegates to a rich-domain method. Name the act for what it is
+  (`Keystroke`, `ButtonPress`, `WheelEvent`), never the ability's name.
 - **Field extractors** — use `Field.requiredString` / `requiredDouble`
   / `optionalDouble`. Don't open-code `dict["…"] as? Double`.
 
@@ -214,19 +219,21 @@ Run `swift test --filter <Suite>` after each red→green cycle.
 companions; tests substitute the mock and assert on returned state:
 
 ```swift
-let input = MockInput()
-given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+let keyboard = MockKey()
+given(keyboard).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
-KeyboardKey.from(wireCode: "KeyA")!.press(modifiers: [.shift], on: input)
-verify(input).key(.value(_), modifiers: .value([.shift]), duration: .value(0))
+KeyboardKey.from(wireCode: "KeyA")!.press(modifiers: [.shift], on: keyboard)
+verify(keyboard).key(.any, modifiers: .value([.shift]), duration: .value(0))
     .called(1)
 ```
 
 If the feature needs a new method on an existing abstraction, add it
 to the protocol with a doc comment, then update the production
 adapter. **Do not** introduce a parallel hierarchy just to enable
-testing — each family has one `Input` (`IndigoHIDInput` for a simulator,
-`DigitizerInput` for a phone), and that's all there needs to be.
+testing — each family has one adapter per role it plays (`IndigoHIDInput`
+for all four on a simulator, `DigitizerTouch` for a phone's `Touch`), and
+that's all there needs to be. A role a device can't play is not registered,
+never implemented as `false`.
 
 ### Adapter wraps 3rd-party I/O? Pick the split.
 
@@ -433,15 +440,15 @@ not the flag table — `make docs` writes that).
   can't implement a feature, fail loudly with a parse error — silent
   drops mid-string are worse than an explicit `{"ok":false,"error":"…"}`.
 - **Adding a Mockable abstraction with one concrete impl just for
-  testing.** One `Input` per family (`IndigoHIDInput`, `DigitizerInput`)
-  is enough; don't invent a parallel hierarchy. The exception is the
+  testing.** One adapter per role a family plays (`IndigoHIDInput`,
+  `DigitizerTouch`) is enough; don't invent a parallel hierarchy. The exception is the
   orchestrator + collaborator split for 3rd-party I/O — there the
   collaborator (`Subprocess`) earns its `MockSubprocess` because the
   state machine is real.
 - **Naming an abstraction `XxxPort` / `XxxService` / `XxxManager`,
   or suffixing aggregate persistence with `XxxRepository`.** These
   are pattern labels, not domain nouns. The codebase uses role-named
-  protocols (`Input`, `Screen`, `Accessibility`, `LogStream`,
+  protocols (`Touch`, `Key`, `Screen`, `Accessibility`, `LogStream`,
   `DeviceHost`, `Subprocess`). For aggregate CRUD specifically, use
   the **plural collection noun** (`Simulators`, `Chromes`, `Books`)
   — not `BookRepository`. If the noun isn't obvious, the abstraction

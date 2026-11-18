@@ -49,7 +49,7 @@ protocol Simulator: Sendable {
     /// Dispatch gestures to this simulator.
     /// Legacy phone alias — equivalent to `displays().phone.input()`
     /// once Infra wires the display aggregate.
-    func input() -> any Input
+    func input() -> any HID
 
     /// Display planes for this simulator (phone + CarPlay aggregates).
     func displays() -> any Displays
@@ -108,6 +108,10 @@ protocol Simulator: Sendable {
     /// a fresh handle; the state lives in the published condition file, not
     /// the handle.
     func network() -> any Network
+
+    /// The input surface Device Hub can take over in this simulator, and
+    /// its repair (`heal`).
+    func inputSurface() -> any InputSurface
 
     /// This simulator's shared pasteboard — set plain text, read it
     /// back, or sync the host Mac's full pasteboard across (images
@@ -228,7 +232,7 @@ extension Simulator {
 
     /// Input for a foldable's live page, whose socket outlives a fold:
     /// each gesture goes to the panel the hinge lights when it starts.
-    func litPanelInput() -> any Input {
+    func litPanelInput() -> any HID {
         LitPanelInput(
             cover: displays().panel(.primary).input(),
             unfolded: displays().panel(.secondary).input(),

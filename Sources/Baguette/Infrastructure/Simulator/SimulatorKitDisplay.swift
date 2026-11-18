@@ -116,7 +116,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
     /// resolved once and never re-derived for a contact that is already
     /// down; the guard decides before each `down` and `move` whether a
     /// fresh observation still matches.
-    func input(expected: ExpectedScreen) throws -> (input: any Input, screenGuard: InputScreenGuard) {
+    func input(expected: ExpectedScreen) throws -> (input: any HID, screenGuard: InputScreenGuard) {
         let observed = try observedBinding()
         try expected.requireMatches(observed.screen)
         let screenGuard = InputScreenGuard(expected: expected) { [self] in
@@ -166,7 +166,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
     /// On a foldable the hardware keys go to the guest as well — the
     /// legacy press lands on a touchscreen service there and SpringBoard
     /// ignores it — so the panel's input is wrapped in `FoldableInput`.
-    func input() -> any Input {
+    func input() -> any HID {
         let panel = boundPanelScreenId()
         let target = DisplayTouchTarget.resolve(
             kind: kind,

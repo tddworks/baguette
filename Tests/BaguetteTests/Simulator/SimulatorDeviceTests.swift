@@ -30,13 +30,28 @@ struct SimulatorDeviceTests {
         #expect(device.kind.platform == .iOS)
     }
 
+    @Test func `should play every input role on a screen with one HID, so a keystroke rides the services the gestures warmed`() throws {
+        let sim = simulator(state: .booted)
+        let made = HIDsMade()
+        given(sim).input().willProduce { made.count += 1; return InputMocks() }
+        let device = SimulatorDevice(sim)
+
+        let screen = try device.input()
+        _ = try screen.require(.touch)
+        _ = try screen.require(.press)
+        _ = try screen.require(.key)
+        _ = try screen.require(.scroll)
+
+        #expect(made.count == 1)
+    }
+
     @Test func `should register every simulator role as an ability`() {
         let device = SimulatorDevice(simulator())
 
         #expect(device.abilities.names == [
-            "lifecycle", "screen", "input", "displays", "hinge", "externalDisplays",
+            "lifecycle", "screen", "touch", "press", "key", "scroll", "displays", "hinge", "externalDisplays",
             "accessibility", "logs", "orientation", "statusBar", "interface", "location",
-            "motion", "network", "pasteboard", "apps", "defaults", "photos", "shake",
+            "motion", "network", "inputSurface", "pasteboard", "apps", "defaults", "photos", "shake",
             "watchPairing",
         ])
     }
@@ -104,4 +119,8 @@ private func simulator(
     given(sim).runtime.willReturn(runtime)
     given(sim).deviceTypeName.willReturn("iPhone 17 Pro")
     return sim
+}
+
+private final class HIDsMade: @unchecked Sendable {
+    var count = 0
 }

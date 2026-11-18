@@ -18,7 +18,9 @@ struct Swipe: Gesture, Equatable {
         )
     }
 
-    func execute(on input: any Input) -> Bool {
-        input.swipe(from: from, to: to, size: size, duration: duration)
+    static var ability: Ability<any Touch> { .touch }
+
+    func execute(on touch: any Touch) -> Bool {
+        touch.swipe(from: from, to: to, size: size, duration: duration)
     }
 }

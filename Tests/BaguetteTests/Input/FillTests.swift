@@ -43,12 +43,12 @@ private final class Stage: @unchecked Sendable {
         return ax
     }
 
-    func input() -> MockInput {
+    func input() -> InputMocks {
         let cmdA = KeyboardKey.from(wireCode: "KeyA")!
         let cmdV = KeyboardKey.from(wireCode: "KeyV")!
         let backspace = KeyboardKey.from(wireCode: "Backspace")!
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willProduce { key, modifiers, _ in
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willProduce { key, modifiers, _ in
             if key == cmdA, modifiers == [.command] {
                 self.events.append("select all")
             } else if key == cmdV, modifiers == [.command] {
@@ -64,7 +64,7 @@ private final class Stage: @unchecked Sendable {
             }
             return true
         }
-        given(input).tap(at: .any, size: .any, duration: .any, edge: .any).willProduce { _, _, _, _ in
+        given(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willProduce { _, _, _, _ in
             self.events.append("touch")
             if self.touchFocuses { self.focused = true }
             return true
@@ -83,7 +83,7 @@ private final class Stage: @unchecked Sendable {
 
     func fill(_ text: String, into label: String = "email") async -> FillOutcome {
         await Fill(label: label, text: text).execute(
-            accessibility: accessibility(), pasteboard: pasteboard(), input: input(), timing: .immediate,
+            accessibility: accessibility(), pasteboard: pasteboard(), input: input().abilities, timing: .immediate,
             inputTaken: { self.askedAboutInput += 1; return self.inputTaken })
     }
 }
@@ -306,13 +306,13 @@ struct FillTests {
 
     @Test func `should report a failure when a key can't be sent`() async {
         let stage = Stage()
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(false)
-        given(input).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(false)
+        given(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
         stage.focused = true
 
         let outcome = await Fill(label: "email", text: "gary").execute(
-            accessibility: stage.accessibility(), pasteboard: stage.pasteboard(), input: input, timing: .immediate)
+            accessibility: stage.accessibility(), pasteboard: stage.pasteboard(), input: input.abilities, timing: .immediate)
 
         guard case .failed = outcome else {
             Issue.record("expected failed, got \(outcome)")

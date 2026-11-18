@@ -7,7 +7,7 @@ description: Why iPhone Duo's hinge and hardware keys are driven by a guest-side
 ## Path
 
 - **Drive:** `baguette hinge` / `POST /simulators/<udid>/hinge` / 3D socket `set_pose` → `Hinge.fold(to:over:)` (`HingeMotor`) → `GuestHingeMotor` → `xcrun simctl spawn <udid> <HingeControl> serve` (one per device, kept) → `HIDVirtualEventService` vendor event on an `avpCustom`-shaped service.
-- **Keys:** `baguette press` / `key` / `type` / `POST …/input` / stream sockets → a foldable's `Input` is `FoldableInput` → `DeviceKeys` (also played by `GuestHingeMotor`) → `HingeControl button <page> <usage> <ms> [<page> <usage>]…` on a `mainScreenButtons`-shaped service.
+- **Keys:** `baguette press` / `key` / `type` / `POST …/input` / stream sockets → a foldable's `HID` is `FoldableInput` → `DeviceKeys` (also played by `GuestHingeMotor`) → `HingeControl button <page> <usage> <ms> [<page> <usage>]…` on a `mainScreenButtons`-shaped service.
 - **Read:** `GuestHinge` → `xcrun simctl spawn <udid> <HingeControl> read-angle` (or `watch-angle`) → CoreMotion's `CMAngleManager` in the guest.
 
 ## How the hinge is driven
@@ -173,7 +173,7 @@ second. Measured with the same monitor, one click each in Device Hub:
 `HingeControl` registers a second service of that shape and presses
 them: `button <page> <usage> <ms>`. On the host, `DeviceKeys` is the
 domain role (`GuestHingeMotor` plays it as well, one serving child per
-device), and a foldable's `Input` is `FoldableInput`: touches go to the
+device), and a foldable's `HID` is `FoldableInput`: touches go to the
 lit panel's digitizer as before, and a `DeviceButton` with a Device Hub
 key (`power`, `lock`, `volume-up`, `volume-down`, `action`) goes to the
 guest, held `duration` seconds or Device Hub's 0.25 s. The CLI, the

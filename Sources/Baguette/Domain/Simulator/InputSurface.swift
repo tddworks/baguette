@@ -16,21 +16,21 @@ protocol InputSurface: AnyObject, Sendable {
     /// Whether Device Hub has attached to this simulator during the
     /// current boot. Not throwing: a device that is shut down, or a host
     /// without Device Hub at all, simply isn't shadowed.
-    func shadowed(on simulator: any Simulator) async -> Bool
+    func shadowed() async -> Bool
 
     /// Wait until the surface exists — SpringBoard is running in the
     /// guest. `Simulator.boot()` returns as soon as the device *state*
     /// flips, seconds before backboardd, Device Hub's daemon, or
     /// SpringBoard are up; asking `shadowed` before then reads a state
     /// nobody has set yet. Throws if the guest never gets there.
-    func ready(on simulator: any Simulator) async throws
+    func ready() async throws
 
     /// Take the surface back: convince backboardd Device Hub is absent
     /// and restart it, so its `SimulatorHID` re-initialises with every
     /// legacy service live — Device Hub's own services re-register
     /// alongside, unaffected. SpringBoard restarts with backboardd, so
     /// **running apps are killed**; returns once SpringBoard is back.
-    func reclaim(on simulator: any Simulator) async throws
+    func reclaim() async throws
 }
 
 extension InputSurface {
@@ -38,18 +38,18 @@ extension InputSurface {
     /// what `baguette boot` runs once the device is up (nothing is
     /// running yet, so the restart costs nothing) and what `baguette
     /// heal` runs on demand.
-    func heal(on simulator: any Simulator) async throws -> HealOutcome {
-        guard await shadowed(on: simulator) else { return .unshadowed }
-        try await reclaim(on: simulator)
+    func heal() async throws -> HealOutcome {
+        guard await shadowed() else { return .unshadowed }
+        try await reclaim()
         return .reclaimed
     }
 
     /// `heal`, but first let the freshly booted guest finish coming up —
     /// otherwise the shadow check runs before Device Hub has attached and
     /// answers "fine" about a surface that is about to be taken.
-    func healAfterBoot(on simulator: any Simulator) async throws -> HealOutcome {
-        try await ready(on: simulator)
-        return try await heal(on: simulator)
+    func healAfterBoot() async throws -> HealOutcome {
+        try await ready()
+        return try await heal()
     }
 }
 

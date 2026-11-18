@@ -7,8 +7,8 @@ description: How keystrokes reach the simulator — IndigoHIDMessageForHIDArbitr
 ## Path
 
 `baguette key` / `baguette type` / wire `key` · `type` / browser
-`KeyboardCapture` → `Key` and `TypeText` gestures →
-`Input.key(_:modifiers:duration:)` → `IndigoHIDInput.key` →
+`KeyboardCapture` → `Keystroke` and `TypeText` acts on the `Key` ability →
+`Key.key(_:modifiers:duration:)` → `IndigoHIDInput.key` →
 `IndigoHIDMessageForHIDArbitrary(target, page 7, usage, operation)`.
 
 `type` text is decomposed into `(KeyboardKey, modifiers)` pairs at
@@ -30,7 +30,7 @@ It stays above the floor because `type` has no read-back to catch a dropped key;
 
 ## Dispatch — one path
 
-Both `Key` and `TypeText` route through the same
+Both `Keystroke` and `TypeText` route through the same
 `IndigoHIDMessageForHIDArbitrary(target, page, usage, operation)`
 recipe as the bezel buttons ([Buttons](../buttons/README.md) — same
 SimulatorKit symbol family, different HID page). iOS 26 signature:

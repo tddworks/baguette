@@ -12,11 +12,11 @@ description: How paste and copy reach the simulator's pasteboard — the devicec
                                              └► SimctlPasteboard ─► xcrun devicectl device pasteboard copy --device <udid>
                                                                     (non-zero → xcrun simctl pbcopy <udid>; text over stdin)
                                           2. press? KeyV + [command]
-                                             └► Input.key ─► IndigoHIDMessageForHIDArbitrary     (page 7, usage 0x19)
+                                             └► Key.key ───► IndigoHIDMessageForHIDArbitrary     (page 7, usage 0x19)
 
 {"type":"copy",…}   ─► CopyDispatch  ─► Copy.execute(pasteboard:input:)
                                           1. press? KeyC + [command]
-                                             └► Input.key ─► IndigoHIDMessageForHIDArbitrary     (page 7, usage 0x06)
+                                             └► Key.key ───► IndigoHIDMessageForHIDArbitrary     (page 7, usage 0x06)
                                           2. settle ~200ms, then Pasteboard.syncToHost()
                                              └► SimctlPasteboard ─► xcrun simctl pbsync <udid> host
 ```
@@ -29,7 +29,7 @@ description: How paste and copy reach the simulator's pasteboard — the devicec
 
 `paste` is **not** a `Gesture` and is not in `GestureRegistry`:
 setting the pasteboard is an async host call, out of reach of the
-sync, `Input`-only `Gesture.execute`. Both wire entry points
+sync, role-only `Gesture.execute`. Both wire entry points
 intercept `paste` lines ahead of the gesture pipeline (the
 `describe_ui` shape) via one shared `App/PasteDispatch`.
 

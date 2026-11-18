@@ -15,11 +15,11 @@ import Mockable
 @Suite("CopyDispatch")
 struct CopyDispatchTests {
 
-    private func surfaces() -> (MockPasteboard, MockInput) {
+    private func surfaces() -> (MockPasteboard, InputMocks) {
         let pasteboard = MockPasteboard()
-        let input = MockInput()
+        let input = InputMocks()
         given(pasteboard).syncToHost().willReturn(())
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
         return (pasteboard, input)
     }
 
@@ -34,7 +34,7 @@ struct CopyDispatchTests {
             #"{"no_type":true}"#,
         ] {
             let outcome = await CopyDispatch.dispatch(
-                line: line, pasteboard: pasteboard, input: input
+                line: line, pasteboard: pasteboard, input: input.abilities
             )
             #expect(outcome == .notCopy)
         }
@@ -44,20 +44,20 @@ struct CopyDispatchTests {
     @Test func `should press Cmd+C, copy the simulator pasteboard to the host and ack ok for a copy line`() async {
         let (pasteboard, input) = surfaces()
         let outcome = await CopyDispatch.dispatch(
-            line: #"{"type":"copy"}"#, pasteboard: pasteboard, input: input
+            line: #"{"type":"copy"}"#, pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .ok)
-        verify(input).key(.any, modifiers: .value([.command]), duration: .any).called(1)
+        verify(input.key).key(.any, modifiers: .value([.command]), duration: .any).called(1)
         verify(pasteboard).syncToHost().called(1)
     }
 
     @Test func `should copy to the host without a keystroke when press is false`() async {
         let (pasteboard, input) = surfaces()
         let outcome = await CopyDispatch.dispatch(
-            line: #"{"type":"copy","press":false}"#, pasteboard: pasteboard, input: input
+            line: #"{"type":"copy","press":false}"#, pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .ok)
-        verify(input).key(.any, modifiers: .any, duration: .any).called(0)
+        verify(input.key).key(.any, modifiers: .any, duration: .any).called(0)
         verify(pasteboard).syncToHost().called(1)
     }
 
@@ -68,20 +68,20 @@ struct CopyDispatchTests {
         given(sim).input().willReturn(input)
 
         let outcome = await CopyDispatch.dispatch(
-            line: #"{"type":"copy"}"#, pasteboard: sim.pasteboard(), input: sim.input()
+            line: #"{"type":"copy"}"#, pasteboard: sim.pasteboard(), input: .input(of: "iPhone 17", all: sim.input())
         )
         #expect(outcome == .ok)
     }
 
     @Test func `should report a simctl failure when copying`() async {
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
         let pasteboard = MockPasteboard()
         given(pasteboard).syncToHost()
             .willThrow(PasteboardError.simctlFailed(status: 1))
 
         let outcome = await CopyDispatch.dispatch(
-            line: #"{"type":"copy","press":false}"#, pasteboard: pasteboard, input: input
+            line: #"{"type":"copy","press":false}"#, pasteboard: pasteboard, input: input.abilities
         )
         #expect(outcome == .failed("xcrun simctl pasteboard command exited 1"))
     }

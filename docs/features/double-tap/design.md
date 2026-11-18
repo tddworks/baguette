@@ -7,7 +7,7 @@ description: Why baguette's double-tap is four touch1 events sequenced in one pr
 ## Path
 
 - `baguette double-tap` → an App-layer sequencer (`DoubleTapCommand.dispatch`)
-  → the `Touch1` dispatcher → `Input` → `IndigoHIDInput`, four times, with
+  → the `Touch1` act → `Touch` → `IndigoHIDInput`, four times, with
   `Thread.sleep` between events.
 - The wire has no envelope of its own: `baguette input` and the stream
   WebSocket already carry `touch1-down` / `touch1-up`, and a browser
@@ -27,21 +27,21 @@ observed in working WebSocket traces from issue
 ~118 ms, gap: ~49 ms, tap-2-down → tap-2-up: ~85 ms — well inside iOS's
 ~250 ms aggregation window).
 
-## Why not a separate `Input.doubleTap` method?
+## Why not a separate `Touch.doubleTap` method?
 
-We considered widening the `Input` protocol with a dedicated `doubleTap(...)`
+We considered widening the `Touch` protocol with a dedicated `doubleTap(...)`
 method (so a single private-API call could synthesize both taps). We didn't,
 because:
 
 - The existing `touch1-*` path already produces the right wire sequence. iOS
   doesn't distinguish "two taps" from "one double-tap gesture" at the HID
   level — it's the recognizer's job to aggregate.
-- Adding a method to `Input` would force every consumer (CLI, WS,
+- Adding a method to `Touch` would force every consumer (CLI, WS,
   `baguette input`) to grow a parallel envelope shape with no new behaviour
   underneath.
 - The composition lives where it belongs: in the App-layer command, where
   `Thread.sleep` is allowed and the four-event recipe is a ~30-line sequencer
-  easily covered by a unit test that injects a `MockInput` and a no-op sleep.
+  easily covered by a unit test that injects a `MockTouch` and a no-op sleep.
 
 A `--count` flag for triple / N-tap is deliberately absent until a real use
 case appears; the sequencer is hard-coded to two cycles.

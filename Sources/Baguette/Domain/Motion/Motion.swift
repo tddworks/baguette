@@ -16,13 +16,13 @@ import Mockable
 protocol Motion: AnyObject, Sendable {
     /// State what the device is doing, and arm the dylib so apps launched
     /// from now on can read it.
-    func publish(_ intent: MotionIntent, on simulator: any Simulator) async throws
+    func publish(_ intent: MotionIntent) async throws
 
     /// Disarm the dylib. Apps launched afterwards see the platform's own
     /// answer again (motion unavailable). Apps **already running** still
     /// have the dylib loaded, so callers should park the device with a
     /// stationary `publish` first.
-    func clear(on simulator: any Simulator) async throws
+    func clear() async throws
 
     /// The intent currently published, or `nil` when nothing has been.
     ///

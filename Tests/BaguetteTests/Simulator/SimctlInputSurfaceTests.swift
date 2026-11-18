@@ -77,6 +77,7 @@ struct SimctlInputSurfaceTests {
         }
         given(sub).terminate().willReturn()
         let surface = SimctlInputSurface(
+            simulator: sim,
             subprocess: sub,
             deviceHubRunning: { deviceHubRunning },
             sleep: { captures.sleeps.append($0) }
@@ -88,7 +89,7 @@ struct SimctlInputSurfaceTests {
 
     @Test func `should find the input surface shadowed when Device Hub's notify state is active in the guest`() async {
         let (surface, sim, captures) = makeSurface(state: "com.apple.coredevice.dtuhidd.active 1\n")
-        let shadowed = await surface.shadowed(on: sim)
+        let shadowed = await surface.shadowed()
         #expect(shadowed)
         #expect(captures.spawns == [[
             "simctl", "spawn", "U",
@@ -98,14 +99,14 @@ struct SimctlInputSurfaceTests {
 
     @Test func `should find the input surface unshadowed when Device Hub's state is inactive`() async {
         let (surface, sim, _) = makeSurface(state: "com.apple.coredevice.dtuhidd.active 0\n")
-        #expect(await surface.shadowed(on: sim) == false)
+        #expect(await surface.shadowed() == false)
     }
 
     @Test func `should find the input surface unshadowed when the state cannot be read`() async {
         // A device that is shut down, or an Xcode 26 host: no Device Hub
         // to speak of, so no heal to advise.
         let (surface, sim, _) = makeSurface(state: nil)
-        #expect(await surface.shadowed(on: sim) == false)
+        #expect(await surface.shadowed() == false)
     }
 
     // MARK: - ready
@@ -117,7 +118,7 @@ struct SimctlInputSurfaceTests {
         // screen. `bootstatus -b` is the one simctl verb that waits for
         // the real thing.
         let (surface, sim, captures) = makeSurface()
-        try await surface.ready(on: sim)
+        try await surface.ready()
 
         #expect(captures.spawns == [["simctl", "bootstatus", "U", "-b"]])
         #expect(captures.sleeps.isEmpty)
@@ -126,8 +127,8 @@ struct SimctlInputSurfaceTests {
     @Test func `should wait for the boot and read the input surface inside the simulator's custom device set when it lives in one`() async throws {
         let (surface, sim, captures) = makeSurface(
             state: "com.apple.coredevice.dtuhidd.active 1\n", deviceSetPath: "/custom set")
-        try await surface.ready(on: sim)
-        _ = await surface.shadowed(on: sim)
+        try await surface.ready()
+        _ = await surface.shadowed()
 
         #expect(captures.spawns == [
             ["simctl", "--set", "/custom set", "bootstatus", "U", "-b"],
@@ -142,7 +143,7 @@ struct SimctlInputSurfaceTests {
         let active = "com.apple.coredevice.dtuhidd.active 1\n"
         let (surface, sim, captures) = makeSurface(
             states: [inactive, inactive, active], deviceHubRunning: true)
-        try await surface.ready(on: sim)
+        try await surface.ready()
 
         #expect(captures.spawns.first == ["simctl", "bootstatus", "U", "-b"])
         #expect(captures.spawns.filter { $0.contains("-g") }.count == 3)
@@ -154,7 +155,7 @@ struct SimctlInputSurfaceTests {
         // device set, say): bounded wait, then carry on unshadowed.
         let inactive = "com.apple.coredevice.dtuhidd.active 0\n"
         let (surface, sim, captures) = makeSurface(states: [inactive], deviceHubRunning: true)
-        try await surface.ready(on: sim)
+        try await surface.ready()
 
         #expect(captures.spawns.filter { $0.contains("-g") }.count == 20)
         #expect(captures.sleeps.count == 19)
@@ -163,7 +164,7 @@ struct SimctlInputSurfaceTests {
     @Test func `should report a failure when the boot never completes`() async {
         let (surface, sim, _) = makeSurface(failing: "bootstatus")
         await #expect(throws: InputSurfaceError.simctlFailed(status: 1)) {
-            try await surface.ready(on: sim)
+            try await surface.ready()
         }
     }
 
@@ -171,7 +172,7 @@ struct SimctlInputSurfaceTests {
 
     @Test func `should clear Device Hub's state before restarting backboardd when reclaiming`() async throws {
         let (surface, sim, captures) = makeSurface()
-        try await surface.reclaim(on: sim)
+        try await surface.reclaim()
 
         // First the state, so SimulatorHID re-initialises believing Device
         // Hub is absent; then the restart. The other order would let the
@@ -189,7 +190,7 @@ struct SimctlInputSurfaceTests {
         // Old SpringBoard was 100; two polls still see it (or nothing),
         // the third sees the replacement.
         let (surface, sim, captures) = makeSurface(springBoardPids: [100, 100, nil, 200])
-        try await surface.reclaim(on: sim)
+        try await surface.reclaim()
 
         let polls = captures.spawns.filter { $0.contains("list") }
         #expect(polls.count == 4)  // one before the restart, three after
@@ -199,14 +200,14 @@ struct SimctlInputSurfaceTests {
     @Test func `should give up reclaiming when SpringBoard never returns`() async {
         let (surface, sim, _) = makeSurface(springBoardPids: [100, 100])
         await #expect(throws: InputSurfaceError.springBoardMissing) {
-            try await surface.reclaim(on: sim)
+            try await surface.reclaim()
         }
     }
 
     @Test func `should fail to reclaim when backboardd cannot be restarted`() async {
         let (surface, sim, _) = makeSurface(failing: "kickstart")
         await #expect(throws: InputSurfaceError.simctlFailed(status: 1)) {
-            try await surface.reclaim(on: sim)
+            try await surface.reclaim()
         }
     }
 }

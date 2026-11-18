@@ -14,8 +14,8 @@ struct FoldableInputTests {
         var keys: [(HIDUsage, [HIDUsage], TimeInterval)] = []
     }
 
-    private func make(refusing: Bool = false) -> (FoldableInput, MockInput, Presses) {
-        let touches = MockInput()
+    private func make(refusing: Bool = false) -> (FoldableInput, InputMocks, Presses) {
+        let touches = InputMocks()
         let keys = MockDeviceKeys()
         let presses = Presses()
         given(keys).press(.any, holding: .any, hold: .any).willProduce { usage, modifiers, hold in
@@ -27,11 +27,11 @@ struct FoldableInputTests {
 
     @Test func `should press a foldable's hardware keys as Device Hub presses them`() {
         let (input, _, presses) = make()
-        #expect(input.button(.volumeUp, duration: 0) == true)
-        #expect(input.button(.volumeDown, duration: 0) == true)
-        #expect(input.button(.power, duration: 0) == true)
-        #expect(input.button(.lock, duration: 0) == true)
-        #expect(input.button(.action, duration: 2) == true)
+        #expect(input.button(.hardware(.volumeUp), duration: 0) == true)
+        #expect(input.button(.hardware(.volumeDown), duration: 0) == true)
+        #expect(input.button(.hardware(.power), duration: 0) == true)
+        #expect(input.button(.hardware(.lock), duration: 0) == true)
+        #expect(input.button(.hardware(.action), duration: 2) == true)
         #expect(presses.keys.map(\.0) == [
             HIDUsage(page: 12, usage: 233), HIDUsage(page: 12, usage: 234),
             HIDUsage(page: 12, usage: 48), HIDUsage(page: 12, usage: 48),
@@ -43,17 +43,17 @@ struct FoldableInputTests {
 
     @Test func `should send touches and keyless buttons to the panel on a foldable`() {
         let (input, touches, presses) = make()
-        given(touches).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
-        given(touches).button(.any, duration: .any).willReturn(true)
+        given(touches.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
+        given(touches.press).button(.any, duration: .any).willReturn(true)
         #expect(input.tap(at: Point(x: 1, y: 2), size: Size(width: 10, height: 20), duration: 0.05, edge: nil))
-        #expect(input.button(.home, duration: 0) == true)
+        #expect(input.button(.navigation(.home), duration: 0) == true)
         #expect(presses.keys.isEmpty)
-        verify(touches).button(.value(.home), duration: .value(0)).called(1)
+        verify(touches.press).button(.value(.navigation(.home)), duration: .value(0)).called(1)
     }
 
     @Test func `should fail a press when the guest refuses the key`() {
         let (input, _, _) = make(refusing: true)
-        #expect(input.button(.volumeUp, duration: 0) == false)
+        #expect(input.button(.hardware(.volumeUp), duration: 0) == false)
     }
 
     @Test func `should type a key on a foldable through the guest with its modifiers held`() {
@@ -68,7 +68,7 @@ struct FoldableInputTests {
         ])
         // A keystroke's default hold is the panel's 100 ms tap.
         #expect(presses.keys.map(\.2) == [0.1, 0.5])
-        verify(touches).key(.any, modifiers: .any, duration: .any).called(0)
+        verify(touches.key).key(.any, modifiers: .any, duration: .any).called(0)
     }
 
     @Test func `should fail a keystroke when the guest refuses the key`() {

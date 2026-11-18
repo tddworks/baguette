@@ -82,7 +82,7 @@ struct LitPanelTests {
         let sim = MockSimulator()
         let displays = MockDisplays()
         let cover = MockDisplay(), unfolded = MockDisplay()
-        let coverInput = MockInput(), unfoldedInput = MockInput()
+        let coverInput = InputMocks(), unfoldedInput = InputMocks()
         let hinge = MockHinge()
         given(sim).displays().willReturn(displays)
         given(sim).hinge().willReturn(hinge)
@@ -91,11 +91,11 @@ struct LitPanelTests {
         given(cover).input().willReturn(coverInput)
         given(unfolded).input().willReturn(unfoldedInput)
         given(hinge).angle().willReturn(HingeAngle(degrees: 130))
-        given(unfoldedInput).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
+        given(unfoldedInput.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
 
         #expect(sim.litPanelInput().tap(
             at: Point(x: 1, y: 2), size: Size(width: 669, height: 951), duration: 0.05, edge: nil))
-        verify(unfoldedInput).tap(at: .any, size: .any, duration: .any, edge: .any).called(1)
-        verify(coverInput).tap(at: .any, size: .any, duration: .any, edge: .any).called(0)
+        verify(unfoldedInput.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(1)
+        verify(coverInput.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(0)
     }
 }

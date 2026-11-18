@@ -98,7 +98,7 @@ struct StreamDisplayPlan: Equatable, Sendable {
     /// planned plane. Phone keeps the legacy `Simulator.screen` /
     /// `input` aliases; CarPlay takes both from the `displays`
     /// aggregate so framebuffer and HID share one binding.
-    func bind(to sim: Simulator) throws -> (screen: any Screen, input: any Input) {
+    func bind(to sim: Simulator) throws -> (screen: any Screen, input: any HID) {
         if enableCarPlay {
             try sim.externalDisplays().enableCarPlay()
         }
@@ -128,9 +128,15 @@ extension StreamDisplayPlan {
         try plane(on: device)?.screen() ?? device.require(.screen)
     }
 
-    /// The planned plane's input on any device, chosen as `screen(on:)` is.
-    func input(on device: any Device) throws -> any Input {
-        try plane(on: device)?.input() ?? device.require(.input)
+    /// The planned plane's input on any device, chosen as `screen(on:)` is:
+    /// a plane's own surface, or the device's input abilities — each made
+    /// once, so a finger lifts where it went down. Refused when the device
+    /// has nothing to touch or isn't running.
+    func input(on device: any Device) throws -> Abilities {
+        if let plane = try plane(on: device) {
+            return .input(of: device.name, all: plane.input())
+        }
+        return try device.input()
     }
 
     /// The display a pinned panel or CarPlay names; nil for the device's

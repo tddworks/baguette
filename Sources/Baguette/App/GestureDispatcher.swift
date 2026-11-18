@@ -1,21 +1,21 @@
 import Foundation
 
 /// Parses one stdin line as JSON, routes through `GestureRegistry`, and
-/// dispatches the resulting `Gesture` against an `Input`. Returns a one-line
+/// runs the resulting `Gesture` on the screen's input — the ability it names. Returns a one-line
 /// JSON ack the caller writes to stdout.
 ///
 /// `@unchecked` because `GestureRegistry` is a class with a mutating
-/// `register` API. Both stored properties are `let`, `Input` is
+/// `register` API. Every stored property is `let`, the screen's abilities are
 /// `Sendable`, and a registry is only ever written while it is being
 /// built (`GestureRegistry.standard`, or a test's own) — `dispatch`
 /// reads it and nothing else. What crosses the isolation boundary is a
 /// finished, frozen object.
 final class GestureDispatcher: @unchecked Sendable {
-    private let input: any Input
+    private let input: Abilities
     private let registry: GestureRegistry
     private let screenGuard: InputScreenGuard?
 
-    init(input: any Input, registry: GestureRegistry = .standard, screenGuard: InputScreenGuard? = nil) {
+    init(input: Abilities, registry: GestureRegistry = .standard, screenGuard: InputScreenGuard? = nil) {
         self.input = input
         self.registry = registry
         self.screenGuard = screenGuard
@@ -32,10 +32,12 @@ final class GestureDispatcher: @unchecked Sendable {
         do {
             try screenGuard?.expected.validateEnvelope(dict)
             let gesture = try registry.parse(dict)
-            let ok = gesture.execute(on: input)
+            let ok = try gesture.execute(on: input)
             return ack(ok: ok, error: ok ? nil : screenGuard?.errorDescription)
         } catch let error as GestureError {
             return ack(ok: false, error: error.message)
+        } catch let error as DeviceError {
+            return ack(ok: false, error: error.description)
         } catch let error as ExpectedScreen.Failure {
             return ack(ok: false, error: error.localizedDescription)
         } catch {

@@ -32,7 +32,9 @@ struct Tap: Gesture, Equatable {
         )
     }
 
-    func execute(on input: any Input) -> Bool {
-        input.tap(at: at, size: size, duration: duration, edge: edge)
+    static var ability: Ability<any Touch> { .touch }
+
+    func execute(on touch: any Touch) -> Bool {
+        touch.tap(at: at, size: size, duration: duration, edge: edge)
     }
 }

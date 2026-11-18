@@ -26,14 +26,10 @@ extension DeviceOption {
     var devices: any Devices { allDevices(deviceSet: deviceSet) }
 }
 
-/// The composition root: the only place that knows how many device
-/// families there are. Simulators come from `deviceSet` (or Xcode's
-/// default set); physical phones from CoreDevice.
+/// Every device the CLI can see: the kinds `DeviceKinds` lists, with
+/// simulators from `deviceSet` (or Xcode's default set).
 func allDevices(deviceSet: String?) -> any Devices {
-    CombinedDevices([
-        SimulatorDevices(CoreSimulators(deviceSetPath: deviceSet)),
-        CoreDevicePhones(),
-    ])
+    DeviceKinds(simulators: CoreSimulators(deviceSetPath: deviceSet)).devices
 }
 
 /// Run `body`; a device refusal (`DeviceError`) is logged in its own words
@@ -48,16 +44,11 @@ func orExit<T>(_ body: () throws -> T) throws -> T {
 }
 
 extension DeviceOption {
-    /// The simulator `--udid` names, for a command only the simulator
-    /// family runs so far. Any other device is refused by the ability the
-    /// command needs ("han's iPhone can't do input"), never "not found".
-    func simulator<Role>(for ability: Ability<Role>) throws -> any Simulator {
-        if let simulator = CoreSimulators(deviceSetPath: deviceSet).find(udid: udid) {
-            return simulator
-        }
+    /// The device `--udid` names and the role it registered for `ability`,
+    /// or exit 1 in the device's own words ("han's iPhone can't do network",
+    /// "Device X is not booted").
+    func require<Role>(_ ability: Ability<Role>) throws -> (device: any Device, role: Role) {
         let device = try device()
-        _ = try orExit { try device.require(ability) }
-        log("\(device.name) can't do \(ability.name) from this command yet")
-        throw ExitCode.failure
+        return (device, try orExit { try device.require(ability) })
     }
 }

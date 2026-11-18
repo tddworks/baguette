@@ -24,7 +24,7 @@ description: The normative domain model baguette binds to — the tree from Devi
 **The words are the ones the user types and sees**: the CLI verbs and flags,
 the wire `type` names, the page's cards (*Defaults*, *Network*, *Location*),
 and Apple's own where we have none (*cover*, *unfolded panel*, *Device Hub*).
-Their exact syntax is in [commands.md](commands.md) and [wire.md](wire.md). An abstraction is named for the role it plays — `Input`,
+Their exact syntax is in [commands.md](commands.md) and [wire.md](wire.md). An abstraction is named for the role it plays — `Touch`,
 `Screen`, `Hinge`, `Subprocess` — never for a pattern (`Port`, `Service`,
 `Manager`, `Repository`); aggregate persistence takes the plural (`Simulators`,
 `Chromes`). See [AGENTS.md](../AGENTS.md#naming-the-abstractions).
@@ -47,9 +47,22 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
 │                                           find(id) · require(ability, of: id)
 └── Device  ◆                               ONE DEVICE — id, name, kind ◇ (platform × reality × model),
     │                                       state ◇ (off · starting · ready · unavailable)
-    └── abilities → AbilityTable  ◇         WHAT IT CAN DO — require(.location) → the role; names
+    ├── abilities → Abilities  ◇         WHAT IT CAN DO — require(.location) → the role; names
+    └── input() → Abilities  ◇           ITS SCREEN'S INPUT — the roles below, each made once, so a
+        │                                   finger lifts where it went down. `ok` = sent, not landed
+        ├── Touch  ◆                        tap · swipe · touch1 · touch2 · twoFingerPath, in device points
+        ├── Press  ◆                        what it presses — available · button(_:duration:); a
+        │                                   DeviceButton ◇ is a Navigation ◇ (home, app switcher,
+        │                                   edge pulls, keyboard) or a HardwareButton ◇ (lock,
+        │                                   power, volume, action, the watch's crown and sides)
+        ├── Key  ◆                          the keyboard — key(_:modifiers:duration:)
+        ├── Scroll  ◆                       the wheel — scroll(deltaX:deltaY:)
+        └── Gesture  ◇ (GestureRegistry)    an act of ONE of them, named by the wire `type`: Tap · Swipe ·
+                                            Touch1 · Touch2 · Pinch · Pan → Touch; ButtonPress → Press;
+                                            Keystroke · TypeText → Key; WheelEvent → Scroll.
+                                            parse(dict); execute(on:) its role, refused by name without it
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
-                                            CoreDevicePhones (screen, input, accessibility, pasteboard) ·
+                                            CoreDevicePhones (screen, touch, accessibility, pasteboard) ·
                                             AndroidEmulators (later)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
@@ -60,13 +73,13 @@ Simulators  ◆                               THE SIMULATOR FAMILY — a device 
     │   ├── phone: Display  ◆              the device's own screen — follows the lit panel
     │   ├── panel(cover | unfolded)  ◆     one panel pinned, the hinge not asked (the 3D book)
     │   └── carPlay: Display  ◆            an attached CarPlay display; never enabled implicitly
-    │       Display: resolve() → DisplayBinding ◇ · screen() → Screen ◆ · input() → Input ◆
+    │       Display: resolve() → DisplayBinding ◇ · screen() → Screen ◆ · input() → HID ◆
     │                observedScreen() → AXScreen ◇ · input(expected:) for --expected-screen
-    ├── input → Input  ◆                    GESTURES, in device points: tap · swipe · touch1 · touch2 ·
-    │   │                                   button · key · scroll · twoFingerPath. `ok` = sent, not landed
-    │   ├── Gesture  ◇ (GestureRegistry)    the wire dialect: one type per `type`, parse(dict) → execute(on:)
+    ├── input → HID  ◆                      ONE INDIGO SURFACE playing Touch · Press · Key · Scroll; the
+    │   │                                   four abilities share one per screen, so keys ride the
+    │   │                                   services gestures warmed
     │   ├── Fill  ◇                         make one named text field hold this text → FillOutcome ◇;
-    │   │                                   takes Accessibility, Pasteboard and Input, as Paste takes two
+    │   │                                   takes Accessibility, Pasteboard and the screen's input
     │   ├── FoldableInput  ◆                a foldable's keys — hardware and keyboard — through DeviceKeys
     │   └── LitPanelInput  ◆                a socket that outlives a fold: each gesture to the lit panel,
     │                                       a touch on the panel it went down on until it lifts
@@ -112,9 +125,9 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 |---|---|---|
 | `boot` · `shutdown` | `simulator.boot()` · `shutdown()` | `boot` then heals if Device Hub attached |
 | `heal` | `InputSurface.heal(on:)` | restarts backboardd; running apps die |
-| `tap` · `swipe` · `pinch` · `pan` · `press` · `type` · `key` | `Gesture.execute(on: sim.input())` | one process per gesture; the input binds the lit panel once |
+| `tap` · `swipe` · `pinch` · `pan` · `press` · `type` · `key` | `gesture.execute(on: device.require(G.ability))` | one process per gesture; refused by name on a device without the role |
 | `fill` | `Fill.execute(accessibility:pasteboard:input:)` | also on `baguette input`; the App only projects the `FillOutcome` |
-| `input` (stdin) · the stream WebSocket | `GestureDispatcher` → the plane's `Input` | many gestures; `--expected-screen` → `displays.phone.input(expected:)` |
+| `input` (stdin) · the stream WebSocket | `GestureDispatcher` → the plane's input `Abilities` | many gestures; `--expected-screen` → `displays.phone.input(expected:)` |
 | the Duo's 3D page | `sim.litPanelInput()` | the socket outlives a fold |
 | `paste` · `clipboard …` | `Paste.execute(pasteboard:input:)` · `pasteboard` | the path around `type`'s US-ASCII limit |
 | `hinge --pose` · `--angle` | `HingeCommand.parse` → `hinge.fold(to:over:)` | exit 3 when unconfirmed (`PoseDelivery`) |
@@ -133,10 +146,10 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 
 | Law | Owner |
 |---|---|
-| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
+| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `Abilities` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
 | one id names one device across every source; asking for an id two sources claim is a refusal, never a pick | `CombinedDevices` |
-| an ability that drives the running screen (screen, input, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
+| an ability that drives the running screen (screen, touch, press, key, scroll, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
 | what a device family can do is decided once, where its device is built | each family's device (`CoreSimulator`, …) |
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
 | every coordinate is in device points, with the plane's `width` / `height` beside it; the adapter divides by size, the domain never normalizes | `Point` · `Size` · `IndigoHIDInput.sendMouse` |
@@ -166,10 +179,11 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
 | a phone's tree takes its screen from the app at its root, which fills it | `AXNode.onItsAppsScreen` |
 | the external digitizer is never released | `InputTeardown.forPlane` |
-| an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Key.parseModifiers` · `Press.parse` |
+| an unknown edge, modifier, phase or button is an error, never a fallback | `Field` · `Keystroke.parseModifiers` · `ButtonPress.parse` |
 | `type` / `key` are US-layout printable ASCII; anything else fails to parse and goes through `paste` | `KeyboardKey.decompose` · `TypeText.parse` |
 | a typed key is held 30 ms, because a burst needs it short; a single key press keeps its own hold | `TypeText` |
-| `siri` is not a button: every known path crashes backboardd | `DeviceButton` (left out on purpose) |
+| `siri` is not a button: every known path crashes backboardd | `HardwareButton` (left out on purpose) |
+| a press of a navigation or button the device doesn't list `available` is refused by name before it reaches the device | `ButtonPress` (the list: `Press.available`) |
 | no hinge reading means as booted: folded, the cover | `Hinge.litPanel` |
 | 90° or more lights the unfolded panel | `HingeAngle.litPanel` |
 | everything on the phone plane follows the lit panel; a socket that outlives a fold asks per gesture, and a touch stays on the digitizer it went down on until it lifts | `Displays.phone` · `LitPanelInput` |
@@ -203,10 +217,12 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a HID target from `IndigoHIDTargetForScreen` or any arithmetic | a trap: only registrations are safe |
 | normalized coordinates in the domain | device points end to end; the adapter normalizes |
 | a `siri` button | it crashes backboardd |
-| a method per ability on `Device`, or a protocol per ability (`Device & Locatable`) | abilities are data in an `AbilityTable`; Mockable can't generate inherited requirements, and the page needs them as a list ([devices](features/devices/design.md)) |
+| a method per ability on `Device`, or a protocol per ability (`Device & Locatable`) | abilities are data in an `Abilities`; Mockable can't generate inherited requirements, and the page needs them as a list ([devices](features/devices/design.md)) |
 | a branch on a device's kind above Infrastructure | a family registers what it can do; nobody else asks what it is |
 | a ViewModel, or rules in the page's JS | the page is a dumb sender; `KeyboardKey.from(wireCode:)` resolves keys in Swift |
-| a second `Input` hierarchy for tests | `IndigoHIDInput` is the only adapter; tests use `MockInput` |
+| a second input hierarchy for tests | `IndigoHIDInput` is the simulator's only adapter; tests mock the role they test (`MockTouch`, `MockKey`, …) |
+| a role that answers `false` for what its device can't do | the device doesn't register it; a phone on a cable has `Touch` only |
+| one protocol for every input role (an 8-method `Input`) | `Touch`, `Press`, `Key`, `Scroll`; a simulator's `HID` is only their name together |
 
 ## 5 · The contexts
 
@@ -222,11 +238,11 @@ Mac — and each family sorts itself by these context names
 
 | Context | Owns the question | Its root |
 |---|---|---|
-| **Common** (shared kernel) | *in what units?* | ◇ `Point` `Size` `Rect` `GesturePhase` `HIDUsage` `DeviceEdge` `DeviceButton` |
-| **Device** (core) | *which devices are there, and what can each do?* | ◆ `Devices` → `Device` · ◇ `AbilityTable` `DeviceKind` `DeviceState` |
+| **Common** (shared kernel) | *in what units?* | ◇ `Point` `Size` `Rect` `GesturePhase` `HIDUsage` `DeviceEdge` |
+| **Device** (core) | *which devices are there, and what can each do?* | ◆ `Devices` → `Device` · ◇ `Abilities` `DeviceKind` `DeviceState` |
 | **Simulator** | *what is a simulator made of?* | ◆ `Simulators` → `Simulator` → `Displays` · `InputSurface` · `SimulatorInjection` |
 | **Screen** | *which framebuffer is this plane, which panel is it?* | ◆ `Screen` · ◇ `DisplayBinding` `ConnectedScreens` `IntegratedPanel` |
-| **Input** (core) | *how does a gesture reach the device?* | ◆ `Input` · `Gesture` · `DeviceKeys` |
+| **Input** (core) | *how does a gesture reach the device?* | ◆ `Touch` · `Press` · `Key` · `Scroll` · `DeviceKeys` · ◇ `Gesture` `DeviceButton` `Navigation` `HardwareButton` |
 | **Hinge** | *how far open is the fold?* | ◆ `Hinge` · `HingeMotor` · ◇ `HingeAngle` `HingeCommand` |
 | **Orientation** | *which way is it turned?* | ◆ `Orientation` |
 | **Accessibility** | *what is on screen?* | ◆ `Accessibility` · ◇ `AXNode` `AXScreen` |
@@ -246,8 +262,8 @@ moves, one change at a time.
 
 | Node | The code today | Moves to |
 |---|---|---|
-| `Devices` | device-level commands, gestures, `input`, `paste` and `describe-ui` ask `Devices`; `fill`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` still take a `Simulator` (refusing other families by ability); the `/simulators/…` routes still read `Simulators`, and `/devices/:udid/…` has only the device page, its stream and `screenshot` | every command and route through `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
-| `Device.abilities` | `Simulator` declares 21 role factories every device would have to fake | registrations in `CoreSimulator`'s `AbilityTable` |
+| `Devices` | every command asks `Devices` for the ability it needs, and each role is bound to its device when registered; the `/simulators/…` routes still read `Simulators`, and `/devices/:udid/…` has only the device page, its stream and `screenshot` | every command and route through `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
+| `Device.abilities` | `Simulator` declares 21 role factories every device would have to fake | registrations in `CoreSimulator`'s `Abilities` |
 | `CompanionPhones` | the twin has its own `Devices` / `Device` (`capabilities: [String]`) and copies of the per-device routes | one source of `Devices`, one route tree |
 | "no reading means folded" | written out as `angle()?.litPanel ?? .primary` at four call sites | `Hinge.litPanel` everywhere (#124); `Server.hingeJSON` keeps one read for both the degrees and the panel |
 | "is this device a foldable" | answered three ways: `chromes.panels(…).contains(.secondary)`, `IntegratedPanels.several(in:)`, `observed.multiplePanels` | one question, one owner |
@@ -256,7 +272,6 @@ moves, one change at a time.
 | `IntegratedPanel` on the wire | `"primary"` / `"secondary"` spelled in `DeviceFrame` and twice in `Server` | one wire name on the value |
 | `StreamFormat.makeStream` | Domain builds `MJPEGStream` / `AVCCStream` and takes `FrameSink`, all Infrastructure | the factory moves to Infrastructure; Domain keeps the format |
 | `FoldableInput` | calls `log(…)` from the App layer | Domain logs nothing; the failure is its `Bool` |
-| `boot` · `heal` · `input` | the App builds `SimctlInputSurface()` itself | `simulator.inputSurface()`, as for every other role |
 | `LabelTap` · `ThenDescribe` | hold a law and assemble JSON in the App | a Domain value answers, and the App only projects it, as `Fill` does |
 | `GuestHingeMotor` | plays `HingeMotor` and `DeviceKeys` over one guest helper | a name for the helper's role, not "motor" |
 

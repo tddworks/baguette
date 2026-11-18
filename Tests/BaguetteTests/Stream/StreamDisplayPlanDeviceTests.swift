@@ -9,7 +9,7 @@ import Testing
 struct StreamDisplayPlanDeviceTests {
     @Test func `should show a device's own screen when the plan is the phone plane`() throws {
         let screen = MockScreen()
-        var abilities = AbilityTable(device: "han's iPhone")
+        var abilities = Abilities(device: "han's iPhone")
         abilities.register(.screen) { screen }
 
         let shown = try StreamDisplayPlan.phoneOnly.screen(on: device(abilities))
@@ -23,7 +23,7 @@ struct StreamDisplayPlanDeviceTests {
         given(cover).screen().willReturn(screen)
         let displays = MockDisplays()
         given(displays).panel(.value(.secondary)).willReturn(cover)
-        var abilities = AbilityTable(device: "iPhone Duo")
+        var abilities = Abilities(device: "iPhone Duo")
         abilities.register(.displays) { displays }
 
         let plan = StreamDisplayPlan(kind: .phone, enableCarPlay: false, panel: .secondary)
@@ -43,7 +43,7 @@ struct StreamDisplayPlanDeviceTests {
         given(displays).carPlay.willReturn(carPlay)
         let external = MockExternalDisplays()
         given(external).enableCarPlay().willReturn()
-        var abilities = AbilityTable(device: "iPhone 17 Pro")
+        var abilities = Abilities(device: "iPhone 17 Pro")
         abilities.register(.displays) { displays }
         abilities.register(.externalDisplays) { external }
 
@@ -54,7 +54,7 @@ struct StreamDisplayPlanDeviceTests {
     }
 
     @Test func `should refuse the CarPlay plane on a device that has no display planes`() {
-        let phone = device(AbilityTable(device: "han's iPhone"))
+        let phone = device(Abilities(device: "han's iPhone"))
 
         #expect(throws: DeviceError.unable(ability: "displays", device: "han's iPhone")) {
             try StreamDisplayPlan(kind: .carPlay, enableCarPlay: false).screen(on: phone)
@@ -62,25 +62,25 @@ struct StreamDisplayPlanDeviceTests {
     }
 
     @Test func `should touch a device's own screen when the plan is the phone plane`() throws {
-        let input = MockInput()
-        var abilities = AbilityTable(device: "iPhone 17 Pro")
-        abilities.register(.input) { input }
+        let touch = MockTouch()
+        var abilities = Abilities(device: "iPhone 17 Pro")
+        abilities.register(.touch) { touch }
 
         let touched = try StreamDisplayPlan.phoneOnly.input(on: device(abilities))
 
-        #expect(touched as AnyObject === input)
+        #expect(try touched.require(.touch) as AnyObject === touch)
     }
 
-    @Test func `should refuse to touch a phone that registered no input`() {
-        var abilities = AbilityTable(device: "han's iPhone")
+    @Test func `should refuse to touch a phone that registered no touch`() {
+        var abilities = Abilities(device: "han's iPhone")
         abilities.register(.screen) { MockScreen() }
 
-        #expect(throws: DeviceError.unable(ability: "input", device: "han's iPhone")) {
+        #expect(throws: DeviceError.unable(ability: "touch", device: "han's iPhone")) {
             try StreamDisplayPlan.phoneOnly.input(on: device(abilities))
         }
     }
 
-    private func device(_ abilities: AbilityTable) -> MockDevice {
+    private func device(_ abilities: Abilities) -> MockDevice {
         let device = MockDevice()
         given(device).name.willReturn("device")
         given(device).state.willReturn(.ready)

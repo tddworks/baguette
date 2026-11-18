@@ -29,18 +29,22 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
     /// loudly rather than arming nothing.
     private let dylibPath: String?
     private let injection: any SimulatorInjection
+    /// The one simulator this conditions — bound when the role is made.
+    private let simulator: any Simulator
 
     init(
         fileURL: URL,
         dylibPath: String?,
-        injection: any SimulatorInjection = SimctlSimulatorInjection()
+        injection: any SimulatorInjection = SimctlSimulatorInjection(),
+        simulator: any Simulator
     ) {
         self.fileURL = fileURL
         self.dylibPath = dylibPath
         self.injection = injection
+        self.simulator = simulator
     }
 
-    func publish(_ intent: MotionIntent, on simulator: any Simulator) async throws {
+    func publish(_ intent: MotionIntent) async throws {
         // Refuse before touching anything: an empty DYLD_INSERT_LIBRARIES
         // entry makes dyld log a load failure for every app launched
         // afterwards, and an intent nobody reads looks like success.
@@ -61,7 +65,7 @@ final class SharedFileMotion: Motion, @unchecked Sendable {
         return try? MotionIntent(decoding: data)
     }
 
-    func clear(on simulator: any Simulator) async throws {
+    func clear() async throws {
         // The file is deliberately left in place. Disarming only stops
         // *future* launches loading the dylib; an app already running still
         // has it loaded and still reads this file, so deleting it would

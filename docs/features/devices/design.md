@@ -7,7 +7,7 @@ description: Design of one Devices model for every kind of device baguette drive
 **Status:** BUILT for the CLI and the `/devices/…` page; the `/simulators/…`
 routes and the gesture commands still read `Simulators` (see §9). Slices 0–8
 are on `feat/devices`: `Infrastructure/` split by family; the device model
-(`DeviceState`, `AbilityTable`, `Device`, `Devices`, `CombinedDevices`); the
+(`DeviceState`, `Abilities`, `Device`, `Devices`, `CombinedDevices`); the
 simulator, companion and CoreDevice families as sources; the device-level
 commands, `baguette list`, `/devices.json`, and the device page's stream and
 touches reading it. A physical iPhone on a cable takes touches (CoreDevice Universal
@@ -22,7 +22,7 @@ and no law here repeats theirs:
 | what a simulator is made of — displays, panels, injection, heal | [CANONICAL_MODEL](../../CANONICAL_MODEL.md) |
 | whether CoreDevice will give an unentitled process a physical iPhone's screen and touches | [real-devices](../real-devices/design.md) (spike) |
 | the companion-app twin — ReplayKit pixels, CoreMotion pose | [device-twin](../device-twin/design.md) |
-| how a gesture reaches the screen once there is an `Input` | [ARCHITECTURE](../../ARCHITECTURE.md), [touches](../touches/design.md) |
+| how a gesture reaches the screen once there is a `Touch` (or `Press`, `Key`, `Scroll`) | [ARCHITECTURE](../../ARCHITECTURE.md), [touches](../touches/design.md) |
 
 ---
 
@@ -54,7 +54,7 @@ by name.**
 CoreSimulators  CoreDevicePhones  CompanionPhones   AndroidEmulators     ← one per device family
      │              │                 │                  │                 (Infrastructure)
 CoreSimulator   CoreDevicePhone   CompanionPhone     AndroidEmulator   : Device
-     └── abilities: AbilityTable ◇ ── .screen .input .location … (only what it can do)
+     └── abilities: Abilities ◇ ── .screen .input .location … (only what it can do)
                         │
              Screen ◆  Input ◆  Location ◆  Apps ◆ …   ← the roles that exist today, unchanged
 ```
@@ -105,12 +105,12 @@ Devices ◆                              every device baguette can see — all �
              ├─ kind : DeviceKind ◇    platform × reality × model
              ├─ state : DeviceState ◇  off · starting · ready · unavailable(reason)
              │                         ONLY READY ACCEPTS GESTURES AND STREAMS
-             └─ abilities : AbilityTable ◇
+             └─ abilities : Abilities ◇
                                        what this device can do   ANYTHING ELSE IS REFUSED BY NAME
                  └─ Ability<Role> ◇ → Role ◆   e.g. .location → any Location
 ```
 
-**What varies and what does not.** The roles (`Screen`, `Input`, `Location`,
+**What varies and what does not.** The roles (`Screen`, `Touch`, `Location`,
 `Apps`, …) do not vary: they are the domain, and each knows only its own job.
 What varies is *which* roles a device has and *who plays them*. That variation
 is data, registered by the device, never a branch: there is no
@@ -143,7 +143,7 @@ on a phone is a refusal, not a special case.
 type (`CoreSimulator`, `CoreDevicePhone`, `CompanionPhone`, `AndroidEmulator`)
 and is the **only** place that decides what that family can do.
 
-### `AbilityTable` — what a device can do
+### `Abilities` — what a device can do
 
 > **Pointable as:** the cards the page shows for a device.
 
@@ -166,7 +166,8 @@ The abilities, from today's `Simulator` methods plus one new one:
 |---|---|---|---|---|---|
 | `lifecycle` | `Lifecycle` (boot · shutdown) | ✓ | — | — | ✓ |
 | `screen` | `Screen` | ✓ | ✓ (devicectl screenshots, ~1 fps) | ✓ once its video arrives | ✓ |
-| `input` | `Input` | ✓ | ✓ (CoreDevice Universal HID: touches; not buttons or keys) | later (runner) | ✓ |
+| `touch` | `Touch` | ✓ | ✓ (CoreDevice Universal HID) | later (runner) | ✓ |
+| `press` · `key` · `scroll` | `Press` · `Key` · `Scroll` | ✓ (one Indigo surface plays all four) | — (the digitizer sends only touches) | — | ✓ |
 | `displays` | `Displays` (phone · panels · CarPlay) | ✓ | — | — | — |
 | `accessibility` | `Accessibility` | ✓ | ✓ (its own accessibility service, over the tunnel) | — | ✓ |
 | `apps` · `logs` | `Apps` · `LogStream` | ✓ | — (devicectl can't push a notification; no syslog verb) | — | ✓ |
@@ -246,10 +247,11 @@ try devices.require(.screen, of: id).start(onFrame: pump.push)
 // baguette list · GET /devices.json — kind and abilities per device; the page shows those cards
 devices.listJSON
 
-// composition root (App) — the only line that knows how many families exist
-let devices: any Devices = CombinedDevices([
-    CoreSimulators(deviceSet: path), CompanionPhones(), CoreDevicePhones(), AndroidEmulators(),
-])
+// DeviceKinds (App) — the one list of kinds, read by the CLI and by `serve`;
+// a new kind (Android) is one more source here
+let devices = DeviceKinds(simulators: CoreSimulators(deviceSetPath: path),
+                          companions: serving ? companionDevices : nil).devices
+let connected = devices.physical    // the device page's list: a view, not a second list
 ```
 
 A foldable keeps its own tell: `displays` and `hinge` are simulator abilities,
@@ -259,7 +261,7 @@ and `litPanelInput()` is built from them, as it is today.
 
 | Law | Owner |
 |---|---|
-| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
+| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `Abilities` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
 | one id names one device across every source; asking for an id two sources claim is a refusal, never a pick (the list shows both, so the clash is visible) | `CombinedDevices` |
 | an ability that drives the running screen (screen, input, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
@@ -267,7 +269,7 @@ and `litPanelInput()` is built from them, as it is today.
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
 
 Laws that stay where CANONICAL §3 puts them, now for every family: coordinates
-are device points and each family's `Input` converts to its own units (Indigo
+are device points and each family's `Touch` converts to its own units (Indigo
 divides by size; adb scales to pixels); a screen and its input come from one
 binding (`Display`).
 
@@ -350,8 +352,8 @@ AGENTS.md's layering sentence changes to:
   (`PluginRoute`) and the page use `/simulators/`, so the old tree stays as an
   alias for at least one release.
 - **Platform-shaped words in the shared kernel.** `DeviceButton` (Common) is
-  iOS's buttons; Android has back and recents. Each family's `Input` refusing
-  what it lacks is the first answer, but the kernel may need a platform-neutral
+  iOS's buttons; Android has back and recents. A family not registering `Press`
+  when it lacks iOS's buttons is the first answer, but the kernel may need a platform-neutral
   set.
 - **Accessibility across platforms.** Can `AXNode` hold a uiautomator tree
   without iOS-only roles leaking into it? Decided when Android arrives.
@@ -380,10 +382,10 @@ AGENTS.md's layering sentence changes to:
   CoreDevice's Universal HID capability. Measured 2026-11-18; the research is
   in [real-devices](../real-devices/design.md#decision).
 - ~~Is a generic method on a `@Mockable` protocol a problem?~~ Avoided:
-  `require` lives on the `AbilityTable` value and in a `Devices` extension,
+  `require` lives on the `Abilities` value and in a `Devices` extension,
   so neither protocol has a generic member. `.location` resolves as an
   implicit member of `Ability<Role>` (keys are constrained extensions in
-  `Domain/Device/Abilities.swift`). Settled by slice 3's tests.
+  `Domain/Device/EveryAbility.swift`). Settled by slice 3's tests.
 - ~~Should two sources claiming one id hide the device from the list?~~ No:
   `all` lists both so the clash is visible, and `find(id:)` throws
   `claimedTwice` rather than pick. Settled in slice 4.
@@ -397,7 +399,7 @@ Each slice is green on its own. Test names are the `should …` sentences.
 | 0 | CANONICAL_MODEL (tree root, the §5 laws, the Device context), AGENTS.md's layering sentence, ARCHITECTURE.md | the design, before code |
 | 1 | Move only: `Infrastructure/` → `Simulator/`, `Companion/`, `Host/`; rewrite simulator-only comments in `Host/` | `swift build` and the whole `swift test` stay green; no new test (no behaviour) |
 | 2 | `DeviceID`, `DeviceKind`, `DeviceState` | "should accept gestures only when the device is ready"; "should read a booted simulator as ready" |
-| 3 | `Ability`, `AbilityTable` | "should refuse an ability the device never registered"; "should hand back the role registered for an ability"; "should name the abilities in the order they were registered" |
+| 3 | `Ability`, `Abilities` | "should refuse an ability the device never registered"; "should hand back the role registered for an ability"; "should name the abilities in the order they were registered" |
 | 4 | `Devices`, `CombinedDevices`, `require(_:of:)`, `listJSON` | "should list every device from every source when sources are combined"; "should refuse to combine two devices that claim one id"; "should refuse a device id no source knows"; "should list each device's kind and abilities" |
 | 5 | `SimulatorDevice` / `SimulatorDevices` present any `Simulator` / `Simulators` as a `Device` / `Devices` — adapters, because `Simulator.state` and `Device.state` (and both `all`s) are different types under one name | "should register every simulator role as an ability"; "should boot the simulator when its lifecycle is told to boot" |
 | 6 | the twin renamed `CompanionPhones`; `CompanionDevices` makes it a source; `/devices.json`, `definition.json`, `3d-model.json` and `/stream` read every physical device | "should show a companion's screen once its video has arrived"; "should list each ready physical device as connected, with what it can do" — **done** |

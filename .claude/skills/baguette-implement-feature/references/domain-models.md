@@ -12,7 +12,7 @@ Its patterns, each below:
 5. **A gesture parses itself and acts in one line**: `parse` then `execute(on:)`.
 6. **A Domain decorator may wrap a role** when it owns a rule.
 
-Every `@Mockable protocol` is named for its domain role (`Input`, `Screen`,
+Every `@Mockable protocol` is named for its domain role (`Touch`, `Screen`,
 `Hinge`, `Subprocess`), never `XxxPort` / `XxxService` / `XxxManager`.
 **Aggregate CRUD is the one carve-out**: the plural collection noun
 (`Simulators`, `Chromes`), never the suffix `XxxRepository`.
@@ -81,33 +81,32 @@ The value owns its identity and its behaviour against the role it dispatches
 into. `DeviceButton` and `KeyboardKey` are the canonical examples:
 
 ```swift
-enum DeviceButton: String, Sendable, Equatable, Hashable {
-    case home, lock, power, action
-    case volumeUp = "volume-up"
-    case volumeDown = "volume-down"
-    // … the watch buttons and the gesture shortcuts (`app-switcher`, …).
-    // `siri` is absent on purpose: every known path crashes backboardd.
+/// What `press` presses: a navigation the system performs, or a button on
+/// the device's body. Each device lists which it has (`Press.available`).
+enum DeviceButton: Hashable, Sendable {
+    case navigation(Navigation)        // home, app-switcher, the edge pulls, …
+    case hardware(HardwareButton)      // lock, power, volume, action, the watch's
 }
 
-extension DeviceButton {
+extension HardwareButton {
     /// Domain knowledge on the type, not in the adapter.
     var standardHIDUsage: HIDUsage? {
         switch self {
-        case .home, .lock: return nil   // the legacy button path
+        case .lock:       return nil   // a button message of its own
         case .power:      return HIDUsage(page: 12, usage: 48)
         case .volumeUp:   return HIDUsage(page: 12, usage: 233)
         case .volumeDown: return HIDUsage(page: 12, usage: 234)
         case .action:     return HIDUsage(page: 11, usage: 45)
-        // … the gesture shortcuts return nil; the watch buttons carry their
-        //   chrome.json codes
+        // … the watch buttons carry their chrome.json codes.
+        // `siri` is absent on purpose: every known path crashes backboardd.
         }
     }
 
     /// Tell, don't ask: the caller says "press this button"; the adapter
     /// picks the SimulatorKit symbol.
     @discardableResult
-    func press(duration: Double = 0, on input: any Input) -> Bool {
-        input.button(self, duration: duration)
+    func press(duration: Double = 0, on buttons: any Press) -> Bool {
+        buttons.button(self, duration: duration)
     }
 }
 ```
@@ -147,26 +146,28 @@ try HingeCommand.parse(pose: "ajar", angle: nil, duration: nil)   // throws Hing
 
 ## 5. A gesture parses itself and acts in one line
 
-baguette has no DTOs: a `Tap` or a `Press` *is* the domain concept, and it
+baguette has no DTOs: a `Tap` or a `ButtonPress` *is* the domain concept, and it
 reads itself from the wire (`parse`) and acts on the role (`execute(on:)`).
 Its rules live on the rich value it carries, so `execute` stays one line.
 
 ```swift
-struct Press: Gesture, Equatable {
+struct ButtonPress: Gesture, Equatable {
     static let wireType = "button"
     let button: DeviceButton
     let duration: Double
 
-    static func parse(_ dict: [String: Any]) throws -> Press {
+    static func parse(_ dict: [String: Any]) throws -> ButtonPress {
         let raw = try Field.requiredString(dict, "button")
         guard let button = DeviceButton(rawValue: raw) else {
             throw GestureError.invalidValue("button", expected: allowed)
         }
-        return Press(button: button, duration: Field.optionalDouble(dict, "duration", default: 0))
+        return ButtonPress(button: button, duration: Field.optionalDouble(dict, "duration", default: 0))
     }
 
-    func execute(on input: any Input) -> Bool {
-        button.press(duration: duration, on: input)   // ← one line
+    static var ability: Ability<any Press> { .press }
+
+    func execute(on buttons: any Press) -> Bool {
+        button.press(duration: duration, on: buttons)   // ← one line
     }
 }
 ```
@@ -179,9 +180,11 @@ struct Press: Gesture, Equatable {
 
 ## 6. A Domain decorator may wrap a role
 
-`IndigoHIDInput` is the only Infrastructure `Input`; tests use `MockInput`.
+`IndigoHIDInput` is the simulator's only input adapter, playing all four
+roles (its `HID`); tests mock the role they test (`MockTouch`, `MockKey`, …).
 Don't add a parallel hierarchy for testability. But a **Domain** type that
-wraps `Input` to own a rule is the right shape, composed by the aggregate:
+wraps a simulator's `HID` to own a rule is the right shape, composed by the
+aggregate:
 
 | Decorator | The rule it owns |
 |---|---|
@@ -189,7 +192,7 @@ wraps `Input` to own a rule is the right shape, composed by the aggregate:
 | `LitPanelInput` | on a socket that outlives a fold, each gesture goes to the lit panel; a touch stays on its digitizer until it lifts |
 
 A decorator forwards everything else unchanged, holds roles not adapters
-(`any Input`, `any Hinge`), and is built by a `Simulator` factory, not by
+(`any HID`, `any Hinge`), and is built by a `Simulator` factory, not by
 `Server`.
 
 ## struct vs class

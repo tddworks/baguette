@@ -22,9 +22,9 @@ struct HealCommand: AsyncParsableCommand {
     @OptionGroup var options: DeviceOption
 
     func run() async throws {
-        let simulator = try options.simulator(for: .input)
+        let (_, surface) = try options.require(.inputSurface)
         do {
-            let outcome = try await SimctlInputSurface().heal(on: simulator)
+            let outcome = try await surface.heal()
             log(outcome.summary)
         } catch {
             log("Heal failed: \(error)")

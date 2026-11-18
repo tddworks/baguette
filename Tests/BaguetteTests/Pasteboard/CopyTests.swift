@@ -12,11 +12,11 @@ import Mockable
 @Suite("Copy")
 struct CopyTests {
 
-    private func surfaces() -> (MockPasteboard, MockInput) {
+    private func surfaces() -> (MockPasteboard, InputMocks) {
         let pasteboard = MockPasteboard()
-        let input = MockInput()
+        let input = InputMocks()
         given(pasteboard).syncToHost().willReturn(())
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
         return (pasteboard, input)
     }
 
@@ -35,29 +35,29 @@ struct CopyTests {
     @Test func `should press Cmd+C then ferry the simulator pasteboard to the host`() async throws {
         let (pasteboard, input) = surfaces()
         let ok = try await Copy(press: true, settleNanos: 0)
-            .execute(pasteboard: pasteboard, input: input)
+            .execute(pasteboard: pasteboard, input: input.abilities)
         #expect(ok)
-        verify(input).key(.any, modifiers: .value([.command]), duration: .any).called(1)
+        verify(input.key).key(.any, modifiers: .value([.command]), duration: .any).called(1)
         verify(pasteboard).syncToHost().called(1)
     }
 
     @Test func `should only ferry the pasteboard, with no keystroke, when press is false`() async throws {
         let (pasteboard, input) = surfaces()
         let ok = try await Copy(press: false, settleNanos: 0)
-            .execute(pasteboard: pasteboard, input: input)
+            .execute(pasteboard: pasteboard, input: input.abilities)
         #expect(ok)
-        verify(input).key(.any, modifiers: .any, duration: .any).called(0)
+        verify(input.key).key(.any, modifiers: .any, duration: .any).called(0)
         verify(pasteboard).syncToHost().called(1)
     }
 
     @Test func `should still ferry the pasteboard but report not-ok when the Cmd+C press fails`() async throws {
         let pasteboard = MockPasteboard()
-        let input = MockInput()
+        let input = InputMocks()
         given(pasteboard).syncToHost().willReturn(())
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(false)
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(false)
 
         let ok = try await Copy(press: true, settleNanos: 0)
-            .execute(pasteboard: pasteboard, input: input)
+            .execute(pasteboard: pasteboard, input: input.abilities)
         #expect(!ok)
         verify(pasteboard).syncToHost().called(1)
     }

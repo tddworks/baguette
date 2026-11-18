@@ -42,11 +42,11 @@ struct MotionRoutesTests {
         given(location).set(.any).willReturn(())
         given(location).start(.any).willReturn(())
         given(location).clear().willReturn(())
-        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+        given(motion).publish(.any).willProduce { intent in
             captures.intents.append(intent)
         }
         given(motion).published().willProduce { captures.last }
-        given(motion).clear(on: .any).willReturn(())
+        given(motion).clear().willReturn(())
         return Wiring(simulators: simulators, sim: sim, motion: motion,
                       sessions: MotionSessions(makeMotion: { _ in motion }),
                       captures: captures)
@@ -158,8 +158,8 @@ struct MotionRoutesTests {
         given(sim).udid.willReturn("U")
         given(sim).name.willReturn("iPhone 17 Pro")
         let motion = MockMotion()
-        given(motion).publish(.any, on: .any).willReturn(())
-        given(motion).clear(on: .any).willThrow(SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
+        given(motion).publish(.any).willReturn(())
+        given(motion).clear().willThrow(SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
         given(motion).published().willProduce { nil }
         let sessions = MotionSessions(makeMotion: { _ in motion })
         _ = await Server.applyMotion(udid: "U", body: #"{"activity":"walking"}"#,
@@ -199,7 +199,7 @@ struct MotionRoutesTests {
         #expect(w.captures.last?.kind == .stationary)
         #expect(w.captures.last?.stepsBefore == 812)
         #expect(w.captures.last?.distanceBefore == 610)
-        verify(w.motion).clear(on: .any).called(1)
+        verify(w.motion).clear().called(1)
         #expect(w.sessions.active(udid: "U") == nil)
     }
 
@@ -214,19 +214,19 @@ struct MotionRoutesTests {
             .stationary(startedAt: 1000, stepsBefore: 812, distanceBefore: 610))
         var reject = true
         let captures = Captures()
-        given(motion).publish(.any, on: .any).willProduce { intent, _ in
+        given(motion).publish(.any).willProduce { intent in
             if reject && failPublish { throw SimctlCapture.Failure.failed(udid: "U", status: 2, output: "") }
             captures.intents.append(intent)
         }
-        given(motion).clear(on: .any).willProduce { _ in
+        given(motion).clear().willProduce {
             if reject { throw SimctlCapture.Failure.failed(udid: "U", status: 3, output: "") }
         }
         let sessions = MotionSessions(makeMotion: { _ in motion })
 
         #expect(await Server.stopMotion(udid: "U", simulators: simulators, sessions: sessions) == .dispatchFailed)
         #expect(sessions.active(udid: "U")?.lastError != nil)
-        verify(motion).publish(.any, on: .any).called(1)
-        verify(motion).clear(on: .any).called(failPublish ? 0 : 1)
+        verify(motion).publish(.any).called(1)
+        verify(motion).clear().called(failPublish ? 0 : 1)
 
         reject = false
         #expect(await Server.stopMotion(udid: "U", simulators: simulators, sessions: sessions) == .ok)
@@ -263,7 +263,7 @@ struct MotionRoutesTests {
                                        sessions: w.sessions)
 
         #expect(w.captures.intents.isEmpty)
-        verify(w.motion).publish(.any, on: .any).called(0)
+        verify(w.motion).publish(.any).called(0)
     }
 
     @Test func `should drive the motion activity from a route's own speed`() async {

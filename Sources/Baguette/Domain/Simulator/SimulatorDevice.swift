@@ -25,30 +25,37 @@ struct SimulatorDevice: Device {
             model: simulator.deviceTypeName)
     }
 
-    var abilities: AbilityTable {
+    var abilities: Abilities {
         let sim = simulator
-        var table = AbilityTable(device: sim.name)
-        table.register(.lifecycle) { SimulatorLifecycle(simulator: sim) }
-        table.register(.screen) { sim.screen() }
-        table.register(.input) { sim.input() }
-        table.register(.displays) { sim.displays() }
-        table.register(.hinge) { sim.hinge() }
-        table.register(.externalDisplays) { sim.externalDisplays() }
-        table.register(.accessibility) { sim.accessibility() }
-        table.register(.logs) { sim.logs() }
-        table.register(.orientation) { sim.orientation() }
-        table.register(.statusBar) { sim.statusBar() }
-        table.register(.interface) { sim.interface() }
-        table.register(.location) { sim.location() }
-        table.register(.motion) { sim.motion() }
-        table.register(.network) { sim.network() }
-        table.register(.pasteboard) { sim.pasteboard() }
-        table.register(.apps) { sim.apps() }
-        table.register(.defaults) { sim.defaults() }
-        table.register(.photos) { sim.photos() }
-        table.register(.shake) { sim.shake() }
-        table.register(.watchPairing) { sim.watchPairing() }
-        return table
+        var abilities = Abilities(device: sim.name)
+        abilities.register(.lifecycle) { SimulatorLifecycle(simulator: sim) }
+        abilities.register(.screen) { sim.screen() }
+        // One HID for the four input roles: a keystroke has to ride the
+        // Indigo services a gesture warmed, never a second client of its own.
+        let hid = OneHID { sim.input() }
+        abilities.register(.touch) { hid.surface }
+        abilities.register(.press) { hid.surface }
+        abilities.register(.key) { hid.surface }
+        abilities.register(.scroll) { hid.surface }
+        abilities.register(.displays) { sim.displays() }
+        abilities.register(.hinge) { sim.hinge() }
+        abilities.register(.externalDisplays) { sim.externalDisplays() }
+        abilities.register(.accessibility) { sim.accessibility() }
+        abilities.register(.logs) { sim.logs() }
+        abilities.register(.orientation) { sim.orientation() }
+        abilities.register(.statusBar) { sim.statusBar() }
+        abilities.register(.interface) { sim.interface() }
+        abilities.register(.location) { sim.location() }
+        abilities.register(.motion) { sim.motion() }
+        abilities.register(.network) { sim.network() }
+        abilities.register(.inputSurface) { sim.inputSurface() }
+        abilities.register(.pasteboard) { sim.pasteboard() }
+        abilities.register(.apps) { sim.apps() }
+        abilities.register(.defaults) { sim.defaults() }
+        abilities.register(.photos) { sim.photos() }
+        abilities.register(.shake) { sim.shake() }
+        abilities.register(.watchPairing) { sim.watchPairing() }
+        return abilities
     }
 }
 
@@ -64,6 +71,26 @@ final class SimulatorDevices: Devices {
 
     func find(id: DeviceID) throws -> (any Device)? {
         simulators.find(udid: id.raw).map(SimulatorDevice.init)
+    }
+}
+
+/// The HID a simulator's abilities share, made the first time a role asks.
+private final class OneHID: @unchecked Sendable {
+    private let make: @Sendable () -> any HID
+    private let lock = NSLock()
+    private var made: (any HID)?
+
+    init(_ make: @escaping @Sendable () -> any HID) {
+        self.make = make
+    }
+
+    var surface: any HID {
+        lock.lock()
+        defer { lock.unlock() }
+        if let made { return made }
+        let surface = make()
+        made = surface
+        return surface
     }
 }
 

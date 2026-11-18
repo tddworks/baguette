@@ -24,10 +24,11 @@ struct LaunchCommand: AsyncParsableCommand {
     var thenDescribeUI = false
 
     func run() async throws {
-        let simulator = try options.simulator(for: .apps)
+        let (device, apps) = try options.require(.apps)
+        let accessibility = try orExit { try device.require(.accessibility) }
         let result = await AppLaunch.perform(
             bundleID: bundleId, relaunch: relaunch, thenDescribeUI: thenDescribeUI,
-            apps: simulator.apps(), accessibility: simulator.accessibility(),
+            apps: apps, accessibility: accessibility,
             affordances: options.affordanceStyle)
         print(result)
         if !result.hasPrefix(#"{"ok":true"#) { throw ExitCode.failure }

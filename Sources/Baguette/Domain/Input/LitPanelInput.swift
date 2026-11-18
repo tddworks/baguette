@@ -9,9 +9,9 @@ import Foundation
 /// the hinge can move from outside (Device Hub, `baguette hinge`)
 /// mid-drag, and an `up` sent to the other panel would leave the first
 /// one holding a contact nobody releases.
-final class LitPanelInput: Input, @unchecked Sendable {
-    private let cover: any Input
-    private let unfolded: any Input
+final class LitPanelInput: HID, @unchecked Sendable {
+    private let cover: any HID
+    private let unfolded: any HID
     private let hinge: any Hinge
     private let lock = NSLock()
     /// The panel each contact stream went down on; a one-finger drag and
@@ -19,19 +19,19 @@ final class LitPanelInput: Input, @unchecked Sendable {
     private enum Contact { case oneFinger, twoFingers }
     private var touching: [Contact: IntegratedPanel] = [:]
 
-    init(cover: any Input, unfolded: any Input, hinge: any Hinge) {
+    init(cover: any HID, unfolded: any HID, hinge: any Hinge) {
         self.cover = cover
         self.unfolded = unfolded
         self.hinge = hinge
     }
 
-    private func input(on panel: IntegratedPanel) -> any Input { panel == .primary ? cover : unfolded }
+    private func input(on panel: IntegratedPanel) -> any HID { panel == .primary ? cover : unfolded }
 
-    private var lit: any Input { input(on: hinge.litPanel) }
+    private var lit: any HID { input(on: hinge.litPanel) }
 
     /// The panel a contact's phase goes to: the lit one on `down`, the
     /// same one until `up`.
-    private func contact(_ stream: Contact, _ phase: GesturePhase) -> any Input {
+    private func contact(_ stream: Contact, _ phase: GesturePhase) -> any HID {
         lock.lock()
         defer { lock.unlock() }
         let panel = (phase == .down ? nil : touching[stream]) ?? hinge.litPanel
@@ -54,6 +54,8 @@ final class LitPanelInput: Input, @unchecked Sendable {
     func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool {
         contact(.twoFingers, phase).touch2(phase: phase, first: first, second: second, size: size)
     }
+
+    var available: Set<DeviceButton> { lit.available }
 
     func button(_ button: DeviceButton, duration: Double) -> Bool {
         lit.button(button, duration: duration)

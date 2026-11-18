@@ -15,7 +15,7 @@ struct DefaultsCommand: ParsableCommand {
         subcommands: [Read.self, Write.self, Delete.self, Export.self, Import.self]
     )
 
-    /// Which simulator, which app, which suite — shared by all three verbs.
+    /// Which device, which app, which suite — shared by all three verbs.
     struct Target: ParsableArguments {
         @OptionGroup var device: DeviceOption
 
@@ -29,8 +29,10 @@ struct DefaultsCommand: ParsableCommand {
             try PreferenceSuite(bundleID: bundleID, name: suite)
         }
 
-        func simulator() throws -> any Simulator {
-            try device.simulator(for: .defaults)
+        /// The device's defaults, and its apps to find a bundle's container.
+        func roles() throws -> (defaults: any Defaults, apps: any Apps) {
+            let (found, defaults) = try device.require(.defaults)
+            return (defaults, try orExit { try found.require(.apps) })
         }
     }
 
@@ -55,7 +57,7 @@ struct DefaultsCommand: ParsableCommand {
             let lookups: PreferenceLookups?
             do {
                 suite = try target.preferenceSuite()
-                let defaults = try target.simulator().defaults()
+                let defaults = try target.roles().defaults
                 preferences = try await defaults.read(suite)
                 lookups = key == nil ? try await defaults.lookups(of: suite.bundleID) : nil
             } catch let exit as ExitCode {
@@ -169,8 +171,8 @@ struct DefaultsCommand: ParsableCommand {
         func run() async throws {
             let applied: PreferenceEdit.Applied
             do {
-                let simulator = try target.simulator()
-                applied = try await edit().apply(on: simulator.defaults(), apps: simulator.apps())
+                let roles = try target.roles()
+                applied = try await edit().apply(on: roles.defaults, apps: roles.apps)
             } catch let exit as ExitCode {
                 throw exit
             } catch {
@@ -203,8 +205,8 @@ struct DefaultsCommand: ParsableCommand {
         func run() async throws {
             let applied: PreferenceEdit.Applied
             do {
-                let simulator = try target.simulator()
-                applied = try await edit().apply(on: simulator.defaults(), apps: simulator.apps())
+                let roles = try target.roles()
+                applied = try await edit().apply(on: roles.defaults, apps: roles.apps)
             } catch let exit as ExitCode {
                 throw exit
             } catch {
@@ -236,7 +238,7 @@ struct DefaultsCommand: ParsableCommand {
             let object: [String: Any]
             do {
                 let suite = try target.preferenceSuite()
-                object = export(try await target.simulator().defaults().read(suite), from: suite)
+                object = export(try await target.roles().defaults.read(suite), from: suite)
             } catch let exit as ExitCode {
                 throw exit
             } catch {
@@ -282,8 +284,8 @@ struct DefaultsCommand: ParsableCommand {
                     ? FileHandle.standardInput.readDataToEndOfFile()
                     : try Data(contentsOf: URL(fileURLWithPath: file))
                 let restore = try preferenceImport(from: data)
-                let simulator = try target.simulator()
-                applied = try await restore.apply(on: simulator.defaults(), apps: simulator.apps())
+                let roles = try target.roles()
+                applied = try await restore.apply(on: roles.defaults, apps: roles.apps)
             } catch let exit as ExitCode {
                 throw exit
             } catch {

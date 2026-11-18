@@ -128,7 +128,7 @@ RemoteAXAccessibility.describeAll
 ### How a touch reaches the phone
 
 ```
-DigitizerInput (gesture → reports, fractions of the screen)
+DigitizerTouch (gesture → reports, fractions of the screen; the phone's only input role)
   → CoreDeviceDigitizer.report
       → CoreDeviceFramework.device(<CoreDevice identifier>)        DeviceManager.allDevices()
       → RemoteDevice.open(.universalHID)                           getImplementation(for:) async throws

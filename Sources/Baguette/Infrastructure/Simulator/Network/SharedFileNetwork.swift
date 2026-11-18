@@ -29,18 +29,22 @@ final class SharedFileNetwork: Network, @unchecked Sendable {
     /// loudly rather than arming nothing.
     private let dylibPath: String?
     private let injection: any SimulatorInjection
+    /// The one simulator this conditions — bound when the role is made.
+    private let simulator: any Simulator
 
     init(
         fileURL: URL,
         dylibPath: String?,
-        injection: any SimulatorInjection = SimctlSimulatorInjection()
+        injection: any SimulatorInjection = SimctlSimulatorInjection(),
+        simulator: any Simulator
     ) {
         self.fileURL = fileURL
         self.dylibPath = dylibPath
         self.injection = injection
+        self.simulator = simulator
     }
 
-    func apply(_ condition: NetworkCondition, on simulator: any Simulator) async throws {
+    func apply(_ condition: NetworkCondition) async throws {
         // Refuse before touching anything: an empty DYLD_INSERT_LIBRARIES
         // entry makes dyld log a load failure for every app launched
         // afterwards, and a condition nobody reads looks like success.
@@ -49,7 +53,7 @@ final class SharedFileNetwork: Network, @unchecked Sendable {
         try await injection.arm(dylibPath: dylibPath, on: simulator)
     }
 
-    func clear(on simulator: any Simulator) async throws {
+    func clear() async throws {
         guard let dylibPath, !dylibPath.isEmpty else { return }
         // Publish *before* disarming, and publish an explicit unconditioned
         // value rather than deleting the file.
@@ -66,7 +70,7 @@ final class SharedFileNetwork: Network, @unchecked Sendable {
         try await injection.disarm(dylibPath: dylibPath, on: simulator)
     }
 
-    func current(on simulator: any Simulator) async throws -> NetworkCondition? {
+    func current() async throws -> NetworkCondition? {
         guard let dylibPath, !dylibPath.isEmpty else { return nil }
         // Armed first. The file is per-simulator, but a device can still
         // hold a stale one without the dylib armed — a simulator reboot

@@ -57,6 +57,14 @@ struct ServeCommand: AsyncParsableCommand {
         let cameraSessions = CameraSessions(guestTerminated: {
             try simulators.hasTerminated(udid: $0)
         })
+        // Companion phones connect only while serving: their live state is
+        // made here, shared by the server's ingest and the list of kinds.
+        let companions = LiveCompanionPhones()
+        let twinScreens = TwinScreens()
+        let kinds = DeviceKinds(
+            simulators: simulators,
+            companions: CompanionDevices(phones: companions, screens: twinScreens)
+        )
         let server = Server(
             simulators: simulators,
             chromes: LiveChromes(
@@ -69,7 +77,10 @@ struct ServeCommand: AsyncParsableCommand {
             host: host,
             port: port,
             allowedHosts: allowedHosts,
-            cameraSessions: cameraSessions
+            cameraSessions: cameraSessions,
+            devices: companions,
+            twinScreens: twinScreens,
+            allDevices: kinds.devices
         )
         for plugin in (try? plugins.all()) ?? [] {
             log("plugin: \(plugin.id) \(plugin.manifest.version)")

@@ -18,13 +18,13 @@ import Mockable
 protocol Network: AnyObject, Sendable {
     /// State how degraded the network is, and arm the dylib so apps
     /// launched from now on are subject to it.
-    func apply(_ condition: NetworkCondition, on simulator: any Simulator) async throws
+    func apply(_ condition: NetworkCondition) async throws
 
     /// Stop conditioning. Apps launched afterwards load nothing; apps
     /// **already running** still have the dylib loaded, so this also
     /// publishes an unconditioned state for them to read — otherwise they
     /// would stay throttled for as long as they keep running.
-    func clear(on simulator: any Simulator) async throws
+    func clear() async throws
 
     /// What this simulator's apps are actually subject to, or `nil` when
     /// nothing is. Throws when the injection state cannot be determined.
@@ -38,7 +38,7 @@ protocol Network: AnyObject, Sendable {
     /// shared file, so a second simulator can see the same bytes without
     /// having the dylib armed; reporting a condition there would be a false
     /// alarm, and a badge that cries wolf stops being read.
-    func current(on simulator: any Simulator) async throws -> NetworkCondition?
+    func current() async throws -> NetworkCondition?
 }
 
 /// Failure modes the network surface surfaces. Maps to a CLI exit message /

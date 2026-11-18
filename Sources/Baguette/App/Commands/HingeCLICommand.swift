@@ -26,13 +26,10 @@ struct HingeCLICommand: ParsableCommand {
     var duration: String?
 
     func run() throws {
-        let simulator = try options.simulator(for: .hinge)
-        guard simulator.canAcceptInput else {
-            log("Device \(simulator.name) is not booted")
-            Foundation.exit(1)
-        }
+        // `.hinge` needs a booted device: Devices refuses the rest, saying so.
+        let (_, hinge) = try options.require(.hinge)
         if pose == nil && angle == nil {
-            let current = simulator.hinge().angle()
+            let current = hinge.angle()
             print(#"{"ok":true,"angleDegrees":\#(current.map { String($0.degrees) } ?? "null")}"#)
             return
         }
@@ -44,7 +41,7 @@ struct HingeCLICommand: ParsableCommand {
             Foundation.exit(2)
         }
         do {
-            try simulator.hinge().fold(to: command.degrees, over: command.duration)
+            try hinge.fold(to: command.degrees, over: command.duration)
         } catch {
             let delivery = PoseDelivery(failure: error)
             log(delivery == .unconfirmed

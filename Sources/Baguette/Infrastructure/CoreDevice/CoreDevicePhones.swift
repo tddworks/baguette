@@ -52,25 +52,25 @@ struct CoreDevicePhone: Device {
                    model: phone.marketingName, hardware: phone.productType)
     }
 
-    var abilities: AbilityTable {
+    var abilities: Abilities {
         let (udid, devicectl) = (phone.udid, devicectl)
-        var table = AbilityTable(device: phone.name)
+        var abilities = Abilities(device: phone.name)
         if let identifier = phone.coreDeviceIdentifier, CoreDeviceFramework.isAvailable {
             // The phone's own H.264 stream, received over the tunnel; the
             // devicectl screenshots stand in when it can't start.
-            table.register(.screen) {
+            abilities.register(.screen) {
                 MediaStreamScreen(identifier: identifier, devicectl: devicectl,
                                   fallback: DevicectlScreen(udid: udid, devicectl: devicectl))
             }
         } else {
-            table.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }
+            abilities.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }
         }
         if let identifier = phone.coreDeviceIdentifier {
-            table.register(.input) { DigitizerInput(digitizer: CoreDeviceDigitizer(identifier: identifier)) }
+            abilities.register(.touch) { DigitizerTouch(digitizer: CoreDeviceDigitizer(identifier: identifier)) }
             // Its own accessibility service, over the tunnel.
-            table.register(.accessibility) { RemoteAXAccessibility(identifier: identifier, devicectl: devicectl) }
+            abilities.register(.accessibility) { RemoteAXAccessibility(identifier: identifier, devicectl: devicectl) }
         }
-        table.register(.pasteboard) { DevicectlPasteboard(udid: udid, devicectl: devicectl) }
-        return table
+        abilities.register(.pasteboard) { DevicectlPasteboard(udid: udid, devicectl: devicectl) }
+        return abilities
     }
 }

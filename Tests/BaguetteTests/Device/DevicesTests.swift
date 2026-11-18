@@ -36,7 +36,7 @@ struct DevicesTests {
 
     @Test func `should hand back the ability of the device an id names`() throws {
         let location = MockLocation()
-        var abilities = AbilityTable(device: "iPhone 17 Pro")
+        var abilities = Abilities(device: "iPhone 17 Pro")
         abilities.register(.location) { location }
         let devices = CombinedDevices([source(device("SIM-1", abilities: abilities))])
 
@@ -52,17 +52,17 @@ struct DevicesTests {
     }
 
     @Test func `should refuse an ability that needs a running device while the device is off`() {
-        var abilities = AbilityTable(device: "iPhone 17 Pro")
-        abilities.register(.input) { MockInput() }
+        var abilities = Abilities(device: "iPhone 17 Pro")
+        abilities.register(.touch) { MockTouch() }
         let devices = CombinedDevices([source(device("SIM-1", state: .off, abilities: abilities))])
 
         #expect(throws: DeviceError.notReady(device: "iPhone 17 Pro", state: .off)) {
-            try devices.require(.input, of: "SIM-1")
+            try devices.require(.touch, of: "SIM-1")
         }
     }
 
     @Test func `should hand back an ability that needs no running device while the device is off`() throws {
-        var abilities = AbilityTable(device: "iPhone 17 Pro")
+        var abilities = Abilities(device: "iPhone 17 Pro")
         abilities.register(.lifecycle) { MockLifecycle() }
         let devices = CombinedDevices([source(device("SIM-1", state: .off, abilities: abilities))])
 
@@ -72,13 +72,23 @@ struct DevicesTests {
     @Test func `should refuse an ability a device never registered before asking whether it is ready`() {
         let devices = CombinedDevices([source(device("PHONE-1", name: "iPhone 18 Pro Max", state: .off))])
 
-        #expect(throws: DeviceError.unable(ability: "input", device: "iPhone 18 Pro Max")) {
-            try devices.require(.input, of: "PHONE-1")
+        #expect(throws: DeviceError.unable(ability: "touch", device: "iPhone 18 Pro Max")) {
+            try devices.require(.touch, of: "PHONE-1")
         }
     }
 
+    @Test func `should keep only the physical devices of every device`() throws {
+        let simulator = device("SIM-1")
+        let phone = device("PHONE-1", kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"))
+        let physical = CombinedDevices([source(simulator, phone)]).physical
+
+        #expect(physical.all.map(\.id) == ["PHONE-1"])
+        #expect(try physical.find(id: "SIM-1") == nil)
+        #expect(try physical.find(id: "PHONE-1")?.id == "PHONE-1")
+    }
+
     @Test func `should list each ready physical device as connected, with what it can do`() {
-        var abilities = AbilityTable(device: "han's iPhone")
+        var abilities = Abilities(device: "han's iPhone")
         abilities.register(.screen) { MockScreen() }
         abilities.register(.orientation) { MockOrientation() }
         let phone = device(
@@ -113,7 +123,7 @@ struct DevicesTests {
     }
 
     @Test func `should list each device's kind, state and abilities`() {
-        var abilities = AbilityTable(device: "iPhone 17 Pro")
+        var abilities = Abilities(device: "iPhone 17 Pro")
         abilities.register(.shake) { MockShake() }
         abilities.register(.location) { MockLocation() }
         let simulator = device(
@@ -148,14 +158,14 @@ extension DevicesTests {
         name: String = "iPhone 17 Pro",
         kind: DeviceKind = DeviceKind(platform: .iOS, reality: .simulated, model: "iPhone 17 Pro"),
         state: DeviceState = .ready,
-        abilities: AbilityTable? = nil
+        abilities: Abilities? = nil
     ) -> MockDevice {
         let device = MockDevice()
         given(device).id.willReturn(id)
         given(device).name.willReturn(name)
         given(device).kind.willReturn(kind)
         given(device).state.willReturn(state)
-        given(device).abilities.willReturn(abilities ?? AbilityTable(device: name))
+        given(device).abilities.willReturn(abilities ?? Abilities(device: name))
         return device
     }
 

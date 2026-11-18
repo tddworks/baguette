@@ -37,11 +37,9 @@ struct BootCommand: AsyncParsableCommand {
         // legacy input surface dead for the rest of the boot. Nothing is
         // running yet, so the SpringBoard restart that fixes it is free.
         // Only a simulator has an input surface Device Hub can shadow.
-        guard !noHeal,
-              let simulator = CoreSimulators(deviceSetPath: options.deviceSet).find(udid: options.udid)
-        else { return }
+        guard !noHeal, let surface = try? options.device().require(.inputSurface) else { return }
         do {
-            if try await SimctlInputSurface().healAfterBoot(on: simulator) == .reclaimed {
+            if try await surface.healAfterBoot() == .reclaimed {
                 log(HealOutcome.reclaimed.summary)
             }
         } catch {

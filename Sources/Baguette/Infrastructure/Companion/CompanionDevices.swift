@@ -35,11 +35,11 @@ struct CompanionDevice: Device {
     /// page borrows a bezel the user picks.
     var kind: DeviceKind { DeviceKind(platform: .iOS, reality: .physical, model: phone.model, hardware: phone.model) }
 
-    var abilities: AbilityTable {
-        var table = AbilityTable(device: phone.name)
+    var abilities: Abilities {
+        var abilities = Abilities(device: phone.name)
         if let hub = screens.find(udid: phone.udid) {
-            table.register(.screen) { hub.view() }
+            abilities.register(.screen) { hub.view() }
         }
-        return table
+        return abilities
     }
 }

@@ -1,9 +1,16 @@
 import Foundation
 
-/// One thing the user does to the simulator — `tap`, `swipe`, `button`,
-/// etc. Each conforming type carries its own fields (parsed from JSON on
-/// the wire) and knows how to dispatch itself against an `Input`.
+/// One thing the user does to a device — a tap, a swipe, a keystroke, a
+/// button press. Each is an act of one input ability, which it names: it
+/// carries its own fields (parsed from JSON on the wire) and runs itself
+/// on that ability's role.
 protocol Gesture: Sendable {
+    /// The input role this act is performed with.
+    associatedtype Role
+
+    /// The ability this act needs; a screen without it refuses the act.
+    static var ability: Ability<Role> { get }
+
     /// The `"type"` value on the wire that selects this gesture's parser.
     static var wireType: String { get }
 
@@ -11,9 +18,24 @@ protocol Gesture: Sendable {
     /// `GestureError` on missing or malformed fields.
     static func parse(_ dict: [String: Any]) throws -> Self
 
-    /// Run the gesture against the input surface. Returns the surface's
-    /// success flag.
-    func execute(on input: any Input) -> Bool
+    /// Run the act on its role. Returns the role's success flag.
+    func execute(on role: Role) -> Bool
+
+    /// What this act needs that `role` doesn't offer — a navigation the
+    /// device lacks — or nil when it can act.
+    func missing(from role: Role) -> String?
+}
+
+extension Gesture {
+    func missing(from role: Role) -> String? { nil }
+
+    /// Run the act on the screen's input: the role it needs, or a refusal
+    /// naming what is missing and the device.
+    func execute(on input: Abilities) throws -> Bool {
+        let role = try input.require(Self.ability)
+        if let missing = missing(from: role) { throw input.refusal(missing) }
+        return execute(on: role)
+    }
 }
 
 /// Failure modes the gesture parsing surfaces. The dispatch layer turns

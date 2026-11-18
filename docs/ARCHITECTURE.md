@@ -126,14 +126,14 @@ protocols at the boundaries the App layer wires up.
 
 | Context | Type | Kind | Notes |
 |---|---|---|---|
-| Device | `Devices` / `Device` | aggregate | every device of every family in one list; a device is identity + kind + state + an `AbilityTable`. `devices.require(.input, of: id)` hands back the role, or refuses naming the ability ([devices](features/devices/design.md)) |
-| Device | `AbilityTable` / `Ability` | value | what one device can do, registered by its family only when it can do it |
+| Device | `Devices` / `Device` | aggregate | every device of every family in one list; a device is identity + kind + state + an `Abilities`. `devices.require(.input, of: id)` hands back the role, or refuses naming the ability ([devices](features/devices/design.md)) |
+| Device | `Abilities` / `Ability` | value | what one device can do, registered by its family only when it can do it |
 | CoreDevice | `PhysicalPhone` · `MediaStreamOffer` · `ReceiverFeedback` · `DTXMessage` · `XPCObject` · `ServiceDirectory` · `AXTreeDump` | value | a phone on a cable, and the wire formats of its screen stream and its services — pure, tested byte for byte ([real devices](features/real-devices/design.md)) |
 | Simulator | `Simulator` | value | identity (`udid`, `name`, `state`, `runtime`); rich verbs `boot()` / `shutdown()` / `screen()` / `input()` / `chrome(in:)` delegate to the injected aggregate |
 | Simulator | `Simulators` | aggregate | `@Mockable` protocol — `all`, `find`, `boot`, `shutdown`, `screen(for:)`, `input(for:)`. Default-impl `running` / `available` / `listJSON` |
 | Screen | `Screen` | port | `@Mockable` protocol — `start(onFrame:)` / `stop`. Emits `IOSurface` per frame |
-| Input | `Input` | port | `@Mockable` protocol — `tap` / `swipe` / `touch1` / `touch2` / `button` / `scroll` |
-| Input | `Gesture` | protocol | `Tap` / `Swipe` / `Touch1` / `Touch2` / `Press` / `Scroll` / `Pinch` / `Pan` value types |
+| Input | `Touch` · `Press` · `Key` · `Scroll` | role | `@Mockable` protocols, one per input ability — `tap` / `swipe` / `touch1` / `touch2` / `twoFingerPath`; `button`; `key`; `scroll`. A device registers only those it has |
+| Input | `Gesture` | protocol | one act of one ability, which it names: `Tap` / `Swipe` / `Touch1` / `Touch2` / `Pinch` / `Pan` (Touch), `ButtonPress` (Press), `Keystroke` / `TypeText` (Key), `WheelEvent` (Scroll) |
 | Input | `GestureRegistry` | strategy | maps wire `"type"` strings to per-gesture parsers |
 | Stream | `Stream` | port | `@Mockable` protocol — `start(on:)` / `stop` / `apply(_:)` / `requestKeyframe` / `requestSnapshot` |
 | Stream | `StreamConfig` / `StreamFormat` | value | runtime knobs + `mjpeg` / `avcc` enum |
@@ -172,7 +172,7 @@ mocks at the port boundary.
 |---|---|---|---|
 | Simulator | `Simulators` | `CoreSimulators` | CoreSimulator + SimulatorKit private classes via the ObjC runtime |
 | Screen | `Screen` | `SimulatorKitScreen` | `SimDevice.io` framebuffer callback registration |
-| Input | `Input` | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
+| Input | `Touch` · `Press` · `Key` · `Scroll` (a simulator's `HID`) | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
 | Stream | `Stream` | `MJPEGStream` / `AVCCStream` | `JPEGEncoder` + `H264Encoder` (VideoToolbox), envelope formatting |
 | Stream | `FrameSink` | `StdoutSink` / `WebSocketFrameSink` | per-process or per-WS sink for encoded bytes |
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
@@ -204,7 +204,7 @@ Thin orchestration; ArgumentParser lives here.
   real `CoreSimulators` + `LiveChromes`. `StreamCommand` writes
   encoder bytes to stdout via `StdoutSink`.
 - `GestureDispatcher` — pure JSON-line-in → ack-JSON-out using
-  `GestureRegistry` + `Input`. Used by both `InputCommand` (over stdin)
+  `GestureRegistry` + the screen's input `Abilities`. Used by both `InputCommand` (over stdin)
   and `Server.streamWS` (over WebSocket text frames).
 - `ReconfigParser` — runtime stream-control parser (`set_bitrate` /
   `set_fps` / `set_scale`). Pure: takes a line + current config,
@@ -227,8 +227,9 @@ Thin orchestration; ArgumentParser lives here.
    calls `GestureDispatcher.dispatch`.
 5. **`GestureDispatcher`** — parses the JSON via
    `GestureRegistry.standard.parse`, gets back a `Tap` value type,
-   calls `tap.execute(on: input)`.
-6. **`Tap.execute`** — calls `input.tap(at:size:duration:)`.
+   asks the screen's input for `Tap.ability` (`.touch`) and calls
+   `tap.execute(on: touch)`; a screen without it is refused by name.
+6. **`Tap.execute`** — calls `touch.tap(at:size:duration:edge:)`.
 7. **`IndigoHIDInput.tap`** — lazily opens `SimDeviceLegacyHIDClient`
    and primes the input services. `IOHIDDigitizerDispatch` builds and patches
    digitizer down/up messages around the requested hold duration. Each send
@@ -362,7 +363,7 @@ WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
 GET  /devices.json                          Devices.connectedJSON (phones, with abilities)
 GET  /devices/:udid                         sim.html (same shell, device tree)
 GET  /devices/:udid/screenshot.{jpg,png}    devices.require(.screen, of:) — any family
-WS   /devices/:udid/stream?format=…         the device's Screen + Input; describe_ui from its Accessibility
+WS   /devices/:udid/stream?format=…         the device's Screen + input abilities; describe_ui from its Accessibility
 GET  /plugins.json                          Plugins.listJSON
 POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
 GET  /bakeries.json                         trusted sources + pinned commits + install state
@@ -440,8 +441,8 @@ App-layer dispatchers).
   `GestureRegistry`) — feed JSON / plist data, assert on the parsed
   value.
 - **Per-gesture parse + execute** — verify the wire dialect parses
-  to the expected value type and that `execute(on: input)` calls the
-  right `Input` method with the right args.
+  to the expected act and that `execute(on:)` calls the right method
+  on its role's mock (`MockTouch`, `MockPress`, `MockKey`, `MockScroll`).
 - **Aggregate semantics** — drive `MockSimulators` / `MockChromes`
   through their default-impl computed properties (`running`,
   `available`, `listJSON`). State, not interactions.

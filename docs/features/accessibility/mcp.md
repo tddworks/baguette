@@ -27,7 +27,7 @@ This document owns **how an MCP server would reach baguette**. It adds no rules.
                                     ├ FillDispatch         fill
                                     └ GestureDispatcher    swipe, press, …
                                             │
-                                  Domain, then Input → IndigoHIDInput
+                                  Domain, then Touch · Press · Key · Scroll → IndigoHIDInput
 ```
 
 ## What it would buy
@@ -78,7 +78,7 @@ An MCP server's real advantages are installation and discovery, not speed: an ag
 
 | Term | Meaning | Not to be confused with |
 |---|---|---|
-| **tool** | one MCP call an agent can make, named after the CLI verb | a gesture, which only reaches `Input` |
+| **tool** | one MCP call an agent can make, named after the CLI verb | a gesture, which only reaches its input role (`Touch`, `Press`, `Key`, `Scroll`) |
 | **tool list** | what the server costs an agent's context before its first call | the answers it reads afterwards |
 
 ## 2 · Where it fits
@@ -108,7 +108,7 @@ Anything else stays on the CLI, reached through the shell. `tap` by point isn't 
 | # | Law | Owner |
 |---|---|---|
 | 1 | stdout carries only the protocol; every log goes to stderr, and `trace` stays off | `McpCommand` |
-| 2 | one process holds one device's `Input` for its life, so HID and accessibility warm up once | `McpCommand` |
+| 2 | one process holds one device's input for its life, so HID and accessibility warm up once | `McpCommand` |
 | 3 | a tool's answer is the line the dispatcher answered, unchanged, so the CLI, a session and MCP can't drift | `McpCommand` |
 
 Every other law stays with its owner: a fill's in `Fill`, a settled screen's in `AXSettle`.

@@ -96,7 +96,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         displays().phone.screen()
     }
 
-    func input() -> any Input {
+    func input() -> any HID {
         displays().phone.input()
     }
 
@@ -166,7 +166,8 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         SharedFileMotion(
             fileURL: URL(fileURLWithPath: SharedFileMotion.path(forUDID: udid)),
             dylibPath: InjectedDylibInstaller.installIfNeeded(.motion),
-            injection: SimctlSimulatorInjection()
+            injection: SimctlSimulatorInjection(),
+            simulator: self
         )
     }
 
@@ -179,8 +180,14 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         SharedFileNetwork(
             fileURL: URL(fileURLWithPath: SharedFileNetwork.path(forUDID: udid)),
             dylibPath: InjectedDylibInstaller.installIfNeeded(.network),
-            injection: SimctlSimulatorInjection()
+            injection: SimctlSimulatorInjection(),
+            simulator: self
         )
+    }
+
+    /// The input surface Device Hub can take over, and its repair.
+    func inputSurface() -> any InputSurface {
+        SimctlInputSurface(simulator: self)
     }
 
     func pasteboard() -> any Pasteboard {

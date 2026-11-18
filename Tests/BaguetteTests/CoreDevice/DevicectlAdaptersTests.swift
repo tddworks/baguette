@@ -232,13 +232,16 @@ struct CoreDevicePhonesTests {
                           coreDeviceIdentifier: UUID()),
             devicectl: Devicectl(makeSubprocess: FakeDevicectl().make))
 
-        #expect(phone.abilities.names == ["screen", "input", "accessibility", "pasteboard"])
+        #expect(phone.abilities.names == ["screen", "touch", "accessibility", "pasteboard"])
         #expect(throws: DeviceError.unable(ability: "lifecycle", device: "han's iPhone")) {
             try phone.require(.lifecycle)
         }
+        #expect(throws: DeviceError.unable(ability: "key", device: "han's iPhone")) {
+            try phone.require(.key)
+        }
     }
 
-    @Test func `should take no input on a phone CoreDevice gave no identifier`() {
+    @Test func `should take no touch on a phone CoreDevice gave no identifier`() {
         let phone = CoreDevicePhone(
             PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
                           marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,

@@ -59,6 +59,12 @@ extension Device {
     /// never registered it, or when it acts on a running device and this
     /// one isn't ready.
     func require<Role>(_ ability: Ability<Role>) throws -> Role {
+        try require(ability, from: abilities)
+    }
+
+    /// The role playing `ability` in `abilities` this device built, refused
+    /// as `require(_:)` refuses.
+    func require<Role>(_ ability: Ability<Role>, from abilities: Abilities) throws -> Role {
         let role = try abilities.require(ability)
         guard !ability.needsReady || state.canAcceptInput else {
             throw DeviceError.notReady(device: name, state: state)
@@ -128,5 +134,23 @@ private extension DeviceState {
         case .ready:       return "ready"
         case .unavailable: return "unavailable"
         }
+    }
+}
+
+extension Devices {
+    /// The physical devices among these — what the device page lists as
+    /// connected. A view of the same list, never a second one.
+    var physical: any Devices { PhysicalDevices(of: self) }
+}
+
+private final class PhysicalDevices: Devices, @unchecked Sendable {
+    private let base: any Devices
+
+    init(of base: any Devices) { self.base = base }
+
+    var all: [any Device] { base.all.filter { $0.kind.reality == .physical } }
+
+    func find(id: DeviceID) throws -> (any Device)? {
+        try base.find(id: id).flatMap { $0.kind.reality == .physical ? $0 : nil }
     }
 }

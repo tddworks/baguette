@@ -5,7 +5,7 @@ import Mockable
 /// running the companion app, an emulator. Who it is, whether it can be
 /// driven now, and what it can do.
 ///
-/// It has no method per ability: what it can do is the `AbilityTable` its
+/// It has no method per ability: what it can do is the `Abilities` its
 /// family built, and asking for anything else is refused by name.
 @Mockable
 protocol Device: Sendable {
@@ -13,7 +13,7 @@ protocol Device: Sendable {
     var name: String { get }
     var kind: DeviceKind { get }
     var state: DeviceState { get }
-    var abilities: AbilityTable { get }
+    var abilities: Abilities { get }
 }
 
 /// A device's identity across every family: a simulator's or iPhone's

@@ -37,7 +37,7 @@ struct SharedFileNetworkTests {
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let network = SharedFileNetwork(
-            fileURL: url, dylibPath: dylibPath, injection: injection)
+            fileURL: url, dylibPath: dylibPath, injection: injection, simulator: sim)
         return (network, injection, sim, url)
     }
 
@@ -56,7 +56,7 @@ struct SharedFileNetworkTests {
     @Test func `should write the applied condition where the dylib reads it`() async throws {
         let (network, _, sim, url) = makeNetwork()
 
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
         let written = try Data(contentsOf: url)
         #expect(written == (try threeG.encoded()))
@@ -68,7 +68,7 @@ struct SharedFileNetworkTests {
     @Test func `should arm the network dylib when a condition is applied`() async throws {
         let (network, injection, sim, _) = makeNetwork()
 
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
         verify(injection).arm(dylibPath: .value(Self.dylib), on: .any).called(1)
     }
@@ -79,8 +79,8 @@ struct SharedFileNetworkTests {
         // which looks exactly like the feature being off.
         let (network, _, sim, url) = makeNetwork()
 
-        try await network.apply(threeG, on: sim)
-        try await network.apply(.offline, on: sim)
+        try await network.apply(threeG)
+        try await network.apply(.offline)
 
         #expect(try NetworkCondition(decoding: try Data(contentsOf: url)) == .offline)
     }
@@ -98,9 +98,9 @@ struct SharedFileNetworkTests {
         // one sane cleared state, so `clear` guarantees it rather than
         // trusting three call sites to remember.
         let (network, _, sim, url) = makeNetwork()
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
-        try await network.clear(on: sim)
+        try await network.clear()
 
         let left = try NetworkCondition(decoding: try Data(contentsOf: url))
         #expect(left.isUnconditioned)
@@ -108,9 +108,9 @@ struct SharedFileNetworkTests {
 
     @Test func `should disarm the network dylib when cleared`() async throws {
         let (network, injection, sim, _) = makeNetwork()
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
-        try await network.clear(on: sim)
+        try await network.clear()
 
         verify(injection).disarm(dylibPath: .value(Self.dylib), on: .any).called(1)
     }
@@ -121,9 +121,9 @@ struct SharedFileNetworkTests {
         // conditioning" is a rule that only holds if it's never ambiguous.
         // An explicit unconditioned value says it outright.
         let (network, _, sim, url) = makeNetwork()
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
-        try await network.clear(on: sim)
+        try await network.clear()
 
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
@@ -135,7 +135,7 @@ struct SharedFileNetworkTests {
 
         var threw = false
         do {
-            try await network.apply(threeG, on: sim)
+            try await network.apply(threeG)
         } catch {
             threw = true
             #expect((error as? SimctlCapture.Failure) == failure)
@@ -152,7 +152,7 @@ struct SharedFileNetworkTests {
 
         var threw = false
         do {
-            try await network.apply(threeG, on: sim)
+            try await network.apply(threeG)
         } catch {
             threw = true
             #expect((error as? NetworkError) == .dylibMissing)
@@ -164,9 +164,9 @@ struct SharedFileNetworkTests {
     @Test func `should report the condition this simulator is subject to`() async throws {
         let (network, injection, sim, _) = makeNetwork()
         given(injection).armed(dylibPath: .any, on: .any).willReturn(true)
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
-        #expect(try await network.current(on: sim) == threeG)
+        #expect(try await network.current() == threeG)
     }
 
     @Test func `should report no condition for a simulator that is not armed`() async throws {
@@ -177,16 +177,16 @@ struct SharedFileNetworkTests {
         // cannot afford.
         let (network, injection, sim, _) = makeNetwork()
         given(injection).armed(dylibPath: .any, on: .any).willReturn(false)
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
-        #expect(try await network.current(on: sim) == nil)
+        #expect(try await network.current() == nil)
     }
 
     @Test func `should report no condition when nothing has been published`() async throws {
         let (network, injection, sim, _) = makeNetwork()
         given(injection).armed(dylibPath: .any, on: .any).willReturn(true)
 
-        #expect(try await network.current(on: sim) == nil)
+        #expect(try await network.current() == nil)
     }
 
     @Test func `should surface an unreadable injection state instead of reporting no conditioning`() async throws {
@@ -195,10 +195,10 @@ struct SharedFileNetworkTests {
         try fixture.output("", stderr: "simulator unavailable", status: 2)
         let network = SharedFileNetwork(
             fileURL: fixture.directory.appendingPathComponent("network.json"),
-            dylibPath: Self.dylib, injection: fixture.injection)
+            dylibPath: Self.dylib, injection: fixture.injection, simulator: fixture.simulator)
 
         await #expect(throws: SimctlCapture.Failure.failed(udid: "U", status: 2, output: "simulator unavailable")) {
-            try await network.current(on: fixture.simulator)
+            try await network.current()
         }
     }
 
@@ -208,7 +208,7 @@ struct SharedFileNetworkTests {
         // someone hunting for a problem that isn't there.
         let (network, injection, sim, _) = makeNetwork(dylibPath: nil)
 
-        try await network.clear(on: sim)
+        try await network.clear()
 
         verify(injection).disarm(dylibPath: .any, on: .any).called(0)
     }
@@ -224,9 +224,9 @@ struct SharedFileNetworkTests {
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
         let network = SharedFileNetwork(
-            fileURL: url, dylibPath: Self.dylib, injection: injection)
+            fileURL: url, dylibPath: Self.dylib, injection: injection, simulator: sim)
 
-        try await network.apply(threeG, on: sim)
+        try await network.apply(threeG)
 
         #expect(FileManager.default.fileExists(atPath: url.path))
     }

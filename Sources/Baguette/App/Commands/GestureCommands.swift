@@ -13,7 +13,24 @@ private func resolve(udid: String, deviceSet: String?) -> any Device {
 
 private extension Device {
     /// Its gestures, or exit(1) saying it can't take them (or isn't ready).
-    func input() -> any Input { requireOrExit(.input) }
+    func screenInput() -> Abilities {
+        do { return try input() } catch {
+            log("\(error)")
+            Foundation.exit(1)
+        }
+    }
+    /// The role `gesture` is an act of, or exit(1) saying it can't take it
+    /// — the ability, or what the act needs of it (a navigation it lacks).
+    func role<G: Gesture>(for gesture: G) -> G.Role {
+        let role = requireOrExit(G.ability)
+        if let missing = gesture.missing(from: role) {
+            log("\(DeviceError.unable(ability: missing, device: name))")
+            Foundation.exit(1)
+        }
+        return role
+    }
+    /// Its fingers, or exit(1).
+    func touch() -> any Touch { requireOrExit(.touch) }
     /// What is on its screen, for `--label` and `--then-describe-ui`.
     func accessibility() -> any Accessibility { requireOrExit(.accessibility) }
 
@@ -76,17 +93,17 @@ struct TapCommand: ParsableCommand {
         let gesture = Tap(at: Point(x: x, y: y), size: Size(width: width, height: height),
                           duration: duration, edge: landing)
         if thenDescribeUI {
-            let input = sim.input()
+            let role = sim.role(for: gesture)
             let result = ThenDescribe.perform(
                 action: "tap", at: Point(x: x, y: y), accessibility: sim.accessibility(),
                 affordances: options.affordanceStyle
             ) {
-                gesture.execute(on: input)
+                gesture.execute(on: role)
             }
             print(result)
             Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
         }
-        runOrExit(gesture.execute(on: sim.input()), action: "tap")
+        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "tap")
     }
 
     private func runByLabel(_ label: String) {
@@ -96,7 +113,7 @@ struct TapCommand: ParsableCommand {
         if thenDescribeUI { envelope["then_describe_ui"] = true }
         if touch { envelope["touch"] = true }
         let bytes = (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
-        let dispatcher = GestureDispatcher(input: sim.input())
+        let dispatcher = GestureDispatcher(input: sim.screenInput())
         let result = LabelTap.dispatch(
             line: String(decoding: bytes, as: UTF8.self),
             accessibility: sim.accessibility(),
@@ -139,23 +156,23 @@ struct DoubleTapCommand: ParsableCommand {
 
     /// Sequence the four phased `Touch1` events that the iOS recognizer
     /// needs to aggregate into one double-tap. Lifted out of `run()` so
-    /// tests can drive it with a `MockInput` and a no-op sleep — the
+    /// tests can drive it with a `MockTouch` and a no-op sleep — the
     /// command body is otherwise unreachable in unit tests because it
     /// resolves a real `CoreSimulators` device.
     static func dispatch(
         at point: Point, size: Size, interval: Double, duration: Double,
-        on input: any Input,
+        on touch: any Touch,
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) -> Bool {
         let down = Touch1(phase: .down, at: point, size: size, edge: nil)
         let up   = Touch1(phase: .up,   at: point, size: size, edge: nil)
-        guard down.execute(on: input) else { return false }
+        guard down.execute(on: touch) else { return false }
         sleep(duration)
-        guard up.execute(on: input) else { return false }
+        guard up.execute(on: touch) else { return false }
         sleep(interval)
-        guard down.execute(on: input) else { return false }
+        guard down.execute(on: touch) else { return false }
         sleep(duration)
-        return up.execute(on: input)
+        return up.execute(on: touch)
     }
 
     func run() {
@@ -164,7 +181,7 @@ struct DoubleTapCommand: ParsableCommand {
             at: Point(x: x, y: y),
             size: Size(width: width, height: height),
             interval: interval, duration: duration,
-            on: sim.input()
+            on: sim.touch()
         )
         runOrExit(ok, action: "double-tap")
     }
@@ -198,17 +215,17 @@ struct SwipeCommand: ParsableCommand {
             duration: duration
         )
         if thenDescribeUI {
-            let input = sim.input()
+            let role = sim.role(for: gesture)
             let result = ThenDescribe.perform(
                 action: "swipe", unchangedHint: ThenDescribe.swipeUnchanged, accessibility: sim.accessibility(),
                 affordances: options.affordanceStyle
             ) {
-                gesture.execute(on: input)
+                gesture.execute(on: role)
             }
             print(result)
             Foundation.exit(result.hasPrefix(#"{"ok":true"#) ? 0 : 1)
         }
-        runOrExit(gesture.execute(on: sim.input()), action: "swipe")
+        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "swipe")
     }
 }
 
@@ -238,7 +255,7 @@ struct PinchCommand: ParsableCommand {
             size: Size(width: width, height: height),
             duration: duration
         )
-        runOrExit(gesture.execute(on: sim.input()), action: "pinch")
+        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "pinch")
     }
 }
 
@@ -270,7 +287,7 @@ struct PanCommand: ParsableCommand {
             size: Size(width: width, height: height),
             duration: duration
         )
-        runOrExit(gesture.execute(on: sim.input()), action: "pan")
+        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "pan")
     }
 }
 
@@ -279,21 +296,21 @@ struct PanCommand: ParsableCommand {
 struct PressCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "press",
-        abstract: "Press-and-release a device button (\(Press.allowed))"
+        abstract: "Press-and-release a device button (\(ButtonPress.allowed))"
     )
 
     @OptionGroup var options: DeviceOption
-    @Option(help: "Device button: \(Press.allowed)") var button: String
+    @Option(help: "Device button: \(ButtonPress.allowed)") var button: String
     @Option(help: "Hold duration in seconds (0 = short tap)") var duration: Double = 0
 
     func run() {
         guard let device = DeviceButton(rawValue: button) else {
-            log("Unknown button: \(button) (allowed: \(Press.allowed))")
+            log("Unknown button: \(button) (allowed: \(ButtonPress.allowed))")
             Foundation.exit(1)
         }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        let gesture = Press(button: device, duration: duration)
-        runOrExit(gesture.execute(on: sim.input()), action: "press")
+        let gesture = ButtonPress(button: device, duration: duration)
+        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "press")
     }
 }
 
@@ -327,10 +344,8 @@ struct KeyCommand: ParsableCommand {
             mods.insert(m)
         }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        runOrExit(
-            key.press(modifiers: mods, duration: duration, on: sim.input()),
-            action: "key"
-        )
+        let keystroke = Keystroke(key: key, modifiers: mods, duration: duration)
+        runOrExit(keystroke.execute(on: sim.role(for: keystroke)), action: "key")
     }
 }
 
@@ -358,6 +373,6 @@ struct TypeCommand: ParsableCommand {
             Foundation.exit(1)
         }
         let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
-        runOrExit(gesture.execute(on: sim.input()), action: "type")
+        runOrExit(gesture.execute(on: sim.role(for: gesture)), action: "type")
     }
 }

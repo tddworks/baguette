@@ -35,7 +35,7 @@ struct SharedFileMotionTests {
         given(injection).disarm(dylibPath: .any, on: .any).willReturn(())
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
-        let motion = SharedFileMotion(fileURL: url, dylibPath: Self.dylib, injection: injection)
+        let motion = SharedFileMotion(fileURL: url, dylibPath: Self.dylib, injection: injection, simulator: sim)
         return (motion, injection, sim, url)
     }
 
@@ -61,7 +61,7 @@ struct SharedFileMotionTests {
         #expect(motion.published() == nil)
 
         let intent = walking()
-        try await motion.publish(intent, on: sim)
+        try await motion.publish(intent)
 
         #expect(motion.published() == intent)
     }
@@ -70,7 +70,7 @@ struct SharedFileMotionTests {
         let (motion, _, sim, url) = makeMotion()
         let intent = walking()
 
-        try await motion.publish(intent, on: sim)
+        try await motion.publish(intent)
 
         let written = try Data(contentsOf: url)
         #expect(written == (try intent.encoded()))
@@ -82,7 +82,7 @@ struct SharedFileMotionTests {
     @Test func `should arm the motion dylib when publishing`() async throws {
         let (motion, injection, sim, _) = makeMotion()
 
-        try await motion.publish(walking(), on: sim)
+        try await motion.publish(walking())
 
         verify(injection).arm(dylibPath: .value(Self.dylib), on: .any).called(1)
     }
@@ -92,10 +92,10 @@ struct SharedFileMotionTests {
         // concatenation would fail to parse and see no motion at all.
         let (motion, _, sim, url) = makeMotion()
 
-        try await motion.publish(walking(speed: 1.5), on: sim)
+        try await motion.publish(walking(speed: 1.5))
         let second = MotionIntent(kind: .running, confidence: .high, speed: 3.6,
                                   startedAt: 2000, stepsBefore: 21, distanceBefore: 15.75)
-        try await motion.publish(second, on: sim)
+        try await motion.publish(second)
 
         #expect(try MotionIntent(decoding: try Data(contentsOf: url)) == second)
     }
@@ -109,9 +109,9 @@ struct SharedFileMotionTests {
         let (motion, injection, sim, url) = makeMotion()
         let parked = MotionIntent.stationary(startedAt: 3000, stepsBefore: 812,
                                             distanceBefore: 610)
-        try await motion.publish(parked, on: sim)
+        try await motion.publish(parked)
 
-        try await motion.clear(on: sim)
+        try await motion.clear()
 
         verify(injection).disarm(dylibPath: .value(Self.dylib), on: .any).called(1)
         #expect(try MotionIntent(decoding: try Data(contentsOf: url)) == parked)
@@ -123,7 +123,7 @@ struct SharedFileMotionTests {
 
         var threw = false
         do {
-            try await motion.publish(walking(), on: sim)
+            try await motion.publish(walking())
         } catch {
             threw = true
             #expect((error as? SimctlCapture.Failure) == .failed(udid: "U", status: 2, output: ""))
@@ -141,11 +141,11 @@ struct SharedFileMotionTests {
         let injection = MockSimulatorInjection()
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
-        let motion = SharedFileMotion(fileURL: url, dylibPath: nil, injection: injection)
+        let motion = SharedFileMotion(fileURL: url, dylibPath: nil, injection: injection, simulator: sim)
 
         var threw = false
         do {
-            try await motion.publish(walking(), on: sim)
+            try await motion.publish(walking())
         } catch {
             threw = true
             #expect((error as? MotionError) == .dylibMissing)
@@ -164,9 +164,9 @@ struct SharedFileMotionTests {
         given(injection).arm(dylibPath: .any, on: .any).willReturn(())
         let sim = MockSimulator()
         given(sim).udid.willReturn("U")
-        let motion = SharedFileMotion(fileURL: url, dylibPath: Self.dylib, injection: injection)
+        let motion = SharedFileMotion(fileURL: url, dylibPath: Self.dylib, injection: injection, simulator: sim)
 
-        try await motion.publish(walking(), on: sim)
+        try await motion.publish(walking())
 
         #expect(FileManager.default.fileExists(atPath: url.path))
     }

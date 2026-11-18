@@ -23,8 +23,10 @@ struct Pan: Gesture, Equatable {
         )
     }
 
-    func execute(on input: any Input) -> Bool {
-        input.twoFingerPath(
+    static var ability: Ability<any Touch> { .touch }
+
+    func execute(on touch: any Touch) -> Bool {
+        touch.twoFingerPath(
             start1: first,
             end1:   Point(x: first.x  + dx, y: first.y  + dy),
             start2: second,

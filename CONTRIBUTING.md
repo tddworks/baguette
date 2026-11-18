@@ -51,7 +51,7 @@ Three layers with imports flowing inward: `App/` (CLI + use-case orchestration) 
 
 - **Apache 2.0.** By opening a pull request you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), like the rest of baguette.
 - **TDD first, always.** Every behaviour change to a Domain or Infrastructure type starts with a failing `@Test`, then the smallest change that turns it green. The pre-implementation gate is in [AGENTS.md](AGENTS.md#tdd-is-non-negotiable-read-this-first).
-- **Name abstractions for their role in the domain** (`Simulators`, `Input`, `Subprocess`), never `XxxPort` / `XxxService` / `XxxManager`. Details in [AGENTS.md](AGENTS.md#naming-the-abstractions).
+- **Name abstractions for their role in the domain** (`Simulators`, `Touch`, `Subprocess`), never `XxxPort` / `XxxService` / `XxxManager`. Details in [AGENTS.md](AGENTS.md#naming-the-abstractions).
 
 ## Testing
 

@@ -6,8 +6,8 @@ import Foundation
 /// reaches backboardd but on a touchscreen service, which SpringBoard
 /// ignores; Device Hub's own `mainScreenButtons` service is what it
 /// listens to, and the keys it sends are the ones below.
-struct FoldableInput: Input {
-    let touches: any Input
+struct FoldableInput: HID {
+    let touches: any HID
     let keys: any DeviceKeys
 
     /// Device Hub's hold: a quarter second between down and up.
@@ -17,14 +17,17 @@ struct FoldableInput: Input {
     /// Power and the sleep/wake key are the same consumer `Power`
     /// usage; the camera control is Apple's vendor keyboard `0x66`.
     static func key(for button: DeviceButton) -> HIDUsage? {
-        switch button {
+        guard case .hardware(let hardware) = button else { return nil }
+        switch hardware {
         case .power, .lock:  return HIDUsage(page: 0x0C, usage: 0x30)
         case .volumeUp:      return HIDUsage(page: 0x0C, usage: 0xE9)
         case .volumeDown:    return HIDUsage(page: 0x0C, usage: 0xEA)
         case .action:        return HIDUsage(page: 0xFF00, usage: 0x66)
-        default:             return nil
+        case .digitalCrown, .sideButton, .leftSideButton: return nil
         }
     }
+
+    var available: Set<DeviceButton> { touches.available }
 
     func button(_ button: DeviceButton, duration: Double) -> Bool {
         guard let key = Self.key(for: button) else {

@@ -68,8 +68,9 @@ WS  /devices/<udid>/stream?format=mjpeg|avcc → frames down; stream controls an
 - **Ready means paired, Developer Mode on, and attached.** A phone off the
   cable lists as `unavailable` with the reason: `Device han's iPhone is
   unavailable: not connected`.
-- **`press`, `key`, `type` and scroll answer `"ok":false`.** They are other HID
-  services; only the touchscreen is wired. Text goes through `paste`.
+- **`press`, `key`, `type` and scroll are refused, naming what's missing**
+  (`han's iPhone can't do key`). They are other HID services; the phone has
+  only its touchscreen. `paste --no-press` puts text on its pasteboard.
 - **No orientation.** `devicectl device orientation set` exits 0 on a phone
   and leaves it as its sensors hold it, so a phone doesn't claim it: turn the
   phone by hand.

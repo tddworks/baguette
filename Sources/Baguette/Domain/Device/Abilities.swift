@@ -1,91 +1,61 @@
 import Foundation
 
-// The abilities a device can register, one key per role. A new ability is
-// one key here plus a registration in each family that can perform it.
-//
-// A key that drives the running screen — what it shows, what touches it,
-// how it is turned or shaken, what is on it — needs a ready device; the
-// rest let their role's own adapter answer, as each did before.
+/// Something a device can be told to do, named by the role that does it.
+/// The `Role` type travels with the key, so `require(.location)` hands
+/// back an `any Location` the compiler checked.
+struct Ability<Role>: Sendable {
+    let name: String
+    /// Whether the role acts on a running device. `Devices.require`
+    /// refuses such an ability while the device isn't ready.
+    let needsReady: Bool
 
-extension Ability where Role == any Lifecycle {
-    static var lifecycle: Self { .init(name: "lifecycle") }
+    init(name: String, needsReady: Bool = false) {
+        self.name = name
+        self.needsReady = needsReady
+    }
 }
 
-extension Ability where Role == any Screen {
-    /// The device's main screen.
-    static var screen: Self { .init(name: "screen", needsReady: true) }
-}
+/// What one device can do: each registered ability mapped to the role
+/// that plays it. Anything else is refused by name — never a fallback,
+/// never a role that pretends.
+///
+/// A device family builds its abilities once, where the device is built;
+/// that is the only place deciding what the family can do.
+struct Abilities: Sendable {
+    private let device: String
+    private var entries: [(name: String, make: @Sendable () -> Any)] = []
 
-extension Ability where Role == any Input {
-    /// Gestures to the device's main screen.
-    static var input: Self { .init(name: "input", needsReady: true) }
-}
+    /// - Parameter device: the device's name, so a refusal can say whose it is.
+    init(device: String) {
+        self.device = device
+    }
 
-extension Ability where Role == any Displays {
-    /// Every display plane: the phone, a foldable's panels, CarPlay.
-    static var displays: Self { .init(name: "displays", needsReady: true) }
-}
+    /// Register the role that plays `ability`. `make` runs on every
+    /// `require`, so a role that is a fresh handle per call stays one.
+    /// Registering an ability again replaces it in place.
+    mutating func register<Role>(_ ability: Ability<Role>, _ make: @escaping @Sendable () -> Role) {
+        let entry = (name: ability.name, make: { make() as Any } as @Sendable () -> Any)
+        if let index = entries.firstIndex(where: { $0.name == ability.name }) {
+            entries[index] = entry
+        } else {
+            entries.append(entry)
+        }
+    }
 
-extension Ability where Role == any Hinge {
-    static var hinge: Self { .init(name: "hinge", needsReady: true) }
-}
+    /// The role registered for `ability`, or a refusal naming the ability
+    /// and the device.
+    func require<Role>(_ ability: Ability<Role>) throws -> Role {
+        guard let entry = entries.first(where: { $0.name == ability.name }),
+              let role = entry.make() as? Role
+        else { throw DeviceError.unable(ability: ability.name, device: device) }
+        return role
+    }
 
-extension Ability where Role == any ExternalDisplays {
-    static var externalDisplays: Self { .init(name: "externalDisplays") }
-}
+    /// A refusal naming what this device can't do.
+    func refusal(_ what: String) -> DeviceError {
+        .unable(ability: what, device: device)
+    }
 
-extension Ability where Role == any Accessibility {
-    static var accessibility: Self { .init(name: "accessibility", needsReady: true) }
-}
-
-extension Ability where Role == any LogStream {
-    static var logs: Self { .init(name: "logs") }
-}
-
-extension Ability where Role == any Orientation {
-    static var orientation: Self { .init(name: "orientation", needsReady: true) }
-}
-
-extension Ability where Role == any StatusBar {
-    static var statusBar: Self { .init(name: "statusBar") }
-}
-
-extension Ability where Role == any Interface {
-    static var interface: Self { .init(name: "interface") }
-}
-
-extension Ability where Role == any Location {
-    static var location: Self { .init(name: "location") }
-}
-
-extension Ability where Role == any Motion {
-    static var motion: Self { .init(name: "motion") }
-}
-
-extension Ability where Role == any Network {
-    static var network: Self { .init(name: "network") }
-}
-
-extension Ability where Role == any Pasteboard {
-    static var pasteboard: Self { .init(name: "pasteboard") }
-}
-
-extension Ability where Role == any Apps {
-    static var apps: Self { .init(name: "apps") }
-}
-
-extension Ability where Role == any Defaults {
-    static var defaults: Self { .init(name: "defaults") }
-}
-
-extension Ability where Role == any PhotoLibrary {
-    static var photos: Self { .init(name: "photos") }
-}
-
-extension Ability where Role == any Shake {
-    static var shake: Self { .init(name: "shake", needsReady: true) }
-}
-
-extension Ability where Role == any WatchPairing {
-    static var watchPairing: Self { .init(name: "watchPairing") }
+    /// The registered abilities, in the order they were registered.
+    var names: [String] { entries.map(\.name) }
 }

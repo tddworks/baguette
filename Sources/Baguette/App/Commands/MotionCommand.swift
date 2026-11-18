@@ -93,11 +93,11 @@ struct MotionCommand: ParsableCommand {
         var resolvedSpeed: Double { activityOptions.resolvedSpeed }
 
         func run() async throws {
-            let simulator = try MotionCommand.resolve(options)
+            let (device, motion) = try options.require(.motion)
             try await MotionCommand.publish(
                 kind: kind, confidence: activityOptions.motionConfidence,
-                speed: resolvedSpeed, on: simulator)
-            log("Motion armed on \(simulator.name): \(kind.rawValue) at "
+                speed: resolvedSpeed, on: motion)
+            log("Motion armed on \(device.name): \(kind.rawValue) at "
                 + "\(resolvedSpeed) m/s. Relaunch the app to pick it up.")
         }
     }
@@ -120,11 +120,11 @@ struct MotionCommand: ParsableCommand {
         var resolvedSpeed: Double { activityOptions.resolvedSpeed }
 
         func run() async throws {
-            let simulator = try MotionCommand.resolve(options)
+            let (device, motion) = try options.require(.motion)
             try await MotionCommand.publish(
                 kind: kind, confidence: activityOptions.motionConfidence,
-                speed: resolvedSpeed, on: simulator)
-            log("\(simulator.name) motion: \(kind.rawValue) at \(resolvedSpeed) m/s")
+                speed: resolvedSpeed, on: motion)
+            log("\(device.name) motion: \(kind.rawValue) at \(resolvedSpeed) m/s")
         }
     }
 
@@ -138,8 +138,7 @@ struct MotionCommand: ParsableCommand {
         @OptionGroup var options: DeviceOption
 
         func run() async throws {
-            let simulator = try MotionCommand.resolve(options)
-            let motion = simulator.motion()
+            let (device, motion) = try options.require(.motion)
             do {
                 // Park before disarming: an app already running still has the
                 // dylib loaded, so the last thing it reads must say "not
@@ -150,19 +149,14 @@ struct MotionCommand: ParsableCommand {
                 let ledger = MotionLedger.resuming(from: motion.published(), at: now)
                 try await motion.publish(
                     .stationary(startedAt: now, stepsBefore: ledger.steps,
-                                distanceBefore: ledger.metres),
-                    on: simulator)
-                try await motion.clear(on: simulator)
+                                distanceBefore: ledger.metres))
+                try await motion.clear()
             } catch {
                 log("motion stop failed: \(error)")
                 throw ExitCode.failure
             }
-            log("Motion stopped on \(simulator.name)")
+            log("Motion stopped on \(device.name)")
         }
-    }
-
-    private static func resolve(_ options: DeviceOption) throws -> any Simulator {
-        try options.simulator(for: .motion)
     }
 
     /// Publishes a new leg, carrying the pedometer's running totals forward.
@@ -172,14 +166,13 @@ struct MotionCommand: ParsableCommand {
     /// every `motion set` would republish zeroes and an app's step count
     /// would restart on each command.
     private static func publish(kind: MotionKind, confidence: MotionConfidence,
-                                speed: Double, on simulator: any Simulator) async throws {
-        let motion = simulator.motion()
+                                speed: Double, on motion: any Motion) async throws {
         let now = Date().timeIntervalSince1970
         let ledger = MotionLedger.resuming(from: motion.published(), at: now)
         let intent = ledger.intent(kind: kind, confidence: confidence, speed: speed,
                                    startedAt: now)
         do {
-            try await motion.publish(intent, on: simulator)
+            try await motion.publish(intent)
         } catch {
             log("motion failed: \(error)")
             throw ExitCode.failure

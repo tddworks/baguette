@@ -5,7 +5,7 @@ import Testing
 
 /// Gestures on a phone whose touches go through a digitizer: every report
 /// the digitizer receives, in order, in fractions of the screen.
-@Suite("DigitizerInput")
+@Suite("DigitizerTouch")
 struct DigitizerInputTests {
     private let size = Size(width: 400, height: 800)
 
@@ -90,30 +90,21 @@ struct DigitizerInputTests {
     @Test func `should say a gesture failed when the digitizer drops a report`() {
         let digitizer = Reports(accepting: false)
 
-        let ok = DigitizerInput(digitizer: digitizer.mock, pause: { _ in })
+        let ok = DigitizerTouch(digitizer: digitizer.mock, pause: { _ in })
             .tap(at: Point(x: 1, y: 1), size: size, duration: 0, edge: nil)
 
         #expect(!ok)
     }
 
-    @Test func `should send no hardware button, key or scroll through a digitizer`() {
-        let (input, digitizer) = makeInput()
-
-        #expect(!input.button(.home, duration: 0))
-        #expect(!input.key(KeyboardKey.from(wireCode: "KeyA")!, modifiers: [], duration: 0))
-        #expect(!input.scroll(deltaX: 0, deltaY: 10))
-        #expect(digitizer.reports.isEmpty)
-    }
-
-    private func makeInput() -> (DigitizerInput, Reports) {
+    private func makeInput() -> (DigitizerTouch, Reports) {
         let digitizer = Reports()
-        return (DigitizerInput(digitizer: digitizer.mock, pause: { _ in }), digitizer)
+        return (DigitizerTouch(digitizer: digitizer.mock, pause: { _ in }), digitizer)
     }
 
-    private func makeInputWithPauses() -> (DigitizerInput, Reports, Pauses) {
+    private func makeInputWithPauses() -> (DigitizerTouch, Reports, Pauses) {
         let digitizer = Reports()
         let pauses = Pauses()
-        return (DigitizerInput(digitizer: digitizer.mock, pause: { pauses.add($0) }), digitizer, pauses)
+        return (DigitizerTouch(digitizer: digitizer.mock, pause: { pauses.add($0) }), digitizer, pauses)
     }
 }
 

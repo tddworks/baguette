@@ -23,12 +23,16 @@ struct FillCommand: AsyncParsableCommand {
     var thenDescribeUI = true
 
     func run() async throws {
-        let simulator = try options.simulator(for: .accessibility)
+        let (device, accessibility) = try options.require(.accessibility)
+        let pasteboard = try orExit { try device.require(.pasteboard) }
+        let input = try orExit { try device.input() }
+        // Only a device Device Hub can take over has a surface to read.
+        let surface = try? device.require(.inputSurface)
         let outcome = await Fill(label: label, text: text).execute(
-            accessibility: simulator.accessibility(), pasteboard: simulator.pasteboard(), input: simulator.input(),
-            inputTaken: { await SimctlInputSurface().shadowed(on: simulator) })
+            accessibility: accessibility, pasteboard: pasteboard, input: input,
+            inputTaken: { await surface?.shadowed() ?? false })
         print(FillDispatch.answer(
-            outcome, thenDescribe: thenDescribeUI, accessibility: simulator.accessibility(), style: options.affordanceStyle))
+            outcome, thenDescribe: thenDescribeUI, accessibility: accessibility, style: options.affordanceStyle))
         if !outcome.isOK { throw ExitCode.failure }
     }
 }

@@ -83,7 +83,7 @@ Sources/
     ├── its id, its kind (platform · model), its power · Devices
     ├── Chrome/               how it looks — its bezel, the buttons on it, its 3D model (by its model)
     └── Abilities/            what it can do — one each, as the product prints it, values inside
-        ├── Screen/  Touch/  Press/  Key/  Type/  UI/  Apps/
+        ├── Power/  Screen/  Touch/  Press/  Key/  Type/  Scroll/  UI/  Apps/  Notify/
         ├── Location/  Orientation/  Motion/  Network/  Interface/  StatusBar/  Shake/
         └── Capture/  Clipboard/  Logs/  Camera/  Hinge/
 ```
@@ -113,26 +113,44 @@ Sources/
 
 Each role is one reason to change (S) and small enough that a kind either
 implements all of it or doesn't register it (I, L). A role says what it can do
-as data where a kind can do part of it (`navigations`, `buttons`), never by
-answering `false`.
+as data where a kind can do part of it (`Press`'s navigations and buttons),
+never by answering `false`. Each is named for what the person types or sees,
+and is the folder of the same name in §2.
 
 | Role ◆ | Members | Replaces |
 |---|---|---|
 | `Power` | `turnOn()` · `turnOff()` | `Lifecycle` |
 | `Screen` | `start(onFrame:)` · `stop()` | — (already small) |
-| `TouchSurface` | `tap` · `swipe` · `touch1` · `touch2` · `twoFingerPath` — in logical units | the touch half of `Input` |
-| `Navigation` | `available: Set<NavigationAction>` · `go(_:)` — home, back, app switcher, notifications, lock | `DeviceButton`'s system half |
-| `HardwareButtons` | `available: Set<HardwareButton>` · `press(_:duration:)` — power, volume, action, side | `DeviceButton`'s body half |
-| `Keyboard` | `press(Key, modifiers:)` · `type(Text)` — keys as HID usages | `Input.key`, `TypeText` |
-| `Scroll` | `scroll(deltaX:deltaY:)` | `Input.scroll` |
+| `Touch` | `tap` · `swipe` · `touch1` · `touch2` · `twoFingerPath` — `tap`, `swipe`, `pinch`, `pan`, `double-tap` | the touch half of `Input` |
+| `Press` | `available` — `Navigation`s (home, app switcher, the edge pulls, the on-screen keyboard; Android's back) and `HardwareButton`s (lock, power, volume, action, the watch's crown and sides) · `button(_:duration:)` — `press --button` | `Input.button`, and `DeviceButton` split in two |
+| `Key` | `key(_:modifiers:duration:)` — keys as HID usages — `key` | `Input.key` |
+| `Type` | `type(Text)` — `type` | `TypeText`, which rides `Key` until a device types without keys (Android's `input text`) |
+| `Scroll` | `scroll(deltaX:deltaY:)` — the page's wheel | `Input.scroll` |
 | `UI` | `snapshot()` · `press(element)` | `Accessibility` |
 | `Apps` | `install(AppPackage)` · `launch` · `terminate` · `open(Link)` · `installed()` | `Apps` minus notifications |
-| `Notifications` | `deliver(_:)` | `Apps.deliver` (iOS today) |
+| `Notify` | `deliver(_:)` — `notify` | `Apps.deliver` (iOS today) |
 | `Location` · `Orientation` · `Motion` · `Clipboard` · `Log` · `Interface` · … | as today | — |
+
+**A role's acts are values inside its folder, named for what they are.**
+The ability takes the product's verb; an act is one use of it, so it never
+borrows the ability's name. Where a role has many acts they already had
+their own names; where it had one, the act had taken the role's:
+
+| Role | Its acts (the wire `type`) |
+|---|---|
+| `Touch` | `Tap` · `Swipe` · `Touch1` · `Touch2` · `Pinch` · `Pan` |
+| `Press` | `ButtonPress` (`button`) — UIKit's `UIPress`: one press of a navigation or a hardware button |
+| `Key` | `Keystroke` (`key`) · `TypeText` (`type`), a sequence of keystrokes |
+| `Scroll` | `WheelEvent` (`scroll`) — the W3C name; its `deltaX` / `deltaY` are the browser's |
+
+A screen's input is its `Abilities` — the roles it has, each made once.
+A simulator plays all four on one Indigo surface, its `HID`: a name for the
+four together, not a protocol, since it asks nothing the roles don't (and
+`@Mockable` can't generate a protocol's inherited requirements).
 
 A capability the device lacks is **absent** (the ability isn't registered), or,
 inside a role that lists its options, **not in `available`** — and asking for it
-is refused by name: `Pixel 9 can't do hardwareButtons`, `iPhone 17 has no back`.
+is refused by name: `han's iPhone can't do key`, `iPhone 17 has no back`.
 
 ## 4 · Each principle, as a rule with an owner
 
@@ -140,7 +158,7 @@ is refused by name: `Pixel 9 can't do hardwareButtons`, `iPhone 17 has no back`.
 |---|---|---|
 | **S** | a role changes for one reason; a kind's file changes only for its own toolchain | the role list (§3); a test per role uses only that role's mock |
 | **O** | the kinds of device are listed once; a new ability, navigation or button is a new case **inside a kind's registration**, never a `switch` outside `Devices/` | `Devices/`' list of kinds — a test pins that `Commands` and `Serve` read the same list |
-| **L** | an implementation does everything its role promises; what a device can't do is unregistered or not `available`, and refused by name — never `false` | `AbilityTable` · each role's `available`; a contract test per role, run against every kind's implementation |
+| **L** | an implementation does everything its role promises; what a device can't do is unregistered or not `available`, and refused by name — never `false` | `Abilities` · each role's `available`; a contract test per role, run against every kind's implementation |
 | **I** | no kind implements a member it can't perform | §3's sizes; a kind's registration names only roles it fully implements |
 | **D** | `Commands` and `Serve` reach a device only through `Devices.require(ability, of: id)`; they never construct a kind's code | the module graph: `Commands` and `Serve` see only a kind's device source |
 
@@ -170,25 +188,29 @@ questions), written before its slice is built:
 | `Plugins` | `docs/features/plugins/design.md` | plugin and bakery |
 | `Commands` · `Serve` | `docs/commands.md` · `docs/serve.md` | the way in; they hold no rule |
 
-## 7 · Build sequence — refactors, each green, no behaviour change
+## 7 · The refactor, step by step
 
-Each slice is test-first where it moves a rule, and leaves `swift test`,
-`make test-web` and the CLI's output unchanged.
+Each step is one PR: green (`swift test`, `make test-web`, the build without
+CoreDevice, `make check-docs`), no behaviour a user or a plugin can see
+changed, test-first where a rule moves. A step that lands removes its row
+from [CANONICAL §6](../../CANONICAL_MODEL.md#6--where-the-code-is-still-behind).
 
-| # | Slice | Proves |
-|---|---|---|
-| 1 | **one list of kinds**, read by the CLI (`SharedOptions` today) and the server | "should list the same devices to the CLI and the server" |
-| 2 | **commands through `Devices`**: the last 6 (`fill`, `launch`, `hinge`, `heal`, `network`, `motion`) ask `devices.require`; no command builds an adapter | each command's refusal test, for a device without the ability |
-| 3 | **split `Input`**: `TouchSurface`, `Keyboard`, `Scroll` registered as abilities; `GestureDispatcher` asks for each; `DigitizerInput`'s stubs disappear | "should refuse a key for a device without a keyboard, naming it" |
-| 4 | **`DeviceButton` → `NavigationAction` + `HardwareButton`**, each role listing `available`; the wire words stay | "should refuse a navigation the device doesn't have, naming it" |
-| 5 | **routes through `Devices`**: one `/devices/:id/…` tree, ability by ability; `/simulators/:udid/…` stays as an alias of it | "should answer a simulator's screenshot under both trees" |
-| 6 | **`Notifications` out of `Apps`**; `Lifecycle` → `Power` | each role's contract test |
-| 7 | **`StreamFormat.makeStream` to Infrastructure**; Domain keeps the format | Domain builds nothing below it |
-| 8 | the contexts as modules, outside to inside (§2) — `Device` first, then `Devices` and its kinds, `Plugins`, the way in | the compiler holds the direction; each module's tests move with it |
-| 9 | Android, as §5 | its own design, built on this |
+| # | Step | Today (on `main`) | Change | Test first |
+|---|---|---|---|---|
+| 0 | **the names** | the roles and the tree disagreed | one list (§2, §3), the product's words | — (this doc) |
+| 1 | **one list of kinds** ✓ | three: `SharedOptions.swift:33`, `Server.swift:107` and `:110` | one list in `Devices`, read by the CLI and the server | "should list the same devices to the CLI and the server" |
+| 2 | **every command through `Devices`** ✓ | `fill`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` take a `Simulator`; commands build `CoreSimulators(…)` and `SimctlInputSurface()`; `Network`, `Motion` and `InputSurface` take `on simulator:` | each asks `options.require(.x)`; every role is bound to its device when registered, so none takes a device; the input surface's repair is `.inputSurface`, an ability only a simulator registers; `options.simulator(for:)` is gone. `CoreSimulators(…)` stays only where the kinds are listed (`DeviceKinds`, `serve`, `list`, `chrome`, `render-3d`, `diag`) | "should register every simulator role as an ability"; the roles' tests, bound |
+| 3 | **split `Input`** ✓ | `IndigoHIDInput`, `DigitizerInput` (3 × `false`), `LitPanelInput`, `FoldableInput`; `GestureDispatcher` built in 5 places; acts named `Press`, `Key`, `Scroll` after their abilities | `Touch`, `Press`, `Key`, `Scroll` registered as abilities; each act names the one it needs (`Gesture.ability`); the iPhone registers `Touch` only (`DigitizerTouch`); the acts are `ButtonPress`, `Keystroke`, `WheelEvent`; `AbilityTable` is `Abilities`; a simulator's four share one `HID` per screen; the wire doesn't change. `Type` stays on `Key` until a device types without keys | "should refuse a key for a device without one, naming it"; "should play every input role on a screen with one HID…" |
+| 4 | **split `DeviceButton`** ✓ | 4 `switch`es, all in `IndigoHIDInput.swift` (250, 256, 285, 425) | `DeviceButton` is a `Navigation` or a `HardwareButton`; `Press` lists what's `available`, and `ButtonPress` is refused by name for anything else (`Gesture.missing(from:)`); the switches are inside the simulator's `Press`, the `(0, 0)` sentinel gone; `standardHIDUsage` is the hardware button's; `press --button` keeps its words (`back` comes with Android) | "should refuse a navigation the device doesn't have, naming it"; "should read every wire button name as a navigation or a hardware button" |
+| 5 | **routes through `Devices`** (several PRs) | 48 routes under `/simulators/:udid/…`, 8 under `/devices/…`; `Server.swift` 3,781 lines | one route group per PR into `/devices/:id/…` through `Devices`; `/simulators/:udid/…` as its alias; `Server.swift` split by group as each moves | "should answer a simulator under both trees", per group |
+| 6 | **`Notify` out of `Apps`; `Lifecycle` → `Power`** | `Apps.deliver`; `SimulatorLifecycle` | two roles | each role's contract test |
+| 7 | **encoders built outside `Device`** | `StreamFormat.makeStream` (Domain) builds Infrastructure encoders | the format stays; building moves out | Domain builds nothing outside it |
+| 8 | **contexts as modules, outside to inside** (one per PR) | one target, 407 files | `Device` (Chrome, abilities) → the kinds (Simulator, iPhone, CompanionPhone) → `Plugins` → `Commands`, `Serve`; roles and values `public`, the rest internal | the compiler holds the direction |
+| 9 | **Android** | — | its own storm and design, then `Devices/Android/` and one line | §5 |
 
-Slices 1–2 are the cheapest and remove most of the cost in §1; 3–4 are where
-Android's `back` and an iPhone's missing keys stop being special.
+Steps 1–2 are the cheapest and remove most of §1's cost; 3–4 end the
+`false` answers and make `back` an ordinary value; 8 makes the shape
+permanent.
 
 ## 8 · Open
 

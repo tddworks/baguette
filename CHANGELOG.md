@@ -11,6 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Changed
+- A `key`, `type`, `button` or `scroll` sent to a phone on a cable says `<phone> can't do key` (or `press`, `scroll`) instead of a bare `{"ok":false}`; the phone takes touches only. → [docs](docs/features/real-devices/README.md)
 - Breaking: a command that drives the screen (`tap`, `screenshot`, `record`, `orientation`, `shake`, …) refuses a device that isn't booted up front, saying so, instead of waiting or failing inside `simctl`. → [docs](docs/features/devices/design.md)
 
 ### Added

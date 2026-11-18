@@ -1,10 +1,10 @@
 import Foundation
 
-/// `Input` for a device whose touches go to a `Digitizer`: each gesture
+/// `Touch` for a device whose touches go to a `Digitizer`: each gesture
 /// becomes the reports a finger makes — down, moves, up — in fractions of
-/// the screen. Buttons, keys and scroll are other HID services; a
-/// digitizer sends none of them, so those answer `false` (not sent).
-struct DigitizerInput: Input {
+/// the screen. Buttons, keys and scroll are other HID services a digitizer
+/// doesn't send, so a device with only this has only `Touch`.
+struct DigitizerTouch: Touch {
     private let digitizer: any Digitizer
     private let pause: @Sendable (Double) -> Void
 
@@ -38,10 +38,6 @@ struct DigitizerInput: Input {
     func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool {
         digitizer.report([first.contact(on: size), second.contact(on: size)], touching: phase != .up, edge: nil)
     }
-
-    func button(_ button: DeviceButton, duration: Double) -> Bool { false }
-    func key(_ key: KeyboardKey, modifiers: Set<KeyModifier>, duration: Double) -> Bool { false }
-    func scroll(deltaX: Double, deltaY: Double) -> Bool { false }
 
     /// Fingers down at their starts, moved together to their ends, lifted there.
     private func drag(_ paths: [(Point, Point)], size: Size, duration: Double) -> Bool {

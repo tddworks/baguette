@@ -81,7 +81,7 @@ while the existing `MJPEGStream` and `AVCCStream` retain codec
 responsibility. The irreducible URL download, filesystem, USD, IOSurface, and
 RealityKit calls remain in Infrastructure.
 
-This feature does not change `Input`, `IndigoHIDInput`, SimulatorKit HID
+This feature does not change the input roles, `IndigoHIDInput`, SimulatorKit HID
 symbols, or `GestureRegistry`. It reuses the existing bidirectional stream
 control WebSocket behavior.
 

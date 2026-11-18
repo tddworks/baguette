@@ -18,12 +18,12 @@ struct FillDispatchTests {
         let ax = MockAccessibility()
         given(ax).glance().willReturn(Self.tree)
         given(ax).describeAll().willReturn(Self.tree)
-        let input = MockInput()
-        given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
         let pasteboard = MockPasteboard()
         given(pasteboard).setText(.any).willReturn()
         return await FillDispatch.dispatch(
-            line: line, accessibility: ax, pasteboard: pasteboard, input: input, timing: Self.instant)
+            line: line, accessibility: ax, pasteboard: pasteboard, input: input.abilities, timing: Self.instant)
     }
 
     @Test func `should leave a line that isn't a fill for its own pipeline`() async {

@@ -8,7 +8,7 @@ import ObjectiveC
 /// One instance per simulator. Warm-up runs lazily on first dispatch
 /// (creates pointer + mouse services) and stays warm for the instance's
 /// lifetime; deinit releases the services.
-final class IndigoHIDInput: Input, @unchecked Sendable {
+final class IndigoHIDInput: HID, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
     /// Digitizer routing target for this input surface. Phone defaults
@@ -243,16 +243,34 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         return touchIdentifierCounter
     }
 
+    /// Every navigation and button.
+    var available: Set<DeviceButton> { DeviceButton.onSimulator }
+
     func button(_ button: DeviceButton, duration: Double) -> Bool {
         guard let c = ensureWarm() else { return false }
         let holdUs = holdMicroseconds(for: duration)
         switch button {
-        case .home, .lock, .softwareKeyboard:
-            return pressLegacyButton(button, holdUs: holdUs, on: c)
-        case .power, .volumeUp, .volumeDown, .action,
-            .digitalCrown, .sideButton, .leftSideButton:
-            guard let usage = button.standardHIDUsage else { return false }
+        case .hardware(let hardware):
+            // A body button is its standard HID usage; lock (sleep/wake)
+            // is a button message of its own.
+            guard let usage = hardware.standardHIDUsage else {
+                return pressLegacyButton(button, code: LegacyButton.lock, holdUs: holdUs, on: c)
+            }
             return pressArbitraryHID(button, usage: usage, holdUs: holdUs, on: c)
+        case .navigation(let navigation):
+            return navigate(navigation, holdUs: holdUs, on: c)
+        }
+    }
+
+    /// A navigation, the way SpringBoard is reached for it: the home
+    /// button's message, or an edge-flagged drag.
+    private func navigate(_ navigation: Navigation, holdUs: UInt32, on c: AnyObject) -> Bool {
+        let button = DeviceButton.navigation(navigation)
+        switch navigation {
+        case .home:
+            return pressLegacyButton(button, code: LegacyButton.home, holdUs: holdUs, on: c)
+        case .softwareKeyboard:
+            return pressLegacyButton(button, code: LegacyButton.softwareKeyboard, holdUs: holdUs, on: c)
         case .appSwitcher:
             // Two consecutive home-button presses ~150 ms apart.
             // SpringBoard listens to the home `IndigoHIDMessageForButton`
@@ -262,9 +280,9 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             // FBSimulatorPurpleHID app-switcher path. Cleaner than
             // synthesising the slow swipe-and-hold gesture and
             // doesn't depend on the mouse-event signature.
-            guard pressLegacyButton(.home, holdUs: holdUs, on: c) else { return false }
+            guard pressLegacyButton(button, code: LegacyButton.home, holdUs: holdUs, on: c) else { return false }
             usleep(150_000)
-            return pressLegacyButton(.home, holdUs: holdUs, on: c)
+            return pressLegacyButton(button, code: LegacyButton.home, holdUs: holdUs, on: c)
         case .swipeToAppSwitcher:
             // Slow edge-flagged drag from the home indicator with
             // a long dwell at the midpoint. iOS's home-indicator
@@ -416,33 +434,23 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         }
     }
 
-    /// `IndigoHIDMessageForButton` arg0 + 3rd arg for the
-    /// legacy button path. The 3rd arg is a routing target on iOS 26.4
-    /// (0x33 = digitizer); not a timestamp despite a `UInt64` slot in
-    /// some headers.
-    private func buttonCodes(for button: DeviceButton) -> (UInt32, UInt32) {
-        switch button {
-        case .home: return (0x0, 0x33)
-        case .lock: return (0x1, 0x33)
-        // SimulatorHID maps button 1008 to the consumer Eject key.
-        case .softwareKeyboard: return (1008, 0x33)
-        case .power, .volumeUp, .volumeDown, .action,
-            .digitalCrown, .sideButton, .leftSideButton,
-            .appSwitcher, .swipeToAppSwitcher, .swipeToHome,
-            .pullDownToLockScreen, .pullDownToNotificationCenter:
-            // Caller routes these through pressArbitraryHID or the
-            // edge-gesture path instead; returning a sentinel keeps
-            // the switch total without silently mis-dispatching.
-            return (0, 0)
-        }
+    /// `IndigoHIDMessageForButton`'s arg0 per button; the 3rd arg is a
+    /// routing target on iOS 26.4 (0x33 = digitizer), not a timestamp
+    /// despite a `UInt64` slot in some headers.
+    private enum LegacyButton {
+        static let home: UInt32 = 0x0
+        static let lock: UInt32 = 0x1
+        /// SimulatorHID maps button 1008 to the consumer Eject key.
+        static let softwareKeyboard: UInt32 = 1008
+        static let target: UInt32 = 0x33
     }
 
-    private func pressLegacyButton(_ button: DeviceButton, holdUs: UInt32, on client: AnyObject) -> Bool {
+    private func pressLegacyButton(_ button: DeviceButton, code arg0: UInt32, holdUs: UInt32, on client: AnyObject) -> Bool {
         guard let bfn = buttonFn else {
             log("[hid] press \(button.rawValue) — buttonFn unresolved")
             return false
         }
-        let (arg0, target) = buttonCodes(for: button)
+        let target = LegacyButton.target
         trace(
             "[hid] press \(button.rawValue) via legacy arg0=\(arg0) target=0x\(String(target, radix: 16)) hold=\(holdUs)us"
         )

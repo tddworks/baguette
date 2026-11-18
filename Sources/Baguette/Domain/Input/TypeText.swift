@@ -2,7 +2,7 @@ import Foundation
 
 /// Multi-character text input. Wire shape:
 /// `{ "type": "type", "text": "hello" }`. Sugar over a sequence of
-/// `Key` presses — at parse time we decompose every character on
+/// `Keystroke`s — at parse time we decompose every character on
 /// the US-layout keyboard to `(KeyboardKey, modifiers)` pairs;
 /// `execute` then dispatches them in order. Characters outside the
 /// supported surface (non-ASCII, control chars, dead keys) fail the
@@ -45,13 +45,10 @@ struct TypeText: Gesture, Equatable {
         return TypeText(text: text, keystrokes: strokes)
     }
 
-    func execute(on input: any Input) -> Bool {
-        for s in keystrokes {
-            if !s.key.press(modifiers: s.modifiers, duration: Self.keyHold, on: input) {
-                return false
-            }
-        }
-        return true
+    static var ability: Ability<any Key> { .key }
+
+    func execute(on keyboard: any Key) -> Bool {
+        keystrokes.allSatisfy { $0.execute(on: keyboard) }
     }
 
     // MARK: - private
@@ -66,13 +63,9 @@ struct TypeText: Gesture, Equatable {
         out.reserveCapacity(text.count)
         for c in text {
             guard let pair = KeyboardKey.decompose(character: c) else { return nil }
-            out.append(Keystroke(key: pair.key, modifiers: pair.modifiers))
+            out.append(Keystroke(key: pair.key, modifiers: pair.modifiers, duration: keyHold))
         }
         return out
     }
 }
 
-fileprivate struct Keystroke: Equatable {
-    let key: KeyboardKey
-    let modifiers: Set<KeyModifier>
-}

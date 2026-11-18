@@ -42,7 +42,7 @@ enum PasteDispatch {
     /// other line, including non-JSON — the caller's own pipeline
     /// owns those acks.
     static func dispatch(
-        line: String, pasteboard: any Pasteboard, input: any Input
+        line: String, pasteboard: any Pasteboard, input: Abilities
     ) async -> Outcome {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data),

@@ -8,14 +8,14 @@ import Mockable
 /// in **one process**, separated by `duration` (per-tap hold) and `interval`
 /// (tap-1-up → tap-2-down gap). The CLI itself only wires argv onto these
 /// parameters; the four-call timing recipe is what the iOS recognizer cares
-/// about, so that's what we pin down here with a `MockInput` and an
+/// about, so that's what we pin down here with a `InputMocks` and an
 /// injectable sleep.
 @Suite("DoubleTapDispatcher")
 struct DoubleTapDispatcherTests {
 
     @Test func `should land a double tap as down, up, down, up at one point`() {
-        let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.touch).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
 
         _ = DoubleTapCommand.dispatch(
             at: Point(x: 220, y: 480),
@@ -25,13 +25,13 @@ struct DoubleTapDispatcherTests {
             sleep: { _ in }
         )
 
-        verify(input).touch1(
+        verify(input.touch).touch1(
             phase: .value(.down),
             at:    .value(Point(x: 220, y: 480)),
             size:  .value(Size(width: 402, height: 874)),
             edge:  .value(nil)
         ).called(2)
-        verify(input).touch1(
+        verify(input.touch).touch1(
             phase: .value(.up),
             at:    .value(Point(x: 220, y: 480)),
             size:  .value(Size(width: 402, height: 874)),
@@ -40,8 +40,8 @@ struct DoubleTapDispatcherTests {
     }
 
     @Test func `should hold for duration, wait interval, then hold for duration between the four touches`() {
-        let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.touch).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
         var sleeps: [TimeInterval] = []
 
         _ = DoubleTapCommand.dispatch(
@@ -56,9 +56,9 @@ struct DoubleTapDispatcherTests {
     }
 
     @Test func `should stop the double tap when the first touch down is refused`() {
-        let input = MockInput()
-        given(input).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).willReturn(false)
-        given(input).touch1(phase: .value(.up), at: .any, size: .any, edge: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.touch).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).willReturn(false)
+        given(input.touch).touch1(phase: .value(.up), at: .any, size: .any, edge: .any).willReturn(true)
 
         let ok = DoubleTapCommand.dispatch(
             at: Point(x: 1, y: 2),
@@ -69,14 +69,14 @@ struct DoubleTapDispatcherTests {
         )
 
         #expect(!ok)
-        verify(input).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).called(1)
-        verify(input).touch1(phase: .value(.up), at: .any, size: .any, edge: .any).called(0)
+        verify(input.touch).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).called(1)
+        verify(input.touch).touch1(phase: .value(.up), at: .any, size: .any, edge: .any).called(0)
     }
 
     @Test func `should report the double tap landed when the final lift succeeds`() {
-        let input = MockInput()
-        given(input).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).willReturn(true)
-        given(input).touch1(phase: .value(.up), at: .any, size: .any, edge: .any).willReturn(true)
+        let input = InputMocks()
+        given(input.touch).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).willReturn(true)
+        given(input.touch).touch1(phase: .value(.up), at: .any, size: .any, edge: .any).willReturn(true)
 
         let ok = DoubleTapCommand.dispatch(
             at: Point(x: 1, y: 2),

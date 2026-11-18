@@ -10,7 +10,7 @@ enum FillDispatch {
         line: String,
         accessibility: any Accessibility,
         pasteboard: any Pasteboard,
-        input: any Input,
+        input: Abilities,
         timing: Fill.Timing = Fill.Timing(),
         inputTaken: @Sendable () async -> Bool = { false }
     ) async -> String? {

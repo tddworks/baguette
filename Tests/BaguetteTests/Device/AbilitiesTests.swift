@@ -3,10 +3,10 @@ import Mockable
 import Testing
 @testable import Baguette
 
-@Suite("AbilityTable")
-struct AbilityTableTests {
+@Suite("Abilities")
+struct AbilitiesTests {
     @Test func `should refuse an ability the device never registered`() {
-        var table = AbilityTable(device: "iPhone 18 Pro Max")
+        var table = Abilities(device: "iPhone 18 Pro Max")
         table.register(.shake) { MockShake() }
 
         #expect(throws: DeviceError.unable(ability: "location", device: "iPhone 18 Pro Max")) {
@@ -16,7 +16,7 @@ struct AbilityTableTests {
 
     @Test func `should hand back the role registered for an ability`() throws {
         let location = MockLocation()
-        var table = AbilityTable(device: "iPhone 17 Pro")
+        var table = Abilities(device: "iPhone 17 Pro")
         table.register(.location) { location }
 
         let found = try table.require(.location)
@@ -25,7 +25,7 @@ struct AbilityTableTests {
     }
 
     @Test func `should build a fresh role each time an ability is asked for`() throws {
-        var table = AbilityTable(device: "iPhone 17 Pro")
+        var table = Abilities(device: "iPhone 17 Pro")
         table.register(.location) { MockLocation() }
 
         let first = try table.require(.location)
@@ -35,7 +35,7 @@ struct AbilityTableTests {
     }
 
     @Test func `should name the abilities in the order they were registered`() {
-        var table = AbilityTable(device: "iPhone 17 Pro")
+        var table = Abilities(device: "iPhone 17 Pro")
         table.register(.shake) { MockShake() }
         table.register(.location) { MockLocation() }
 
@@ -44,7 +44,7 @@ struct AbilityTableTests {
 
     @Test func `should name an ability once when it is registered twice`() throws {
         let second = MockLocation()
-        var table = AbilityTable(device: "iPhone 17 Pro")
+        var table = Abilities(device: "iPhone 17 Pro")
         table.register(.location) { MockLocation() }
         table.register(.location) { second }
 

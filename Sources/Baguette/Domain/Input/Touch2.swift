@@ -18,7 +18,9 @@ struct Touch2: Gesture, Equatable {
         )
     }
 
-    func execute(on input: any Input) -> Bool {
-        input.touch2(phase: phase, first: first, second: second, size: size)
+    static var ability: Ability<any Touch> { .touch }
+
+    func execute(on touch: any Touch) -> Bool {
+        touch.touch2(phase: phase, first: first, second: second, size: size)
     }
 }

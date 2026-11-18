@@ -35,6 +35,8 @@ import Foundation
 final class SimctlInputSurface: InputSurface, @unchecked Sendable {
     typealias Sleep = @Sendable (Duration) async -> Void
 
+    /// The one simulator whose surface this reads and repairs.
+    private let simulator: any Simulator
     private let subprocess: any Subprocess
     private let xcrun: URL
     private let deviceHubRunning: @Sendable () -> Bool
@@ -59,25 +61,27 @@ final class SimctlInputSurface: InputSurface, @unchecked Sendable {
     ///   host right now. Defaults to asking the workspace for its bundle;
     ///   tests inject the answer.
     init(
+        simulator: any Simulator,
         subprocess: any Subprocess = HostSubprocess(),
         xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun"),
         deviceHubRunning: @escaping @Sendable () -> Bool = { DeviceHubApp.isRunning },
         sleep: @escaping Sleep = { try? await Task.sleep(for: $0) }
     ) {
+        self.simulator = simulator
         self.subprocess = subprocess
         self.xcrun = xcrun
         self.deviceHubRunning = deviceHubRunning
         self.sleep = sleep
     }
 
-    func shadowed(on simulator: any Simulator) async -> Bool {
+    func shadowed() async -> Bool {
         let state = try? await spawn(on: simulator, [
             "notifyutil", "-g", DeviceHubAttachment.stateKey,
         ])
         return DeviceHubAttachment.parsing(state).attached
     }
 
-    func ready(on simulator: any Simulator) async throws {
+    func ready() async throws {
         // Not a guest spawn: `bootstatus -b` is the host-side verb that
         // blocks until the device has finished booting. SpringBoard and
         // backboardd have pids within a second of `boot()` returning, and
@@ -89,11 +93,11 @@ final class SimctlInputSurface: InputSurface, @unchecked Sendable {
         guard deviceHubRunning() else { return }
         for attempt in 0..<Self.attachAttempts {
             if attempt > 0 { await sleep(Self.pollInterval) }
-            if await shadowed(on: simulator) { return }
+            if await shadowed() { return }
         }
     }
 
-    func reclaim(on simulator: any Simulator) async throws {
+    func reclaim() async throws {
         let before = await springBoardPid(on: simulator)
         try await spawn(on: simulator, ["notifyutil", "-s", DeviceHubAttachment.stateKey, "0"])
         try await spawn(on: simulator, ["launchctl", "kickstart", "-k", Self.backboardd])

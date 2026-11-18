@@ -75,10 +75,11 @@ struct Server: Sendable {
     let devices: LiveCompanionPhones
     let twinScreens: TwinScreens
     let twinPoses: TwinPoses
-    /// Every physical device the `/devices/…` page can show: companion
-    /// phones and phones CoreDevice reaches on a cable.
+    /// Every physical device the `/devices/…` page can show — a view of
+    /// `allDevices`, never a second list.
     let physicalDevices: any Devices
-    /// Every device of every family — what `/devices/:udid/…` resolves.
+    /// Every device of every kind — what `/devices/:udid/…` resolves. Listed
+    /// by `DeviceKinds`, outside the server.
     let allDevices: any Devices
 
     init(
@@ -96,7 +97,7 @@ struct Server: Sendable {
         devices: LiveCompanionPhones = LiveCompanionPhones(),
         twinScreens: TwinScreens = TwinScreens(),
         twinPoses: TwinPoses = TwinPoses(),
-        phones: any Devices = CoreDevicePhones()
+        allDevices: any Devices
     ) {
         self.simulators = simulators
         self.motionSessions = motionSessions
@@ -104,10 +105,8 @@ struct Server: Sendable {
         self.devices = devices
         self.twinScreens = twinScreens
         self.twinPoses = twinPoses
-        self.physicalDevices = CombinedDevices([
-            CompanionDevices(phones: devices, screens: twinScreens), phones,
-        ])
-        self.allDevices = CombinedDevices([SimulatorDevices(simulators), physicalDevices])
+        self.allDevices = allDevices
+        self.physicalDevices = allDevices.physical
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -210,7 +209,7 @@ struct Server: Sendable {
             // the boot itself succeeded.
             if response.status == .ok, let sim = simulators.find(udid: Self.udidParam(r)) {
                 do {
-                    if try await SimctlInputSurface().healAfterBoot(on: sim) == .reclaimed {
+                    if try await sim.inputSurface().healAfterBoot() == .reclaimed {
                         log("[serve] \(HealOutcome.reclaimed.summary) for \(sim.udid)")
                     }
                 } catch {
@@ -1335,7 +1334,7 @@ struct Server: Sendable {
         case .route(let route): speed = route.speed ?? 20
         case .walk(let walk): speed = walk.speed
         }
-        await session.drive(speed: speed, on: simulator)
+        await session.drive(speed: speed)
     }
 
     /// Pure dispatch for `DELETE /simulators/:udid/location`.
@@ -1357,7 +1356,7 @@ struct Server: Sendable {
             return .dispatchFailed
         }
         if let session = await sessions?.active(udid: udid) {
-            await session.drive(speed: 0, on: sim)
+            await session.drive(speed: 0)
         }
         return .ok
     }
@@ -1434,7 +1433,7 @@ struct Server: Sendable {
         }
         let session = await sessions.session(for: sim)
         await session.set(kind: request.kind, confidence: request.confidence,
-                          speed: request.speed, on: sim)
+                          speed: request.speed)
         // Say what was armed. Injection only takes effect on the next app
         // launch, so when someone reports "my app sees nothing" this line is
         // the first thing worth checking.
@@ -1463,7 +1462,7 @@ struct Server: Sendable {
         // failed, so a retry still has something to disarm — dropping it
         // would strand an armed dylib with nothing tracking it.
         let session = await sessions.session(for: simulator)
-        guard await session.stop(on: simulator) else { return .dispatchFailed }
+        guard await session.stop() else { return .dispatchFailed }
         await sessions.end(udid: udid)
         return .ok
     }
@@ -1551,7 +1550,7 @@ struct Server: Sendable {
             return .invalidBody
         }
         do {
-            try await sim.network().apply(condition, on: sim)
+            try await sim.network().apply(condition)
         } catch {
             log("network: failed to condition \(sim.name) — \(error)")
             return .dispatchFailed
@@ -1573,7 +1572,7 @@ struct Server: Sendable {
             return .unknownDevice
         }
         do {
-            try await sim.network().clear(on: sim)
+            try await sim.network().clear()
         } catch {
             log("network: failed to clear \(sim.name) — \(error)")
             return .dispatchFailed
@@ -1685,7 +1684,7 @@ struct Server: Sendable {
             .map { "\"\($0.rawValue)\"" }
             .joined(separator: ",")
         guard let sim = simulators.find(udid: udid) else { return nil }
-        guard let condition = try await sim.network().current(on: sim) else {
+        guard let condition = try await sim.network().current() else {
             return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
         }
         let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"
@@ -2879,7 +2878,7 @@ struct Server: Sendable {
         )
         // 3D stays phone-only; ignore any display=carplay on these routes.
         let screen: any DeviceFrames
-        let input: any Input
+        let input: any HID
         let refresh: () -> Void
         var foldable: RenderedFoldable?
         if plan.model.definition.scene.fold != nil {
@@ -2907,7 +2906,7 @@ struct Server: Sendable {
             input = sim.litPanelInput()
             refresh = { book.refresh() }
         } else {
-            let bound: (screen: any Screen, input: any Input)
+            let bound: (screen: any Screen, input: any HID)
             do {
                 bound = try StreamDisplayPlan.phoneOnly.bind(to: sim)
             } catch {
@@ -2923,7 +2922,8 @@ struct Server: Sendable {
             refresh = { rendered.refresh() }
         }
         let pasteboard = sim.pasteboard()
-        let dispatcher = GestureDispatcher(input: input)
+        let screenInput = Abilities.input(of: sim.name, all: input)
+        let dispatcher = GestureDispatcher(input: screenInput)
         // Atomic frames: a render or encode failure ends the stream with
         // an error rather than leaving a page with stale hit geometry.
         let frameFailure: @Sendable (any Error) -> Void = { error in
@@ -3048,13 +3048,13 @@ struct Server: Sendable {
                     continue
                 }
                 if let frame = await PasteDispatch.dispatch(
-                    line: line, pasteboard: pasteboard, input: input
+                    line: line, pasteboard: pasteboard, input: screenInput
                 ).resultFrame {
                     try? await outbound.write(.text(frame))
                     continue
                 }
                 if let frame = await CopyDispatch.dispatch(
-                    line: line, pasteboard: pasteboard, input: input
+                    line: line, pasteboard: pasteboard, input: screenInput
                 ).resultFrame {
                     try? await outbound.write(.text(frame))
                     continue
@@ -3099,7 +3099,7 @@ struct Server: Sendable {
         let displayPlan = StreamDisplayPlan.from(
             query: displayQuery, panel: panelQuery, requireExistingDisplay: requireExistingDisplay
         )
-        let bound: (screen: any Screen, input: any Input)
+        let bound: (screen: any Screen, input: any HID)
         do {
             bound = try displayPlan.bind(to: sim)
         } catch {
@@ -3113,7 +3113,7 @@ struct Server: Sendable {
         // Device Hub has shadowed this device's input surface, every
         // gesture on this socket will ack and land nowhere. Say so.
         Task {
-            if await SimctlInputSurface().shadowed(on: sim),
+            if await sim.inputSurface().shadowed(),
                let advisory = DeviceHubAttachment(attached: true).advisory(udid: sim.udid) {
                 warn("[serve] \(advisory)")
             }
@@ -3122,9 +3122,9 @@ struct Server: Sendable {
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
         let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
         let screen = bound.screen
-        // One Input for the whole session — the paste keystroke must
+        // One input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride.
-        let input = bound.input
+        let input = Abilities.input(of: sim.name, all: bound.input)
         let pasteboard = sim.pasteboard()
         let dispatcher = GestureDispatcher(input: input)
 

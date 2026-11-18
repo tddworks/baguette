@@ -21,10 +21,12 @@ struct Pinch: Gesture, Equatable {
         )
     }
 
-    func execute(on input: any Input) -> Bool {
+    static var ability: Ability<any Touch> { .touch }
+
+    func execute(on touch: any Touch) -> Bool {
         let halfStart = startSpread / 2
         let halfEnd   = endSpread / 2
-        return input.twoFingerPath(
+        return touch.twoFingerPath(
             start1: Point(x: center.x - halfStart, y: center.y),
             end1:   Point(x: center.x - halfEnd,   y: center.y),
             start2: Point(x: center.x + halfStart, y: center.y),

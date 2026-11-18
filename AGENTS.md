@@ -17,7 +17,7 @@ Only after step 4 may you write code under `Sources/`. Pure docs / CHANGELOG edi
 
 ### Naming the abstractions
 
-Every `@Mockable protocol` in this codebase is named **for the role it plays in the domain**, never for its architectural pattern. Look at the existing list — `Simulators`, `Simulator`, `Input`, `Screen`, `Stream`, `Accessibility`, `LogStream`, `DeviceHost`, `Chromes`. **The words "Port" / "Service" / "Manager" never appear**, and you're not adding them. If you find yourself reaching for `XxxPort` / `XxxService` / `XxxManager`, the abstraction isn't named yet — keep going until the noun describes what the thing *is* in the domain. "A subprocess" is fine; "a log process port" is not.
+Every `@Mockable protocol` in this codebase is named **for the role it plays in the domain**, never for its architectural pattern. Look at the existing list — `Simulators`, `Simulator`, `Touch`, `Screen`, `Stream`, `Accessibility`, `LogStream`, `DeviceHost`, `Chromes`. **The words "Port" / "Service" / "Manager" never appear**, and you're not adding them. If you find yourself reaching for `XxxPort` / `XxxService` / `XxxManager`, the abstraction isn't named yet — keep going until the noun describes what the thing *is* in the domain. "A subprocess" is fine; "a log process port" is not.
 
 **Repository is the one carve-out — but only for aggregate CRUD, and only spelled as the collection noun.** When the protocol genuinely *is* a DDD collection-like interface for an aggregate root (load / save / delete by identity), it takes the **plural of the aggregate** — `Simulators`, `Chromes`, `Books`, `Orders` — exactly as the existing aggregates already do. The suffix `XxxRepository` is still banned; the *role* (aggregate persistence) is the legitimate case the plural-noun convention already covers. If your protocol isn't aggregate persistence (it's an adapter, an event source, a process boundary, …), the carve-out doesn't apply — pick a role-noun like `Subprocess` / `LogStream` instead.
 
@@ -59,7 +59,7 @@ Every other target (`make`, `make docs`, `make check-docs`, …) and the toolcha
 
 Imports flow inward: `App` (CLI + use cases) → `Domain` (value types + `@Mockable` abstractions) + `Infrastructure` (the only private-API code); `Infrastructure` → `Domain`; `Domain` → Foundation + IOSurface. `Domain/` splits by bounded context; `Tests/BaguetteTests/` mirrors it. `Infrastructure/` splits by device family (`Simulator/`, `Companion/`…), then context, plus `Host/`; families never import each other → [devices](docs/features/devices/design.md). `Resources/Web/` holds the vanilla IIFE modules `baguette serve` serves.
 
-**Two consumers, one pipeline.** Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → `Input` → `IndigoHIDInput`. The only difference is the App-layer entry point.
+**Two consumers, one pipeline.** Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → the gesture's role (`Touch`, `Key`, …) → `IndigoHIDInput`. The only difference is the App-layer entry point.
 
 ### The crucial detail: 9-arg `IndigoHIDMessageForMouseNSEvent`
 
@@ -74,7 +74,7 @@ iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` /
 Chicago-school state-based throughout. Every external boundary is an `@Mockable` protocol; tests substitute auto-generated `MockXxx` fakes and assert on returned values rather than recorded calls. Patterns:
 
 - Pure parsers (`DeviceChrome`, `DeviceProfile`, `ReconfigParser`, `GestureRegistry`) — feed JSON / plist, assert parsed value.
-- Per-gesture parse + execute — verify wire dialect parses to the right value type and `execute(on: input)` calls the right `Input` method.
+- Per-gesture parse + execute — verify the wire parses to the right act and `execute(on:)` calls its role's mock.
 - Aggregate semantics — drive `MockSimulators` / `MockChromes` through default-impl computed properties (`running`, `available`, `listJSON`).
 
 ## Known limits

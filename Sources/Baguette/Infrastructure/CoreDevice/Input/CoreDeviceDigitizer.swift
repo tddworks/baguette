@@ -3,7 +3,7 @@ import Foundation
 
 /// A physical phone's touchscreen, fed through CoreDevice's Universal HID
 /// capability — the path Device Hub's live view uses. Integration-only: the
-/// gestures themselves are `DigitizerInput`'s.
+/// gestures themselves are `DigitizerTouch`'s.
 final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
     /// The Universal HID service a phone registers for its main touchscreen
     /// (display id 1). Measured on an iPhone 18 Pro Max, iOS 27.0.1: a

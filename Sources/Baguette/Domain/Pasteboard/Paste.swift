@@ -33,10 +33,10 @@ struct Paste: Equatable, Sendable {
     /// Set the pasteboard, then (when `press`) Cmd+V. Throws the
     /// pasteboard's failure before any keystroke is sent; returns
     /// the key press's success flag (`true` when `press` is false).
-    func execute(pasteboard: any Pasteboard, input: any Input) async throws -> Bool {
+    func execute(pasteboard: any Pasteboard, input: Abilities) async throws -> Bool {
         try await pasteboard.setText(text)
         guard press else { return true }
         return KeyboardKey.from(wireCode: "KeyV")!
-            .press(modifiers: [.command], on: input)
+            .press(modifiers: [.command], on: try input.require(.key))
     }
 }

@@ -11,48 +11,48 @@ struct InputSurfaceTests {
     @Test func `should leave an unshadowed input surface alone when healing`() async throws {
         let surface = MockInputSurface()
         let sim = MockSimulator()
-        given(surface).shadowed(on: .any).willReturn(false)
+        given(surface).shadowed().willReturn(false)
 
-        let outcome = try await surface.heal(on: sim)
+        let outcome = try await surface.heal()
 
         #expect(outcome == .unshadowed)
-        verify(surface).reclaim(on: .any).called(0)
+        verify(surface).reclaim().called(0)
     }
 
     @Test func `should reclaim a shadowed input surface when healing`() async throws {
         let surface = MockInputSurface()
         let sim = MockSimulator()
-        given(surface).shadowed(on: .any).willReturn(true)
-        given(surface).reclaim(on: .any).willReturn()
+        given(surface).shadowed().willReturn(true)
+        given(surface).reclaim().willReturn()
 
-        let outcome = try await surface.heal(on: sim)
+        let outcome = try await surface.heal()
 
         #expect(outcome == .reclaimed)
-        verify(surface).reclaim(on: .any).called(1)
+        verify(surface).reclaim().called(1)
     }
 
     @Test func `should report a failed reclaim when healing`() async {
         let surface = MockInputSurface()
         let sim = MockSimulator()
-        given(surface).shadowed(on: .any).willReturn(true)
-        given(surface).reclaim(on: .any).willThrow(InputSurfaceError.springBoardMissing)
+        given(surface).shadowed().willReturn(true)
+        given(surface).reclaim().willThrow(InputSurfaceError.springBoardMissing)
 
         await #expect(throws: InputSurfaceError.springBoardMissing) {
-            try await surface.heal(on: sim)
+            try await surface.heal()
         }
     }
 
     @Test func `should wait for the input surface to be ready when healing after boot`() async throws {
         let surface = MockInputSurface()
         let sim = MockSimulator()
-        given(surface).ready(on: .any).willReturn()
-        given(surface).shadowed(on: .any).willReturn(true)
-        given(surface).reclaim(on: .any).willReturn()
+        given(surface).ready().willReturn()
+        given(surface).shadowed().willReturn(true)
+        given(surface).reclaim().willReturn()
 
-        let outcome = try await surface.healAfterBoot(on: sim)
+        let outcome = try await surface.healAfterBoot()
 
         #expect(outcome == .reclaimed)
-        verify(surface).ready(on: .any).called(1)
+        verify(surface).ready().called(1)
     }
 
     @Test func `should summarise each heal outcome in one line`() {

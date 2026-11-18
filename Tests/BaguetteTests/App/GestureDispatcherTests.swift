@@ -6,9 +6,9 @@ import Mockable
 struct GestureDispatcherTests {
 
     @Test func `should ack ok when a valid tap lands`() {
-        let input = MockInput()
-        given(input).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        given(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1,"y":2,"width":100,"height":200}"#)
 
@@ -16,9 +16,9 @@ struct GestureDispatcherTests {
     }
 
     @Test func `should ack not ok when the simulator refuses the gesture`() {
-        let input = MockInput()
-        given(input).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(false)
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        given(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(false)
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1,"y":2,"width":1,"height":1}"#)
 
@@ -29,39 +29,39 @@ struct GestureDispatcherTests {
     // sits in the top band, and the edge hint has to survive the whole
     // way from the wire to the input surface for it to be pressed.
     @Test func `should carry a tap's edge hint all the way to the simulator`() {
-        let input = MockInput()
-        given(input).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        given(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(
             line: #"{"type":"tap","x":742,"y":44,"width":800,"height":480,"edge":"top"}"#
         )
 
         #expect(ack == #"{"ok":true}"#)
-        verify(input).tap(
+        verify(input.touch).tap(
             at: .value(Point(x: 742, y: 44)), size: .any, duration: .any, edge: .value(.top)
         ).called(1)
     }
 
     @Test func `should reject a gesture whose size is not the expected screen before touching the simulator`() throws {
-        let input = MockInput()
+        let input = InputMocks()
         let expected = try ExpectedScreen(json: ExpectedScreenTests.json)
         let screenGuard = InputScreenGuard(expected: expected) { expected.screen }
-        let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
+        let dispatcher = GestureDispatcher(input: input.abilities, screenGuard: screenGuard)
 
         let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1,"y":2,"width":1206,"height":2622}"#)
 
         #expect(ack == #"{"ok":false,"error":"input dimensions must match the observed native panel points"}"#)
-        verify(input).tap(at: .any, size: .any, duration: .any, edge: .any).called(0)
+        verify(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(0)
     }
 
     @Test func `should name the screen change when the guarded screen refuses a gesture`() throws {
-        let input = MockInput()
+        let input = InputMocks()
         let expected = try ExpectedScreen(json: ExpectedScreenTests.json)
         let screenGuard = InputScreenGuard(expected: expected) { throw ObservedScreenError.unavailable }
-        given(input).tap(at: .any, size: .any, duration: .any, edge: .any)
+        given(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any)
             .willProduce { _, _, _, _ in screenGuard.allows(.down) }
-        let dispatcher = GestureDispatcher(input: input, screenGuard: screenGuard)
+        let dispatcher = GestureDispatcher(input: input.abilities, screenGuard: screenGuard)
 
         let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1,"y":2,"width":402,"height":874}"#)
 
@@ -69,8 +69,8 @@ struct GestureDispatcherTests {
     }
 
     @Test func `should report the missing field when a gesture line is incomplete`() {
-        let input = MockInput()
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(line: #"{"type":"tap","x":1}"#)
 
@@ -78,8 +78,8 @@ struct GestureDispatcherTests {
     }
 
     @Test func `should report an unknown gesture type`() {
-        let input = MockInput()
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(line: #"{"type":"frobnicate"}"#)
 
@@ -87,8 +87,8 @@ struct GestureDispatcherTests {
     }
 
     @Test func `should report invalid JSON when a gesture line is malformed`() {
-        let input = MockInput()
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(line: "not json at all")
 
@@ -96,21 +96,21 @@ struct GestureDispatcherTests {
     }
 
     @Test func `should land a touch1-down as the down phase of a single finger`() {
-        let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
-        let dispatcher = GestureDispatcher(input: input)
+        let input = InputMocks()
+        given(input.touch).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
+        let dispatcher = GestureDispatcher(input: input.abilities)
 
         let ack = dispatcher.dispatch(line: #"{"type":"touch1-down","x":0,"y":0,"width":1,"height":1}"#)
 
         #expect(ack == #"{"ok":true}"#)
-        verify(input).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).called(1)
+        verify(input.touch).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).called(1)
     }
 
     @Test func `should report any error a gesture fails to parse with in the ack`() {
-        let input = MockInput()
+        let input = InputMocks()
         let registry = GestureRegistry()
         registry.register(ThrowingGesture.self)
-        let dispatcher = GestureDispatcher(input: input, registry: registry)
+        let dispatcher = GestureDispatcher(input: input.abilities, registry: registry)
 
         let ack = dispatcher.dispatch(line: #"{"type":"explode"}"#)
 
@@ -118,10 +118,10 @@ struct GestureDispatcherTests {
     }
 
     @Test func `should escape error text so the ack stays valid JSON`() {
-        let input = MockInput()
+        let input = InputMocks()
         let registry = GestureRegistry()
         registry.register(EscapingGesture.self)
-        let dispatcher = GestureDispatcher(input: input, registry: registry)
+        let dispatcher = GestureDispatcher(input: input.abilities, registry: registry)
 
         let ack = dispatcher.dispatch(line: #"{"type":"escape-error"}"#)
 
@@ -132,7 +132,8 @@ struct GestureDispatcherTests {
 private struct ThrowingGesture: Gesture {
     static var wireType: String { "explode" }
     static func parse(_ dict: [String: Any]) throws -> Self { throw OtherError.boom }
-    func execute(on input: any Input) -> Bool { true }
+    static var ability: Ability<any Touch> { .touch }
+    func execute(on touch: any Touch) -> Bool { true }
 }
 
 private enum OtherError: Error, CustomStringConvertible {
@@ -143,7 +144,8 @@ private enum OtherError: Error, CustomStringConvertible {
 private struct EscapingGesture: Gesture {
     static var wireType: String { "escape-error" }
     static func parse(_ dict: [String: Any]) throws -> Self { throw EscapingError() }
-    func execute(on input: any Input) -> Bool { true }
+    static var ability: Ability<any Touch> { .touch }
+    func execute(on touch: any Touch) -> Bool { true }
 }
 
 private struct EscapingError: Error, CustomStringConvertible {

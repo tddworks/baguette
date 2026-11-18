@@ -208,7 +208,7 @@ baguette pan --udid <udid> --x1 <x1> --y1 <y1> --x2 <x2> --y2 <y2> --dx <dx> --d
 
 ## baguette press
 
-Press-and-release a device button (home \| lock \| power \| volume-up \| volume-down \| action \| software-keyboard \| digital-crown \| side-button \| left-side-button \| app-switcher \| swipe-to-app-switcher \| swipe-to-home \| pull-down-to-lock-screen \| pull-down-to-notification-center)
+Press-and-release a device button (home \| app-switcher \| swipe-to-app-switcher \| swipe-to-home \| pull-down-to-lock-screen \| pull-down-to-notification-center \| software-keyboard \| lock \| power \| action \| volume-up \| volume-down \| digital-crown \| side-button \| left-side-button)
 
 ```
 baguette press --udid <udid> --button <button> [--duration <duration>]
@@ -217,7 +217,7 @@ baguette press --udid <udid> --button <button> [--duration <duration>]
 | Flag | Required | Default | Description |
 |---|---|---|---|
 | `--udid` | yes |  | Simulator UDID |
-| `--button` | yes |  | Device button: home \| lock \| power \| volume-up \| volume-down \| action \| software-keyboard \| digital-crown \| side-button \| left-side-button \| app-switcher \| swipe-to-app-switcher \| swipe-to-home \| pull-down-to-lock-screen \| pull-down-to-notification-center |
+| `--button` | yes |  | Device button: home \| app-switcher \| swipe-to-app-switcher \| swipe-to-home \| pull-down-to-lock-screen \| pull-down-to-notification-center \| software-keyboard \| lock \| power \| action \| volume-up \| volume-down \| digital-crown \| side-button \| left-side-button |
 | `--duration` |  | `0.0` | Hold duration in seconds (0 = short tap) |
 
 ## baguette key

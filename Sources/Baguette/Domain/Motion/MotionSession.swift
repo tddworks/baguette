@@ -46,7 +46,6 @@ final class MotionSession {
 
     private var ledger: MotionLedger = .empty
     private var current: MotionIntent?
-    private var armedSimulator: (any Simulator)?
 
     init(motion: any Motion, now: @escaping @Sendable () -> Double = {
         Date().timeIntervalSince1970
@@ -56,9 +55,8 @@ final class MotionSession {
     }
 
     /// Turn motion on, or change what's being reported.
-    func set(kind: MotionKind, confidence: MotionConfidence, speed: Double,
-             on simulator: any Simulator) async {
-        await publish(kind: kind, confidence: confidence, speed: speed, on: simulator)
+    func set(kind: MotionKind, confidence: MotionConfidence, speed: Double) async {
+        await publish(kind: kind, confidence: confidence, speed: speed)
     }
 
     /// Drive motion from a location walk or route speed.
@@ -66,7 +64,7 @@ final class MotionSession {
     /// A no-op while motion is off — see the note on opt-in above. The kind
     /// is classified from the speed, so the preset a user picked in the
     /// browser's Walk mode is the kind the app under test observes.
-    func drive(speed: Double, on simulator: any Simulator) async {
+    func drive(speed: Double) async {
         guard case .publishing = phase else { return }
         let kind = MotionKind.from(speed: speed)
         // Skip a republish that would tell an app nothing new.
@@ -74,8 +72,7 @@ final class MotionSession {
            abs(current.speed - speed) < Self.speedEpsilon {
             return
         }
-        await publish(kind: kind, confidence: current?.confidence ?? .high,
-                      speed: speed, on: simulator)
+        await publish(kind: kind, confidence: current?.confidence ?? .high, speed: speed)
     }
 
     /// Park the device and stop future app launches reading motion.
@@ -96,9 +93,7 @@ final class MotionSession {
     /// before failing left it armed. The totals then resume from what the
     /// guest can already see, so the pedometer never jumps backwards.
     @discardableResult
-    func stop(on simulator: any Simulator) async -> Bool {
-        let target = armedSimulator ?? simulator
-        armedSimulator = target
+    func stop() async -> Bool {
         adoptPublished()
         if current == nil {
             ledger = .resuming(from: motion.published(), at: now())
@@ -108,36 +103,33 @@ final class MotionSession {
         let parked = MotionIntent.stationary(startedAt: now(), stepsBefore: ledger.steps,
                                             distanceBefore: ledger.metres)
         do {
-            try await motion.publish(parked, on: target)
+            try await motion.publish(parked)
             // Adopt the parked intent the moment it lands, before the disarm
             // is attempted. If the disarm then fails, the device really is
             // stationary — a retry must bank *that*, and banking the walk it
             // replaced would add steps for time spent standing still.
             current = parked
             phase = .publishing(.stationary)
-            try await motion.clear(on: target)
+            try await motion.clear()
         } catch {
             lastError = error.localizedDescription
             return false
         }
         phase = .idle
         current = nil
-        armedSimulator = nil
         lastError = nil
         return true
     }
 
-    private func publish(kind: MotionKind, confidence: MotionConfidence, speed: Double,
-                         on simulator: any Simulator) async {
+    private func publish(kind: MotionKind, confidence: MotionConfidence, speed: Double) async {
         adoptPublished()
         bankCurrentLeg()
         let intent = ledger.intent(kind: kind, confidence: confidence, speed: speed,
                                   startedAt: now())
         // A publish can write the shared intent and arm the dylib before it
         // reports failure, so this session owns the cleanup from here on.
-        armedSimulator = simulator
         do {
-            try await motion.publish(intent, on: simulator)
+            try await motion.publish(intent)
         } catch {
             lastError = error.localizedDescription
             return

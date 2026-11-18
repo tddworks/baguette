@@ -26,7 +26,7 @@ struct PasteCommand: AsyncParsableCommand {
     func run() async throws {
         let device = try options.device()
         let pasteboard = try orExit { try device.require(.pasteboard) }
-        let input = try orExit { try device.require(.input) }
+        let input = try orExit { try device.input() }
         let ok: Bool
         do {
             ok = try await Paste(text: text, press: press)

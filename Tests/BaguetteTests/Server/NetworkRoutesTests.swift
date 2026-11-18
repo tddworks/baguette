@@ -37,14 +37,14 @@ struct NetworkRoutesTests {
         given(sim).name.willReturn("iPhone 17 Pro")
         given(sim).network().willReturn(network)
         if let applyError {
-            given(network).apply(.any, on: .any).willThrow(applyError)
+            given(network).apply(.any).willThrow(applyError)
         } else {
-            given(network).apply(.any, on: .any).willProduce { condition, _ in
+            given(network).apply(.any).willProduce { condition in
                 captures.applied.append(condition)
             }
         }
-        given(network).clear(on: .any).willReturn(())
-        given(network).current(on: .any).willReturn(current)
+        given(network).clear().willReturn(())
+        given(network).current().willReturn(current)
         return Wiring(simulators: simulators, sim: sim, network: network, captures: captures)
     }
 
@@ -153,7 +153,7 @@ struct NetworkRoutesTests {
         let outcome = await Server.clearNetwork(udid: "U", simulators: w.simulators)
 
         #expect(outcome == .ok)
-        verify(w.network).clear(on: .any).called(1)
+        verify(w.network).clear().called(1)
     }
 
     @Test func `should report an unknown device when clearing its network conditioning`() async {
@@ -234,7 +234,7 @@ struct NetworkRoutesTests {
         try fixture.output("", stderr: "simulator unavailable", status: 2)
         let network = SharedFileNetwork(
             fileURL: fixture.directory.appendingPathComponent("network.json"),
-            dylibPath: "/builds/current/VirtualNetwork.dylib", injection: fixture.injection)
+            dylibPath: "/builds/current/VirtualNetwork.dylib", injection: fixture.injection, simulator: fixture.simulator)
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(fixture.simulator)
         given(fixture.simulator).network().willReturn(network)
