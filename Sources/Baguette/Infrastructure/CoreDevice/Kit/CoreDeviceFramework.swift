@@ -1,15 +1,35 @@
-import CoreDeviceABI
 import Foundation
 
 /// Xcode's private device stack (`CoreDevice.framework`), reached in-process
 /// for what `devicectl` has no verb for — today, a phone's touchscreen.
-/// Integration-only: every call crosses into the framework through
-/// `CoreDeviceABI`. The research behind it: docs/features/real-devices/design.md.
+/// Weak-linked (see Package.swift): Swift binds CoreDevice's own symbols with
+/// `@_silgen_name` on the stand-ins below. Integration-only; the research
+/// is docs/features/real-devices/design.md.
 enum CoreDeviceFramework {
+    /// Whether this Mac has CoreDevice. Weak-linked symbols are null on a
+    /// Mac without it, so nothing here is called before this says yes.
+    static var isAvailable: Bool {
+        #if COREDEVICE
+        return dlsym(UnsafeMutableRawPointer(bitPattern: -2), "$s10CoreDevice0B7ManagerC6sharedACvgZ") != nil
+        #else
+        return false
+        #endif
+    }
+
     /// The phone CoreDevice knows by `identifier` (its CoreDevice identifier,
     /// not the UDID), or nil when it isn't listed or CoreDevice is absent.
     static func device(_ identifier: UUID) -> RemoteDevice? {
-        DeviceManager.shared?.devices().first { $0.identifier == identifier }
+        #if COREDEVICE
+        guard isAvailable else { return nil }
+        return DeviceManager.shared?.devices().first { $0.identifier == identifier }
+        #else
+        return nil
+        #endif
+    }
+
+    /// A CoreDevice or UniversalHID symbol (type metadata, a conformance).
+    static func symbol(_ mangledName: String) -> UnsafeRawPointer? {
+        dlsym(UnsafeMutableRawPointer(bitPattern: -2), mangledName).map(UnsafeRawPointer.init)
     }
 }
 
@@ -23,40 +43,6 @@ struct CapabilityKind: Sendable {
     static let universalHID = CapabilityKind(
         typeSymbol: "$s10CoreDevice29UniversalHIDServiceCapabilityVN",
         conformanceSymbol: "$s10CoreDevice29UniversalHIDServiceCapabilityVAA0bE0AAWP")
-}
-
-/// A device as CoreDevice lists it.
-struct RemoteDevice: @unchecked Sendable {
-    fileprivate let object: RemoteDeviceObject
-
-    var identifier: UUID { object.identifier() }
-
-    /// Open `kind` on this device. Blocks until CoreDevice answers.
-    func open(_ kind: CapabilityKind) throws -> OpenedCapability {
-        guard let type = cdabi_symbol(kind.typeSymbol),
-              let conformance = cdabi_symbol(kind.conformanceSymbol)
-        else { throw CoreDeviceError.unavailable }
-        let capability = OpenedCapability()
-        let failure = Failure()
-        let done = DispatchSemaphore(value: 0)
-        let object = self.object
-        Task.detached {
-            // CapabilityStaticMember<T> holds nothing, but is resilient: the
-            // call takes its address, T's metadata and T's conformance.
-            let member = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
-            defer { member.deallocate() }
-            do {
-                try await object.capability(capability.existential, member, type, conformance)
-                capability.isOpen = true
-            } catch {
-                failure.error = error
-            }
-            done.signal()
-        }
-        done.wait()
-        if let error = failure.error { throw error }
-        return capability
-    }
 }
 
 /// What CoreDevice wrote for an opened capability: an existential of its
@@ -81,6 +67,45 @@ enum CoreDeviceError: Error, CustomStringConvertible {
     var description: String { "CoreDevice is not available on this Mac" }
 }
 
+/// Stands for any CoreDevice capability: gives Swift an existential's layout.
+protocol OpaqueCapability {}
+
+#if COREDEVICE
+
+/// A device as CoreDevice lists it.
+struct RemoteDevice: @unchecked Sendable {
+    fileprivate let object: RemoteDeviceObject
+
+    var identifier: UUID { object.identifier() }
+
+    /// Open `kind` on this device. Blocks until CoreDevice answers.
+    func open(_ kind: CapabilityKind) throws -> OpenedCapability {
+        guard let type = CoreDeviceFramework.symbol(kind.typeSymbol),
+              let conformance = CoreDeviceFramework.symbol(kind.conformanceSymbol)
+        else { throw CoreDeviceError.unavailable }
+        let capability = OpenedCapability()
+        let failure = Failure()
+        let done = DispatchSemaphore(value: 0)
+        let object = self.object
+        Task.detached {
+            // CapabilityStaticMember<T> holds nothing, but is resilient: the
+            // call takes its address, T's metadata and T's conformance.
+            let member = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+            defer { member.deallocate() }
+            do {
+                try await object.implementation(capability.existential, member, type, conformance)
+                capability.isOpen = true
+            } catch {
+                failure.error = error
+            }
+            done.signal()
+        }
+        done.wait()
+        if let error = failure.error { throw error }
+        return capability
+    }
+}
+
 /// CoreDevice's `DeviceManager`, made once per process with every
 /// visibility class allowed, so physical phones are listed beside simulators.
 private final class DeviceManager: @unchecked Sendable {
@@ -89,23 +114,22 @@ private final class DeviceManager: @unchecked Sendable {
     private let object: DeviceManagerObject
 
     private init?() {
-        guard cdabi_load(),
-              let managerType = cdabi_symbol("$s10CoreDevice0B7ManagerCN"),
-              let visibilityType = cdabi_symbol("$s10CoreDevice0B15VisibilityClassON"),
+        guard let managerType = CoreDeviceFramework.symbol("$s10CoreDevice0B7ManagerCN"),
+              let visibilityType = CoreDeviceFramework.symbol("$s10CoreDevice0B15VisibilityClassON"),
               let visibility = unsafeBitCast(visibilityType, to: Any.Type.self) as? any Hashable.Type
         else { return nil }
         // Touching the shared manager first initializes the class's
         // resilient metadata, which the allocating initializer relies on.
-        _ = sharedManagerObject()
+        _ = sharedDeviceManager()
         let allowed = Self.everyVisibilityClass(visibility)
         object = withExtendedLifetime(allowed) {
             let storage = withUnsafePointer(to: allowed) {
                 UnsafeRawPointer($0).load(as: UnsafeMutableRawPointer.self)
             }
             // The initializer takes ownership of the Set it is given.
-            cdabi_retain_bridge_object(storage)
+            retainBridgeObject(storage)
             return unsafeBitCast(managerType, to: DeviceManagerObject.Type.self)
-                .make(connection: serviceConnection(), allowed: storage)
+                .make(connection: sharedServiceConnection(), allowed: storage)
         }
     }
 
@@ -118,39 +142,58 @@ private final class DeviceManager: @unchecked Sendable {
 
     /// Apple's own cases, from its `allCases`, as the Set the initializer takes.
     private static func everyVisibilityClass<T: Hashable>(_: T.Type) -> Any {
-        Set(unsafeBitCast(visibilityClasses(), to: [T].self))
+        Set(unsafeBitCast(visibilityClassAllCases(), to: [T].self))
     }
 }
 
-// Stand-ins that give Swift the calling convention for CoreDevice's own
-// objects. Every instance and metadata comes from CoreDevice; none is made here.
-protocol OpaqueCapability {}
+// Stand-ins that give Swift CoreDevice's calling convention: each method is
+// bound to CoreDevice's own symbol. Every instance comes from CoreDevice.
 private protocol ServiceConnection {}
 
-@_silgen_name("cdabi_manager_shared")
-private func sharedManagerObject() -> DeviceManagerObject
-@_silgen_name("cdabi_service_connection")
-private func serviceConnection() -> any ServiceConnection
-@_silgen_name("cdabi_visibility_classes")
-private func visibilityClasses() -> UnsafeRawPointer
+/// DeviceManager.shared
+@_silgen_name("$s10CoreDevice0B7ManagerC6sharedACvgZ")
+private func sharedDeviceManager() -> DeviceManagerObject
+/// CoreDeviceService.sharedConnection
+@_silgen_name("$s10CoreDevice0aB7ServiceV16sharedConnectionAA0abcE0_pvgZ")
+private func sharedServiceConnection() -> any ServiceConnection
+/// DeviceVisibilityClass.allCases
+@_silgen_name("$s10CoreDevice0B15VisibilityClassO8allCasesSayACGvgZ")
+private func visibilityClassAllCases() -> UnsafeRawPointer
+@_silgen_name("swift_bridgeObjectRetain")
+private func retainBridgeObject(_ object: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer
 
 private class DeviceManagerObject {
-    @_silgen_name("cdabi_manager_init")
+    /// DeviceManager(serviceConnection:allowedDeviceVisibilityClasses:)
+    @_silgen_name("$s10CoreDevice0B7ManagerC17serviceConnection07allowedB17VisibilityClassesAcA0ab7ServiceE0_p_ShyAA0bG5ClassOGtcfC")
     static func make(connection: __owned any ServiceConnection, allowed: UnsafeRawPointer) -> DeviceManagerObject
-    @_silgen_name("cdabi_manager_devices")
+    /// DeviceManager.allDevices()
+    @_silgen_name("$s10CoreDevice0B7ManagerC10allDevicesSayAA06RemoteB0CGyF")
     final func devices() -> [RemoteDeviceObject]
-    @_silgen_name("cdabi_manager_ready")
+    /// DeviceManager.fullyInitialized
+    @_silgen_name("$s10CoreDevice0B7ManagerC16fullyInitializedSbvgTj")
     final func isReady() -> Bool
 }
 
 private class RemoteDeviceObject {
-    @_silgen_name("cdabi_device_identifier")
+    /// RemoteDevice.deviceIdentifier
+    @_silgen_name("$s10CoreDevice06RemoteB0C16deviceIdentifier10Foundation4UUIDVvgTj")
     final func identifier() -> UUID
-    @_silgen_name("cdabi_device_capability")
-    final func capability(_ result: UnsafeMutableRawPointer, _ member: UnsafeRawPointer,
-                          _ type: UnsafeRawPointer, _ conformance: UnsafeRawPointer) async throws
+    /// RemoteDevice.getImplementation(for:) async throws
+    @_silgen_name("$s10CoreDevice06RemoteB0C17getImplementation3for12ProtocolTypeQzAA22CapabilityStaticMemberVyxG_tYaKAA0bI0RzlFTj")
+    final func implementation(_ result: UnsafeMutableRawPointer, _ member: UnsafeRawPointer,
+                              _ type: UnsafeRawPointer, _ conformance: UnsafeRawPointer) async throws
 }
 
 private final class Failure: @unchecked Sendable {
     var error: (any Error)?
 }
+
+#else
+
+/// A device as CoreDevice lists it — never, in a build without CoreDevice.
+struct RemoteDevice: Sendable {
+    var identifier: UUID { UUID() }
+    func open(_ kind: CapabilityKind) throws -> OpenedCapability { throw CoreDeviceError.unavailable }
+}
+
+#endif

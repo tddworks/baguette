@@ -287,8 +287,9 @@ Infrastructure/
 │       Pasteboard/ Photos/ StatusBar/ Interface/ Shake/ Motion/ Network/ Camera/ Injection/ …
 ├── Companion/   the twin: LiveCompanionPhones, TwinScreen(s), TwinPoses, VTH264Decoder
 ├── CoreDevice/  physical iPhone: devicectl, and CoreDevice.framework for touch
-│   └── Kit/     Devicectl; CoreDeviceFramework (RemoteDevice, CapabilityKind) over the
-│                CoreDeviceABI native target — the only code speaking CoreDevice's Swift ABI
+│   └── Kit/     Devicectl; CoreDeviceFramework (RemoteDevice, CapabilityKind) and
+│                DigitizerReport, bound to the weak-linked framework in Swift; one C call
+│                (CoreDeviceABI) for the typed-throws send
 ├── Android/     adb + emulator   (later, same shape)
 ├── Host/        the Mac, shared by every family: Stream/ Recording/ Render/ Camera/ (AV capture)
 │                Chrome/ Bakery/ Plugin/ Subprocess/

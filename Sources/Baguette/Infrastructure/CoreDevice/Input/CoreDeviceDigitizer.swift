@@ -20,20 +20,23 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
     }
 
     func report(_ contacts: [Contact], touching: Bool, edge: DeviceEdge?) -> Bool {
+        #if COREDEVICE
         guard (1...2).contains(contacts.count), let hid = universalHID() else { return false }
-        let fingers = contacts.map { cdabi_finger(x: $0.x, y: $0.y) }
-        return fingers.withUnsafeBufferPointer {
-            cdabi_send_digitizer_report(
-                hid.existential, Self.mainTouchscreen, $0.baseAddress,
-                UInt8($0.count), touching, edge.swipeEdge)
+        let report = DigitizerReport(fingers: contacts, touching: touching, swipeEdge: edge.swipeEdge)
+        return report.withWords { lo, hi in
+            cdabi_send_report(lo, hi, Self.mainTouchscreen, hid.existential)
         }
+        #else
+        return false
+        #endif
     }
 
+    #if COREDEVICE
     /// The phone's Universal HID capability, opened on first use.
     private func universalHID() -> OpenedCapability? {
         lock.withLock {
             if let hid { return hid }
-            guard cdabi_digitizer_ready() else {
+            guard DigitizerReport.isAvailable else {
                 log("[coredevice] this Xcode's UniversalHID can't build a touch report")
                 return nil
             }
@@ -49,11 +52,12 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
             return hid
         }
     }
+    #endif
 }
 
 private extension Optional where Wrapped == DeviceEdge {
     /// Universal HID's swipe-in edges: 0 none, 1 left, 2 top, 3 bottom, 4 right.
-    var swipeEdge: UInt8 {
+    var swipeEdge: Int {
         switch self {
         case .none:    return 0
         case .left?:   return 1
