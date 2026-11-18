@@ -4,9 +4,11 @@ description: Design of one Devices model for every kind of device baguette drive
 
 # Devices — "every device I can drive, and what each one can do"
 
-**Status:** DESIGN, 2026-11-18. Nothing here is built. Today the code has
+**Status:** DESIGN, 2026-11-18. Nothing here is built. Before this lap the code had
 one fat `Simulator` protocol, a separate twin-only `Devices` / `Device`
-pair, and `Infrastructure/` sorted by context. The
+pair, and `Infrastructure/` sorted by context. Done so far: `Infrastructure/`
+is split by family (slice 1), and the twin's pair is renamed
+`CompanionPhones` / `CompanionPhone` in `Domain/Companion/`, freeing the names. The
 [build sequence](#9--build-sequence) moves it one green slice at a time.
 
 This document owns **which devices exist, what each one can do, and where
@@ -279,7 +281,7 @@ Infrastructure/
 │   ├── Kit/     DeviceHost, framework loading, the simctl runner — shared inside the family
 │   └── Input/ Screen/ Accessibility/ Hinge/ Orientation/ Logs/ Location/ Apps/ Defaults/
 │       Pasteboard/ Photos/ StatusBar/ Interface/ Shake/ Motion/ Network/ Camera/ Injection/ …
-├── Companion/   the twin: LiveDevices → CompanionPhones, TwinScreen(s), TwinPoses, VTH264Decoder
+├── Companion/   the twin: LiveCompanionPhones, TwinScreen(s), TwinPoses, VTH264Decoder
 ├── CoreDevice/  physical iPhone: devicectl + CoreDevice.framework   (after the spike)
 │   └── Kit/     the CoreDevice symbol bridge (the technique expo-device-hub's CoreDeviceShim uses)
 ├── Android/     adb + emulator   (later, same shape)

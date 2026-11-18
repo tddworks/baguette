@@ -2,28 +2,28 @@ import Foundation
 import Testing
 @testable import Baguette
 
-@Suite("LiveDevices")
-struct LiveDevicesTests {
+@Suite("LiveCompanionPhones")
+struct LiveCompanionPhonesTests {
     private let hello = TwinHello(
         udid: "U1", name: "iPhone", model: "iPhone17,2", capabilities: ["motion"]
     )
 
     @Test func `should list a companion once it registers`() {
-        let devices = LiveDevices()
+        let devices = LiveCompanionPhones()
         devices.register(hello: hello)
-        #expect(devices.all == [Device(hello: hello)])
+        #expect(devices.all == [CompanionPhone(hello: hello)])
         #expect(devices.find(udid: "U1") != nil)
     }
 
     @Test func `should drop a device from the list when it unregisters`() {
-        let devices = LiveDevices()
+        let devices = LiveCompanionPhones()
         devices.register(hello: hello)
         devices.unregister(udid: "U1")
         #expect(devices.all.isEmpty)
     }
 
     @Test func `should replace the earlier identity when a udid registers again`() {
-        let devices = LiveDevices()
+        let devices = LiveCompanionPhones()
         devices.register(hello: hello)
         devices.register(hello: TwinHello(
             udid: "U1", name: "Renamed", model: "iPhone17,2", capabilities: []
@@ -33,7 +33,7 @@ struct LiveDevicesTests {
     }
 
     @Test func `should list devices in registration order`() {
-        let devices = LiveDevices()
+        let devices = LiveCompanionPhones()
         devices.register(hello: hello)
         devices.register(hello: TwinHello(
             udid: "U2", name: "iPad", model: "iPad16,3", capabilities: []
@@ -42,9 +42,9 @@ struct LiveDevicesTests {
     }
 }
 
-extension LiveDevicesTests {
+extension LiveCompanionPhonesTests {
     @Test func `should keep a device listed while any of its sockets is connected`() {
-        let devices = LiveDevices()
+        let devices = LiveCompanionPhones()
         let hello = TwinHello(udid: "U9", name: "iPhone", model: "iPhone14,3", capabilities: [])
         devices.register(hello: hello)   // video socket
         devices.register(hello: hello)   // motion socket

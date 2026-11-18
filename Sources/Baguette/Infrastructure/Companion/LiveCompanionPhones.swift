@@ -1,26 +1,26 @@
 import Foundation
 
-/// The in-memory `Devices` implementation. Membership is driven by
+/// The in-memory `CompanionPhones` implementation. Membership is driven by
 /// companion sockets: a valid hello registers the device, the socket
 /// closing unregisters it. Registration order is preserved so the UI
 /// lists devices stably; a re-registered udid keeps its slot but takes
 /// the fresh identity (the phone may have been renamed between
 /// connects).
-final class LiveDevices: Devices, @unchecked Sendable {
+final class LiveCompanionPhones: CompanionPhones, @unchecked Sendable {
     private let lock = NSLock()
     // Registration is COUNTED: the video and motion sockets each
     // register the same udid, and the device stays listed until the
     // last one closes.
-    private var ordered: [(device: Device, connections: Int)] = []
+    private var ordered: [(device: CompanionPhone, connections: Int)] = []
 
-    var all: [Device] {
+    var all: [CompanionPhone] {
         lock.lock()
         defer { lock.unlock() }
         return ordered.map(\.device)
     }
 
     func register(hello: TwinHello) {
-        let device = Device(hello: hello)
+        let device = CompanionPhone(hello: hello)
         lock.lock()
         if let index = ordered.firstIndex(where: { $0.device.udid == device.udid }) {
             ordered[index] = (device, ordered[index].connections + 1)

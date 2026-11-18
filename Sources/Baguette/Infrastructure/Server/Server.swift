@@ -72,7 +72,7 @@ struct Server: Sendable {
     /// video ingest hubs. Reference types for the same reason as
     /// `motionSessions` — membership and decoder sessions must
     /// survive between socket connections.
-    let devices: LiveDevices
+    let devices: LiveCompanionPhones
     let twinScreens: TwinScreens
     let twinPoses: TwinPoses
 
@@ -88,7 +88,7 @@ struct Server: Sendable {
         grants: PluginGrants = PluginGrants(),
         motionSessions: MotionSessions = MotionSessions(),
         cameraSessions: CameraSessions = CameraSessions(guestTerminated: { _ in false }),
-        devices: LiveDevices = LiveDevices(),
+        devices: LiveCompanionPhones = LiveCompanionPhones(),
         twinScreens: TwinScreens = TwinScreens(),
         twinPoses: TwinPoses = TwinPoses()
     ) {

@@ -4,7 +4,7 @@ import Mockable
 /// A physical phone whose companion app is connected to this host —
 /// the identity baguette lists it under, taken verbatim from the
 /// companion's hello.
-struct Device: Equatable, Sendable {
+struct CompanionPhone: Equatable, Sendable {
     let udid: String
     let name: String
     let model: String
@@ -32,12 +32,12 @@ struct Device: Equatable, Sendable {
 /// connecting and disconnecting; the production impl lives in
 /// Infrastructure.
 @Mockable
-protocol Devices: AnyObject, Sendable {
-    var all: [Device] { get }
+protocol CompanionPhones: AnyObject, Sendable {
+    var all: [CompanionPhone] { get }
 }
 
-extension Devices {
-    func find(udid: String) -> Device? {
+extension CompanionPhones {
+    func find(udid: String) -> CompanionPhone? {
         all.first { $0.udid == udid }
     }
 

@@ -290,7 +290,7 @@ extension Server {
 
     private static func twinVideoWS(
         expecting pathUdid: String,
-        devices: LiveDevices,
+        devices: LiveCompanionPhones,
         screens: TwinScreens,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
@@ -442,7 +442,7 @@ extension Server {
         udid: String,
         format: StreamFormat,
         query: [String: [String]],
-        devices: LiveDevices,
+        devices: LiveCompanionPhones,
         models: any DeviceModels,
         screens: TwinScreens,
         poses: TwinPoses,
