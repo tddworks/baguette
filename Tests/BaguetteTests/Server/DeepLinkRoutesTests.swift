@@ -5,7 +5,7 @@ import Mockable
 
 /// Handler-level coverage for the console's two routes. We drive the
 /// pure dispatch helpers rather than the Hummingbird `Response`
-/// wrappers, with `MockSimulators` + `MockApps`.
+/// wrappers, with one device's `MockApps`.
 ///
 /// `openURL` reports *where the link went*, not just whether dispatch
 /// succeeded — an https link dispatches perfectly happily and then lands
@@ -19,13 +19,9 @@ struct DeepLinkRoutesTests {
         installed: [InstalledApp] = [],
         openSucceeds: Bool = true,
         listSucceeds: Bool = true
-    ) -> (MockSimulators, MockApps) {
-        let simulators = MockSimulators()
-        let sim = MockSimulator()
+    ) -> (any Devices, MockApps) {
         let apps = MockApps()
-        given(simulators).find(udid: .value("U")).willReturn(sim)
-        given(simulators).find(udid: .value("nope")).willReturn(nil)
-        given(sim).apps().willReturn(apps)
+        let simulators = routeDevices { $0.register(.apps) { apps } }
 
         if openSucceeds {
             given(apps).open(.any).willReturn(())
@@ -50,7 +46,7 @@ struct DeepLinkRoutesTests {
 
     @Test func `should report that a custom-scheme link reached the app`() async {
         let (simulators, apps) = host()
-        let outcome = await Server.openURL(udid: "U", url: "myapp://profile", simulators: simulators)
+        let outcome = await Server.openURL(udid: "U", url: "myapp://profile", devices: simulators)
 
         #expect(outcome == .opened(routing: .app))
         verify(apps).open(.value(DeepLink.from("myapp://profile")!)).called(1)
@@ -61,14 +57,14 @@ struct DeepLinkRoutesTests {
         // needs to say so, so the outcome carries the routing.
         let (simulators, _) = host()
         let outcome = await Server.openURL(
-            udid: "U", url: "https://example.com/x", simulators: simulators
+            udid: "U", url: "https://example.com/x", devices: simulators
         )
         #expect(outcome == .opened(routing: .browser))
     }
 
     @Test func `should refuse a bare word as not a URL`() async {
         let (simulators, apps) = host()
-        let outcome = await Server.openURL(udid: "U", url: "profile", simulators: simulators)
+        let outcome = await Server.openURL(udid: "U", url: "profile", devices: simulators)
 
         #expect(outcome == .notAURL)
         verify(apps).open(.any).called(0)
@@ -76,13 +72,13 @@ struct DeepLinkRoutesTests {
 
     @Test func `should report an unknown device when opening a link on an unknown udid`() async {
         let (simulators, _) = host()
-        let outcome = await Server.openURL(udid: "nope", url: "myapp://x", simulators: simulators)
+        let outcome = await Server.openURL(udid: "nope", url: "myapp://x", devices: simulators)
         #expect(outcome == .unknownDevice)
     }
 
     @Test func `should report a failed dispatch when the link cannot be opened`() async {
         let (simulators, _) = host(openSucceeds: false)
-        let outcome = await Server.openURL(udid: "U", url: "myapp://x", simulators: simulators)
+        let outcome = await Server.openURL(udid: "U", url: "myapp://x", devices: simulators)
         #expect(outcome == .dispatchFailed)
     }
 
@@ -90,7 +86,7 @@ struct DeepLinkRoutesTests {
 
     @Test func `should answer the schemes route with the ranked scheme inventory`() async {
         let (simulators, _) = host(installed: [Self.myApp])
-        let outcome = await Server.schemes(udid: "U", query: "", simulators: simulators)
+        let outcome = await Server.schemes(udid: "U", query: "", devices: simulators)
 
         #expect(outcome == .ok([
             SchemeSuggestion(scheme: "myapp", appName: "My App", bundleIdentifier: "com.example.MyApp"),
@@ -104,7 +100,7 @@ struct DeepLinkRoutesTests {
             InstalledApp(bundleIdentifier: "a", name: "A", schemes: ["superapp"]),
             InstalledApp(bundleIdentifier: "b", name: "B", schemes: ["app"]),
         ])
-        let outcome = await Server.schemes(udid: "U", query: "app", simulators: simulators)
+        let outcome = await Server.schemes(udid: "U", query: "app", devices: simulators)
 
         guard case .ok(let suggestions) = outcome else { return #expect(Bool(false)) }
         #expect(suggestions.map(\.scheme) == ["app", "superapp"])
@@ -112,12 +108,12 @@ struct DeepLinkRoutesTests {
 
     @Test func `should report an unknown device when listing schemes on an unknown udid`() async {
         let (simulators, _) = host()
-        #expect(await Server.schemes(udid: "nope", query: "", simulators: simulators) == .unknownDevice)
+        #expect(await Server.schemes(udid: "nope", query: "", devices: simulators) == .unknownDevice)
     }
 
     @Test func `should report a failed listing when the installed apps cannot be read`() async {
         let (simulators, _) = host(listSucceeds: false)
-        #expect(await Server.schemes(udid: "U", query: "", simulators: simulators) == .listFailed)
+        #expect(await Server.schemes(udid: "U", query: "", devices: simulators) == .listFailed)
     }
 
     // MARK: - what the browser actually receives
@@ -156,5 +152,18 @@ struct DeepLinkRoutesTests {
 
     @Test func `should send an empty scheme list when no app declares a scheme`() {
         #expect((object(Server.schemesJSONString([]))["schemes"] as? [[String: Any]])?.isEmpty == true)
+    }
+
+    @Test func `should refuse to open a link on a device that can't, naming it`() async {
+        let phone = routeDevices(name: "han's iPhone")
+
+        #expect(await Server.openURL(udid: "U", url: "myapp://x", devices: phone)
+            == .refused(.unable(ability: "apps", device: "han's iPhone")))
+    }
+
+    @Test func `should answer the deep-link routes under the devices tree and a simulator's old one`() {
+        for leaf in ["openurl", "schemes.json"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
     }
 }

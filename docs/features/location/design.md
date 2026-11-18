@@ -6,7 +6,7 @@ description: Why baguette's location drives simctl location the way it does — 
 
 ## Path
 
-- `baguette location set|start|walk|clear`, `POST|DELETE /simulators/:udid/location`
+- `baguette location set|start|walk|clear`, `POST|DELETE /devices/:udid/location` (or `/simulators/…`)
   and the page's Location card → the `Location` domain role (`set` / `start` /
   `clear`) → `xcrun simctl location <udid> set|start|clear` through the shared
   `Subprocess` collaborator. A non-zero exit becomes
@@ -38,7 +38,7 @@ description: Why baguette's location drives simctl location the way it does — 
 
 ## Body discrimination order
 
-`POST /simulators/:udid/location` checks `waypoints`, then `bearing`, then a
+`POST /devices/:udid/location` checks `waypoints`, then `bearing`, then a
 bare point. The order matters — a walk body carries `latitude`/`longitude` too, so
 `bearing` has to be read **before** the bare-point branch, or every
 joystick vector would silently parse as a stationary point and the device

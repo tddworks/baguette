@@ -6,7 +6,7 @@ description: Why network conditioning injects a dylib, how the URLProtocol/confi
 
 ## Path
 
-- `baguette network set|clear|status`, `POST|GET|DELETE /simulators/<UDID>/network`,
+- `baguette network set|clear|status`, `POST|GET|DELETE /devices/<UDID>/network` (or `/simulators/…`),
   the focus-mode Network card
 - → `NetworkProfile` / `NetworkCondition` / `NetworkSchedule` (host-side, tested) → `Network`
 - → writes `/tmp/BaguetteNetwork-<udid>.json` and `launchctl setenv DYLD_INSERT_LIBRARIES`

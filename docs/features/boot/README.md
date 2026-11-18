@@ -51,11 +51,13 @@ active: they're how you leave a device that won't boot.
 
 | Method | Path | Returns |
 |---|---|---|
-| POST | `/simulators/<UDID>/boot` | `{"ok":true}`, or `{"ok":false,"error":"…"}` with 404 (unknown udid) / 500 (boot refused) |
-| POST | `/simulators/<UDID>/shutdown` | same shape |
+| POST | `/devices/<UDID>/boot` | `{"ok":true}`, or `{"ok":false,"error":"…"}` with 404 (unknown udid) / 422 (a device that can't be turned on, like a phone on a cable) / 500 (boot refused) |
+| POST | `/devices/<UDID>/shutdown` | same shape |
+
+A simulator answers under its old `/simulators/<UDID>/boot` and `/shutdown` too.
 
 ```bash
-curl -X POST http://127.0.0.1:8421/simulators/<UDID>/boot
+curl -X POST http://127.0.0.1:8421/devices/<UDID>/boot
 ```
 
 `GET /simulators.json` reports each device's `state`: `"Creating"`,

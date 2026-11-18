@@ -6,7 +6,7 @@ description: Why iPhone Duo's hinge and hardware keys are driven by a guest-side
 
 ## Path
 
-- **Drive:** `baguette hinge` / `POST /simulators/<udid>/hinge` / 3D socket `set_pose` → `Hinge.fold(to:over:)` (`HingeMotor`) → `GuestHingeMotor` → `xcrun simctl spawn <udid> <HingeControl> serve` (one per device, kept) → `HIDVirtualEventService` vendor event on an `avpCustom`-shaped service.
+- **Drive:** `baguette hinge` / `POST /devices/<udid>/hinge` / 3D socket `set_pose` → `Hinge.fold(to:over:)` (`HingeMotor`) → `GuestHingeMotor` → `xcrun simctl spawn <udid> <HingeControl> serve` (one per device, kept) → `HIDVirtualEventService` vendor event on an `avpCustom`-shaped service.
 - **Keys:** `baguette press` / `key` / `type` / `POST …/input` / stream sockets → a foldable's `HID` is `FoldableInput` → `DeviceKeys` (also played by `GuestHingeMotor`) → `HingeControl button <page> <usage> <ms> [<page> <usage>]…` on a `mainScreenButtons`-shaped service.
 - **Read:** `GuestHinge` → `xcrun simctl spawn <udid> <HingeControl> read-angle` (or `watch-angle`) → CoreMotion's `CMAngleManager` in the guest.
 

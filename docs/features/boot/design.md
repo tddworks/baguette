@@ -6,9 +6,9 @@ description: How every boot entry point reaches one CoreSimulator call, and how 
 
 ## Path
 
-- CLI `baguette boot`, `POST /simulators/<UDID>/boot` (`Server.lifecycle`, which
-  also serves `shutdown`), the list page, the farm and focus mode's Boot button
-  → `Simulator.boot()`
+- CLI `baguette boot`, `POST /devices/<UDID>/boot` (or `/simulators/…`;
+  `Server.applyPower`, which also serves `shutdown`), the list page, the farm
+  and focus mode's Boot button → the device's `.lifecycle` → `Simulator.boot()`
 - → CoreSimulator `bootWithOptions:error:` with `{"persist": true}` first
   (headless boot that survives the client disconnecting), falling back to
   `bootWithError:`.

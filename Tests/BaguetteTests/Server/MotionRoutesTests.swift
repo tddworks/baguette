@@ -7,15 +7,14 @@ import Mockable
 /// the hook that lets a location walk drive motion.
 ///
 /// Same shape as the location routes: the pure parse + dispatch helpers are
-/// driven with `MockSimulators` + `MockMotion`, not the Hummingbird
+/// driven with one device's `MockMotion`, not the Hummingbird
 /// `Response` wrappers.
 @Suite("Server motion routes")
 @MainActor
 struct MotionRoutesTests {
 
     private struct Wiring {
-        let simulators: MockSimulators
-        let sim: MockSimulator
+        let devices: any Devices
         let motion: MockMotion
         let sessions: MotionSessions
         let captures: Captures
@@ -27,18 +26,13 @@ struct MotionRoutesTests {
     }
 
     private func makeWiring() -> Wiring {
-        let simulators = MockSimulators()
-        let sim = MockSimulator()
         let motion = MockMotion()
         let location = MockLocation()
         let captures = Captures()
-        // One stub only: registering a second `find` here would be consumed
-        // by the second lookup in the same test (applyMotion, then the
-        // location hook), and the device would go "missing" mid-test.
-        given(simulators).find(udid: .any).willReturn(sim)
-        given(sim).udid.willReturn("U")
-        given(sim).name.willReturn("iPhone 17 Pro")
-        given(sim).location().willReturn(location)
+        let devices = routeDevices(name: "iPhone 17 Pro") {
+            $0.register(.location) { location }
+            $0.register(.motion) { motion }
+        }
         given(location).set(.any).willReturn(())
         given(location).start(.any).willReturn(())
         given(location).clear().willReturn(())
@@ -47,8 +41,8 @@ struct MotionRoutesTests {
         }
         given(motion).published().willProduce { captures.last }
         given(motion).clear().willReturn(())
-        return Wiring(simulators: simulators, sim: sim, motion: motion,
-                      sessions: MotionSessions(makeMotion: { _ in motion }),
+        return Wiring(devices: devices, motion: motion,
+                      sessions: MotionSessions(),
                       captures: captures)
     }
 
@@ -112,7 +106,7 @@ struct MotionRoutesTests {
 
         let outcome = await Server.applyMotion(
             udid: "U", body: #"{"activity":"walking","speed":1.5}"#,
-            simulators: w.simulators, sessions: w.sessions)
+            devices: w.devices, sessions: w.sessions)
 
         #expect(outcome == .ok)
         #expect(w.captures.last?.kind == .walking)
@@ -122,18 +116,16 @@ struct MotionRoutesTests {
     @Test func `should report an unknown device when arming its motion`() async {
         // Its own mock: the shared wiring answers every udid, because a
         // single test makes several lookups.
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
         let outcome = await Server.applyMotion(
             udid: "nope", body: #"{"activity":"walking"}"#,
-            simulators: simulators, sessions: MotionSessions(makeMotion: { _ in MockMotion() }))
+            devices: routeDevices(), sessions: MotionSessions())
         #expect(outcome == .unknownDevice)
     }
 
     @Test func `should report an invalid body when the motion request is malformed`() async {
         let w = makeWiring()
         let outcome = await Server.applyMotion(
-            udid: "U", body: "not json", simulators: w.simulators, sessions: w.sessions)
+            udid: "U", body: "not json", devices: w.devices, sessions: w.sessions)
         #expect(outcome == .invalidBody)
     }
 
@@ -141,31 +133,26 @@ struct MotionRoutesTests {
         // The POST and DELETE routes 404 an unknown udid; the read-back said
         // `{"active":false}`, which reads as "this device has motion off"
         // rather than "there is no such device".
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
-        let sessions = MotionSessions(makeMotion: { _ in MockMotion() })
+        let devices = routeDevices()
+        let sessions = MotionSessions()
 
-        #expect(await Server.motionState(udid: "nope", simulators: simulators,
+        #expect(await Server.motionState(udid: "nope", devices: devices,
                                          sessions: sessions) == nil)
     }
 
     @Test func `should report a failed disarm and keep the session for a retry`() async {
         // If disarming fails, future app launches still load the dylib. An
         // API that answered `ok` there would leave motion silently injected.
-        let simulators = MockSimulators()
-        let sim = MockSimulator()
-        given(simulators).find(udid: .any).willReturn(sim)
-        given(sim).udid.willReturn("U")
-        given(sim).name.willReturn("iPhone 17 Pro")
         let motion = MockMotion()
+        let devices = routeDevices(name: "iPhone 17 Pro") { $0.register(.motion) { motion } }
         given(motion).publish(.any).willReturn(())
         given(motion).clear().willThrow(SimctlCapture.Failure.failed(udid: "U", status: 2, output: ""))
         given(motion).published().willProduce { nil }
-        let sessions = MotionSessions(makeMotion: { _ in motion })
+        let sessions = MotionSessions()
         _ = await Server.applyMotion(udid: "U", body: #"{"activity":"walking"}"#,
-                                     simulators: simulators, sessions: sessions)
+                                     devices: devices, sessions: sessions)
 
-        let outcome = await Server.stopMotion(udid: "U", simulators: simulators,
+        let outcome = await Server.stopMotion(udid: "U", devices: devices,
                                               sessions: sessions)
 
         #expect(outcome == .dispatchFailed)
@@ -177,10 +164,10 @@ struct MotionRoutesTests {
         let w = makeWiring()
         _ = await Server.applyMotion(
             udid: "U", body: #"{"activity":"walking"}"#,
-            simulators: w.simulators, sessions: w.sessions)
+            devices: w.devices, sessions: w.sessions)
 
         let outcome = await Server.stopMotion(
-            udid: "U", simulators: w.simulators, sessions: w.sessions)
+            udid: "U", devices: w.devices, sessions: w.sessions)
 
         #expect(outcome == .ok)
         #expect(w.captures.last?.kind == .stationary)
@@ -193,7 +180,7 @@ struct MotionRoutesTests {
         w.captures.intents.append(.stationary(startedAt: 1000, stepsBefore: 812, distanceBefore: 610))
 
         let outcome = await Server.stopMotion(
-            udid: "U", simulators: w.simulators, sessions: w.sessions)
+            udid: "U", devices: w.devices, sessions: w.sessions)
 
         #expect(outcome == .ok)
         #expect(w.captures.last?.kind == .stationary)
@@ -205,11 +192,8 @@ struct MotionRoutesTests {
 
     @Test(arguments: [false, true])
     func `should keep a failed cleanup after a restart until an explicit retry succeeds`(failPublish: Bool) async {
-        let simulators = MockSimulators()
-        let sim = MockSimulator()
         let motion = MockMotion()
-        given(simulators).find(udid: .any).willReturn(sim)
-        given(sim).udid.willReturn("U")
+        let devices = routeDevices { $0.register(.motion) { motion } }
         given(motion).published().willReturn(
             .stationary(startedAt: 1000, stepsBefore: 812, distanceBefore: 610))
         var reject = true
@@ -221,15 +205,15 @@ struct MotionRoutesTests {
         given(motion).clear().willProduce {
             if reject { throw SimctlCapture.Failure.failed(udid: "U", status: 3, output: "") }
         }
-        let sessions = MotionSessions(makeMotion: { _ in motion })
+        let sessions = MotionSessions()
 
-        #expect(await Server.stopMotion(udid: "U", simulators: simulators, sessions: sessions) == .dispatchFailed)
+        #expect(await Server.stopMotion(udid: "U", devices: devices, sessions: sessions) == .dispatchFailed)
         #expect(sessions.active(udid: "U")?.lastError != nil)
         verify(motion).publish(.any).called(1)
         verify(motion).clear().called(failPublish ? 0 : 1)
 
         reject = false
-        #expect(await Server.stopMotion(udid: "U", simulators: simulators, sessions: sessions) == .ok)
+        #expect(await Server.stopMotion(udid: "U", devices: devices, sessions: sessions) == .ok)
         #expect(captures.last?.kind == .stationary)
         #expect(captures.last?.stepsBefore == 812)
         #expect(captures.last?.distanceBefore == 610)
@@ -244,10 +228,10 @@ struct MotionRoutesTests {
         let w = makeWiring()
         _ = await Server.applyMotion(
             udid: "U", body: #"{"activity":"walking"}"#,
-            simulators: w.simulators, sessions: w.sessions)
+            devices: w.devices, sessions: w.sessions)
 
         let json = #"{"latitude":37.3,"longitude":-122,"bearing":90,"speed":6}"#
-        _ = await Server.applyLocation(udid: "U", body: json, simulators: w.simulators,
+        _ = await Server.applyLocation(udid: "U", body: json, devices: w.devices,
                                        sessions: w.sessions)
 
         #expect(w.captures.last?.kind == .cycling)
@@ -259,7 +243,7 @@ struct MotionRoutesTests {
         let w = makeWiring()
 
         let json = #"{"latitude":37.3,"longitude":-122,"bearing":90,"speed":6}"#
-        _ = await Server.applyLocation(udid: "U", body: json, simulators: w.simulators,
+        _ = await Server.applyLocation(udid: "U", body: json, devices: w.devices,
                                        sessions: w.sessions)
 
         #expect(w.captures.intents.isEmpty)
@@ -270,12 +254,12 @@ struct MotionRoutesTests {
         let w = makeWiring()
         _ = await Server.applyMotion(
             udid: "U", body: #"{"activity":"walking"}"#,
-            simulators: w.simulators, sessions: w.sessions)
+            devices: w.devices, sessions: w.sessions)
 
         let json = """
         {"waypoints":[{"latitude":1,"longitude":2},{"latitude":3,"longitude":4}],"speed":20}
         """
-        _ = await Server.applyLocation(udid: "U", body: json, simulators: w.simulators,
+        _ = await Server.applyLocation(udid: "U", body: json, devices: w.devices,
                                        sessions: w.sessions)
 
         #expect(w.captures.last?.kind == .automotive)
@@ -288,10 +272,10 @@ struct MotionRoutesTests {
         let w = makeWiring()
         _ = await Server.applyMotion(
             udid: "U", body: #"{"activity":"walking"}"#,
-            simulators: w.simulators, sessions: w.sessions)
+            devices: w.devices, sessions: w.sessions)
 
         _ = await Server.applyLocation(udid: "U", body: #"{"latitude":1,"longitude":2}"#,
-                                       simulators: w.simulators, sessions: w.sessions)
+                                       devices: w.devices, sessions: w.sessions)
 
         #expect(w.captures.last?.kind == .stationary)
     }
@@ -300,9 +284,9 @@ struct MotionRoutesTests {
         let w = makeWiring()
         _ = await Server.applyMotion(
             udid: "U", body: #"{"activity":"walking"}"#,
-            simulators: w.simulators, sessions: w.sessions)
+            devices: w.devices, sessions: w.sessions)
 
-        _ = await Server.clearLocation(udid: "U", simulators: w.simulators,
+        _ = await Server.clearLocation(udid: "U", devices: w.devices,
                                        sessions: w.sessions)
 
         #expect(w.captures.last?.kind == .stationary)

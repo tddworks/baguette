@@ -6,10 +6,10 @@ description: How baguette finds an installed app's URL schemes (simctl listapps 
 
 ## Path
 
-- `baguette openurl`, `POST /simulators/:udid/openurl` and the `deeplink`
+- `baguette openurl`, `POST /devices/:udid/openurl` (or `/simulators/…`) and the `deeplink`
   plugin → `DeepLink` (names the routing: `app` vs `browser`, which is where
   the `https://` warning comes from) → `simctl openurl`.
-- `baguette schemes`, `GET /simulators/:udid/schemes.json` → `SimctlApps` →
+- `baguette schemes`, `GET /devices/:udid/schemes.json` → `SimctlApps` →
   `xcrun simctl listapps` + a read of each bundle's `Info.plist`.
 
 ## How the schemes are found

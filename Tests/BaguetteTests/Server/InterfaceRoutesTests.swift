@@ -6,7 +6,7 @@ import Mockable
 /// Handler-level coverage for the interface routes. As with the
 /// status-bar routes, the pure parse + dispatch helpers are tested
 /// rather than the Hummingbird `Response` wrappers — every branch is
-/// driven with `MockSimulators` + `MockInterface`.
+/// driven with one device's `MockInterface`.
 @Suite("Server interface routes")
 struct InterfaceRoutesTests {
 
@@ -64,7 +64,7 @@ struct InterfaceRoutesTests {
         let simulators = Self.simulators(
             appearance: .dark, contrast: .enabled, contentSize: .accessibilityLarge
         )
-        guard case .ok(let json) = await Server.readInterface(udid: "U", simulators: simulators)
+        guard case .ok(let json) = await Server.readInterface(udid: "U", devices: simulators)
         else { Issue.record("expected .ok"); return }
 
         let parsed = try #require(
@@ -81,15 +81,14 @@ struct InterfaceRoutesTests {
         let simulators = Self.simulators(
             appearance: .unknown, contrast: .unknown, contentSize: .unknown
         )
-        guard case .ok(let json) = await Server.readInterface(udid: "U", simulators: simulators)
+        guard case .ok(let json) = await Server.readInterface(udid: "U", devices: simulators)
         else { Issue.record("expected .ok"); return }
         #expect(json.contains("\"appearance\":\"unknown\""))
     }
 
     @Test func `should report an unknown device when reading its interface settings`() async {
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
-        #expect(await Server.readInterface(udid: "nope", simulators: simulators) == .unknownDevice)
+        let simulators = routeDevices()
+        #expect(await Server.readInterface(udid: "nope", devices: simulators) == .unknownDevice)
     }
 
     // MARK: - applying
@@ -103,7 +102,7 @@ struct InterfaceRoutesTests {
         let outcome = await Server.applyInterface(
             udid: "U",
             update: InterfaceUpdate(appearance: .dark),
-            simulators: Self.simulators(interface: interface)
+            devices: Self.simulators(interface: interface)
         )
 
         #expect(outcome == .ok(applied: ["appearance"]))
@@ -123,7 +122,7 @@ struct InterfaceRoutesTests {
             update: InterfaceUpdate(
                 appearance: .light, increaseContrast: .disabled, contentSize: .decrement
             ),
-            simulators: Self.simulators(interface: interface)
+            devices: Self.simulators(interface: interface)
         )
 
         verify(interface).setAppearance(.value(.light)).called(1)
@@ -138,7 +137,7 @@ struct InterfaceRoutesTests {
         let outcome = await Server.applyInterface(
             udid: "U",
             update: InterfaceUpdate(appearance: .dark),
-            simulators: Self.simulators(interface: interface)
+            devices: Self.simulators(interface: interface)
         )
         guard case .failed(let message, let applied) = outcome else {
             Issue.record("expected .failed, got \(outcome)"); return
@@ -163,7 +162,7 @@ struct InterfaceRoutesTests {
             update: InterfaceUpdate(
                 appearance: .dark, increaseContrast: .enabled, contentSize: .increment
             ),
-            simulators: Self.simulators(interface: interface)
+            devices: Self.simulators(interface: interface)
         )
         guard case .failed(let message, let applied) = outcome else {
             Issue.record("expected .failed, got \(outcome)"); return
@@ -186,7 +185,7 @@ struct InterfaceRoutesTests {
             update: InterfaceUpdate(
                 appearance: .light, increaseContrast: .disabled, contentSize: .decrement
             ),
-            simulators: Self.simulators(interface: interface)
+            devices: Self.simulators(interface: interface)
         )
         guard case .ok(let applied) = outcome else {
             Issue.record("expected .ok, got \(outcome)"); return
@@ -218,12 +217,22 @@ struct InterfaceRoutesTests {
     }
 
     @Test func `should report an unknown device when changing its interface settings`() async {
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
+        let simulators = routeDevices()
         let outcome = await Server.applyInterface(
-            udid: "nope", update: InterfaceUpdate(appearance: .dark), simulators: simulators
+            udid: "nope", update: InterfaceUpdate(appearance: .dark), devices: simulators
         )
         #expect(outcome == .unknownDevice)
+    }
+
+    @Test func `should refuse the interface of a device that has none, naming it`() async {
+        #expect(await Server.readInterface(udid: "U", devices: routeDevices(name: "han's iPhone"))
+            == .refused(.unable(ability: "interface", device: "han's iPhone")))
+    }
+
+    @Test func `should answer the interface routes under the devices tree and a simulator's old one`() {
+        for leaf in ["interface.json", "interface"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
     }
 
     // MARK: - helpers
@@ -232,7 +241,7 @@ struct InterfaceRoutesTests {
         appearance: InterfaceAppearance = .light,
         contrast: InterfaceContrast = .disabled,
         contentSize: ContentSize = .large
-    ) -> MockSimulators {
+    ) -> any Devices {
         let interface = MockInterface()
         given(interface).appearance().willReturn(appearance)
         given(interface).increaseContrast().willReturn(contrast)
@@ -240,11 +249,7 @@ struct InterfaceRoutesTests {
         return simulators(interface: interface)
     }
 
-    static func simulators(interface: MockInterface) -> MockSimulators {
-        let sim = MockSimulator()
-        given(sim).interface().willReturn(interface)
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(sim)
-        return simulators
+    static func simulators(interface: MockInterface) -> any Devices {
+        routeDevices { $0.register(.interface) { interface } }
     }
 }

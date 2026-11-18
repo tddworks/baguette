@@ -18,8 +18,8 @@ extension Server {
 
     // MARK: - registration
 
-    /// `POST /simulators/:udid/openurl?url=<encoded>`  open a deep link
-    /// `GET  /simulators/:udid/schemes.json[?q=…]`     ranked completions
+    /// `POST /devices/:udid/openurl?url=<encoded>`  open a deep link
+    /// `GET  /devices/:udid/schemes.json[?q=…]`     ranked completions
     ///
     /// Ranking happens server-side so there is one ordering rule, tested
     /// once, rather than a JS copy that drifts. `schemes.json` carries
@@ -29,47 +29,55 @@ extension Server {
         on router: Router<BasicWebSocketRequestContext>,
         rejectUntrustedBrowser: @escaping @Sendable (Request) -> Response?
     ) {
-        let simulators = self.simulators
+        let devices = allDevices
 
-        router.post("/simulators/:udid/openurl") { r, _ in
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            let url = r.uri.queryParameters.get("url").map { String($0) } ?? ""
-            switch await Self.openURL(
-                udid: Self.udidParam(r), url: url, simulators: simulators
-            ) {
-            case .opened(let routing):
-                return Self.deepLinkJSON(Self.openedJSONString(routing: routing))
-            case .notAURL:
-                return Self.pluginError(
-                    "not a URL (expected a scheme, e.g. myapp://path)", status: .badRequest
-                )
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return Self.pluginError(
-                    "xcrun simctl openurl failed", status: .internalServerError
-                )
+        for path in Self.deviceRoutes("openurl") {
+            router.post(RouterPath(path)) { r, _ in
+                if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                    return rejected
+                }
+                let url = r.uri.queryParameters.get("url").map { String($0) } ?? ""
+                switch await Self.openURL(
+                    udid: Self.udidParam(r), url: url, devices: devices
+                ) {
+                case .opened(let routing):
+                    return Self.deepLinkJSON(Self.openedJSONString(routing: routing))
+                case .notAURL:
+                    return Self.pluginError(
+                        "not a URL (expected a scheme, e.g. myapp://path)", status: .badRequest
+                    )
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                case .dispatchFailed:
+                    return Self.pluginError(
+                        "xcrun simctl openurl failed", status: .internalServerError
+                    )
+                }
             }
         }
 
-        router.get("/simulators/:udid/schemes.json") { r, _ in
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            let query = r.uri.queryParameters.get("q").map { String($0) } ?? ""
-            switch await Self.schemes(
-                udid: Self.udidParam(r), query: query, simulators: simulators
-            ) {
-            case .ok(let suggestions):
-                return Self.deepLinkJSON(Self.schemesJSONString(suggestions))
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .listFailed:
-                return Self.pluginError(
-                    "xcrun simctl listapps failed", status: .internalServerError
-                )
+        for path in Self.deviceRoutes("schemes.json") {
+            router.get(RouterPath(path)) { r, _ in
+                if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                    return rejected
+                }
+                let query = r.uri.queryParameters.get("q").map { String($0) } ?? ""
+                switch await Self.schemes(
+                    udid: Self.udidParam(r), query: query, devices: devices
+                ) {
+                case .ok(let suggestions):
+                    return Self.deepLinkJSON(Self.schemesJSONString(suggestions))
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                case .listFailed:
+                    return Self.pluginError(
+                        "xcrun simctl listapps failed", status: .internalServerError
+                    )
+                }
             }
         }
     }
@@ -92,12 +100,13 @@ extension Server {
         case opened(routing: DeepLink.Routing)
         case notAURL
         case unknownDevice
+        case refused(DeviceError)
         case dispatchFailed
     }
 
     /// Parse the typed text, look up the device, open the link. Split
     /// out from the route closure so unit tests can drive every branch
-    /// (`MockSimulators` + `MockApps`) without booting Hummingbird.
+    /// (one device's `MockApps`) without booting Hummingbird.
     ///
     /// Parsing runs **before** the device lookup: "profile" isn't a URL
     /// whichever device you aim it at, and saying so is more useful than
@@ -105,14 +114,17 @@ extension Server {
     static func openURL(
         udid: String,
         url: String,
-        simulators: any Simulators
+        devices: any Devices
     ) async -> OpenURLOutcome {
         guard let link = DeepLink.from(url) else { return .notAURL }
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
+        let apps: any Apps
+        switch role(.apps, of: udid, in: devices) {
+        case .unknownDevice: return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
+        case .role(let role): apps = role
         }
         do {
-            try await sim.apps().open(link)
+            try await apps.open(link)
         } catch {
             return .dispatchFailed
         }
@@ -146,6 +158,7 @@ extension Server {
     enum SchemesOutcome: Equatable {
         case ok([SchemeSuggestion])
         case unknownDevice
+        case refused(DeviceError)
         case listFailed
     }
 
@@ -155,13 +168,16 @@ extension Server {
     static func schemes(
         udid: String,
         query: String,
-        simulators: any Simulators
+        devices: any Devices
     ) async -> SchemesOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
+        let apps: any Apps
+        switch role(.apps, of: udid, in: devices) {
+        case .unknownDevice: return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
+        case .role(let role): apps = role
         }
         do {
-            let installed = try await sim.apps().installed()
+            let installed = try await apps.installed()
             return .ok(SchemeSuggestion.matching(query, in: installed))
         } catch {
             return .listFailed

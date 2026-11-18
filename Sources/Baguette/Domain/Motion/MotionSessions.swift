@@ -1,6 +1,6 @@
 import Foundation
 
-/// The motion state of every simulator the server is driving, keyed by udid.
+/// The motion state of every device the server is driving, keyed by its id.
 ///
 /// The server's route handlers are stateless statics, but motion is not: the
 /// pedometer's running totals live on a `MotionSession`, and they have to
@@ -19,26 +19,19 @@ import Foundation
 final class MotionSessions {
 
     private var sessions: [String: MotionSession] = [:]
-    /// `nonisolated` because it is immutable and touches no isolated
-    /// state — that is what lets `init` be nonisolated too.
-    private nonisolated let makeMotion: @Sendable (any Simulator) -> any Motion
 
     /// `nonisolated` so a `Server` — which is not main-actor isolated —
-    /// can take one as a default argument. Only stored-property setup
-    /// happens here; every read and write afterwards is on the main actor.
-    nonisolated init(
-        makeMotion: @escaping @Sendable (any Simulator) -> any Motion = { $0.motion() }
-    ) {
-        self.makeMotion = makeMotion
-    }
+    /// can take one as a default argument. Every read and write afterwards
+    /// is on the main actor.
+    nonisolated init() {}
 
-    /// The session for `simulator`, created on first use. Reused thereafter
-    /// so the ledger survives — a second `motion` request must not reset the
-    /// pedometer.
-    func session(for simulator: any Simulator) -> MotionSession {
-        if let existing = sessions[simulator.udid] { return existing }
-        let session = MotionSession(motion: makeMotion(simulator))
-        sessions[simulator.udid] = session
+    /// The session for the device `id` names, created on first use with its
+    /// `motion` role. Reused thereafter so the ledger survives — a second
+    /// `motion` request must not reset the pedometer.
+    func session(for id: String, motion: () -> any Motion) -> MotionSession {
+        if let existing = sessions[id] { return existing }
+        let session = MotionSession(motion: motion())
+        sessions[id] = session
         return session
     }
 

@@ -1,5 +1,5 @@
 ---
-description: The JSON gesture wire shared by `baguette input` (stdin), `POST /simulators/<UDID>/input` and the stream WebSocket — envelopes, acks, stream control and coordinates. Read when writing a host plugin or a page that drives a simulator.
+description: The JSON gesture wire shared by `baguette input` (stdin), `POST /devices/<UDID>/input` and the stream WebSocket — envelopes, acks, stream control and coordinates. Read when writing a host plugin or a page that drives a simulator.
 ---
 
 # Wire protocol
@@ -9,7 +9,7 @@ One JSON object per line (stdin) or per text message (WebSocket), always keyed b
 | Entry point | Transport | Reply |
 |---|---|---|
 | `baguette input --udid <UDID>` | newline-delimited JSON on stdin | one ack line on stdout per input line |
-| `POST /simulators/<UDID>/input` | one envelope as the request body | the ack as the response body |
+| `POST /devices/<UDID>/input` (or `/simulators/…`) | one envelope as the request body | the ack as the response body |
 | `WS /simulators/<UDID>/stream` ([serve.md](serve.md)) | one text message per envelope | gestures: none; `paste` / `copy` / `describe_ui`: a typed `*_result` frame |
 
 Keep one `baguette input` process per device alive rather than spawning one per gesture: startup costs about a second, and the first gesture pays the HID warm-up.

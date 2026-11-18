@@ -86,8 +86,8 @@ Usage: baguette interface appearance --udid <udid> [<value>]
 ## HTTP
 
 ```http
-GET  /simulators/:udid/interface.json     all three
-POST /simulators/:udid/interface          set any subset
+GET  /devices/:udid/interface.json        all three   (or /simulators/:udid/…)
+POST /devices/:udid/interface             set any subset
 ```
 
 ```bash

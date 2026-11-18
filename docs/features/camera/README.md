@@ -114,7 +114,7 @@ the staged host file for this udid. A missing `source` defaults to
 ### Uploading an image / video source
 
 ```
-POST /simulators/:udid/camera-source?name=<filename>
+POST /devices/:udid/camera-source?name=<filename>      (or /simulators/:udid/…)
      body = raw file bytes (application/octet-stream)
      → { "ok": true, "kind": "image" }   // or "video"
 ```

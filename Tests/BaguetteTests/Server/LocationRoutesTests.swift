@@ -7,7 +7,7 @@ import Mockable
 /// status-bar routes, we test the pure parse + dispatch helpers
 /// (`parseLocationRequest`, `applyLocation`, `clearLocation`) rather than
 /// the Hummingbird `Response` wrappers — every branch is driven with
-/// `MockSimulators` + `MockLocation`.
+/// one device's `MockLocation`.
 @Suite("Server location routes")
 struct LocationRoutesTests {
 
@@ -95,30 +95,24 @@ struct LocationRoutesTests {
     // MARK: - apply
 
     @Test func `should pin the simulator to a single posted point`() async {
-        let host = MockSimulators()
-        let sim = MockSimulator()
         let location = MockLocation()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        given(sim).location().willReturn(location)
+        let host = routeDevices { $0.register(.location) { location } }
         given(location).set(.any).willReturn(())
 
         let outcome = await Server.applyLocation(
-            udid: "U", body: #"{"latitude":1.5,"longitude":2.5}"#, simulators: host
+            udid: "U", body: #"{"latitude":1.5,"longitude":2.5}"#, devices: host
         )
         #expect(outcome == .ok)
         verify(location).set(.value(Coordinate(latitude: 1.5, longitude: 2.5)!)).called(1)
     }
 
     @Test func `should start a posted route on the simulator`() async {
-        let host = MockSimulators()
-        let sim = MockSimulator()
         let location = MockLocation()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        given(sim).location().willReturn(location)
+        let host = routeDevices { $0.register(.location) { location } }
         given(location).start(.any).willReturn(())
 
         let json = #"{"waypoints":[{"latitude":1,"longitude":2},{"latitude":3,"longitude":4}]}"#
-        let outcome = await Server.applyLocation(udid: "U", body: json, simulators: host)
+        let outcome = await Server.applyLocation(udid: "U", body: json, devices: host)
         #expect(outcome == .ok)
         verify(location).start(.any).called(1)
     }
@@ -127,15 +121,12 @@ struct LocationRoutesTests {
         // A walk reaches simctl as a `start` route, never a `set` — that's
         // the whole point of the vector model, since only a travelled
         // route makes locationd derive CLLocation.course.
-        let host = MockSimulators()
-        let sim = MockSimulator()
         let location = MockLocation()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        given(sim).location().willReturn(location)
+        let host = routeDevices { $0.register(.location) { location } }
         given(location).start(.any).willReturn(())
 
         let json = #"{"latitude":37.3349,"longitude":-122.0090,"bearing":90,"speed":25}"#
-        let outcome = await Server.applyLocation(udid: "U", body: json, simulators: host)
+        let outcome = await Server.applyLocation(udid: "U", body: json, devices: host)
 
         let expected = LocationWalk(
             origin: Coordinate(latitude: 37.3349, longitude: -122.0090)!,
@@ -148,43 +139,34 @@ struct LocationRoutesTests {
     }
 
     @Test func `should report a failed dispatch when simctl cannot start a walk`() async {
-        let host = MockSimulators()
-        let sim = MockSimulator()
         let location = MockLocation()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        given(sim).location().willReturn(location)
+        let host = routeDevices { $0.register(.location) { location } }
         given(location).start(.any).willThrow(LocationError.simctlFailed(status: 1))
 
         let json = #"{"latitude":1,"longitude":2,"bearing":90,"speed":5}"#
-        #expect(await Server.applyLocation(udid: "U", body: json, simulators: host) == .dispatchFailed)
+        #expect(await Server.applyLocation(udid: "U", body: json, devices: host) == .dispatchFailed)
     }
 
     @Test func `should report an unknown device when setting the location of a missing simulator`() async {
-        let host = MockSimulators()
-        given(host).find(udid: .value("ghost")).willReturn(nil)
+        let host = routeDevices()
         let outcome = await Server.applyLocation(
-            udid: "ghost", body: #"{"latitude":1,"longitude":2}"#, simulators: host
+            udid: "ghost", body: #"{"latitude":1,"longitude":2}"#, devices: host
         )
         #expect(outcome == .unknownDevice)
     }
 
     @Test func `should report an invalid body when the location is malformed JSON`() async {
-        let host = MockSimulators()
-        let sim = MockSimulator()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        #expect(await Server.applyLocation(udid: "U", body: "{", simulators: host) == .invalidBody)
+        let host = routeDevices { $0.register(.location) { MockLocation() } }
+        #expect(await Server.applyLocation(udid: "U", body: "{", devices: host) == .invalidBody)
     }
 
     @Test func `should report a failed dispatch when simctl cannot set the location`() async {
-        let host = MockSimulators()
-        let sim = MockSimulator()
         let location = MockLocation()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        given(sim).location().willReturn(location)
+        let host = routeDevices { $0.register(.location) { location } }
         given(location).set(.any).willThrow(LocationError.simctlFailed(status: 1))
 
         let outcome = await Server.applyLocation(
-            udid: "U", body: #"{"latitude":1,"longitude":2}"#, simulators: host
+            udid: "U", body: #"{"latitude":1,"longitude":2}"#, devices: host
         )
         #expect(outcome == .dispatchFailed)
     }
@@ -192,19 +174,16 @@ struct LocationRoutesTests {
     // MARK: - clear
 
     @Test func `should clear the simulated location`() async {
-        let host = MockSimulators()
-        let sim = MockSimulator()
         let location = MockLocation()
-        given(host).find(udid: .value("U")).willReturn(sim)
-        given(sim).location().willReturn(location)
+        let host = routeDevices { $0.register(.location) { location } }
         given(location).clear().willReturn(())
 
-        #expect(await Server.clearLocation(udid: "U", simulators: host) == .ok)
+        #expect(await Server.clearLocation(udid: "U", devices: host) == .ok)
         verify(location).clear().called(1)
     }
 
     @Test func `should report an unknown device when clearing the location for an empty udid`() async {
-        let host = MockSimulators()
-        #expect(await Server.clearLocation(udid: "", simulators: host) == .unknownDevice)
+        let host = routeDevices()
+        #expect(await Server.clearLocation(udid: "", devices: host) == .unknownDevice)
     }
 }

@@ -11,7 +11,7 @@ import NIOCore
 /// function.
 extension Server {
 
-    /// `GET /simulators/:udid/companion-screens.json`
+    /// `GET /devices/:udid/companion-screens.json`
     ///
     /// Browser-facing only. It reports what the host has attached to a
     /// device, which is the sort of thing a plugin should have to
@@ -21,15 +21,19 @@ extension Server {
         on router: Router<BasicWebSocketRequestContext>,
         rejectUntrustedBrowser: @escaping @Sendable (Request) -> Response?
     ) {
-        let simulators = self.simulators
+        let devices = allDevices
 
-        router.get("/simulators/:udid/companion-screens.json") { r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch Self.readCompanionScreens(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok(let json):
-                return Self.jsonResponse(json)
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+        for path in Self.deviceRoutes("companion-screens.json") {
+            router.get(RouterPath(path)) { r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                switch Self.readCompanionScreens(udid: Self.udidParam(r), devices: devices) {
+                case .ok(let json):
+                    return Self.jsonResponse(json)
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                }
             }
         }
 
@@ -38,23 +42,27 @@ extension Server {
         // application's UI is not one to hand out with a manifest line.
         // Three segments, not `…/companion-screens/carplay`: `udidParam`
         // reads the udid positionally as the second-to-last one.
-        router.post("/simulators/:udid/carplay-display") { r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch Self.reattachCarPlay(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok(let json):
-                return Self.jsonResponse(json)
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .failed(let message):
-                // The overwhelmingly common cause is macOS refusing the
-                // Apple event, which is a permission the user grants
-                // once — so say what to do, not just what broke.
-                return Self.pluginError(
-                    "could not drive Simulator.app: \(message). "
-                        + "Grant Automation + Accessibility access to the terminal "
-                        + "running baguette in System Settings → Privacy & Security.",
-                    status: .internalServerError
-                )
+        for path in Self.deviceRoutes("carplay-display") {
+            router.post(RouterPath(path)) { r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                switch Self.reattachCarPlay(udid: Self.udidParam(r), devices: devices) {
+                case .ok(let json):
+                    return Self.jsonResponse(json)
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                case .failed(let message):
+                    // The overwhelmingly common cause is macOS refusing the
+                    // Apple event, which is a permission the user grants
+                    // once — so say what to do, not just what broke.
+                    return Self.pluginError(
+                        "could not drive Simulator.app: \(message). "
+                            + "Grant Automation + Accessibility access to the terminal "
+                            + "running baguette in System Settings → Privacy & Security.",
+                        status: .internalServerError
+                    )
+                }
             }
         }
     }
@@ -62,12 +70,14 @@ extension Server {
     enum CompanionScreensOutcome: Equatable {
         case ok(String)
         case unknownDevice
+        case refused(DeviceError)
     }
 
     enum CarPlayReattachOutcome: Equatable {
         /// The resulting availability, in the same shape the rail reads.
         case ok(String)
         case unknownDevice
+        case refused(DeviceError)
         case failed(String)
     }
 
@@ -81,17 +91,23 @@ extension Server {
     /// nothing to stream, so the answer is a fresh bind probe rather
     /// than `{"ok":true}`.
     static func reattachCarPlay(
-        udid: String, simulators: any Simulators
+        udid: String, devices: any Devices
     ) -> CarPlayReattachOutcome {
-        guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
+        let external: any ExternalDisplays
+        switch role(.externalDisplays, of: udid, in: devices) {
+        case .unknownDevice: return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
+        case .role(let role): external = role
+        }
         do {
-            try sim.externalDisplays().reattachCarPlay()
+            try external.reattachCarPlay()
         } catch {
             return .failed(String(describing: error))
         }
-        switch readCompanionScreens(udid: udid, simulators: simulators) {
+        switch readCompanionScreens(udid: udid, devices: devices) {
         case .ok(let json):   return .ok(json)
         case .unknownDevice:  return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
         }
     }
 
@@ -117,14 +133,29 @@ extension Server {
     /// still gets a renderable answer instead of a 500 the rail would
     /// have to guess at.
     static func readCompanionScreens(
-        udid: String, simulators: any Simulators
+        udid: String, devices: any Devices
     ) -> CompanionScreensOutcome {
-        guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
+        guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
+            return .unknownDevice
+        }
+        // The device's own abilities, not `require`: a device that is merely
+        // off still answers (it resolves no CarPlay screen), as the rail
+        // needs; one that has no displays at all is refused by name.
+        let displays: any Displays
+        let pairing: any WatchPairing
+        do {
+            displays = try device.abilities.require(.displays)
+            pairing = try device.abilities.require(.watchPairing)
+        } catch let refusal as DeviceError {
+            return .refused(refusal)
+        } catch {
+            return .unknownDevice
+        }
         // The binding's own size, so the rail can name what it bound
         // rather than assume the menu attached a CarPlay-shaped screen.
         let screens = CompanionScreens(
-            externalSize: (try? sim.displays().carPlay.resolve())?.size,
-            watch: sim.watchPairing().watch
+            externalSize: (try? displays.carPlay.resolve())?.size,
+            watch: pairing.watch
         )
         return .ok(screens.json)
     }

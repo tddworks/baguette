@@ -99,8 +99,8 @@ face → grid, Side opens Control Centre, drag scrolls Settings.
 ## HTTP
 
 ```
-GET  /simulators/:udid/companion-screens.json   what's attached
-POST /simulators/:udid/carplay-display          attach one, answer what it can do
+GET  /devices/:udid/companion-screens.json      what's attached   (or /simulators/:udid/…)
+POST /devices/:udid/carplay-display             attach one, answer what it can do
 ```
 
 ```json

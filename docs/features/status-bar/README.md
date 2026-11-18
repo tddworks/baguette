@@ -32,12 +32,16 @@ shows the result.
 
 | Method | Path | Does |
 |---|---|---|
-| GET | `/simulators/<UDID>/status-bar` | Current overrides as JSON (`{}` if none) |
-| POST | `/simulators/<UDID>/status-bar` | Apply the fields in the body |
-| DELETE | `/simulators/<UDID>/status-bar` | Clear all overrides |
+| GET | `/devices/<UDID>/status-bar` | Current overrides as JSON (`{}` if none) |
+| POST | `/devices/<UDID>/status-bar` | Apply the fields in the body |
+| DELETE | `/devices/<UDID>/status-bar` | Clear all overrides |
+
+A simulator answers under its old `/simulators/<UDID>/status-bar` too, and
+plugins use that spelling. A device without a status bar to override answers
+`422`; one that isn't running, `409`.
 
 ```bash
-curl -X POST http://127.0.0.1:8421/simulators/<UDID>/status-bar \
+curl -X POST http://127.0.0.1:8421/devices/<UDID>/status-bar \
   -d '{"batteryLevel":68,"dataNetwork":"5g"}'
 ```
 

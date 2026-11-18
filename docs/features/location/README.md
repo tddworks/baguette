@@ -66,7 +66,7 @@ device's.
 
 ## HTTP
 
-`POST /simulators/:udid/location` accepts three shapes: a `waypoints` array is
+`POST /devices/:udid/location` (a simulator also answers under `/simulators/:udid/location`) accepts three shapes: a `waypoints` array is
 a route; a `bearing` is a walk vector; otherwise a bare `latitude`/`longitude`
 pair is a single-point `set`.
 
@@ -94,7 +94,7 @@ Route `speed` / `distance` / `interval` are optional; a walk needs both
 the same heading) and `speed` (m/s). Posting a single point pins the device and
 drops `course` back to `-1` — "no longer travelling".
 
-`DELETE /simulators/:udid/location` clears the override (no body).
+`DELETE /devices/:udid/location` clears the override (no body).
 
 A malformed body, an out-of-range point (lat ∉ ±90 or lon ∉ ±180), a route
 with fewer than two valid waypoints, or a walk with a missing / non-positive

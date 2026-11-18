@@ -15,7 +15,7 @@ struct PluginRoutesTests {
         // `describe_ui` was WS-only, which put the AX tree out of reach
         // of a subprocess plugin entirely. This route is what makes the
         // reference a11y plugin possible.
-        let outcome = Server.describeUI(udid: "U", point: nil, simulators: Self.simulators())
+        let outcome = Server.describeUI(udid: "U", point: nil, devices: Self.simulators())
         guard case .ok(let json) = outcome else {
             Issue.record("expected .ok, got \(outcome)"); return
         }
@@ -30,7 +30,7 @@ struct PluginRoutesTests {
         given(ax).describeAt(point: .value(Point(x: 10, y: 20)))
             .willReturn(AXNode(role: "AXButton", frame: Self.frame))
         let outcome = Server.describeUI(
-            udid: "U", point: Point(x: 10, y: 20), simulators: Self.simulators(ax: ax)
+            udid: "U", point: Point(x: 10, y: 20), devices: Self.simulators(ax: ax)
         )
         guard case .ok(let json) = outcome else {
             Issue.record("expected .ok, got \(outcome)"); return
@@ -39,9 +39,7 @@ struct PluginRoutesTests {
     }
 
     @Test func `should report an unknown device when describing the UI of an unknown udid`() throws {
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
-        #expect(Server.describeUI(udid: "nope", point: nil, simulators: simulators) == .unknownDevice)
+        #expect(Server.describeUI(udid: "nope", point: nil, devices: routeDevices()) == .unknownDevice)
     }
 
     @Test func `should report no data when describing the UI with nothing frontmost`() throws {
@@ -49,7 +47,7 @@ struct PluginRoutesTests {
         // plugin should say "nothing to audit", not "audit failed".
         let ax = MockAccessibility()
         given(ax).describeAll().willReturn(nil)
-        #expect(Server.describeUI(udid: "U", point: nil, simulators: Self.simulators(ax: ax)) == .noData)
+        #expect(Server.describeUI(udid: "U", point: nil, devices: Self.simulators(ax: ax)) == .noData)
     }
 
     // MARK: - running a command
@@ -136,17 +134,13 @@ struct PluginRoutesTests {
         serverURL: "http://127.0.0.1:8421", udid: "U", token: "tok"
     )
 
-    static func simulators(ax: MockAccessibility? = nil) -> MockSimulators {
+    static func simulators(ax: MockAccessibility? = nil) -> any Devices {
         let accessibility = ax ?? {
             let mock = MockAccessibility()
             given(mock).describeAll().willReturn(AXNode(role: "AXApplication", frame: frame))
             return mock
         }()
-        let sim = MockSimulator()
-        given(sim).accessibility().willReturn(accessibility)
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(sim)
-        return simulators
+        return routeDevices { $0.register(.accessibility) { accessibility } }
     }
 
     static func plugins(capabilities: [PluginCapability] = []) -> MockPlugins {

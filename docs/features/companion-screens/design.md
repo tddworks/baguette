@@ -6,7 +6,7 @@ description: Why companion screens work the way they do — the CarPlay HID serv
 
 ## Path
 
-- Page rail → `GET /simulators/:udid/companion-screens.json` → `CompanionScreens`
+- Page rail → `GET /devices/:udid/companion-screens.json` → `CompanionScreens`
   (CarPlay probe = the stream's own `Display.resolve()`; watch = one phone's
   side of `simctl list pairs -j`). `POST …/carplay-display` →
   `ExternalDisplays.enableCarPlay()`, which drives Simulator.app's

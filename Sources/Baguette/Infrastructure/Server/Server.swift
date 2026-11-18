@@ -189,6 +189,11 @@ struct Server: Sendable {
         registerPluginRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerBakeryRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerInterfaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerScreenStateRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerPowerRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerPlaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerFileRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerHingeRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerDeepLinkRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerNotifyRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
@@ -199,418 +204,6 @@ struct Server: Sendable {
             trustedWebSocketUpgrade: trustedWebSocketUpgrade
         )
 
-        // Simulator actions.
-        router.post("/simulators/:udid/boot")     { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let response = Self.lifecycle(udid: Self.udidParam(r), simulators: simulators) { try $0.boot() }
-            // Same heal `baguette boot` performs: nothing runs on a
-            // freshly booted device, so reclaiming the input surface
-            // from Device Hub costs nothing. Failure is advisory only —
-            // the boot itself succeeded.
-            if response.status == .ok, let sim = simulators.find(udid: Self.udidParam(r)) {
-                do {
-                    if try await sim.inputSurface().healAfterBoot() == .reclaimed {
-                        log("[serve] \(HealOutcome.reclaimed.summary) for \(sim.udid)")
-                    }
-                } catch {
-                    log("[serve] input surface heal failed for \(sim.udid): \(error)")
-                }
-            }
-            return response
-        }
-        router.post("/simulators/:udid/shutdown") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Self.lifecycle(udid: Self.udidParam(r), simulators: simulators) { try $0.shutdown() }
-        }
-        // Orientation — `?value=portrait|landscape-left|landscape-right|portrait-upside-down`.
-        // Uses the device's orientation backend. Parse and dispatch
-        // logic lives in `Server.applyOrientation` for unit testing.
-        router.post("/simulators/:udid/orientation") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let value = r.uri.queryParameters.get("value") ?? ""
-            switch Self.applyOrientation(
-                udid: Self.udidParam(r), value: value, simulators: simulators
-            ) {
-            case .ok:
-                return jsonOK
-            case .invalidValue:
-                return errorJSON(
-                    "value must be one of portrait, landscape-left, landscape-right, portrait-upside-down",
-                    status: .badRequest
-                )
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON(
-                    "orientation change failed (device configuration, event port or guest pose helper unavailable)",
-                    status: .internalServerError
-                )
-            case .unconfirmed:
-                return errorJSON(
-                    "orientation change unconfirmed: the guest pose helper timed out; read the device state before retrying",
-                    status: .gatewayTimeout
-                )
-            }
-        }
-
-        // Shake — `POST` fires a UIKit motionShake via
-        // `simulator.shake().shake()`, backed by `simctl spawn
-        // notifyutil`. Pure dispatch lives in `Server.applyShake` for
-        // unit testing.
-        router.post("/simulators/:udid/shake") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.applyShake(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok:
-                return jsonOK
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON("shake failed (simctl error)", status: .internalServerError)
-            }
-        }
-
-        // Status bar — `POST` sets overrides from a JSON body,
-        // `DELETE` clears them. Backed by `simctl status_bar`; pure
-        // parse + dispatch lives in `Server.applyStatusBar` /
-        // `clearStatusBar` for unit testing. DELETE (rather than a
-        // deeper `/clear` path) keeps the udid second-to-last so
-        // `udidParam` extracts it uniformly.
-        router.post("/simulators/:udid/status-bar") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { String(buffer: $0) } ?? ""
-            switch await Self.applyStatusBar(
-                udid: Self.udidParam(r), body: body, simulators: simulators
-            ) {
-            case .ok:
-                return jsonOK
-            case .invalidBody:
-                return errorJSON("status-bar body must be a JSON object of valid override fields", status: .badRequest)
-            case .emptyOverride:
-                return errorJSON("set at least one status-bar field", status: .badRequest)
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON("status-bar override failed (simctl error)", status: .internalServerError)
-            }
-        }
-        // Read current overrides so the browser panel hydrates its
-        // controls from the device instead of guessing. Pure parse +
-        // dispatch in `Server.readStatusBar`.
-        router.get("/simulators/:udid/status-bar") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.readStatusBar(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok(let override):
-                return Response(
-                    status: .ok,
-                    headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                    body: .init(byteBuffer: ByteBuffer(string: override.jsonString))
-                )
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .failed:
-                return errorJSON("status-bar read failed (simctl error)", status: .internalServerError)
-            }
-        }
-        router.delete("/simulators/:udid/status-bar") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.clearStatusBar(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok:
-                return jsonOK
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON("status-bar clear failed (simctl error)", status: .internalServerError)
-            case .invalidBody, .emptyOverride:
-                return jsonOK // unreachable for clear; keep the switch total
-            }
-        }
-
-        // Location — `POST` sets the simulated GPS position (a single
-        // point; a moving route when the body carries `waypoints`; or the
-        // joystick's walk vector when it carries `bearing`); `DELETE`
-        // clears it back to live. Backed by `simctl location`; pure parse
-        // + dispatch lives in `Server.applyLocation` / `clearLocation`
-        // for unit testing.
-        router.post("/simulators/:udid/location") { [simulators, motionSessions] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { String(buffer: $0) } ?? ""
-            switch await Self.applyLocation(
-                udid: Self.udidParam(r), body: body, simulators: simulators,
-                sessions: motionSessions
-            ) {
-            case .ok:
-                return jsonOK
-            case .invalidBody:
-                return errorJSON("location body must be a point {latitude,longitude}, a {waypoints:[…]} route, or a {latitude,longitude,bearing,speed} walk", status: .badRequest)
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON("location change failed (simctl error)", status: .internalServerError)
-            }
-        }
-        router.delete("/simulators/:udid/location") { [simulators, motionSessions] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.clearLocation(udid: Self.udidParam(r), simulators: simulators,
-                                            sessions: motionSessions) {
-            case .ok:
-                return jsonOK
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON("location clear failed (simctl error)", status: .internalServerError)
-            case .invalidBody:
-                return jsonOK // unreachable for clear; keep the switch total
-            }
-        }
-
-        // Motion — `POST` arms the injected dylib and states what the device
-        // is doing; `DELETE` parks it as stationary and disarms. Once armed,
-        // the location routes above drive the activity from the speed the
-        // device is moving at, so the browser's joystick needs no new wire.
-        //
-        // Unlike location there is no simctl verb behind this: all three
-        // CoreMotion surfaces report unavailable in a stock simulator. Only
-        // apps launched *after* the POST see anything — dyld inserts at exec
-        // time. See `docs/features/motion/README.md`.
-        router.post("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { String(buffer: $0) } ?? ""
-            switch await Self.applyMotion(
-                udid: Self.udidParam(r), body: body, simulators: simulators,
-                sessions: motionSessions
-            ) {
-            case .ok:
-                return Self.jsonResponse(
-                    await Self.motionStateJSON(udid: Self.udidParam(r), sessions: motionSessions))
-            case .invalidBody:
-                return errorJSON(
-                    "motion body must name an activity: stationary, walking, running, cycling, or automotive",
-                    status: .badRequest)
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON(
-                    "motion failed — is VirtualMotion.dylib bundled in this build?",
-                    status: .internalServerError)
-            }
-        }
-        // Read-back for the card's readout — the one place motion differs
-        // from location, which has no GET because simctl cannot report the
-        // active position. Here the state is ours, so we can answer.
-        router.get("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            guard let json = await Self.motionState(
-                udid: Self.udidParam(r), simulators: simulators, sessions: motionSessions
-            ) else {
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            }
-            return Self.jsonResponse(json)
-        }
-        router.delete("/simulators/:udid/motion") { [simulators, motionSessions] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.stopMotion(udid: Self.udidParam(r), simulators: simulators,
-                                         sessions: motionSessions) {
-            case .ok:
-                return jsonOK
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .invalidBody, .dispatchFailed:
-                return errorJSON("motion stop failed", status: .internalServerError)
-            }
-        }
-
-        // Network conditioning — `POST` arms the injected dylib and states
-        // how degraded the network is; `GET` reports what this simulator is
-        // actually subject to; `DELETE` stops conditioning, including for
-        // apps that are already running.
-        //
-        // Like motion there is no simctl verb behind this, and for a
-        // sharper reason: the host's own tooling (Network Link Conditioner,
-        // and the dnctl/pfctl rules under it) is system-wide, so scoping to
-        // one simulator means injecting into the app under test. Only apps
-        // launched *after* the POST are conditioned — dyld inserts at exec
-        // time — though changing the condition afterwards reaches a running
-        // app fine. See `docs/features/network/README.md`.
-        router.post("/simulators/:udid/network") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { String(buffer: $0) } ?? ""
-            switch await Self.applyNetwork(
-                udid: Self.udidParam(r), body: body, simulators: simulators
-            ) {
-            case .ok:
-                do {
-                    guard let json = try await Self.networkStateJSON(
-                        udid: Self.udidParam(r), simulators: simulators
-                    ) else {
-                        return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-                    }
-                    return Self.jsonResponse(json)
-                } catch {
-                    return errorJSON(
-                        "network condition applied; status read-back failed: \(error)",
-                        status: .internalServerError)
-                }
-            case .invalidBody:
-                return errorJSON(
-                    "network body must name exactly one of: a profile "
-                    + "(\"profile\":\"3g\"), explicit numbers (\"latencyMs\", "
-                    + "\"bandwidthKbps\", \"lossPercent\"), or \"offline\":true",
-                    status: .badRequest)
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .dispatchFailed:
-                return errorJSON(
-                    "network conditioning failed — is VirtualNetwork.dylib bundled "
-                    + "in this build?",
-                    status: .internalServerError)
-            }
-        }
-        // Read-back for the card's readout and, more to the point, its armed
-        // badge. A throttle nobody remembers arming presents as "the app is
-        // slow", so the UI has to be able to say plainly that one is on.
-        router.get("/simulators/:udid/network") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            do {
-                guard let json = try await Self.networkStateJSON(
-                    udid: Self.udidParam(r), simulators: simulators
-                ) else {
-                    return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-                }
-                return Self.jsonResponse(json)
-            } catch {
-                // An unreadable injection state is not "no conditioning".
-                return errorJSON("network status failed: \(error)", status: .internalServerError)
-            }
-        }
-        router.delete("/simulators/:udid/network") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            switch await Self.clearNetwork(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok:
-                return jsonOK
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .invalidBody, .dispatchFailed:
-                return errorJSON("network clear failed", status: .internalServerError)
-            }
-        }
-
-        // File upload — drag-and-drop a file onto the device view. One
-        // dumb entry point: the browser POSTs raw bytes with `?name=`,
-        // and `Server.addFile` routes by extension to the right device
-        // collection (apps → install, media → Photos). Anything with no
-        // home on a simulator is refused with 415, never swallowed.
-        //
-        // Browser-only. Because it classifies by extension, the
-        // authority it confers would depend on the bytes — so it is the
-        // one upload route `PluginRoute` maps to nothing. Plugins use
-        // `/apps` and `/media` below, which say which power they mean.
-        router.post("/simulators/:udid/files") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return await Self.handleUpload(r, simulators: simulators, allowing: .all)
-        }
-
-        // The two narrow halves, each guarded by its own capability.
-        // Same plumbing, different answer to "what may land here".
-        router.post("/simulators/:udid/apps") { [simulators] r, _ in
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            return await Self.handleUpload(r, simulators: simulators, allowing: .apps)
-        }
-
-        router.post("/simulators/:udid/media") { [simulators] r, _ in
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            return await Self.handleUpload(r, simulators: simulators, allowing: .media)
-        }
-
-        // Camera source upload: an image / video the simulator's camera
-        // streams from. Unlike /files (consumed synchronously by simctl
-        // inside the request), these bytes must OUTLIVE the POST — the
-        // camera WebSocket streams them later — so they're staged into a
-        // persistent per-udid slot and remembered by CameraSourceStaging.
-        router.post("/simulators/:udid/camera-source") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let udid = Self.udidParam(r)
-            // Resolve the udid against a real device before it names a
-            // directory — `udidParam` percent-decodes, so an unchecked
-            // udid can carry `..` into the staging root. `CameraSourceSlot`
-            // refuses those too; this is the same check `/files` makes and
-            // it keeps the error honest ("unknown udid" beats a slot error).
-            guard !udid.isEmpty, simulators.find(udid: udid) != nil else {
-                return errorJSON("unknown udid: \(udid)", status: .notFound)
-            }
-            let rawName = String(r.uri.queryParameters.get("name") ?? "source")
-            let filename = (rawName as NSString).lastPathComponent
-            let nameURL = URL(fileURLWithPath: filename)
-
-            // Cheap reject before reading the body: only images/videos
-            // can drive the camera.
-            guard let kind = CameraMediaKind.at(nameURL) else {
-                return errorJSON(
-                    "no camera source for .\(nameURL.pathExtension) (images and videos only)",
-                    status: .unsupportedMediaType
-                )
-            }
-            guard let buffer = try? await r.body.collect(upTo: Self.maxUploadBytes) else {
-                return errorJSON("upload too large (max \(Self.maxUploadBytes / (1 << 20)) MiB) or unreadable", status: .badRequest)
-            }
-            do {
-                try await CameraSourceStaging.shared.stage(
-                    udid: udid, filename: filename, data: Data(buffer: buffer)
-                )
-            } catch {
-                return errorJSON("could not stage camera source: \(error)", status: .internalServerError)
-            }
-            let json = "{\"ok\":true,\"kind\":\"\(kind == .image ? "image" : "video")\"}"
-            return Response(status: .ok, headers: [.contentType: "application/json"],
-                            body: .init(byteBuffer: ByteBuffer(string: json)))
-        }
-
-        // Hinge — a foldable's pose. The page polls this on iPhone Duo so
-        // that when Device Hub folds or unfolds the device, the stream,
-        // the bezel and the tap space follow the newly lit panel; every
-        // other device answers `foldable:false` once and is never asked
-        // again.
-        router.get("/simulators/:udid/hinge") { [simulators, chromes] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            guard let json = Self.hingeJSON(
-                udid: Self.udidParam(r), simulators: simulators, chromes: chromes
-            ) else {
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            }
-            return Self.jsonResponse(json)
-        }
-        // Move the hinge — Device Hub's pose picker, over HTTP:
-        // `?pose=closed|open|flat` or `?angle=<0–180>`, `&duration=<s>`.
-        // Blocks for the sweep (Device Hub's 0.8 s by default).
-        router.post("/simulators/:udid/hinge") { [simulators] r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            let q = r.uri.queryParameters
-            switch Self.driveHinge(
-                udid: Self.udidParam(r), pose: q.get("pose"), angle: q.get("angle"),
-                duration: q.get("duration"), simulators: simulators
-            ) {
-            case .ok:
-                return jsonOK
-            case .invalid(let reason):
-                return errorJSON(Self.hingeCommandMessage(reason), status: .badRequest)
-            case .unknownDevice:
-                return errorJSON("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .failed(let error):
-                return errorJSON("hinge could not be driven: \(error)", status: .internalServerError)
-            case .unconfirmed:
-                return errorJSON(
-                    "hinge move unconfirmed: the guest pose helper timed out; read the hinge before retrying",
-                    status: .gatewayTimeout
-                )
-            }
-        }
         // Chrome / bezel — DeviceKit-sourced layout + rasterized PNG.
         router.get("/simulators/:udid/chrome.json") { [simulators, chromes] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -890,7 +483,7 @@ struct Server: Sendable {
         router.ws(
             "/simulators/:udid/stream.3d.mjpeg",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { [simulators, models] inbound, outbound, context in
+        ) { [simulators, models, allDevices] inbound, outbound, context in
             var query: [String: [String]] = [:]
             for pair in context.request.uri.queryParameters {
                 query[String(pair.key), default: []].append(String(pair.value))
@@ -906,6 +499,7 @@ struct Server: Sendable {
                 format: .mjpeg,
                 options: options,
                 simulators: simulators,
+                devices: allDevices,
                 models: models,
                 inbound: inbound,
                 outbound: outbound
@@ -914,7 +508,7 @@ struct Server: Sendable {
         router.ws(
             "/simulators/:udid/stream.3d.avcc",
             shouldUpgrade: trustedWebSocketUpgrade
-        ) { [simulators, models] inbound, outbound, context in
+        ) { [simulators, models, allDevices] inbound, outbound, context in
             var query: [String: [String]] = [:]
             for pair in context.request.uri.queryParameters {
                 query[String(pair.key), default: []].append(String(pair.value))
@@ -930,6 +524,7 @@ struct Server: Sendable {
                 format: .avcc,
                 options: options,
                 simulators: simulators,
+                devices: allDevices,
                 models: models,
                 inbound: inbound,
                 outbound: outbound
@@ -1018,568 +613,6 @@ struct Server: Sendable {
         )
     }
 
-    /// Outcome of `applyOrientation` — one case per HTTP-status
-    /// branch the orientation route maps to. Lives next to the
-    /// helper so the route closure in `addRoutes(...)` is just a
-    /// `switch outcome → Response` translation.
-    enum OrientationOutcome: Equatable {
-        case ok
-        case invalidValue
-        case unknownDevice
-        case dispatchFailed
-        case unconfirmed
-    }
-
-    /// Pure parse + dispatch: validate `value`, look up the
-    /// simulator, and run `simulator.orientation().set(...)`. Split
-    /// out from the route closure so unit tests can drive every
-    /// branch (`MockSimulators` + `MockOrientation`) without booting
-    /// Hummingbird.
-    static func applyOrientation(
-        udid: String,
-        value: String,
-        simulators: any Simulators
-    ) -> OrientationOutcome {
-        guard let orientation = DeviceOrientation(wireName: value) else {
-            return .invalidValue
-        }
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        switch sim.orientation().set(orientation) {
-        case .delivered: return .ok
-        case .rejected: return .dispatchFailed
-        case .unconfirmed: return .unconfirmed
-        }
-    }
-
-    /// Outcome of `applyShake` — one case per HTTP-status branch the
-    /// shake route maps to.
-    enum ShakeOutcome: Equatable {
-        case ok
-        case unknownDevice
-        case dispatchFailed
-    }
-
-    /// Pure dispatch for `POST /simulators/:udid/shake`. Split from the
-    /// route closure so unit tests can drive every branch
-    /// (`MockSimulators` + `MockShake`) without booting Hummingbird.
-    static func applyShake(
-        udid: String,
-        simulators: any Simulators
-    ) async -> ShakeOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            try await sim.shake().shake()
-            return .ok
-        } catch {
-            return .dispatchFailed
-        }
-    }
-
-    /// Outcome of the status-bar routes — one case per HTTP-status
-    /// branch. Lives next to the helpers so the route closures stay a
-    /// `switch outcome → Response` translation.
-    enum StatusBarOutcome: Equatable {
-        case ok
-        case invalidBody
-        case emptyOverride
-        case unknownDevice
-        case dispatchFailed
-    }
-
-    /// Parse a `StatusBarOverride` from a JSON request body. Returns
-    /// `nil` for malformed JSON or a present enum field with an
-    /// unrecognised value — fail loud rather than silently dropping it.
-    /// Numeric fields are accepted as JSON numbers; range clamping is
-    /// the value type's job.
-    static func parseStatusBarOverride(json: String) -> StatusBarOverride? {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dict = object as? [String: Any] else {
-            return nil
-        }
-        var override = StatusBarOverride()
-        override.time = dict["time"] as? String
-        override.operatorName = dict["operatorName"] as? String
-        if let raw = dict["dataNetwork"] as? String {
-            guard let value = DataNetwork(wireName: raw) else { return nil }
-            override.dataNetwork = value
-        }
-        if let raw = dict["wifiMode"] as? String {
-            guard let value = WifiMode(wireName: raw) else { return nil }
-            override.wifiMode = value
-        }
-        if let raw = dict["cellularMode"] as? String {
-            guard let value = CellularMode(wireName: raw) else { return nil }
-            override.cellularMode = value
-        }
-        if let raw = dict["batteryState"] as? String {
-            guard let value = BatteryState(wireName: raw) else { return nil }
-            override.batteryState = value
-        }
-        override.wifiBars = intField(dict["wifiBars"])
-        override.cellularBars = intField(dict["cellularBars"])
-        override.batteryLevel = intField(dict["batteryLevel"])
-        return override
-    }
-
-    /// JSON numbers arrive as `NSNumber`; accept either an `Int` or a
-    /// `Double` spelling so `3` and `3.0` both work.
-    private static func intField(_ value: Any?) -> Int? {
-        if let i = value as? Int { return i }
-        if let d = value as? Double { return Int(d) }
-        return nil
-    }
-
-    /// Pure parse + dispatch for `POST /simulators/:udid/status-bar`.
-    /// Split from the route closure so unit tests can drive every
-    /// branch with `MockSimulators` + `MockStatusBar`.
-    static func applyStatusBar(
-        udid: String,
-        body: String,
-        simulators: any Simulators
-    ) async -> StatusBarOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        guard let override = parseStatusBarOverride(json: body) else {
-            return .invalidBody
-        }
-        guard !override.isEmpty else { return .emptyOverride }
-        do {
-            try await sim.statusBar().override(override)
-            return .ok
-        } catch {
-            return .dispatchFailed
-        }
-    }
-
-    /// Pure dispatch for `DELETE /simulators/:udid/status-bar`.
-    static func clearStatusBar(
-        udid: String,
-        simulators: any Simulators
-    ) async -> StatusBarOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            try await sim.statusBar().clear()
-            return .ok
-        } catch {
-            return .dispatchFailed
-        }
-    }
-
-    /// Outcome of `GET /simulators/:udid/status-bar`.
-    enum StatusBarReadOutcome: Equatable {
-        case ok(StatusBarOverride)
-        case unknownDevice
-        case failed
-    }
-
-    /// Pure read for the status-bar GET route. Split from the closure so
-    /// unit tests can drive every branch with `MockSimulators` +
-    /// `MockStatusBar`.
-    static func readStatusBar(
-        udid: String,
-        simulators: any Simulators
-    ) async -> StatusBarReadOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            return .ok(try await sim.statusBar().read())
-        } catch {
-            return .failed
-        }
-    }
-
-    // MARK: - Location routes
-
-    /// A parsed location request — a single point (`set`), a moving route
-    /// (`start`), or the browser joystick's walk vector. The route body is
-    /// distinguished by a `waypoints` array and the walk by a `bearing`;
-    /// otherwise a bare `latitude`/`longitude` pair is a point.
-    enum LocationRequest: Equatable {
-        case point(Coordinate)
-        case route(LocationRoute)
-        case walk(LocationWalk)
-    }
-
-    /// Outcome of the location routes — one case per HTTP-status branch.
-    enum LocationOutcome: Equatable {
-        case ok
-        case invalidBody
-        case unknownDevice
-        case dispatchFailed
-    }
-
-    /// Parse a `LocationRequest` from a JSON request body. Returns `nil`
-    /// for malformed JSON, an out-of-range point, a route with fewer
-    /// than two valid waypoints, or a walk with no positive speed — fail
-    /// loud rather than silently dropping it. Numbers arrive as JSON
-    /// numbers; `Coordinate` / `LocationRoute` / `LocationWalk` own the
-    /// validation.
-    ///
-    /// Order matters. A walk body carries `latitude`/`longitude` just
-    /// like a point does, so `bearing` has to be read *before* the bare
-    /// point branch — otherwise every joystick vector would parse as a
-    /// stationary point and the device would never move.
-    static func parseLocationRequest(json: String) -> LocationRequest? {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dict = object as? [String: Any] else {
-            return nil
-        }
-        if let raw = dict["waypoints"] as? [Any] {
-            let coords = raw.compactMap { coordinateFromJSON($0) }
-            guard coords.count == raw.count else { return nil }
-            guard let route = LocationRoute(
-                waypoints: coords,
-                speed: doubleField(dict["speed"]),
-                distance: doubleField(dict["distance"]),
-                interval: doubleField(dict["interval"])
-            ) else { return nil }
-            return .route(route)
-        }
-        if let bearing = doubleField(dict["bearing"]) {
-            guard let origin = coordinateFromJSON(object),
-                  let speed = doubleField(dict["speed"]),
-                  let walk = LocationWalk(
-                      origin: origin, bearing: Bearing(degrees: bearing), speed: speed
-                  ) else { return nil }
-            return .walk(walk)
-        }
-        guard let coordinate = coordinateFromJSON(object) else { return nil }
-        return .point(coordinate)
-    }
-
-    /// Build a `Coordinate` from a `{"latitude":…,"longitude":…}` JSON
-    /// object, validating the range. Returns `nil` for a non-object or an
-    /// out-of-range pair.
-    private static func coordinateFromJSON(_ value: Any) -> Coordinate? {
-        guard let dict = value as? [String: Any],
-              let lat = doubleField(dict["latitude"]),
-              let lon = doubleField(dict["longitude"]) else {
-            return nil
-        }
-        return Coordinate(latitude: lat, longitude: lon)
-    }
-
-    /// JSON numbers arrive as `NSNumber`; accept either a `Double` or an
-    /// `Int` spelling so `1` and `1.0` both work.
-    private static func doubleField(_ value: Any?) -> Double? {
-        if let d = value as? Double { return d }
-        if let i = value as? Int { return Double(i) }
-        return nil
-    }
-
-    /// Pure parse + dispatch for `POST /simulators/:udid/location`. Split
-    /// from the route closure so unit tests can drive every branch with
-    /// `MockSimulators` + `MockLocation`.
-    ///
-    /// When `sessions` carries a **running** motion session for this device,
-    /// the same request also drives motion: the browser keeps posting the
-    /// walk vector it always did, and the activity follows from its speed.
-    /// A session is never created here — motion stays opt-in.
-    static func applyLocation(
-        udid: String,
-        body: String,
-        simulators: any Simulators,
-        sessions: MotionSessions? = nil
-    ) async -> LocationOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        guard let request = parseLocationRequest(json: body) else {
-            return .invalidBody
-        }
-        do {
-            switch request {
-            case .point(let coordinate): try await sim.location().set(coordinate)
-            case .route(let route): try await sim.location().start(route)
-            // A walk is a route — projected over the horizon along its
-            // bearing — so the joystick reuses the `start` path that makes
-            // locationd derive course, rather than the `set` path that
-            // reports course = -1.
-            case .walk(let walk): try await sim.location().start(walk.route())
-            }
-        } catch {
-            return .dispatchFailed
-        }
-        await driveMotion(with: request, on: sim, sessions: sessions)
-        return .ok
-    }
-
-    /// The speed a location request moves the device at, which is what
-    /// classifies the motion. A pinned point isn't travelling at all —
-    /// locationd reports `course = -1` for it — so it parks motion rather
-    /// than leaving a stale walk running.
-    private static func driveMotion(
-        with request: LocationRequest,
-        on simulator: any Simulator,
-        sessions: MotionSessions?
-    ) async {
-        guard let sessions else { return }
-        guard let session = await sessions.active(udid: simulator.udid) else { return }
-        let speed: Double
-        switch request {
-        case .point: speed = 0
-        // An untuned route runs at simctl's own default of 20 m/s, which is
-        // motorway-ish — so an untuned route reads as automotive, not as a
-        // stroll.
-        case .route(let route): speed = route.speed ?? 20
-        case .walk(let walk): speed = walk.speed
-        }
-        await session.drive(speed: speed)
-    }
-
-    /// Pure dispatch for `DELETE /simulators/:udid/location`.
-    ///
-    /// Dropping the location override also parks motion: the device has
-    /// stopped being driven anywhere, so an app shouldn't keep reading a
-    /// walk.
-    static func clearLocation(
-        udid: String,
-        simulators: any Simulators,
-        sessions: MotionSessions? = nil
-    ) async -> LocationOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            try await sim.location().clear()
-        } catch {
-            return .dispatchFailed
-        }
-        if let session = await sessions?.active(udid: udid) {
-            await session.drive(speed: 0)
-        }
-        return .ok
-    }
-
-    // MARK: - motion
-
-    /// A parsed `POST /simulators/:udid/motion` body.
-    struct MotionRequest: Equatable {
-        let kind: MotionKind
-        let confidence: MotionConfidence
-        let speed: Double
-    }
-
-    /// Parse a `MotionRequest` from either spelling:
-    ///
-    /// - `{"activity":"running"}` — names the kind outright, as the CLI
-    ///   does. Its speed defaults to that kind's usual pace.
-    /// - `{"speed":6}` — names only how fast the device is moving, as the
-    ///   **browser** does, and the kind is classified here.
-    ///
-    /// The second spelling is what keeps `MotionKind`'s thresholds out of
-    /// the frontend: the card posts the speed it's already set to move at,
-    /// exactly as it posts walk vectors, and Swift owns the classification.
-    /// Two copies of those bands would drift.
-    ///
-    /// An `activity` that names no real kind is a `400` rather than a
-    /// silent `unknown`, which would look like the feature was working.
-    static func parseMotionRequest(json: String) -> MotionRequest? {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dict = object as? [String: Any] else {
-            return nil
-        }
-        // A supplied-but-unknown confidence is rejected rather than quietly
-        // downgraded to `high` — reporting a confidence nobody asked for is
-        // worse than refusing the request.
-        let confidence: MotionConfidence
-        if let word = dict["confidence"] as? String {
-            guard let parsed = MotionConfidence(rawValue: word) else { return nil }
-            confidence = parsed
-        } else {
-            confidence = .high
-        }
-        // A negative speed classifies as `unknown`, which would arm a session
-        // that reports no motion at all — indistinguishable from a broken
-        // feature. CoreLocation's "-1 means I don't know" has no meaning as
-        // an *instruction*.
-        let speed = doubleField(dict["speed"])
-        if let speed, speed < 0 { return nil }
-        if let activity = dict["activity"] as? String {
-            guard let kind = MotionKind(rawValue: activity), kind != .unknown else { return nil }
-            return MotionRequest(
-                kind: kind, confidence: confidence,
-                speed: speed ?? MotionCommand.defaultSpeed(for: kind))
-        }
-        guard let speed else { return nil }
-        return MotionRequest(kind: .from(speed: speed), confidence: confidence, speed: speed)
-    }
-
-    /// Pure parse + dispatch for `POST /simulators/:udid/motion` — arms the
-    /// dylib and states what the device is doing. Creates the session, so
-    /// this is the one place motion turns on.
-    static func applyMotion(
-        udid: String,
-        body: String,
-        simulators: any Simulators,
-        sessions: MotionSessions
-    ) async -> LocationOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        guard let request = parseMotionRequest(json: body) else {
-            return .invalidBody
-        }
-        let session = await sessions.session(for: sim)
-        await session.set(kind: request.kind, confidence: request.confidence,
-                          speed: request.speed)
-        // Say what was armed. Injection only takes effect on the next app
-        // launch, so when someone reports "my app sees nothing" this line is
-        // the first thing worth checking.
-        if let failure = await session.lastError {
-            log("motion: failed to arm \(sim.name) — \(failure)")
-            return .dispatchFailed
-        }
-        log("motion: \(sim.name) is \(request.kind.rawValue) at \(request.speed) m/s")
-        return .ok
-    }
-
-    /// Pure dispatch for `DELETE /simulators/:udid/motion` — parks the
-    /// device as stationary, disarms the dylib, and forgets the session so a
-    /// later walk stops driving it.
-    static func stopMotion(
-        udid: String,
-        simulators: any Simulators,
-        sessions: MotionSessions
-    ) async -> LocationOutcome {
-        guard !udid.isEmpty, let simulator = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        // A restarted server has no session in memory, but the guest is
-        // still reading the intent it published; an explicit stop must
-        // park and disarm regardless. Keep the session when the stop
-        // failed, so a retry still has something to disarm — dropping it
-        // would strand an armed dylib with nothing tracking it.
-        let session = await sessions.session(for: simulator)
-        guard await session.stop() else { return .dispatchFailed }
-        await sessions.end(udid: udid)
-        return .ok
-    }
-
-    /// The `{"activity":…,"steps":…}` payload the browser's readout shows, or
-    /// `nil` when no such simulator exists — the caller turns that into the
-    /// same `404` the POST and DELETE routes give, rather than reporting an
-    /// unknown device as one with motion switched off.
-    static func motionState(udid: String, simulators: any Simulators,
-                            sessions: MotionSessions) async -> String? {
-        guard !udid.isEmpty, simulators.find(udid: udid) != nil else { return nil }
-        return await motionStateJSON(udid: udid, sessions: sessions)
-    }
-
-    static func motionStateJSON(udid: String, sessions: MotionSessions) async -> String {
-        guard let session = await sessions.active(udid: udid) else {
-            return #"{"ok":true,"active":false}"#
-        }
-        let kind: String
-        switch await session.phase {
-        case .idle: kind = MotionKind.stationary.rawValue
-        case .publishing(let k): kind = k.rawValue
-        }
-        let steps = await session.steps
-        let metres = await session.metres
-        let speed = await session.speed
-        return #"{"ok":true,"active":true,"activity":"\#(kind)","steps":\#(steps),"#
-            + #""metres":\#(String(format: "%.1f", metres)),"#
-            + #""speed":\#(String(format: "%.2f", speed))}"#
-    }
-
-    // MARK: - network
-
-    /// Parse a `NetworkCondition` from one of three spellings:
-    ///
-    /// - `{"profile":"3g"}` — a named preset, resolved here so Network Link
-    ///   Conditioner's figures live in Swift alone and never get copied into
-    ///   JavaScript where the two would drift.
-    /// - `{"latencyMs":300,"bandwidthKbps":400,"lossPercent":5}` — explicit.
-    /// - `{"offline":true}`.
-    ///
-    /// **Exactly one** of those, matching the CLI: "3G but lossier" reads
-    /// like it ought to work, and once it does, whether the preset or the
-    /// field wins becomes something a caller has to remember. A body that
-    /// conditions nothing is a `400` rather than a no-op, because arming
-    /// costs an app relaunch and achieving nothing visible would look like
-    /// the feature being broken.
-    ///
-    /// `"offline":false` is *not* a source: the browser card posts its whole
-    /// form, so that key arrives alongside real numbers on every ordinary
-    /// request, and counting it would make each of those a conflict.
-    static func parseNetworkRequest(json: String) -> NetworkCondition? {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let dict = object as? [String: Any] else {
-            return nil
-        }
-        let latency = doubleField(dict["latencyMs"])
-        let bandwidth = doubleField(dict["bandwidthKbps"])
-        let loss = doubleField(dict["lossPercent"])
-        let profile = dict["profile"] as? String
-        let offline = (dict["offline"] as? Bool) == true
-        let namesNumbers = latency != nil || bandwidth != nil || loss != nil
-
-        let sources = [profile != nil, offline, namesNumbers].filter { $0 }.count
-        guard sources == 1 else { return nil }
-
-        if let profile { return NetworkProfile(rawValue: profile)?.condition }
-        if offline { return .offline }
-        return NetworkCondition(
-            latencyMs: latency ?? 0, bandwidthKbps: bandwidth, lossPercent: loss ?? 0)
-    }
-
-    /// Pure parse + dispatch for `POST /simulators/:udid/network` — arms the
-    /// dylib and states how degraded the network is.
-    static func applyNetwork(
-        udid: String,
-        body: String,
-        simulators: any Simulators
-    ) async -> LocationOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        guard let condition = parseNetworkRequest(json: body) else {
-            return .invalidBody
-        }
-        do {
-            try await sim.network().apply(condition)
-        } catch {
-            log("network: failed to condition \(sim.name) — \(error)")
-            return .dispatchFailed
-        }
-        // Say what was armed. Injection only takes effect on the next app
-        // launch, so when someone reports "my app isn't slow" this line is
-        // the first thing worth checking — and when they report the
-        // opposite, months later, it's the record that explains why.
-        log("network: \(sim.name) is conditioned — \(condition.summary)")
-        return .ok
-    }
-
-    /// Pure dispatch for `DELETE /simulators/:udid/network`.
-    static func clearNetwork(
-        udid: String,
-        simulators: any Simulators
-    ) async -> LocationOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            try await sim.network().clear()
-        } catch {
-            log("network: failed to clear \(sim.name) — \(error)")
-            return .dispatchFailed
-        }
-        return .ok
-    }
-
     /// What the browser card's readout and its armed badge are drawn from.
     ///
     /// Carries the preset names as well as the current condition, so adding
@@ -1600,41 +633,7 @@ struct Server: Sendable {
         }
     }
 
-    enum HingeDriveOutcome: Equatable {
-        case ok
-        case invalid(HingeCommandError)
-        case unknownDevice
-        case failed(HingeError)
-        /// The helper timed out and was stopped; the move may have landed.
-        case unconfirmed
-    }
 
-    /// Pure dispatch for `POST /simulators/:udid/hinge` and the 3D
-    /// socket's `set_pose`: parse the pose or angle, find the device,
-    /// sweep its hinge. Blocks for the sweep.
-    static func driveHinge(
-        udid: String, pose: String?, angle: String?, duration: String?,
-        simulators: any Simulators
-    ) -> HingeDriveOutcome {
-        let command: HingeCommand
-        do {
-            command = try HingeCommand.parse(pose: pose, angle: angle, duration: duration)
-        } catch let error as HingeCommandError {
-            return .invalid(error)
-        } catch {
-            return .invalid(.missingTarget)
-        }
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            try sim.hinge().fold(to: command.degrees, over: command.duration)
-            return .ok
-        } catch {
-            guard PoseDelivery(failure: error) != .unconfirmed else { return .unconfirmed }
-            return .failed(error as? HingeError ?? .toolFailed(status: -1))
-        }
-    }
 
     static func hingeCommandMessage(_ error: HingeCommandError) -> String {
         switch error {
@@ -1655,215 +654,7 @@ struct Server: Sendable {
         #"{"type":"hinge","angleDegrees":\#(angle.degrees)}"#
     }
 
-    /// Pure data producer for `GET /simulators/<udid>/hinge`.
-    ///
-    /// `foldable` comes from the profile (does the device have a second
-    /// panel), `angleDegrees` from the hinge — `null` when no reading
-    /// arrived, which on a foldable means "as booted" — and `litPanel`
-    /// is the one the chrome, screen and tap space currently describe.
-    /// A single-panel device's hinge is never consulted.
-    static func hingeJSON(
-        udid: String, simulators: any Simulators, chromes: any Chromes
-    ) -> String? {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else { return nil }
-        let foldable = chromes.panels(forDeviceName: sim.deviceTypeName).contains(.secondary)
-        let angle = foldable ? sim.hinge().angle() : nil
-        let degrees = angle.map { "\($0.degrees)" } ?? "null"
-        let lit = angle?.litPanel ?? .primary
-        // The guest turns the unfolded panel to landscape on its own, so
-        // the page has to be told which way it faces; the binding of the
-        // phone plane carries what Connected Screens reports.
-        let orientation = (foldable ? try? sim.displays().phone.resolve() : nil)?
-            .orientation.map { "\"\($0.wireName)\"" } ?? "null"
-        return #"{"ok":true,"foldable":\#(foldable),"angleDegrees":\#(degrees),"#
-            + #""litPanel":"\#(lit == .primary ? "primary" : "secondary")","orientation":\#(orientation)}"#
-    }
 
-    static func networkStateJSON(udid: String, simulators: any Simulators) async throws -> String? {
-        let profiles = NetworkProfile.allCases
-            .map { "\"\($0.rawValue)\"" }
-            .joined(separator: ",")
-        guard let sim = simulators.find(udid: udid) else { return nil }
-        guard let condition = try await sim.network().current() else {
-            return #"{"ok":true,"active":false,"profiles":[\#(profiles)]}"#
-        }
-        let bandwidth = condition.bandwidthKbps.map { "\($0)" } ?? "null"
-        // Naming the preset lets the card keep the pill the user pressed
-        // lit, without the frontend holding NLC's figures to recognise the
-        // numbers it gets back.
-        let profile = NetworkProfile.matching(condition).map { "\"\($0.rawValue)\"" } ?? "null"
-        return #"{"ok":true,"active":true,"profile":\#(profile),"#
-            + #""latencyMs":\#(condition.latencyMs),"#
-            + #""bandwidthKbps":\#(bandwidth),"lossPercent":\#(condition.lossPercent),"#
-            + #""offline":\#(condition.isOffline),"summary":"\#(condition.summary)","#
-            + #""profiles":[\#(profiles)]}"#
-    }
-
-    /// Upper bound on a single drag-and-drop upload, collected into
-    /// memory before staging to a temp file. 1 GiB comfortably covers
-    /// `.ipa` apps and media clips; this is a localhost dev tool, so a
-    /// generous cap is fine.
-    static let maxUploadBytes = 1 << 30
-
-    /// Outcome of `POST /simulators/:udid/files`.
-    enum AddFileOutcome: Equatable {
-        case installed              // an app → simctl install
-        case added                  // media → simctl addmedia
-        case unsupported(ext: String)
-        /// The file has a home on a simulator, just not through *this*
-        /// route — an app posted to `/media`, or a photo to `/apps`.
-        /// Distinct from `.unsupported` because the fix is different:
-        /// use the other endpoint, don't convert the file.
-        case wrongKind(ext: String)
-        case badArchive(reason: String)   // a zip that isn't a packed .app
-        case unknownDevice
-        case dispatchFailed
-    }
-
-    /// Pure dispatch for `POST /simulators/:udid/files`. The thin
-    /// "which collection?" router: classify the already-materialised
-    /// file by extension and hand it to the matching device collection.
-    /// A file with no home on a simulator is refused (`.unsupported`)
-    /// rather than silently dropped. Split from the route closure so
-    /// unit tests drive every branch with `MockSimulators` + `MockApps`
-    /// / `MockPhotoLibrary`.
-    /// The upload plumbing `/files`, `/apps` and `/media` share:
-    /// sanitise the client-supplied name, reject an extension with no
-    /// home *before* reading megabytes, stage into a unique temp dir,
-    /// dispatch, then clean up whatever happened.
-    ///
-    /// Only `allowing` differs between the three, which is the point —
-    /// the routes are the same act under different authority, so they
-    /// should not be three copies that can drift apart.
-    static func handleUpload(
-        _ r: Request, simulators: any Simulators, allowing kinds: UploadKinds
-    ) async -> Response {
-        let udid = Self.udidParam(r)
-        // Strip any path components from the client-supplied name so
-        // `?name=../../etc/x` can't escape the temp directory.
-        let rawName = String(r.uri.queryParameters.get("name") ?? "upload")
-        let filename = (rawName as NSString).lastPathComponent
-        let nameURL = URL(fileURLWithPath: filename)
-
-        // Cheap reject before reading the body: if the extension has no
-        // home on a simulator — or no home on *this* route — don't
-        // bother uploading megabytes to find out.
-        let isApp = AppBundle.at(nameURL) != nil || AppArchive.at(nameURL) != nil
-        let isMedia = MediaItem.at(nameURL) != nil
-        guard isApp || isMedia else {
-            return errorJSON(
-                "no home for .\(nameURL.pathExtension) on a simulator (apps, zipped apps, and media only)",
-                status: .unsupportedMediaType
-            )
-        }
-        guard (isApp && kinds.contains(.apps)) || (isMedia && kinds.contains(.media)) else {
-            return errorJSON(Self.wrongKindMessage(ext: nameURL.pathExtension.lowercased(), allowed: kinds),
-                             status: .unsupportedMediaType)
-        }
-        guard let buffer = try? await r.body.collect(upTo: Self.maxUploadBytes) else {
-            return errorJSON("upload too large (max \(Self.maxUploadBytes / (1 << 20)) MiB) or unreadable", status: .badRequest)
-        }
-
-        // Materialise into a unique temp dir (preserving the name so
-        // the extension — and simctl's bundle detection — survives),
-        // dispatch, then clean up regardless of outcome.
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("baguette-upload-\(UUID().uuidString)")
-        let tempURL = dir.appendingPathComponent(filename)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try Data(buffer: buffer).write(to: tempURL)
-        } catch {
-            return errorJSON("could not stage upload: \(error)", status: .internalServerError)
-        }
-
-        switch await Self.addFile(udid: udid, path: tempURL, simulators: simulators, allowing: kinds) {
-        case .installed:
-            return Response(status: .ok, headers: [.contentType: "application/json"],
-                            body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"app\"}")))
-        case .added:
-            return Response(status: .ok, headers: [.contentType: "application/json"],
-                            body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true,\"kind\":\"media\"}")))
-        case .unsupported(let ext):
-            return errorJSON("no home for .\(ext) on a simulator (apps, zipped apps, and media only)", status: .unsupportedMediaType)
-        case .wrongKind(let ext):
-            return errorJSON(Self.wrongKindMessage(ext: ext, allowed: kinds), status: .unsupportedMediaType)
-        case .badArchive(let reason):
-            return errorJSON(reason, status: .unsupportedMediaType)
-        case .unknownDevice:
-            return errorJSON("unknown udid: \(udid)", status: .notFound)
-        case .dispatchFailed:
-            return errorJSON("file upload failed (simctl error — is the device booted?)", status: .internalServerError)
-        }
-    }
-
-    /// Names the endpoint that *would* have taken it, so the fix is
-    /// obvious rather than "415, good luck".
-    static func wrongKindMessage(ext: String, allowed: UploadKinds) -> String {
-        allowed.contains(.apps)
-            ? ".\(ext) is media, not an app — POST it to /media"
-            : ".\(ext) is an app, not media — POST it to /apps"
-    }
-
-    static func addFile(
-        udid: String,
-        path: URL,
-        simulators: any Simulators,
-        allowing kinds: UploadKinds = .all
-    ) async -> AddFileOutcome {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return .unknownDevice
-        }
-        do {
-            if let app = AppBundle.at(path) {
-                guard kinds.contains(.apps) else { return .wrongKind(ext: path.pathExtension.lowercased()) }
-                try await sim.apps().install(app)
-                return .installed
-            }
-            if let archive = AppArchive.at(path) {
-                guard kinds.contains(.apps) else { return .wrongKind(ext: path.pathExtension.lowercased()) }
-                try await sim.apps().install(archive: archive)
-                return .installed
-            }
-            if let media = MediaItem.at(path) {
-                guard kinds.contains(.media) else { return .wrongKind(ext: path.pathExtension.lowercased()) }
-                try await sim.photos().add(media)
-                return .added
-            }
-            return .unsupported(ext: path.pathExtension.lowercased())
-        } catch let error as AppsError {
-            // Extraction / locating failures are the upload's fault —
-            // surface the reason instead of a generic simctl 500.
-            switch error {
-            case .extractFailed, .archiveTooLarge, .noAppInArchive:
-                return .badArchive(reason: error.description)
-            // `openFailed` / `listFailed` / the lifecycle cases can't reach an upload, but the
-            // switch has to name them: the compiler is the only thing
-            // that will notice when a new `AppsError` case does.
-            case .installFailed, .openFailed, .deliverFailed, .notificationsNotAllowed, .listFailed, .terminateFailed, .launchFailed:
-                return .dispatchFailed
-            }
-        } catch {
-            return .dispatchFailed
-        }
-    }
-
-    private static func lifecycle(
-        udid: String,
-        simulators: any Simulators,
-        action: (Simulator) throws -> Void
-    ) -> Response {
-        guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
-            return errorJSON("unknown udid: \(udid)", status: .notFound)
-        }
-        do {
-            try action(sim)
-            return jsonOK
-        } catch {
-            return errorJSON(String(describing: error), status: .internalServerError)
-        }
-    }
 
     private static func chromeJSON(
         udid: String,
@@ -2843,6 +1634,7 @@ struct Server: Sendable {
         format: StreamFormat,
         options: Device3DStreamOptions,
         simulators: any Simulators,
+        devices: any Devices,
         models: any DeviceModels,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
@@ -3029,7 +1821,7 @@ struct Server: Sendable {
                             poses.enqueue {
                                 let outcome = Self.driveHinge(
                                     udid: udid, pose: nil, angle: target, duration: over,
-                                    simulators: simulators)
+                                    devices: devices)
                                 if outcome != .ok { log("hinge: \(outcome)") }
                             }
                         }
@@ -3240,7 +2032,6 @@ struct Server: Sendable {
     /// inference grinds to a halt when too many `router.ws` /
     /// `router.get` closures share a single function body.
     private func registerLogsRoute(on router: Router<BasicWebSocketRequestContext>) {
-        let simulators = self.simulators
         let bindHost = self.host
         let bindPort = self.port
         let allowedHosts = self.allowedHosts
@@ -3251,22 +2042,36 @@ struct Server: Sendable {
                     request, bindHost: bindHost, bindPort: bindPort, allowedHosts: allowedHosts
                 ) ? .upgrade([:]) : .dontUpgrade
             }
-        router.ws(
-            "/simulators/:udid/logs",
-            shouldUpgrade: trustedWebSocketUpgrade
-        ) { inbound, outbound, context in
-            let req = context.request
-            let opts = LogsRouteOptions.from(request: req)
-            await Self.logsWS(
-                opts: opts,
-                simulators: simulators,
-                inbound: inbound,
-                outbound: outbound
-            )
+        let devices = allDevices
+        for path in Self.deviceRoutes("logs") {
+            router.ws(
+                RouterPath(path),
+                shouldUpgrade: trustedWebSocketUpgrade
+            ) { inbound, outbound, context in
+                let req = context.request
+                let opts = LogsRouteOptions.from(request: req)
+                await Self.logsWS(
+                    opts: opts,
+                    devices: devices,
+                    inbound: inbound,
+                    outbound: outbound
+                )
+            }
         }
     }
 
-    /// Live log-stream over the dedicated `/simulators/:udid/logs`
+    /// The frame that stops a logs socket at once — no device has that id,
+    /// or the one that does has no log stream — or nil when it can stream.
+    static func logsStopped(udid: String, devices: any Devices) -> String? {
+        switch role(.logs, of: udid, in: devices) {
+        case .role: return nil
+        case .unknownDevice: return #"{"type":"log_stopped","reason":"unknown udid"}"#
+        case .refused(let refusal):
+            return #"{"type":"log_stopped","reason":"\#(jsonEscape(refusal.description))"}"#
+        }
+    }
+
+    /// Live log-stream over the dedicated `/devices/:udid/logs` (or `/simulators/…`)
     /// WebSocket. Filter is fixed at connect time via query string
     /// (`level`, `style`, `predicate`, `bundleId`). The spawned
     /// `/usr/bin/log stream` child runs for the lifetime of the
@@ -3289,14 +2094,15 @@ struct Server: Sendable {
     /// to exit or the socket to close.
     private static func logsWS(
         opts: LogsRouteOptions,
-        simulators: any Simulators,
+        devices: any Devices,
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
-        guard !opts.udid.isEmpty, let sim = simulators.find(udid: opts.udid) else {
-            try? await outbound.write(.text(#"{"type":"log_stopped","reason":"unknown udid"}"#))
+        if let stopped = logsStopped(udid: opts.udid, devices: devices) {
+            try? await outbound.write(.text(stopped))
             return
         }
+        guard case .role(let stream) = role(.logs, of: opts.udid, in: devices) else { return }
         guard let lvl = LogFilter.Level(wire: opts.level) else {
             try? await outbound.write(.text(
                 #"{"type":"log_stopped","reason":"invalid level: \#(opts.level)"}"#
@@ -3314,7 +2120,6 @@ struct Server: Sendable {
             predicate: opts.predicate, bundleId: opts.bundleId
         )
 
-        let stream = sim.logs()
         let lineQueue = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(2048))
 
         do {

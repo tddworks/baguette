@@ -80,7 +80,8 @@ it there.
 ## HTTP
 
 ```
-POST /simulators/<UDID>/notify?bundleId=com.example.app     body: the payload
+POST /devices/<UDID>/notify?bundleId=com.example.app        body: the payload
+     (a simulator also answers under /simulators/<UDID>/notify)
   → {"ok":true,"app":"com.example.app","presentation":{…},"expectation":"Delivered: …"}
     400 malformed payload (the reason, e.g. payload needs an "aps" object)
     404 unknown udid

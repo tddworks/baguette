@@ -349,16 +349,16 @@ GET  /                                      302 → /simulators
 GET  /simulators                            sim.html
 GET  /simulators.json                       Simulators.listJSON
 GET  /simulators/:udid                      sim.html (same shell)
-POST /simulators/:udid/boot                 simulator.boot()
-POST /simulators/:udid/shutdown             simulator.shutdown()
+POST /devices/:udid/boot                    device.require(.lifecycle).boot()
+POST /devices/:udid/shutdown                device.require(.lifecycle).shutdown()
 GET  /simulators/:udid/chrome.json          DeviceChromeAssets.layoutJSON()
 GET  /simulators/:udid/bezel.png            composite.data
-GET  /simulators/:udid/interface.json       appearance + contrast + content size
-POST /simulators/:udid/interface            set any subset, answer the result
-GET  /simulators/:udid/companion-screens.json  CarPlay display + paired watch
-POST /simulators/:udid/carplay-display      attach/reattach CarPlay via Simulator.app
-GET  /simulators/:udid/describe-ui.json     Accessibility.describeAll / describeAt
-POST /simulators/:udid/input                GestureDispatcher (one envelope)
+GET  /devices/:udid/interface.json          appearance + contrast + content size
+POST /devices/:udid/interface               set any subset, answer the result
+GET  /devices/:udid/companion-screens.json   CarPlay display + paired watch
+POST /devices/:udid/carplay-display         attach/reattach CarPlay via Simulator.app
+GET  /devices/:udid/describe-ui.json        Accessibility.describeAll / describeAt
+POST /devices/:udid/input                   GestureDispatcher (one envelope)
 WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
 GET  /devices.json                          Devices.connectedJSON (phones, with abilities)
 GET  /devices/:udid                         sim.html (same shell, device tree)

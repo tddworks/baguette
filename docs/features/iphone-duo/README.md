@@ -74,13 +74,13 @@ Works for a device that's folded or not booted.
 
 ## HTTP / WebSocket
 
-`GET /simulators/<UDID>/hinge` reports the hinge and the lit panel:
+`GET /devices/<UDID>/hinge` reports the hinge and the lit panel:
 
 ```json
 {"ok":true,"foldable":true,"angleDegrees":130.0,"litPanel":"secondary","orientation":"landscape-left"}
 ```
 
-Moving it (`POST /simulators/<UDID>/hinge`) is documented in
+Moving it (`POST /devices/<UDID>/hinge`) is documented in
 [hinge](../hinge/README.md). On the page's 3D socket, the pose picker and the
 slider send `set_pose`:
 

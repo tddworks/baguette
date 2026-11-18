@@ -6,8 +6,8 @@ description: How baguette defaults finds an app's preferences plist through simc
 
 ## Path
 
-- CLI `baguette defaults read|write|delete`, `GET /simulators/<UDID>/defaults.json`,
-  `POST|DELETE /simulators/<UDID>/defaults`
+- CLI `baguette defaults read|write|delete`, `GET /devices/<UDID>/defaults.json`,
+  `POST|DELETE /devices/<UDID>/defaults` (or `/simulators/…`)
 - → `PreferenceSuite` (which container, which plist) + `PreferenceValue` (typed value)
   → `PreferenceEdit` (the optional quit / relaunch around a change)
 - → `Defaults` (`Simulator.defaults()` vends a fresh handle) → `SimctlDefaults`, two

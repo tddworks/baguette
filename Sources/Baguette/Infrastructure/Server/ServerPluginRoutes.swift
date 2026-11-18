@@ -14,7 +14,7 @@ extension Server {
 
     /// `GET  /plugins.json`                         installed manifests
     /// `POST /plugins/:id/commands/:cmd`            run a contribution
-    /// `GET  /simulators/:udid/describe-ui.json`    AX tree over HTTP
+    /// `GET  /devices/:udid/describe-ui.json`    AX tree over HTTP
     ///
     /// The first two are browser-facing and ride the existing
     /// browser-trust check. `describe-ui.json` is one plugins call, so
@@ -26,7 +26,7 @@ extension Server {
         rejectUntrustedBrowser: @escaping @Sendable (Request) -> Response?
     ) {
         let plugins = self.plugins
-        let simulators = self.simulators
+        let devices = allDevices
         let grants = self.grants
         let origin = "http://\(self.host):\(self.port)"
 
@@ -79,51 +79,59 @@ extension Server {
         // device without holding a WebSocket. `input` is the most
         // powerful capability — it can tap through anything — so it is
         // never implied and must be declared.
-        router.post("/simulators/:udid/input") { r, _ in
-            // A plugin's grant was already checked against `input` by
-            // `PluginGrantMiddleware`; reaching here means it declared
-            // the capability. A caller with no grant still has to be a
-            // trusted browser (or a local non-browser client).
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { String(buffer: $0) } ?? ""
-            switch await Self.dispatchInput(
-                udid: Self.udidParam(r), body: body, simulators: simulators
-            ) {
-            case .ok(let ack):
-                return Self.jsonResponse(ack)
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+        for path in Self.deviceRoutes("input") {
+            router.post(RouterPath(path)) { r, _ in
+                // A plugin's grant was already checked against `input` by
+                // `PluginGrantMiddleware`; reaching here means it declared
+                // the capability. A caller with no grant still has to be a
+                // trusted browser (or a local non-browser client).
+                if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                    return rejected
+                }
+                let buffer = try? await r.body.collect(upTo: 64 * 1024)
+                let body = buffer.map { String(buffer: $0) } ?? ""
+                switch await Self.dispatchInput(
+                    udid: Self.udidParam(r), body: body, devices: devices
+                ) {
+                case .ok(let ack):
+                    return Self.jsonResponse(ack)
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                }
             }
         }
 
-        router.get("/simulators/:udid/describe-ui.json") { r, _ in
-            // Either a trusted browser, or a plugin whose grant carries
-            // `describe-ui` — the middleware already turned away one
-            // that didn't, even holding a valid token for something else.
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            let udid = Self.udidParam(r)
-            let x = r.uri.queryParameters.get("x").flatMap { Double($0) }
-            let y = r.uri.queryParameters.get("y").flatMap { Double($0) }
-            let point = (x != nil && y != nil) ? Point(x: x!, y: y!) : nil
+        for path in Self.deviceRoutes("describe-ui.json") {
+            router.get(RouterPath(path)) { r, _ in
+                // Either a trusted browser, or a plugin whose grant carries
+                // `describe-ui` — the middleware already turned away one
+                // that didn't, even holding a valid token for something else.
+                if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                    return rejected
+                }
+                let udid = Self.udidParam(r)
+                let x = r.uri.queryParameters.get("x").flatMap { Double($0) }
+                let y = r.uri.queryParameters.get("y").flatMap { Double($0) }
+                let point = (x != nil && y != nil) ? Point(x: x!, y: y!) : nil
 
-            switch Self.describeUI(udid: udid, point: point, simulators: simulators) {
-            case .ok(let json):
-                return Response(
-                    status: .ok,
-                    headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                    body: .init(byteBuffer: ByteBuffer(string: json))
-                )
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(udid)", status: .notFound)
-            case .noData:
-                return Self.pluginError("no accessibility data", status: .ok)
-            case .failed(let message):
-                return Self.pluginError(message, status: .internalServerError)
+                switch Self.describeUI(udid: udid, point: point, devices: devices) {
+                case .ok(let json):
+                    return Response(
+                        status: .ok,
+                        headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                        body: .init(byteBuffer: ByteBuffer(string: json))
+                    )
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(udid)", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                case .noData:
+                    return Self.pluginError("no accessibility data", status: .ok)
+                case .failed(let message):
+                    return Self.pluginError(message, status: .internalServerError)
+                }
             }
         }
     }
@@ -181,6 +189,7 @@ extension Server {
     enum DescribeUIOutcome: Equatable {
         case ok(String)
         case unknownDevice
+        case refused(DeviceError)
         /// Nothing is frontmost (SpringBoard idle, boot in progress).
         /// Not an error: the caller should say "nothing to inspect",
         /// not "inspection failed".
@@ -194,12 +203,17 @@ extension Server {
     /// socket, which put the tree out of reach of any plugin that
     /// isn't a browser. Same logic, addressable by `curl`.
     static func describeUI(
-        udid: String, point: Point?, simulators: any Simulators
+        udid: String, point: Point?, devices: any Devices
     ) -> DescribeUIOutcome {
-        guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
+        let accessibility: any Accessibility
+        switch role(.accessibility, of: udid, in: devices) {
+        case .unknownDevice: return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
+        case .role(let role): accessibility = role
+        }
         do {
-            let node = try point.map { try sim.accessibility().describeAt(point: $0) }
-                ?? sim.accessibility().describeAll()
+            let node = try point.map { try accessibility.describeAt(point: $0) }
+                ?? accessibility.describeAll()
             guard let node else { return .noData }
             return .ok(#"{"ok":true,"tree":\#(node.json)}"#)
         } catch {
@@ -214,6 +228,7 @@ extension Server {
         /// `{"ok":false,"error":…}` for a envelope it couldn't parse.
         case ok(String)
         case unknownDevice
+        case refused(DeviceError)
     }
 
     /// Dispatch one gesture envelope, the same JSON the stream socket
@@ -224,10 +239,18 @@ extension Server {
     /// event-loop thread yields messages the simulator silently drops.
     /// `Server.streamWS` does the same before dispatching.
     static func dispatchInput(
-        udid: String, body: String, simulators: any Simulators
+        udid: String, body: String, devices: any Devices
     ) async -> InputOutcome {
-        guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
-        let input = Abilities.input(of: sim.name, all: sim.input())
+        let input: Abilities
+        do {
+            input = try devices.device(DeviceID(udid)).input()
+        } catch DeviceError.unknown {
+            return .unknownDevice
+        } catch let refusal as DeviceError {
+            return .refused(refusal)
+        } catch {
+            return .unknownDevice
+        }
         let ack = await MainActor.run {
             GestureDispatcher(input: input).dispatch(line: body)
         }

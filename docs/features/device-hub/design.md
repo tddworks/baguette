@@ -6,7 +6,7 @@ description: Root cause of Xcode 27 Device Hub's dtuhidd shadowing baguette's le
 
 ## Path
 
-- `baguette boot` (unless `--no-heal`), `POST /simulators/:udid/boot` →
+- `baguette boot` (unless `--no-heal`), `POST /devices/:udid/boot` →
   `InputSurface.healAfterBoot`; `baguette heal` → `InputSurface.heal`;
   `baguette input` startup and `serve`'s stream WebSocket → `InputSurface.shadowed`
   → advisory.

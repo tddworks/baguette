@@ -10,8 +10,8 @@ import NIOCore
 /// grinds once too many closures share one function.
 extension Server {
 
-    /// `GET  /simulators/:udid/interface.json`   all three settings
-    /// `POST /simulators/:udid/interface`        set any subset
+    /// `GET  /devices/:udid/interface.json`   all three settings
+    /// `POST /devices/:udid/interface`        set any subset
     ///
     /// Both are browser-facing and ride the existing browser-trust
     /// check. Both are also plugin-reachable under the `interface`
@@ -21,74 +21,82 @@ extension Server {
         on router: Router<BasicWebSocketRequestContext>,
         rejectUntrustedBrowser: @escaping @Sendable (Request) -> Response?
     ) {
-        let simulators = self.simulators
+        let devices = allDevices
 
-        router.get("/simulators/:udid/interface.json") { r, _ in
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            switch await Self.readInterface(udid: Self.udidParam(r), simulators: simulators) {
-            case .ok(let json):
-                return Self.jsonResponse(json)
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .failed(let message):
-                return Self.pluginError(message, status: .internalServerError)
+        for path in Self.deviceRoutes("interface.json") {
+            router.get(RouterPath(path)) { r, _ in
+                if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                    return rejected
+                }
+                switch await Self.readInterface(udid: Self.udidParam(r), devices: devices) {
+                case .ok(let json):
+                    return Self.jsonResponse(json)
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                case .failed(let message):
+                    return Self.pluginError(message, status: .internalServerError)
+                }
             }
         }
 
-        router.post("/simulators/:udid/interface") { r, _ in
-            if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
-                return rejected
-            }
-            let buffer = try? await r.body.collect(upTo: 64 * 1024)
-            let body = buffer.map { String(buffer: $0) } ?? ""
-            guard let update = Self.parseInterfaceUpdate(json: body) else {
-                return Self.pluginError(
-                    "interface body must be a JSON object naming appearance, "
-                        + "increaseContrast and/or contentSize with settable values",
-                    status: .badRequest
-                )
-            }
-            switch await Self.applyInterface(
-                udid: Self.udidParam(r), update: update, simulators: simulators
-            ) {
-            case .ok(let applied):
-                // Answer with the resulting state so a caller that just
-                // changed something doesn't need a second round-trip to
-                // re-render — and sees what actually landed, not what it
-                // asked for.
-                switch await Self.readInterface(udid: Self.udidParam(r), simulators: simulators) {
-                case .ok(let json):
-                    return Self.jsonResponse(json)
-                default:
-                    // The settings landed but the device won't say what
-                    // it now reads as. Still a success — failing here
-                    // would invite a retry that re-applies them — but
-                    // answered in a shape that admits the read didn't
-                    // happen, rather than a bare `{"ok":true}`.
-                    return Self.jsonResponse(Self.appliedJSON(applied))
+        for path in Self.deviceRoutes("interface") {
+            router.post(RouterPath(path)) { r, _ in
+                if Self.presentsGrant(r) == false, let rejected = rejectUntrustedBrowser(r) {
+                    return rejected
                 }
-            case .unknownDevice:
-                return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
-            case .failed(let message, let applied):
-                // 500, but carrying the settings that did land — the
-                // caller can't otherwise tell a request that changed
-                // nothing from one that changed two of three.
-                return Response(
-                    status: .internalServerError,
-                    headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                    body: .init(byteBuffer: ByteBuffer(
-                        string: Self.appliedJSON(applied, error: message)
-                    ))
-                )
+                let buffer = try? await r.body.collect(upTo: 64 * 1024)
+                let body = buffer.map { String(buffer: $0) } ?? ""
+                guard let update = Self.parseInterfaceUpdate(json: body) else {
+                    return Self.pluginError(
+                        "interface body must be a JSON object naming appearance, "
+                            + "increaseContrast and/or contentSize with settable values",
+                        status: .badRequest
+                    )
+                }
+                switch await Self.applyInterface(
+                    udid: Self.udidParam(r), update: update, devices: devices
+                ) {
+                case .ok(let applied):
+                    // Answer with the resulting state so a caller that just
+                    // changed something doesn't need a second round-trip to
+                    // re-render — and sees what actually landed, not what it
+                    // asked for.
+                    switch await Self.readInterface(udid: Self.udidParam(r), devices: devices) {
+                    case .ok(let json):
+                        return Self.jsonResponse(json)
+                    default:
+                        // The settings landed but the device won't say what
+                        // it now reads as. Still a success — failing here
+                        // would invite a retry that re-applies them — but
+                        // answered in a shape that admits the read didn't
+                        // happen, rather than a bare `{"ok":true}`.
+                        return Self.jsonResponse(Self.appliedJSON(applied))
+                    }
+                case .unknownDevice:
+                    return Self.pluginError("unknown udid: \(Self.udidParam(r))", status: .notFound)
+                case .refused(let refusal):
+                    return Self.refusal(refusal)
+                case .failed(let message, let applied):
+                    // 500, but carrying the settings that did land — the
+                    // caller can't otherwise tell a request that changed
+                    // nothing from one that changed two of three.
+                    return Response(
+                        status: .internalServerError,
+                        headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                        body: .init(byteBuffer: ByteBuffer(
+                            string: Self.appliedJSON(applied, error: message)
+                        ))
+                    )
+                }
             }
         }
     }
 
     // MARK: - parse
 
-    /// Parse a `POST /simulators/:udid/interface` body. Nil when the
+    /// Parse a `POST …/interface` body. Nil when the
     /// body isn't a JSON object, or when a field names a value that can
     /// only be read — so a bad request is refused whole rather than
     /// half-applied.
@@ -104,6 +112,7 @@ extension Server {
     enum InterfaceReadOutcome: Equatable {
         case ok(String)
         case unknownDevice
+        case refused(DeviceError)
         case failed(String)
     }
 
@@ -113,10 +122,14 @@ extension Server {
     /// failing the request — that's a state the caller needs to be able
     /// to render ("boot the device"), not an error.
     static func readInterface(
-        udid: String, simulators: any Simulators
+        udid: String, devices: any Devices
     ) async -> InterfaceReadOutcome {
-        guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
-        let interface = sim.interface()
+        let interface: any Interface
+        switch role(.interface, of: udid, in: devices) {
+        case .unknownDevice: return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
+        case .role(let role): interface = role
+        }
         do {
             let reading = InterfaceReading(
                 appearance: try await interface.appearance(),
@@ -136,6 +149,7 @@ extension Server {
         /// the order they were applied.
         case ok(applied: [String])
         case unknownDevice
+        case refused(DeviceError)
         /// A setter threw. `applied` names the settings that had
         /// already landed before it did — this request was not
         /// all-or-nothing, and a caller that assumes otherwise will
@@ -152,10 +166,14 @@ extension Server {
     /// pretend, the outcome reports exactly which settings landed and
     /// stops at the first failure.
     static func applyInterface(
-        udid: String, update: InterfaceUpdate, simulators: any Simulators
+        udid: String, update: InterfaceUpdate, devices: any Devices
     ) async -> InterfaceApplyOutcome {
-        guard let sim = simulators.find(udid: udid) else { return .unknownDevice }
-        let interface = sim.interface()
+        let interface: any Interface
+        switch role(.interface, of: udid, in: devices) {
+        case .unknownDevice: return .unknownDevice
+        case .refused(let refusal): return .refused(refusal)
+        case .role(let role): interface = role
+        }
         var applied: [String] = []
         do {
             if let appearance = update.appearance {
