@@ -27,6 +27,11 @@ struct DeviceProfileTests {
         #expect(profile.screenSize == Size(width: 440, height: 956))
     }
 
+    @Test func `should know the screen's size in pixels from the profile`() throws {
+        let profile = try DeviceProfile.parsing(plistData: Self.makePlist(chromeIdentifier: "phone12"))
+        #expect(profile.screenPixels == Size(width: 1320, height: 2868))
+    }
+
     @Test func `should leave the screen size unknown when any main screen key is missing`() throws {
         let plist = try PropertyListSerialization.data(
             fromPropertyList: ["chromeIdentifier": "phone12"] as [String: Any],

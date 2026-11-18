@@ -65,6 +65,11 @@ struct SimulatorDefinition: Equatable, Sendable {
         /// masks the live frame with it instead of rounding by
         /// `clipRadius`, which cannot say "square on the hinge side".
         let maskImage: String?
+        /// The screen's size in pixels, when the chrome knows it. A frame
+        /// can be larger — a phone's HEVC stream pads 1320 × 2868 to
+        /// 1328 × 2896 without saying so — and the page shows the top-left
+        /// `pixels` of it. A simulator's frames already are this size.
+        let pixels: Size?
         /// A foldable's unfolded panel: one framebuffer creased across
         /// the middle of its long axis by the hinge. Drawn by the page;
         /// the fold view splits there.
@@ -185,6 +190,7 @@ extension SimulatorDefinition {
                 ],
                 "clipRadius": screen.clipRadius,
                 "maskImage": screen.maskImage.map { $0 as Any } ?? NSNull(),
+                "pixels": screen.pixels.map { ["width": $0.width, "height": $0.height] as Any } ?? NSNull(),
                 "crease": screen.crease,
                 "buttonMargins": [
                     "top":    screen.buttonMargins.top,
@@ -299,6 +305,7 @@ extension SimulatorDefinition {
                 buttonMargins: m,
                 maskImage: assets.screenMask == nil ? nil
                     : "\(urlPrefix)/screen-mask.png" + panelQuery(panel, first: true),
+                pixels: assets.screenPixels,
                 crease: panel == .secondary,
                 bezelImage: BezelImage(
                     rest: "\(urlPrefix)/bezel.png" + panelQuery(panel, first: true),

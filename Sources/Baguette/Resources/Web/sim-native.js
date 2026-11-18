@@ -944,6 +944,9 @@
       udid, format, version: 'v2',
       display: 'phone',
       canvas: sim.canvas,
+      // The screen's pixels: a phone's stream pads its frames, and the
+      // page shows only the screen part of each.
+      visible: sim.def && sim.def.screen && sim.def.screen.pixels,
     }, sessionCallbacks()));
     // `boot()` runs this before wiring the toolbar and unload handler,
     // so a throw here killed the whole page, not just the canvas (#71).

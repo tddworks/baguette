@@ -21,6 +21,10 @@ struct DeviceProfile: Equatable, Sendable {
     /// types carry them on 26, 0 of 124 on 27) and publishes the same
     /// values in a sibling `capabilities.plist` instead.
     let screenSize: Size?
+    /// The same screen in pixels (`mainScreenWidth` × `mainScreenHeight`,
+    /// or the display's `width` × `height`): what a frame of it shows,
+    /// and so what the page shows of a frame an encoder padded.
+    let screenPixels: Size?
     /// A foldable's second panel, from `capabilities.plist`'s
     /// `primary-1` display. `nil` on every single-panel device.
     let secondaryPanel: PanelProfile?
@@ -32,6 +36,7 @@ struct DeviceProfile: Equatable, Sendable {
     struct PanelProfile: Equatable, Sendable {
         let chromeIdentifier: String
         let screenSize: Size?
+        let screenPixels: Size?
         /// The framebuffer mask CoreSimulator clips this panel with —
         /// `/Library/Developer/DeviceKit/FramebufferMasks/<id>.pdf`.
         /// The shape the simulator itself uses: iPhone Duo's cover has
@@ -40,9 +45,11 @@ struct DeviceProfile: Equatable, Sendable {
         /// `nil` when the profile names none (Xcode ≤26).
         let framebufferMaskIdentifier: String?
 
-        init(chromeIdentifier: String, screenSize: Size?, framebufferMaskIdentifier: String? = nil) {
+        init(chromeIdentifier: String, screenSize: Size?, screenPixels: Size? = nil,
+             framebufferMaskIdentifier: String? = nil) {
             self.chromeIdentifier = chromeIdentifier
             self.screenSize = screenSize
+            self.screenPixels = screenPixels
             self.framebufferMaskIdentifier = framebufferMaskIdentifier
         }
     }
@@ -59,7 +66,7 @@ struct DeviceProfile: Equatable, Sendable {
         switch panel {
         case .primary:
             return PanelProfile(
-                chromeIdentifier: chromeIdentifier, screenSize: screenSize,
+                chromeIdentifier: chromeIdentifier, screenSize: screenSize, screenPixels: screenPixels,
                 framebufferMaskIdentifier: framebufferMaskIdentifier)
         case .secondary:
             return secondaryPanel
@@ -69,11 +76,13 @@ struct DeviceProfile: Equatable, Sendable {
     init(
         chromeIdentifier: String,
         screenSize: Size?,
+        screenPixels: Size? = nil,
         secondaryPanel: PanelProfile? = nil,
         framebufferMaskIdentifier: String? = nil
     ) {
         self.chromeIdentifier = chromeIdentifier
         self.screenSize = screenSize
+        self.screenPixels = screenPixels
         self.secondaryPanel = secondaryPanel
         self.framebufferMaskIdentifier = framebufferMaskIdentifier
     }
@@ -104,11 +113,14 @@ struct DeviceProfile: Equatable, Sendable {
         return DeviceProfile(
             chromeIdentifier: bareChromeIdentifier(fullID),
             screenSize: parseScreenSize(dict) ?? cover.flatMap(parseDisplaySize),
+            screenPixels: parsePixels(dict, width: "mainScreenWidth", height: "mainScreenHeight")
+                ?? cover.flatMap { parsePixels($0, width: "width", height: "height") },
             secondaryPanel: unfolded.flatMap { panel in
                 guard let id = panel["chromeIdentifier"] as? String else { return nil }
                 return PanelProfile(
                     chromeIdentifier: bareChromeIdentifier(id),
                     screenSize: parseDisplaySize(panel),
+                    screenPixels: parsePixels(panel, width: "width", height: "height"),
                     framebufferMaskIdentifier: panel["framebufferMaskIdentifier"] as? String
                 )
             },
@@ -155,6 +167,11 @@ struct DeviceProfile: Equatable, Sendable {
               s > 0
         else { return nil }
         return Size(width: w / s, height: h / s)
+    }
+
+    private static func parsePixels(_ dict: [String: Any], width: String, height: String) -> Size? {
+        guard let w = dict[width] as? Double, let h = dict[height] as? Double, w > 0, h > 0 else { return nil }
+        return Size(width: w, height: h)
     }
 
     /// Plist values are NSNumber-bridged; `as? Double` covers integer

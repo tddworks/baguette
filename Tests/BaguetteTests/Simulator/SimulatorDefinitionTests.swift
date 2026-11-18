@@ -64,6 +64,24 @@ struct SimulatorDefinitionTests {
         #expect(screen["maskImage"] as? String == "/simulators/UDID-1/screen-mask.png?panel=primary")
     }
 
+    @Test func `should give the screen's size in pixels, so the page shows just the screen of a padded frame`() throws {
+        let def = Self.composeFixture(screenPixels: Size(width: 1320, height: 2868))
+        #expect(def.screen.pixels == Size(width: 1320, height: 2868))
+        let json = try #require(def.toJSON().data(using: .utf8))
+        let root = try #require(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        let screen = try #require(root["screen"] as? [String: Any])
+        let pixels = try #require(screen["pixels"] as? [String: Any])
+        #expect(pixels["width"] as? Double == 1320)
+        #expect(pixels["height"] as? Double == 2868)
+    }
+
+    @Test func `should leave the screen's pixel size unset when the chrome doesn't know it`() throws {
+        let json = try #require(Self.composeFixture().toJSON().data(using: .utf8))
+        let root = try #require(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        let screen = try #require(root["screen"] as? [String: Any])
+        #expect(screen["pixels"] is NSNull)
+    }
+
     @Test func `should leave the screen mask image unset when the chrome has none`() throws {
         let def = Self.composeFixture()
         #expect(def.screen.maskImage == nil)
@@ -268,7 +286,7 @@ struct SimulatorDefinitionTests {
     // MARK: - fixture
 
     static func composeFixture(
-        screenMask: ChromeImage? = nil, panel: IntegratedPanel = .primary
+        screenMask: ChromeImage? = nil, panel: IntegratedPanel = .primary, screenPixels: Size? = nil
     ) -> SimulatorDefinition {
         let sim = MockSimulator()
         given(sim).udid.willReturn("UDID-1")
@@ -288,7 +306,8 @@ struct SimulatorDefinitionTests {
                 data: Data("MERGED".utf8),
                 size: Size(width: 400, height: 800)
             ),
-            screenMask: screenMask
+            screenMask: screenMask,
+            screenPixels: screenPixels
         )
 
         return SimulatorDefinition.compose(
