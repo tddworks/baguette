@@ -7,8 +7,10 @@ description: Design of one Devices model for every kind of device baguette drive
 **Status:** DESIGN, 2026-11-18. Nothing here is built. Before this lap the code had
 one fat `Simulator` protocol, a separate twin-only `Devices` / `Device`
 pair, and `Infrastructure/` sorted by context. Done so far: `Infrastructure/`
-is split by family (slice 1), and the twin's pair is renamed
-`CompanionPhones` / `CompanionPhone` in `Domain/Companion/`, freeing the names. The
+is split by family (slice 1); the twin's pair is renamed
+`CompanionPhones` / `CompanionPhone` in `Domain/Companion/`; and the Domain
+model is built (slices 2–4: `DeviceState`, `AbilityTable`, `Device`,
+`Devices`, `CombinedDevices`). No family conforms to it yet. The
 [build sequence](#9--build-sequence) moves it one green slice at a time.
 
 This document owns **which devices exist, what each one can do, and where
@@ -186,7 +188,7 @@ the twin today) has one without the other.
 @Mockable
 protocol Devices: AnyObject, Sendable {
     var all: [any Device] { get }                   // a fresh snapshot per read
-    func find(id: DeviceID) -> (any Device)?
+    func find(id: DeviceID) throws -> (any Device)?   // throws only rather than guess
 }
 ```
 
@@ -257,7 +259,7 @@ and `litPanelInput()` is built from them, as it is today.
 |---|---|
 | a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
-| one id names one device across every source; two sources claiming one id is an error, never a pick | `CombinedDevices` |
+| one id names one device across every source; asking for an id two sources claim is a refusal, never a pick (the list shows both, so the clash is visible) | `CombinedDevices` |
 | only a ready device accepts gestures and streams | `DeviceState` |
 | what a family can do is decided once, where the device is built, and nowhere else | each family's device (`CoreSimulator`, `CoreDevicePhone`, …) |
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
@@ -367,10 +369,13 @@ AGENTS.md's layering sentence changes to:
   [real-devices](../real-devices/design.md) spike now builds on. Checked
   2026-11-18 against the repo's HEAD.
 - ~~Is a generic method on a `@Mockable` protocol a problem?~~ Avoided:
-  `require` lives on the `AbilityTable` value, so `Device` has no generic
-  member. Whether `.location` resolves as an implicit member of
-  `Ability<Role>` is checked by the first test in slice 3; the fallback is
-  `Ability.location`.
+  `require` lives on the `AbilityTable` value and in a `Devices` extension,
+  so neither protocol has a generic member. `.location` resolves as an
+  implicit member of `Ability<Role>` (keys are constrained extensions in
+  `Domain/Device/Abilities.swift`). Settled by slice 3's tests.
+- ~~Should two sources claiming one id hide the device from the list?~~ No:
+  `all` lists both so the clash is visible, and `find(id:)` throws
+  `claimedTwice` rather than pick. Settled in slice 4.
 
 ## 9 · Build sequence
 

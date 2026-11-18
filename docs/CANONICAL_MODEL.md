@@ -134,7 +134,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 |---|---|
 | a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
-| one id names one device across every source; two sources claiming one id is an error, never a pick | `CombinedDevices` |
+| one id names one device across every source; asking for an id two sources claim is a refusal, never a pick | `CombinedDevices` |
 | only a ready device accepts gestures and streams | `DeviceState` |
 | what a device family can do is decided once, where its device is built | each family's device (`CoreSimulator`, …) |
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
