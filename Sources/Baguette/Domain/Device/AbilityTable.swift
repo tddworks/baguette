@@ -5,6 +5,14 @@ import Foundation
 /// back an `any Location` the compiler checked.
 struct Ability<Role>: Sendable {
     let name: String
+    /// Whether the role acts on a running device. `Devices.require`
+    /// refuses such an ability while the device isn't ready.
+    let needsReady: Bool
+
+    init(name: String, needsReady: Bool = false) {
+        self.name = name
+        self.needsReady = needsReady
+    }
 }
 
 /// What one device can do: each registered ability mapped to the role

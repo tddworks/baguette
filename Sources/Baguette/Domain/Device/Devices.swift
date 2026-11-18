@@ -16,10 +16,16 @@ protocol Devices: AnyObject, Sendable {
 
 extension Devices {
     /// The role playing `ability` on the device `id` names — or a refusal
-    /// naming the id, or the ability and the device. The App's one way in.
+    /// naming the id, the ability the device lacks, or, for an ability that
+    /// acts on a running device, that it isn't ready. The App's one way in.
     func require<Role>(_ ability: Ability<Role>, of id: DeviceID) throws -> Role {
+        try device(id).require(ability)
+    }
+
+    /// The device `id` names, or a refusal naming the id.
+    func device(_ id: DeviceID) throws -> any Device {
         guard let device = try find(id: id) else { throw DeviceError.unknown(id: id) }
-        return try device.abilities.require(ability)
+        return device
     }
 
     /// The list a client sees: each device's identity, kind, state and
@@ -28,6 +34,19 @@ extension Devices {
         let dict: [String: Any] = ["devices": all.map(\.listing)]
         let data = try! JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+extension Device {
+    /// The role playing `ability` on this device: refused when the device
+    /// never registered it, or when it acts on a running device and this
+    /// one isn't ready.
+    func require<Role>(_ ability: Ability<Role>) throws -> Role {
+        let role = try abilities.require(ability)
+        guard !ability.needsReady || state.canAcceptInput else {
+            throw DeviceError.notReady(device: name, state: state)
+        }
+        return role
     }
 }
 

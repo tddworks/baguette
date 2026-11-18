@@ -51,6 +51,32 @@ struct DevicesTests {
         }
     }
 
+    @Test func `should refuse an ability that needs a running device while the device is off`() {
+        var abilities = AbilityTable(device: "iPhone 17 Pro")
+        abilities.register(.input) { MockInput() }
+        let devices = CombinedDevices([source(device("SIM-1", state: .off, abilities: abilities))])
+
+        #expect(throws: DeviceError.notReady(device: "iPhone 17 Pro", state: .off)) {
+            try devices.require(.input, of: "SIM-1")
+        }
+    }
+
+    @Test func `should hand back an ability that needs no running device while the device is off`() throws {
+        var abilities = AbilityTable(device: "iPhone 17 Pro")
+        abilities.register(.lifecycle) { MockLifecycle() }
+        let devices = CombinedDevices([source(device("SIM-1", state: .off, abilities: abilities))])
+
+        _ = try devices.require(.lifecycle, of: "SIM-1")
+    }
+
+    @Test func `should refuse an ability a device never registered before asking whether it is ready`() {
+        let devices = CombinedDevices([source(device("PHONE-1", name: "iPhone 18 Pro Max", state: .off))])
+
+        #expect(throws: DeviceError.unable(ability: "input", device: "iPhone 18 Pro Max")) {
+            try devices.require(.input, of: "PHONE-1")
+        }
+    }
+
     @Test func `should list each device's kind, state and abilities`() {
         var abilities = AbilityTable(device: "iPhone 17 Pro")
         abilities.register(.shake) { MockShake() }
