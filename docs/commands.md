@@ -12,7 +12,7 @@ Every `baguette` command and flag, generated from the binary. For how to use a f
 
 ## baguette list
 
-List simulators in the default or a custom device set
+List simulators in the default or a custom device set, then connected physical devices
 
 ```
 baguette list [--json]

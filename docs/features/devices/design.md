@@ -4,16 +4,15 @@ description: Design of one Devices model for every kind of device baguette drive
 
 # Devices — "every device I can drive, and what each one can do"
 
-**Status:** DESIGN, 2026-11-18. Nothing here is built. Before this lap the code had
-one fat `Simulator` protocol, a separate twin-only `Devices` / `Device`
-pair, and `Infrastructure/` sorted by context. Done so far: `Infrastructure/`
-is split by family (slice 1); the twin's pair is renamed
-`CompanionPhones` / `CompanionPhone` in `Domain/Companion/`; and the Domain
-model is built (slices 2–4: `DeviceState`, `AbilityTable`, `Device`,
-`Devices`, `CombinedDevices`); and the simulator family presents itself
-through it (slice 5: `SimulatorDevices` / `SimulatorDevice`). No command or
-route reads it yet. The
-[build sequence](#9--build-sequence) moves it one green slice at a time.
+**Status:** BUILT for the CLI and the `/devices/…` page; the `/simulators/…`
+routes and the gesture commands still read `Simulators` (see §9). Slices 0–8
+are on `feat/devices`: `Infrastructure/` split by family; the device model
+(`DeviceState`, `AbilityTable`, `Device`, `Devices`, `CombinedDevices`); the
+simulator, companion and CoreDevice families as sources; the device-level
+commands, `baguette list`, `/devices.json` and the device page's stream
+reading it. A physical iPhone on a cable shows its screen (devicectl
+screenshots, ~1 fps), turns and shares its pasteboard; everything else is
+refused by name.
 
 This document owns **which devices exist, what each one can do, and where
 each device family's implementation lives**. Its neighbours own the rest,
@@ -167,12 +166,13 @@ The abilities, from today's `Simulator` methods plus one new one:
 | Ability | Role | iOS simulator | physical iPhone (CoreDevice) | companion phone | Android emulator |
 |---|---|---|---|---|---|
 | `lifecycle` | `Lifecycle` (boot · shutdown) | ✓ | — | — | ✓ |
-| `screen` | `Screen` | ✓ | after the spike | ✓ | ✓ |
+| `screen` | `Screen` | ✓ | ✓ (devicectl screenshots, ~1 fps) | ✓ once its video arrives | ✓ |
 | `input` | `Input` | ✓ | after the spike | later (runner) | ✓ |
 | `displays` | `Displays` (phone · panels · CarPlay) | ✓ | — | — | — |
 | `accessibility` | `Accessibility` | ✓ | ? | — | ✓ |
-| `apps` · `logs` | `Apps` · `LogStream` | ✓ | ✓ (devicectl) | — | ✓ |
-| `location` · `orientation` · `pasteboard` | as today | ✓ | ? | — | ✓ |
+| `apps` · `logs` | `Apps` · `LogStream` | ✓ | — (devicectl can't push a notification; no syslog verb) | — | ✓ |
+| `orientation` · `pasteboard` | as today | ✓ | ✓ (devicectl) | — | ✓ |
+| `location` | as today | ✓ | — (devicectl sets one point, no route) | — | ✓ |
 | `interface` · `defaults` · `photos` · `shake` | as today | ✓ | — | — | ? |
 | `statusBar` · `motion` · `network` · `hinge` · `externalDisplays` · `watchPairing` | as today | ✓ | — | — | — |
 
@@ -262,7 +262,7 @@ and `litPanelInput()` is built from them, as it is today.
 | a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
 | one id names one device across every source; asking for an id two sources claim is a refusal, never a pick (the list shows both, so the clash is visible) | `CombinedDevices` |
-| only a ready device accepts gestures and streams | `DeviceState` |
+| an ability that drives the running screen (screen, input, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
 | what a family can do is decided once, where the device is built, and nowhere else | each family's device (`CoreSimulator`, `CoreDevicePhone`, …) |
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
 
@@ -364,6 +364,9 @@ AGENTS.md's layering sentence changes to:
   folded. Registering it only where `Chromes` lists two panels would make the
   page's hinge card honest. Decided when the page renders cards from
   abilities (slice 7).
+- **devicectl's orientation names.** `DevicectlOrientation` passes
+  `landscapeLeft` for `DeviceOrientation.landscapeLeft`, assuming devicectl
+  names poses as UIKit does. Not yet checked by turning a phone.
 - **The camera.** `CameraSessions` stays per server; the simulator's guest
   side (`SimctlCameraGuest`) likely becomes a `camera` ability. Decided when it
   moves.
@@ -397,8 +400,8 @@ Each slice is green on its own. Test names are the `should …` sentences.
 | 3 | `Ability`, `AbilityTable` | "should refuse an ability the device never registered"; "should hand back the role registered for an ability"; "should name the abilities in the order they were registered" |
 | 4 | `Devices`, `CombinedDevices`, `require(_:of:)`, `listJSON` | "should list every device from every source when sources are combined"; "should refuse to combine two devices that claim one id"; "should refuse a device id no source knows"; "should list each device's kind and abilities" |
 | 5 | `SimulatorDevice` / `SimulatorDevices` present any `Simulator` / `Simulators` as a `Device` / `Devices` — adapters, because `Simulator.state` and `Device.state` (and both `all`s) are different types under one name | "should register every simulator role as an ability"; "should boot the simulator when its lifecycle is told to boot" |
-| 6 | the twin becomes `CompanionPhones`; its route copies fold into the one tree | "should let a companion phone show its screen but refuse input" |
-| 7 | commands and routes move to `devices.require(_:of:)`, one context at a time; the page renders cards from `abilities` | each command's existing tests, now through `MockDevices`; `make test-web` for the card list |
-| 8 | delete what §7 names | the build |
-| 9 | `CoreDevicePhones`, shaped by the spike's outcome | its own design |
+| 6 | the twin renamed `CompanionPhones`; `CompanionDevices` makes it a source; `/devices.json`, `definition.json`, `3d-model.json` and `/stream` read every physical device | "should show a companion's screen once its video has arrived"; "should list each ready physical device as connected, with what it can do" — **done** |
+| 7 | readiness on the key (`Ability.needsReady`), device-level commands through `Devices`, display plans bound to any device, simulator-only commands refusing other families by ability | "should refuse an ability that needs a running device while the device is off"; "should show a device's own screen when the plan is the phone plane" — **done**; the `/simulators/…` routes and the page's cards from `abilities` remain |
+| 8 | delete what §7 names | `RecordingError.deviceNotBooted` gone (a second owner of readiness); the rest waits on slice 7's remainder |
+| 9 | `CoreDevicePhones` through public `devicectl`: screen, orientation, pasteboard | "should list a paired phone on a cable as ready"; "should register what a physical phone can do, and nothing it can't" — **done**; a live stream and input wait on the CoreDevice spike |
 | 10 | `AndroidEmulators` | its own design |

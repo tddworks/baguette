@@ -19,6 +19,12 @@ Device Hub shuts every booted device down.
 
 Every command takes `--device-set <path>` for a device in a custom set.
 
+A paired iPhone on a cable lists after the simulators
+(`"reality":"physical"`) and takes the same `--udid`: `screenshot`, `stream`,
+`record`, `orientation` and `clipboard` work; anything else answers
+`<name> can't do <ability>` and exits 1. See
+[real devices](https://github.com/tddworks/baguette/blob/main/docs/features/real-devices/README.md).
+
 ## When input acks but lands nowhere: `heal`
 
 Under Xcode 27, Device Hub can take over a device's input surface: every

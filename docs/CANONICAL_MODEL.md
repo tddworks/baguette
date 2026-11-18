@@ -48,8 +48,9 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
 └── Device  ◆                               ONE DEVICE — id, name, kind ◇ (platform × reality × model),
     │                                       state ◇ (off · starting · ready · unavailable)
     └── abilities → AbilityTable  ◇         WHAT IT CAN DO — require(.location) → the role; names
-        sources (one per device family):    CoreSimulators (the tree below) · CompanionPhones ·
-                                            CoreDevicePhones (spike) · AndroidEmulators (later)
+        sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
+                                            CoreDevicePhones (screen, orientation, pasteboard) ·
+                                            AndroidEmulators (later)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
 └── Simulator  ◆                            ONE SIMULATOR — udid, name, state, runtime, device type;
@@ -135,7 +136,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
 | one id names one device across every source; asking for an id two sources claim is a refusal, never a pick | `CombinedDevices` |
-| only a ready device accepts gestures and streams | `DeviceState` |
+| an ability that drives the running screen (screen, input, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
 | what a device family can do is decided once, where its device is built | each family's device (`CoreSimulator`, …) |
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
 | every coordinate is in device points, with the plane's `width` / `height` beside it; the adapter divides by size, the domain never normalizes | `Point` · `Size` · `IndigoHIDInput.sendMouse` |
@@ -229,7 +230,8 @@ Mac — and each family sorts itself by these context names
 | **Apps** · **Defaults** · **Pasteboard** · **Photos** | *which apps, and what data?* | one ◆ role each |
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
-| **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` (not wired) |
+| **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
+| **CoreDevice** | *what is a phone on a cable, to CoreDevice?* | ◇ `PhysicalPhone` · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind
 
@@ -238,7 +240,7 @@ moves, one change at a time.
 
 | Node | The code today | Moves to |
 |---|---|---|
-| `Devices` | commands and routes unwrap `simulators.find(udid:)` 85 times, each failing in its own words | `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
+| `Devices` | device-level commands (`boot`, `screenshot`, `stream`, `record`, `orientation`, `clipboard`, `location`, `status-bar`, …) ask `Devices`; gestures, `input`, `fill`, `describe-ui`, `launch`, `hinge`, `heal`, `network`, `motion`, `defaults` still take a `Simulator` (refusing other families by ability); the `/simulators/…` routes still read `Simulators` | every command and route through `devices.require(ability, of: id)` ([devices](features/devices/design.md)) |
 | `Device.abilities` | `Simulator` declares 21 role factories every device would have to fake | registrations in `CoreSimulator`'s `AbilityTable` |
 | `CompanionPhones` | the twin has its own `Devices` / `Device` (`capabilities: [String]`) and copies of the per-device routes | one source of `Devices`, one route tree |
 | `Infrastructure/` | split by context, every folder a simulator adapter | split by device family, plus `Host/` |
