@@ -36,7 +36,7 @@ turns clicks and drags into touches. Its badge says `DEVICE · touch`.
 | Ability | How | Note |
 |---|---|---|
 | touches (`tap`, `swipe`, `pinch`, `pan`, `input`) | CoreDevice's Universal HID | edge swipes too; no buttons, keys or scroll yet |
-| screen (`screenshot`, `stream`, `record`) | the phone's own HEVC stream, started through CoreDevice | live, up to 60 fps; screenshots stand in if it can't start |
+| screen (`screenshot`, `stream`, `record`) | the phone's own H.264 stream, started through CoreDevice | live, up to 60 fps; screenshots stand in if it can't start |
 | pasteboard (`clipboard`, text in `paste`) | `devicectl device pasteboard` | |
 
 Anything else answers with what's missing and exits 1:

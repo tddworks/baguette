@@ -1,7 +1,8 @@
 import Foundation
 
 // A physical phone's live screen arrives as an RTP stream (RFC 3550) of
-// H.264 (RFC 6184), unencrypted, over the CoreDevice tunnel. These values
+// H.264 (RFC 6184) — HEVC (RFC 7798) when offered — unencrypted, over the
+// CoreDevice tunnel. These values
 // turn its packets back into frames; the socket and decoder are elsewhere.
 // Research: docs/features/real-devices/design.md.
 
@@ -39,8 +40,9 @@ struct RTPPacket: Equatable, Sendable {
     }
 }
 
-/// The video codec a phone's stream carries. The phone answers the offer
-/// with HEVC (AVConference's codec type 102); H.264 is the other choice.
+/// The video codec a phone's stream carries: H.264, the only one
+/// `MediaStreamOffer` offers. HEVC (payload 100) is what the phone picks
+/// when offered both, and it mosaics under motion.
 enum VideoCodec: Sendable {
     case h264, hevc
 
@@ -109,6 +111,8 @@ struct VideoDepacketizer: Sendable {
     private var timestamp: UInt32?
     private var lastSequence: UInt16?
     private var damaged = false
+    /// The SPS and PPS from the phone's last configuration packet (H.264).
+    private var configuration: [Data] = []
     /// Frames thrown away for a lost or broken packet, since the start.
     private(set) var droppedFrames = 0
 
@@ -133,6 +137,10 @@ struct VideoDepacketizer: Sendable {
         let bytes = [UInt8](payload)
         let headerSize = codec == .h264 ? 1 : 2
         guard bytes.count >= headerSize else { return }
+        if codec == .h264, bytes[0] == 0x92 {
+            configuration = Self.parameterSets(inSampleDescription: payload)
+            return
+        }
         switch (codec, codec.type(of: payload)) {
         case (.h264, 24), (.hevc, 48):
             aggregate(bytes, from: headerSize)
@@ -171,7 +179,35 @@ struct VideoDepacketizer: Sendable {
         defer { nalUnits = []; fragment = nil; damaged = false }
         if damaged || fragment != nil { droppedFrames += 1; return nil }
         guard !nalUnits.isEmpty, let timestamp else { return nil }
-        return AccessUnit(codec: codec, nalUnits: nalUnits, timestamp: timestamp)
+        let unit = AccessUnit(codec: codec, nalUnits: nalUnits, timestamp: timestamp)
+        guard unit.isKeyframe, unit.parameterSets.isEmpty, !configuration.isEmpty else { return unit }
+        return AccessUnit(codec: codec, nalUnits: configuration + nalUnits, timestamp: timestamp)
+    }
+
+    /// The SPS and PPS of the avcC atom in the sample description an H.264
+    /// stream sends ahead of its first picture (payload `0x92`, outside the
+    /// NAL unit types), or none when there is no well-formed atom.
+    private static func parameterSets(inSampleDescription payload: Data) -> [Data] {
+        let bytes = [UInt8](payload)
+        guard let tag = payload.range(of: Data("avcC".utf8)).map({ $0.lowerBound - payload.startIndex }),
+              tag >= 4, bytes.count >= tag + 10 else { return [] }
+        let end = min(bytes.count, tag - 4 + bytes[(tag - 4)..<tag].reduce(0) { $0 << 8 | Int($1) })
+        var offset = tag + 4 + 5
+        var sets: [Data] = []
+        for countMask in [0x1F, 0xFF] {
+            guard offset < end else { return [] }
+            let count = Int(bytes[offset]) & countMask
+            offset += 1
+            for _ in 0..<count {
+                guard offset + 2 <= end else { return [] }
+                let length = Int(bytes[offset]) << 8 | Int(bytes[offset + 1])
+                offset += 2
+                guard offset + length <= end else { return [] }
+                sets.append(Data(bytes[offset..<offset + length]))
+                offset += length
+            }
+        }
+        return sets
     }
 }
 
@@ -211,6 +247,22 @@ struct RTCPReceiverReport: Equatable, Sendable {
 
     static func pictureLossIndication(reporter: UInt32, source: UInt32) -> Data {
         [0x81CE_0002, reporter, source].map(\.bigEndian).withUnsafeBytes { Data($0) }
+    }
+
+    /// An RTCP APP packet acknowledging one whole picture, sent as each
+    /// picture's last packet arrives.
+    static func pictureReceived(reporter: UInt32, timestamp: UInt32) -> Data {
+        [0x80CC_0003, reporter, 0x0000_0005, timestamp].map(\.bigEndian).withUnsafeBytes { Data($0) }
+    }
+
+    /// The `RCTL` APP packet a receiver sends every 50 ms: pictures received,
+    /// a millisecond clock, and the highest sequence past the first. The
+    /// phone's encoder steers its reference pictures by it; without it, fast
+    /// motion leaves the picture smeared while decoding reports no error.
+    static func receiverControl(reporter: UInt32, clock: UInt16, pictures: UInt16, packets: UInt16) -> Data {
+        [0x80CC_0007, reporter, 0x5243_544C, 0x8500_0004,
+         UInt32(pictures) << 16, 0, UInt32(clock) << 16, UInt32(packets) << 16]
+            .map(\.bigEndian).withUnsafeBytes { Data($0) }
     }
 }
 

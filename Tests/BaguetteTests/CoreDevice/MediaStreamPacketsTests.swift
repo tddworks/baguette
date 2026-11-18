@@ -175,6 +175,31 @@ struct RTCPReceiverReportTests {
             0x81, 0xCE, 0x00, 0x02, 0, 0, 0, 1, 0, 0, 0, 2,
         ]))
     }
+
+    @Test func `should acknowledge each received picture to the phone`() {
+        #expect(RTCPReceiverReport.pictureReceived(reporter: 0x00DB_16EB, timestamp: 5600) == Data([
+            0x80, 0xCC, 0x00, 0x03,             // V=2, APP, length 3 words
+            0x00, 0xDB, 0x16, 0xEB,             // our SSRC
+            0x00, 0x00, 0x00, 0x05,             // the acknowledgement's name
+            0x00, 0x00, 0x15, 0xE0,             // the picture's RTP timestamp
+        ]))
+    }
+
+    @Test func `should tell the phone how many pictures and packets arrived, with a clock for round trips`() {
+        let control = RTCPReceiverReport.receiverControl(
+            reporter: 0x00DB_16EB, clock: 12438, pictures: 6, packets: 21)
+
+        #expect(control == Data([
+            0x80, 0xCC, 0x00, 0x07,             // V=2, APP, length 7 words
+            0x00, 0xDB, 0x16, 0xEB,             // our SSRC
+            0x52, 0x43, 0x54, 0x4C,             // "RCTL"
+            0x85, 0x00, 0x00, 0x04,             // constant tag
+            0x00, 0x06, 0x00, 0x00,             // pictures received
+            0x00, 0x00, 0x00, 0x00,             // nothing amiss this interval
+            0x30, 0x96, 0x00, 0x00,             // millisecond clock
+            0x00, 0x15, 0x00, 0x00,             // highest sequence, past the first
+        ]))
+    }
 }
 
 @Suite("TunnelAddress")
@@ -287,5 +312,91 @@ struct VideoDepacketizerLossTests {
         _ = depacketizer.push(parsed(rtp(marker: true, sequence: 3, payload: [0x62, 0x01, 0x41, 2])))
 
         #expect(depacketizer.droppedFrames == 1)
+    }
+}
+
+@Suite("H.264 configuration packet")
+struct H264ConfigurationPacketTests {
+    private let sps: [UInt8] = [0x27, 0x64, 0x00, 0x33, 0xAC]
+    private let pps: [UInt8] = [0x28, 0xEE, 0x3C, 0xB0]
+
+    /// What the phone sends ahead of its first H.264 picture: a sample
+    /// description whose avcC atom holds the SPS and PPS.
+    private var configuration: [UInt8] {
+        var record: [UInt8] = [1, 0x64, 0x00, 0x33, 0xFF, 0xE1, 0, UInt8(sps.count)]
+        record += sps
+        record += [1, 0, UInt8(pps.count)]
+        record += pps
+        var bytes: [UInt8] = [0x92, 0xE6, 0xC0, 0xA3, 0x61, 0x76, 0x63, 0x31, 0, 0, 0, 0]
+        bytes += [0, 0, 0, UInt8(8 + record.count)]
+        bytes += Array("avcC".utf8)
+        bytes += record
+        return bytes
+    }
+
+    @Test func `should hand a keyframe the parameter sets the phone sent ahead of it`() throws {
+        var depacketizer = VideoDepacketizer(codec: .h264)
+
+        let config = try #require(RTPPacket(rtp(payloadType: 123, sequence: 1, payload: configuration)))
+        let picture = try #require(RTPPacket(rtp(marker: true, payloadType: 123, sequence: 2, payload: [0x65, 0x88, 0x84])))
+
+        let ahead = depacketizer.push(config)
+        let pushed = depacketizer.push(picture)
+
+        #expect(ahead == nil)
+        let unit = try #require(pushed)
+
+        #expect(unit.parameterSets == [Data(sps), Data(pps)])
+        #expect(unit.isKeyframe)
+    }
+
+    @Test func `should not hand the parameter sets to a picture that isn't a keyframe`() throws {
+        var depacketizer = VideoDepacketizer(codec: .h264)
+
+        let config = try #require(RTPPacket(rtp(payloadType: 123, sequence: 1, payload: configuration)))
+        let picture = try #require(RTPPacket(rtp(marker: true, payloadType: 123, sequence: 2, payload: [0x41, 0x9A])))
+
+        _ = depacketizer.push(config)
+        let pushed = depacketizer.push(picture)
+        let unit = try #require(pushed)
+
+        #expect(unit.parameterSets.isEmpty)
+    }
+}
+
+@Suite("MediaStreamOffer")
+struct MediaStreamOfferTests {
+    private let offer = MediaStreamOffer(
+        receiver: 0x0102_0304, host: .init(model: "Mac16,11", build: "26A428"),
+        callID: UUID(uuidString: "1B4753BF-F67F-48EC-B847-42B1FC17CD12")!, made: 0xEEA6_0000_0000_0000)
+
+    @Test func `should offer the phone H.264 only, the codec whose stream stays whole under motion`() {
+        // Protobuf: the receiver (field 5) lists one codec (field 3), payload type 123.
+        let receiver: [UInt8] = [0x08, 0x84, 0x86, 0x88, 0x08, 0x10, 0x00, 0x1A, 0x3F, 0x08, 0x7B]
+        #expect(offer.media.prefix(4) == Data([0x08, 0x01, 0x10, 0x01]))
+        #expect(offer.media.range(of: Data(receiver)) != nil)
+        #expect(offer.media.range(of: Data([0x1A, 0x2E, 0x08, 0x64])) == nil)
+    }
+
+    @Test func `should cap the phone's video at six megabits a second`() {
+        #expect(offer.media.range(of: Data([0x4A, 0x0B, 0x08, 0x00, 0x10, 0x80, 0x9B, 0xEE, 0x02, 0x18, 0x80, 0x80, 0x08])) != nil)
+    }
+
+    @Test func `should wrap the offer as the property list the phone reads, naming the host`() throws {
+        let plist = try #require(try PropertyListSerialization.propertyList(from: offer.bytes, format: nil) as? [String: Any])
+
+        #expect(plist["avcMediaStreamNegotiatorMode"] as? Int == 5)
+        #expect(plist["avcMediaStreamOptionCallID"] as? String == "1B4753BF-F67F-48EC-B847-42B1FC17CD12")
+        var endpoint = Data([0x08, 0x00, 0x10, 0x01, 0x1A, 0x08])
+        endpoint += Data("Mac16,11".utf8)
+        endpoint += Data([0x22, 0x0B])
+        endpoint += Data("2235.63.5.2".utf8)
+        endpoint += Data([0x2A, 0x06])
+        endpoint += Data("26A428".utf8)
+        #expect(plist["avcMediaStreamOptionRemoteEndpointInfo"] as? Data == endpoint)
+        let blob = try #require(plist["avcMediaStreamNegotiatorMediaBlob"] as? Data)
+        let inflated = try (blob.subdata(in: 2..<(blob.count - 4)) as NSData).decompressed(using: .zlib) as Data
+        #expect(blob.prefix(1) == Data([0x78]))
+        #expect(inflated == offer.media)
     }
 }

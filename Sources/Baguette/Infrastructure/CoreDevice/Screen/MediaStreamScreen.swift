@@ -1,10 +1,11 @@
 import Foundation
 import IOSurface
 
-/// A physical phone's live screen: the HEVC stream the phone itself
-/// encodes, started through CoreDevice and received here as RTP over the
-/// CoreDevice tunnel — the stream Device Hub shows, without AVConference's
-/// receiver (which only Apple's apps may use). About 60 fps.
+/// A physical phone's live screen: the H.264 stream the phone itself
+/// encodes, started through CoreDevice with our own offer
+/// (`MediaStreamOffer`) and received here as RTP over the CoreDevice
+/// tunnel, without AVConference's receiver (which only Apple's apps may
+/// use). About 60 fps.
 ///
 /// Integration-only: the packets, frames and RTCP are pure values
 /// (`MediaStreamPackets.swift`), and decoding is `H264Decoder`'s. When the
@@ -70,7 +71,8 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         let fd = try Self.receiver()
         lock.withLock { socket = fd }
         let port = Self.port(of: fd)
-        let offer = try AVConferenceNegotiator.videoOffer()
+        let offer = MediaStreamOffer(
+            receiver: UInt32.random(in: 1 ... .max), host: Self.mac, made: Self.ntpNow()).bytes
 
         let identifier = self.identifier, devicectl = self.devicectl
         let response = try device.startMediaStream {
@@ -98,11 +100,14 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     private func receive(on fd: Int32, phone: sockaddr_in6, reporter: UInt32, source: UInt32,
                          _ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         var phone = phone
-        // The phone answers AVConference's offer with HEVC.
-        var depacketizer = VideoDepacketizer(codec: .hevc)
+        var depacketizer = VideoDepacketizer(codec: .h264)
         var parameterSets: [Data] = []
         var highest: UInt32 = 0
         var lastReport = Date.distantPast
+        var lastControl = Date.distantPast
+        var firstSequence: UInt16?
+        var lastSequence: UInt16 = 0
+        var pictures: UInt16 = 0
         var firstPacket: Date?
         var gate = DecodeGate()
         var lastKeyframeRequest = Date.distantPast
@@ -114,6 +119,15 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             if Date().timeIntervalSince(lastReport) >= 1 {
                 send(RTCPReceiverReport(reporter: reporter, source: source, highestSequence: highest).bytes, to: &phone, on: fd)
                 lastReport = Date()
+            }
+            // The phone's encoder picks its reference pictures by this; without
+            // it, fast motion smears the picture and decoding never complains.
+            if let firstSequence, Date().timeIntervalSince(lastControl) >= 0.05 {
+                let clock = UInt16(truncatingIfNeeded: Int(Date().timeIntervalSince(opened) * 1000))
+                send(RTCPReceiverReport.receiverControl(
+                    reporter: reporter, clock: clock, pictures: pictures,
+                    packets: lastSequence &- firstSequence), to: &phone, on: fd)
+                lastControl = Date()
             }
             // Ask again and again while waiting: a request can be lost too.
             if gate.needsKeyframe, Date().timeIntervalSince(lastKeyframeRequest) >= 0.3 {
@@ -136,6 +150,12 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             if firstPacket == nil { firstPacket = Date() }
             stats.packets += 1
             highest = max(highest, highest & 0xFFFF_0000 | UInt32(packet.sequence))
+            if firstSequence == nil { firstSequence = packet.sequence }
+            lastSequence = packet.sequence
+            if packet.marker {
+                pictures &+= 1
+                send(RTCPReceiverReport.pictureReceived(reporter: reporter, timestamp: packet.timestamp), to: &phone, on: fd)
+            }
             guard let unit = depacketizer.push(packet) else { continue }
             let fresh = unit.parameterSets
             if !fresh.isEmpty, fresh != parameterSets {
@@ -151,6 +171,25 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     }
 
     // MARK: - Pieces
+
+    /// This Mac, as the offer names it.
+    private static var mac: MediaStreamOffer.Mac {
+        MediaStreamOffer.Mac(model: sysctl("hw.model"), build: sysctl("kern.osversion"))
+    }
+
+    private static func sysctl(_ name: String) -> String {
+        var size = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return "" }
+        var bytes = [CChar](repeating: 0, count: size)
+        guard sysctlbyname(name, &bytes, &size, nil, 0) == 0 else { return "" }
+        return String(cString: bytes)
+    }
+
+    /// Now, as an NTP timestamp (seconds since 1900, 32.32 fixed point).
+    private static func ntpNow() -> UInt64 {
+        let now = Date().timeIntervalSince1970 + 2_208_988_800
+        return UInt64(now) << 32 | UInt64((now - now.rounded(.down)) * 4_294_967_296)
+    }
 
     private static func startRequest(offer: Data, receiverIP: String, port: UInt16) -> [String: Any] {
         [
@@ -177,7 +216,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         guard fd >= 0 else { throw StreamError.socket }
         var size: Int32 = 8 * 1024 * 1024
         setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, socklen_t(MemoryLayout<Int32>.size))
-        var timeout = timeval(tv_sec: 0, tv_usec: 250_000)
+        var timeout = timeval(tv_sec: 0, tv_usec: 20_000)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         var address = sockaddr_in6()
         address.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
