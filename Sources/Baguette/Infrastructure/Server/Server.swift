@@ -78,6 +78,8 @@ struct Server: Sendable {
     /// Every physical device the `/devices/…` page can show: companion
     /// phones and phones CoreDevice reaches on a cable.
     let physicalDevices: any Devices
+    /// Every device of every family — what `/devices/:udid/…` resolves.
+    let allDevices: any Devices
 
     init(
         simulators: any Simulators,
@@ -105,6 +107,7 @@ struct Server: Sendable {
         self.physicalDevices = CombinedDevices([
             CompanionDevices(phones: devices, screens: twinScreens), phones,
         ])
+        self.allDevices = CombinedDevices([SimulatorDevices(simulators), physicalDevices])
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -2602,10 +2605,22 @@ struct Server: Sendable {
         guard !udid.isEmpty, let sim = simulators.find(udid: udid) else {
             return errorJSON("unknown udid: \(udid)", status: .notFound)
         }
+        return await screenshot(
+            of: sim.screen(), quality: quality, scale: scale, format: format, options: options)
+    }
+
+    /// A still of `screen`, encoded and sized as asked — whichever device it is.
+    static func screenshot(
+        of screen: any Screen,
+        quality: Double,
+        scale: Int,
+        format: CaptureImageFormat,
+        options: CaptureOptions
+    ) async -> Response {
         let captured: Data
         do {
             captured = try await ScreenSnapshot.capture(
-                screen: sim.screen(),
+                screen: screen,
                 quality: quality,
                 scale: max(1, scale)
             )

@@ -53,6 +53,7 @@ $ baguette boot --udid 00008160-…
 ```
 GET /devices.json                            → {"connected":[{"udid":…,"name":…,"model":…,"capabilities":["screen","input","pasteboard"]}]}
 GET /devices/<udid>/definition.json?chrome=iPhone 17 Pro Max   → the page's bezel and screen geometry
+GET /devices/<udid>/screenshot.jpg|png       → a still of any device's screen (a simulator's too); the /simulators knobs (?size= ?fit= ?background= ?scale=)
 WS  /devices/<udid>/stream?format=mjpeg|avcc → frames down; stream controls and gestures up (the wire.md envelopes)
 ```
 

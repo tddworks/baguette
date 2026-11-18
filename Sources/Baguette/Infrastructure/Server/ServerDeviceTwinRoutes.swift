@@ -101,6 +101,35 @@ extension Server {
         // the JS switches its base path from the URL.
         router.get("/devices/:udid") { _, _ in Self.staticAsset("sim.html") }
 
+        // A still of any device's screen — a simulator's or a phone's —
+        // with the same knobs as `/simulators/:udid/screenshot.*`.
+        let allDevices = self.allDevices
+        for format in Self.CaptureImageFormat.allCases {
+            router.get("/devices/:udid/screenshot.\(format.pathExtension)") { r, _ in
+                if let rejected = rejectUntrustedBrowser(r) { return rejected }
+                let options: Self.CaptureOptions
+                do {
+                    options = try Self.captureOptions(query: r)
+                } catch let error as Self.CaptureQueryError {
+                    return Self.twinJSONResponse(["ok": false, "error": error.message], status: .badRequest)
+                }
+                let screen: any Screen
+                do {
+                    screen = try allDevices.require(.screen, of: DeviceID(Self.udidParam(r)))
+                } catch {
+                    return Self.twinJSONResponse(
+                        ["ok": false, "error": String(describing: error)], status: Self.status(for: error))
+                }
+                return await Self.screenshot(
+                    of: screen,
+                    quality: r.uri.queryParameters.get("quality").flatMap(Double.init) ?? format.defaultQuality,
+                    scale: r.uri.queryParameters.get("scale").flatMap(Int.init) ?? 1,
+                    format: format,
+                    options: options
+                )
+            }
+        }
+
         // SDK bootstrap for a physical device. A phone has no DeviceKit
         // chrome of its own on this Mac, so the bezel is BORROWED — the
         // user picks a device name (`?chrome=iPhone 17 Pro Max`) and the
@@ -435,6 +464,16 @@ extension Server {
             }
         } catch {
             // socket closed; defer cleans up
+        }
+    }
+
+    /// How a route answers a device that couldn't be driven as asked.
+    static func status(for error: Error) -> HTTPResponse.Status {
+        switch error as? DeviceError {
+        case .unknown?: return .notFound
+        case .unable?: return .unprocessableContent
+        case .notReady?, .claimedTwice?: return .conflict
+        case nil: return .internalServerError
         }
     }
 

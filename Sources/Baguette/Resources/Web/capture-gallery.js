@@ -109,8 +109,12 @@
     async _fetchScreenshot(settings, withBezel) {
       const query = withBezel ? {} : settings.toQuery();
       const params = new URLSearchParams({ t: String(Date.now()), ...query });
-      const url = `/simulators/${encodeURIComponent(this.udid)}`
-        + `/screenshot.jpg?${params.toString()}`;
+      // The page's own device tree: a phone's page asks `/devices/…`.
+      const target = root.BaguetteTarget;
+      const base = target
+        ? target.path(this.udid, '/screenshot.jpg')
+        : `/simulators/${encodeURIComponent(this.udid)}/screenshot.jpg`;
+      const url = `${base}?${params.toString()}`;
       const res = await root.fetch(url);
       // The route answers a bad UDID or a failed grab with a JSON body,
       // which would otherwise decode-fail as "not an image" and throw the
