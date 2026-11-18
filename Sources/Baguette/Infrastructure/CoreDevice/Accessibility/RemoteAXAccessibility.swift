@@ -81,11 +81,14 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
         guard let port = directory.ports[Self.service] else { throw Failure.noService }
         let dump = try Self.treeDump(at: address, port: port, by: deadline)
 
-        let token = UUID().uuidString
-        AXPTranslatorBridge.dispatcher.register(token: token, deadline: deadline) { request in
+        // One token per phone, pointed at its newest tree: the translator
+        // caches the elements it builds, each still carrying the token it was
+        // built with, so a fresh token per read leaves a long-lived process
+        // (`serve`) asking a dead token — an empty app on every later read.
+        let token = "baguette-phone-\(identifier.uuidString)"
+        AXPTranslatorBridge.dispatcher.register(token: token, deadline: .distantFuture) { request in
             Self.respond(to: request, from: dump)
         }
-        defer { AXPTranslatorBridge.dispatcher.unregister(token: token) }
         dump.root.setValue(token, forKey: "bridgeDelegateToken")
         guard let element = AXPTranslatorBridge.macPlatformElement(translator: translator, translation: dump.root) else {
             return nil
