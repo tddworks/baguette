@@ -15,8 +15,8 @@ struct AndroidDevicesTests {
 
         """.utf8)
 
-    private func devices(_ fake: FakeDevicectl) -> AndroidDevices {
-        AndroidDevices(adb: Adb(executable: Self.adbPath, makeSubprocess: fake.make))
+    private func devices(_ fake: FakeDevicectl, running: [RunningEmulator] = []) -> AndroidDevices {
+        AndroidDevices(adb: Adb(executable: Self.adbPath, makeSubprocess: fake.make), runningEmulators: { running })
     }
 
     @Test func `should list the Android devices adb is attached to`() {
@@ -52,10 +52,20 @@ struct AndroidDevicesTests {
         #expect(devices(fake).all.isEmpty)
     }
 
-    @Test func `should give an Android device no abilities yet`() {
+    @Test func `should give an emulator with a control API its screen and every input role`() {
+        let fake = FakeDevicectl()
+        fake.output = Self.listing
+        let running = [RunningEmulator(serial: "emulator-5554", avd: "baguette_pixel", port: 8554, token: "tok")]
+
+        let emulator = devices(fake, running: running).all.first
+
+        #expect(emulator?.abilities.names == ["screen", "touch", "press", "key", "scroll"])
+    }
+
+    @Test func `should give an Android device it can't reach yet no abilities`() {
         let fake = FakeDevicectl()
         fake.output = Self.listing
 
-        #expect(devices(fake).all.first?.abilities.names == [])
+        #expect(devices(fake).all.map { $0.abilities.names } == [[], []])
     }
 }

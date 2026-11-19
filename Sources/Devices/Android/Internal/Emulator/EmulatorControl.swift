@@ -1,4 +1,5 @@
 import Foundation
+import IOSurface
 
 /// The Android Emulator's control API (`android.emulation.control`, served
 /// over gRPC) — the handful of its protobuf messages baguette sends and
@@ -36,15 +37,6 @@ enum EmulatorControl {
         }
     }
 
-    /// A key, by its USB HID usage (`codeType` Usb, the default).
-    struct KeyboardEvent: Equatable, Sendable {
-        enum Kind: UInt64, Sendable { case down = 0, up = 1, press = 2 }
-        let usage: Int
-        let kind: Kind
-
-        var bytes: Data { Protobuf.varint(field: 2, kind.rawValue) + Protobuf.varint(field: 3, UInt64(usage)) }
-    }
-
     /// A picture of the screen: its size (in its format) and its pixels.
     struct Image: Equatable, Sendable {
         let width: Int
@@ -60,6 +52,34 @@ enum EmulatorControl {
             height = Int(format.first { $0.number == 4 }?.varint ?? 0)
             self.pixels = pixels
             sequence = Int(fields.first { $0.number == 5 }?.varint ?? 0)
+        }
+
+        /// The picture as every `Screen` hands one on: a BGRA surface — the
+        /// emulator's RGBA with red and blue swapped. Nil when its pixels
+        /// don't fill its size.
+        func bgraSurface() -> IOSurface? {
+            let bytesPerRow = width * 4
+            guard width > 0, height > 0, pixels.count >= bytesPerRow * height,
+                  let surface = IOSurface(properties: [.width: width, .height: height, .bytesPerElement: 4,
+                                                       .bytesPerRow: bytesPerRow, .pixelFormat: 0x4247_5241])
+            else { return nil }
+            surface.lock(options: [], seed: nil)
+            defer { surface.unlock(options: [], seed: nil) }
+            let rowStride = surface.bytesPerRow
+            let out = surface.baseAddress.assumingMemoryBound(to: UInt8.self)
+            pixels.withUnsafeBytes { raw in
+                let rgba = raw.bindMemory(to: UInt8.self)
+                for row in 0..<height {
+                    for column in 0..<width {
+                        let from = row * bytesPerRow + column * 4, to = row * rowStride + column * 4
+                        out[to] = rgba[from + 2]
+                        out[to + 1] = rgba[from + 1]
+                        out[to + 2] = rgba[from]
+                        out[to + 3] = rgba[from + 3]
+                    }
+                }
+            }
+            return surface
         }
     }
     /// Just enough protobuf: varint and length-delimited fields, written and read.

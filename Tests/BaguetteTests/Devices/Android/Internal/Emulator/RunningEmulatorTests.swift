@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Baguette
 
@@ -22,5 +23,20 @@ struct RunningEmulatorTests {
 
     @Test func `should read no control API from an emulator started without gRPC`() {
         #expect(RunningEmulator(ini: "port.serial=5554\navd.name=baguette_pixel\n") == nil)
+    }
+
+    @Test func `should find the emulators running from their discovery files`() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("running-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Self.ini.write(to: folder.appendingPathComponent("pid_95363.ini"), atomically: true, encoding: .utf8)
+        try "port.serial=5556\n".write(to: folder.appendingPathComponent("pid_1.ini"), atomically: true, encoding: .utf8)
+        try "not an emulator".write(to: folder.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+
+        #expect(RunningEmulator.all(in: folder).map(\.serial) == ["emulator-5554"])
+    }
+
+    @Test func `should find no emulators running when the folder isn't there`() {
+        #expect(RunningEmulator.all(in: URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString)")).isEmpty)
     }
 }

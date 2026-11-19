@@ -323,7 +323,7 @@ struct PressTests {
     @Test func `should reject a press when the button is unknown`() {
         #expect(throws: GestureError.invalidValue(
             "button",
-            expected: "home | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center | software-keyboard | lock | power | action | volume-up | volume-down | digital-crown | side-button | left-side-button"
+            expected: "home | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center | software-keyboard | back | lock | power | action | volume-up | volume-down | digital-crown | side-button | left-side-button"
         )) {
             try ButtonPress.parse(["button": "siri"])
         }

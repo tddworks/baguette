@@ -28,4 +28,17 @@ struct RunningEmulator: Equatable, Sendable {
         else { return nil }
         self.init(serial: "emulator-\(console)", avd: values["avd.name"] ?? "", port: port, token: token)
     }
+
+    /// Where running emulators write their discovery files.
+    static let folder = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Caches/TemporaryItems/avd/running")
+
+    /// Every emulator running now with a control API, from the discovery
+    /// files in `folder`.
+    static func all(in folder: URL = folder) -> [RunningEmulator] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "ini" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .compactMap { (try? String(contentsOf: $0, encoding: .utf8)).flatMap(RunningEmulator.init(ini:)) }
+    }
 }

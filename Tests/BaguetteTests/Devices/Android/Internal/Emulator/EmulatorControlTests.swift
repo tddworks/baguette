@@ -1,4 +1,5 @@
 import Foundation
+import IOSurface
 import Testing
 @testable import Baguette
 
@@ -30,11 +31,6 @@ struct EmulatorControlTests {
                                      0x0A, 0x08, 0x08, 0x03, 0x10, 0x04, 0x18, 0x02, 0x20, 0x01]))
     }
 
-    @Test func `should press a key by its USB HID usage`() {
-        #expect(EmulatorControl.KeyboardEvent(usage: 0x04, kind: .press).bytes == Data([0x10, 0x02, 0x18, 0x04]))
-        #expect(EmulatorControl.KeyboardEvent(usage: 0x04, kind: .down).bytes == Data([0x18, 0x04]))
-    }
-
     @Test func `should read a picture's size and pixels from the emulator's image`() throws {
         // Image { format: { format: RGBA8888, width: 2, height: 1 }, image: 8 bytes, seq: 7 }
         let bytes = Data([0x0A, 0x06, 0x08, 0x01, 0x18, 0x02, 0x20, 0x01,
@@ -51,5 +47,21 @@ struct EmulatorControlTests {
 
     @Test func `should read no picture from bytes that aren't an image`() {
         #expect(EmulatorControl.Image(Data([0xFF, 0xFF, 0xFF])) == nil)
+    }
+
+    @Test func `should hand a picture on as a BGRA surface, red and blue swapped`() throws {
+        // Image { format: { RGBA8888, 2 × 1 }, image: red, then blue }
+        let bytes = Data([0x0A, 0x06, 0x08, 0x01, 0x18, 0x02, 0x20, 0x01,
+                          0x22, 0x08, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0xFF])
+        let image = try #require(EmulatorControl.Image(bytes))
+
+        let surface = try #require(image.bgraSurface())
+
+        #expect(surface.width == 2)
+        #expect(surface.height == 1)
+        surface.lock(options: .readOnly, seed: nil)
+        defer { surface.unlock(options: .readOnly, seed: nil) }
+        let pixels = Data(bytes: surface.baseAddress, count: 8)
+        #expect(pixels == Data([0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0xFF]))
     }
 }

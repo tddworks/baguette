@@ -276,6 +276,10 @@ final class IndigoHIDInput: HID, @unchecked Sendable {
             return stroke(
                 from: CGPoint(x: 0.75, y: 0.002), to: CGPoint(x: 0.75, y: 0.55),
                 steps: 24, stepMs: 25, dwellMs: 0, edge: .top)
+        default:
+            // Not one of a simulator's (`DeviceButton.onSimulator`): refused
+            // by name before it gets here.
+            return false
         }
     }
 

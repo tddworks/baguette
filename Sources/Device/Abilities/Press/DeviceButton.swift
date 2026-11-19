@@ -15,8 +15,8 @@ public enum DeviceButton: Hashable, Sendable {
 /// (SpringBoard's own recipe, so a Face ID phone gets there too); the
 /// `swipe-` and `pull-down-` variants are edge-flagged drags the system
 /// gesture recognizer routes (the app in front never sees them).
-/// `software-keyboard` shows or hides the on-screen keyboard. Android's
-/// `back` joins these when an Android device can press it.
+/// `software-keyboard` shows or hides the on-screen keyboard. `back` is
+/// Android's: an Android device lists it, an iOS one doesn't.
 public enum Navigation: String, Sendable, CaseIterable {
     case home
     case appSwitcher = "app-switcher"
@@ -25,6 +25,7 @@ public enum Navigation: String, Sendable, CaseIterable {
     case pullDownToLockScreen = "pull-down-to-lock-screen"
     case pullDownToNotificationCenter = "pull-down-to-notification-center"
     case softwareKeyboard = "software-keyboard"
+    case back
 }
 
 /// A button on the device's body. `lock` is the sleep/wake button; the
@@ -64,7 +65,11 @@ extension DeviceButton: RawRepresentable, CaseIterable {
     }
 
     /// What an iOS simulator offers: every navigation and button.
-    public static var onSimulator: Set<DeviceButton> { Set(allCases) }
+    public static var onSimulator: Set<DeviceButton> {
+        Set([Navigation.home, .appSwitcher, .swipeToAppSwitcher, .swipeToHome, .pullDownToLockScreen,
+             .pullDownToNotificationCenter, .softwareKeyboard].map(Self.navigation)
+            + HardwareButton.allCases.map(Self.hardware))
+    }
 
     /// Press-and-release on the device's buttons. `duration` is the hold
     /// in seconds; `0` defers to the device's default short tap.
