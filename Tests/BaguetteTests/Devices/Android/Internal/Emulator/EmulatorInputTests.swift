@@ -87,6 +87,14 @@ struct EmulatorInputTests {
                                                   Self.touches((20, 20, 1, 0))])
     }
 
+    @Test func `should keep a finger that strays off the screen on its edge`() {
+        let recorder = Recorder()
+
+        _ = input(recorder).touch1(phase: .down, at: Point(x: -10, y: 1000), size: Self.points, edge: nil)
+
+        #expect(recorder.calls.map(\.message) == [Self.touches((0, 2400, 1, 1))])
+    }
+
     @Test func `should put two fingers down as two touches`() {
         let recorder = Recorder()
 

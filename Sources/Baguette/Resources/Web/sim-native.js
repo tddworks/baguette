@@ -32,8 +32,8 @@
   // One page for every device. What it shows follows the device: each
   // control only when the device has the ability it drives
   // (`deviceAbilities`, from /devices/<id>/device.json), and a borrowed
-  // bezel plus a badge only for a physical device (`deviceMode`), whose
-  // model has no DeviceKit chrome of its own. Both are read at boot; the
+  // bezel plus a badge for anything but a simulator (`deviceMode`) — a
+  // phone, an emulator — whose model has no DeviceKit chrome of its own. Both are read at boot; the
   // URL's tree decides neither.
   let deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
   let deviceAbilities = null;
@@ -341,7 +341,7 @@
     const listing = await fetchDeviceListing(udid);
     if (listing) {
       deviceAbilities = listing.abilities || [];
-      deviceMode = !!(listing.kind && listing.kind.reality === 'physical');
+      deviceMode = !!(listing.kind && listing.kind.reality !== 'simulated');
     }
     const meta = await fetchDeviceMeta(udid, listing);
     deviceName = meta.name;
@@ -2190,7 +2190,7 @@
     });
   }
 
-  /// A physical device's badge says what it can do, from the abilities
+  /// A device that isn't a simulator has a badge saying what it can do, from the abilities
   /// the server lists for it. The controls themselves already follow
   /// those abilities (`buildToolbarClusters`), for every device.
   function applyDeviceModeChrome() {

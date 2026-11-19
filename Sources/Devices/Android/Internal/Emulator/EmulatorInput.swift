@@ -66,11 +66,17 @@ final class EmulatorInput: Touch, Scroll, @unchecked Sendable {
 
     private func touch(_ fingers: [(point: Point, identifier: Int, down: Bool)], _ size: Size) -> Bool {
         let touches = fingers.map { finger in
-            EmulatorControl.TouchEvent.Touch(x: Int((finger.point.x / size.width * screen.width).rounded()),
-                                             y: Int((finger.point.y / size.height * screen.height).rounded()),
+            EmulatorControl.TouchEvent.Touch(x: Self.pixel(finger.point.x / size.width, across: screen.width),
+                                             y: Self.pixel(finger.point.y / size.height, across: screen.height),
                                              identifier: finger.identifier, pressure: finger.down ? 1 : 0)
         }
         return send("sendTouch", EmulatorControl.TouchEvent(touches: touches).bytes)
+    }
+
+    /// The pixel `fraction` of the way across `length`; a finger off the
+    /// screen (an edge swipe, a drag past the frame) on its edge.
+    private static func pixel(_ fraction: Double, across length: Double) -> Int {
+        Int((min(max(fraction, 0), 1) * length).rounded())
     }
 
     // MARK: - Scroll

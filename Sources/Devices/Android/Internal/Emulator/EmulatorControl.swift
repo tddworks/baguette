@@ -29,10 +29,10 @@ enum EmulatorControl {
         var bytes: Data {
             touches.reduce(into: Data()) { out, touch in
                 out += Protobuf.message(field: 1,
-                                        Protobuf.varint(field: 1, UInt64(touch.x))
-                                        + Protobuf.varint(field: 2, UInt64(touch.y))
-                                        + Protobuf.varint(field: 3, UInt64(touch.identifier))
-                                        + Protobuf.varint(field: 4, UInt64(touch.pressure)))
+                                        Protobuf.varint(field: 1, Protobuf.int32(touch.x))
+                                        + Protobuf.varint(field: 2, Protobuf.int32(touch.y))
+                                        + Protobuf.varint(field: 3, Protobuf.int32(touch.identifier))
+                                        + Protobuf.varint(field: 4, Protobuf.int32(touch.pressure)))
             }
         }
     }
@@ -91,6 +91,12 @@ enum EmulatorControl {
         }
 
         /// A varint field; nothing at its default, 0.
+        /// An `int32` as protobuf writes it: a negative one sign-extended
+        /// to ten bytes, never a trap.
+        static func int32(_ value: Int) -> UInt64 {
+            UInt64(bitPattern: Int64(Int32(clamping: value)))
+        }
+
         static func varint(field: Int, _ value: UInt64) -> Data {
             value == 0 ? Data() : encode(UInt64(field << 3)) + encode(value)
         }

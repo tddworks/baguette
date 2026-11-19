@@ -23,6 +23,13 @@ struct EmulatorControlTests {
         #expect(event.bytes == Data([0x0A, 0x08, 0x08, 0x9C, 0x04, 0x10, 0xB0, 0x09, 0x18, 0x01]))
     }
 
+    @Test func `should write a point left of the screen as protobuf's negative number, never refuse it`() {
+        let event = EmulatorControl.TouchEvent(touches: [.init(x: -1, y: 0, identifier: 1, pressure: 1)])
+
+        #expect(event.bytes == Data([0x0A, 0x0F, 0x08, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01,
+                                     0x18, 0x01, 0x20, 0x01]))
+    }
+
     @Test func `should send two fingers as two touches`() {
         let event = EmulatorControl.TouchEvent(touches: [.init(x: 1, y: 2, identifier: 1, pressure: 1),
                                                       .init(x: 3, y: 4, identifier: 2, pressure: 1)])
