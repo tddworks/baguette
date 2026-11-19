@@ -113,6 +113,33 @@ One PR each, test-first:
 2. **An emulator's screen and input** over its gRPC API; `Navigation.back`; emulators power on and off (`emulator -avd`, `adb emu kill`). The page streams and touches an emulator.
 3. **The rest.** Accessibility, apps, orientation, location, pasteboard, logs.
 
+## What's left
+
+As of 2026-11-19 (PR #141). There's no real Android phone to test against; everything below that needs one waits for it, and its emulator half is marked.
+
+**Phones** — listed today (`baguette list`, the page), with no abilities.
+
+- [ ] **Buttons, keys, typing.** Already built for emulators through adb (`AdbKeys`), and adb reaches a phone the same way: register them for a phone too. Testable with a fake adb; needs a phone only to confirm.
+- [ ] **Screen, touch, scroll — through scrcpy's server, pinned** (Decision 1). Build and verify it on the emulator first (scrcpy runs on one), then confirm on a phone. Downloading the server jar needs the user's go-ahead.
+- [ ] **No power.** A real phone can't be turned on or off from the Mac; it never registers `power`.
+- [ ] **`unauthorized` phones** list as unavailable ("accept the USB debugging prompt"); untested on a real phone.
+
+**Slice 3 — the rest, emulators first** (each also reaches a phone through adb or the scrcpy server):
+
+- [ ] Accessibility: uiautomator's dump as `AXNode`s, by the class-to-role table (Decision 3).
+- [ ] Apps: install, launch, terminate, list (`adb install`, `am start`, `am force-stop`, `pm list`).
+- [ ] Location: the control API's `setGps` (emulators); a phone has no simulated GPS without a mock-location app.
+- [ ] Clipboard: the control API's `setClipboard` / `getClipboard` (emulators).
+- [ ] Logs: `adb logcat`.
+- [ ] Orientation: the control API's `setPhysicalModel` (emulators).
+
+**Smaller**
+
+- [ ] `baguette input` (stdin, used by plugins) refuses an emulator: it requires a pasteboard up front, which an emulator doesn't have. It should require one only for `paste` / `copy`.
+- [ ] An Android frame: the page borrows a DeviceKit (Apple) frame for an emulator (Decision 4).
+- [ ] An emulator's OS in the list ("Android 15"): one more adb call per emulator (`getprop ro.build.version.release`) or the AVD's config.
+- [ ] Watch for tearing in shared memory (Risks).
+
 ## Decisions
 
 1. **Transport.**
