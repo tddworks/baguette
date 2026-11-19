@@ -39,10 +39,13 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
 struct CoreDevicePhone: Device {
     private let phone: PhysicalPhone
     private let devicectl: Devicectl
+    private let screenRoute: PhoneScreenRoute
 
-    init(_ phone: PhysicalPhone, devicectl: Devicectl) {
+    init(_ phone: PhysicalPhone, devicectl: Devicectl,
+         screenRoute: PhoneScreenRoute = PhoneScreenRoute(environment: ProcessInfo.processInfo.environment)) {
         self.phone = phone
         self.devicectl = devicectl
+        self.screenRoute = screenRoute
     }
 
     var id: DeviceID { DeviceID(phone.udid) }
@@ -59,11 +62,19 @@ struct CoreDevicePhone: Device {
         // One tunnel for every service reached through it.
         let tunnel = CoreDeviceTunnel(devicectl: devicectl)
         if let identifier = phone.coreDeviceIdentifier, CoreDeviceFramework.isAvailable {
-            // The phone's own H.264 stream, received over the tunnel; the
-            // devicectl screenshots stand in when it can't start.
+            // The phone's own stream, received over the tunnel by baguette or
+            // by AVConference (`PhoneScreenRoute`); the devicectl screenshots
+            // stand in when it can't start.
+            let route = screenRoute
             abilities.register(.screen) {
-                MediaStreamScreen(identifier: identifier, devicectl: devicectl,
-                                  fallback: DevicectlScreen(udid: udid, devicectl: devicectl), tunnel: tunnel)
+                let fallback = DevicectlScreen(udid: udid, devicectl: devicectl)
+                switch route {
+                case .rtp:
+                    return MediaStreamScreen(identifier: identifier, devicectl: devicectl,
+                                             fallback: fallback, tunnel: tunnel)
+                case .avconference:
+                    return AVConferenceScreen(identifier: identifier, fallback: fallback, tunnel: tunnel)
+                }
             }
         } else {
             abilities.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }

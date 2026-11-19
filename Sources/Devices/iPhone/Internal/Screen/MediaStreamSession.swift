@@ -30,6 +30,13 @@ struct MediaStreamSession: Equatable, Sendable {
         self.init(phoneHost: host, phonePort: port, phoneSource: phoneSource, ourSource: ourSource)
     }
 
+    /// The negotiator's answer in CoreDevice's `StartResponse` (as JSON) —
+    /// what AVConference's negotiator takes back after its own offer — or
+    /// nil when CoreDevice sent none.
+    static func negotiatorAnswer(in answer: [String: Any]) -> Data? {
+        (answer["negotiatorAnswer"] as? String).flatMap { Data(base64Encoded: $0) }
+    }
+
     /// CoreDevice's `StartRequest`, as JSON: the main display's video, sent
     /// to `receiverIP`:`port` (this Mac's end of the tunnel), with our offer.
     static func startRequest(offer: Data, receiverIP: String, port: UInt16, session: UUID = UUID()) -> [String: Any] {

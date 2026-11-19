@@ -101,6 +101,23 @@ MediaStreamScreen.start
 - **Size.** Coded 1328 × 2896 for a 1320 × 2868 screen, padded right and bottom, with no crop window in the SPS; a smaller resolution in the offer is ignored. The phone's screen size comes from `devicectl device info displays` (the primary display's `nativeSize`), asked while the stream starts, and the decoder crops each picture to it — a clean aperture at the top-left, applied by VideoToolbox as it converts (`kVTScalingMode_CropSourceToCleanAperture`). So every consumer — the page, `screenshot`, `record` — gets the screen and never the padding.
 - **Stopping.** An RTCP BYE; the phone's 20 s RTCP timeout ends it anyway. `StopRequest(stopAll:)` is not used — it could end Device Hub's stream too.
 
+### The screen through AVConference, in-process (spike, 2026-11-19)
+
+A second route, measured on the same iPhone 18 Pro Max (iOS 27.0.1, macOS 26, AVConference 2235.63.5.2) from an unentitled process; the approach is [device-hub-ios](https://github.com/JaviSoto/device-hub-ios)'s (`DHAVConferenceReceiver.mm`), reimplemented. It corrects *Why not AVConference's receiver* above: that refusal is `avconferenced`'s, and an in-process stream never asks it.
+
+| Step | Call | Result |
+|---|---|---|
+| Load | `dlopen` `/System/Library/PrivateFrameworks/AVConference.framework/AVConference`; everything through `objc_msgSend` | ok |
+| Offer | `AVCMediaStreamNegotiator initWithMode:5 options:` (`TransportProtocolType` 2, `AccessNetworkType` 1) → `createOffer` → `offer` (≈490 bytes) | ok; sent verbatim as the `StartRequest`'s `negotiatorOffer` |
+| Answer | CoreDevice's `StartResponse` carries `negotiatorAnswer` (≈430 bytes) beside `connection` → `setAnswer:withError:` | ok; negotiates **HEVC** (`RxPayloadType` 100) |
+| Stream | `generateMediaStreamConfigurationWithError:` · `generateMediaStreamInitOptionsWithError:` + `avcMediaStreamOptionRunInProcess = YES` → `AVCVideoStream initWithNetworkSockets:` (`avcKeySharedSocket`) → `configure:error:` → `start` | ok — `configure` is the call `avconferenced` refused out of process |
+| Pictures | `AVCVideoStream._opaqueStream` (a `VCVideoStream`): set `_shouldCacheRemoteVideoFrame`, call `requestLastDecodedFrame`, take the `CVPixelBuffer` in a replaced `sendLastRemoteVideoFrame:` that never calls through (the original JPEG-encodes every picture) | 1328 × 2896, `420f`, IOSurface-backed; 25–50 distinct pictures a second while the screen moves |
+
+- **The socket is a loopback relay.** Handing AVConference the tunnel's IPv6 socket, connected to the phone, decodes but fails its RTCP (`RTPSendControlPacket failed, 80010006`) and stalls; unconnected, nothing is decoded. An IPv4 loopback pair — AVConference's end connected to ours, ours relaying to and from the tunnel socket — runs a 70-second session at 25–47 pictures a second with no stall.
+- **One RTCP report still fails**, every `rtcpSendInterval` (5 s): the negotiated `remoteAddress` is empty and `rtcpRemotePort` 0; setting the port doesn't help. Sessions run regardless.
+- **Decoded pictures don't come out on their own.** In-process they go to `VCVideoPlayer` / `VCImageQueue` (C, for a `CALayer`); `VCVideoStreamReceiver -showDecodedFrame:atTime:` is never called. Asking for the last decoded picture is the Objective-C way out.
+- **A locked phone sends nothing**, through either route; a still screen sends nothing either.
+
 ### How the accessibility tree reaches the Mac
 
 ```

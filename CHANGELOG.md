@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- A phone's live screen is received by AVConference in baguette's own process (HEVC), at the same CPU as before; `BAGUETTE_PHONE_SCREEN=rtp` keeps baguette's own H.264 receiver. → [docs](docs/features/real-devices/screen-routes.md)
+
 ### Fixed
 - An H.264 stream on the serve page picks up again at the next keyframe after the browser's decoder fails, instead of freezing on its last picture at 0 fps until a refresh. → [docs](docs/serve.md)
 - A phone's live screen shows on the first open instead of screenshots until a refresh, and keeps streaming past its first 15 seconds; `describe-ui` and touches reach it cold too: baguette now keeps the phone's CoreDevice tunnel up. → [docs](docs/features/real-devices/design.md)
