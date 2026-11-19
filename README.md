@@ -36,7 +36,7 @@ and one that can't do something says so by name and exits 1.
   CoreDevice → [real devices](docs/features/real-devices/README.md).
 - **Android emulators** — boot and shut down an AVD, stream its screen,
   touches with two fingers, scrolls, buttons (`back` too), keys and typing,
-  through the emulator's own control API → [Android](docs/features/android/design.md).
+  through the emulator's own control API → [Android](docs/features/android/README.md).
 
 ## Demo
 
@@ -124,7 +124,7 @@ Rows below are for simulators; other devices do the parts their pages list.
 
 | Area | What you can do |
 |---|---|
-| Devices | iOS simulators, real iPhones on a cable, Android emulators; all in one list and one page → [real devices](docs/features/real-devices/README.md), [Android](docs/features/android/design.md), [serve](docs/serve.md) |
+| Devices | iOS simulators, real iPhones on a cable, Android emulators; all in one list and one page → [real devices](docs/features/real-devices/README.md), [Android](docs/features/android/README.md), [serve](docs/serve.md) |
 | Touches & gestures | Tap, swipe, pinch, pan, streamed one- and two-finger touches, home-indicator and pull-down system gestures → [touches](docs/features/touches/README.md), [double-tap](docs/features/double-tap/README.md) |
 | Buttons & keyboard | Home, lock, volume, action, Watch crown; keystrokes, typed text, paste and clipboard sync → [buttons](docs/features/buttons/README.md), [keyboard](docs/features/keyboard/README.md), [paste](docs/features/paste/README.md) |
 | Screen capture | Screenshots, recordings, frame streams to stdout, one output-size vocabulary, 3D device renders → [screenshot](docs/features/screenshot/README.md), [stream](docs/features/stream/README.md), [recording](docs/features/recording/README.md), [capture-size](docs/features/capture-size/README.md), [3d-rendering](docs/features/3d-rendering/README.md) |

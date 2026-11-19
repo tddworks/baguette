@@ -10,6 +10,8 @@ Apple Silicon and **Xcode 26.4.1 or later**. baguette links Xcode's private `Cor
 make                     # release build via ./build.sh → ./Baguette
 ./Injected/build.sh      # refresh the guest helpers before a direct swift build / test
 swift build              # debug build (carries the MOCKING flag + mocks)
+swift run Baguette serve # run from source: builds, then serves http://127.0.0.1:8421
+swift run Baguette list  # any command runs the same way
 swift test               # the Swift Testing suite; no booted simulator needed
 swift test --filter Simulators                   # one suite
 swift test --filter "GestureRegistry/parses tap" # one test
