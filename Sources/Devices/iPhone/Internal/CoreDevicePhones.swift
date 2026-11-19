@@ -56,20 +56,22 @@ struct CoreDevicePhone: Device {
     var abilities: Abilities {
         let (udid, devicectl) = (phone.udid, devicectl)
         var abilities = Abilities(device: phone.name)
+        // One tunnel for every service reached through it.
+        let tunnel = CoreDeviceTunnel(devicectl: devicectl)
         if let identifier = phone.coreDeviceIdentifier, CoreDeviceFramework.isAvailable {
             // The phone's own H.264 stream, received over the tunnel; the
             // devicectl screenshots stand in when it can't start.
             abilities.register(.screen) {
                 MediaStreamScreen(identifier: identifier, devicectl: devicectl,
-                                  fallback: DevicectlScreen(udid: udid, devicectl: devicectl))
+                                  fallback: DevicectlScreen(udid: udid, devicectl: devicectl), tunnel: tunnel)
             }
         } else {
             abilities.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }
         }
         if let identifier = phone.coreDeviceIdentifier {
-            abilities.register(.touch) { DigitizerTouch(digitizer: CoreDeviceDigitizer(identifier: identifier)) }
+            abilities.register(.touch) { DigitizerTouch(digitizer: CoreDeviceDigitizer(identifier: identifier, tunnel: tunnel)) }
             // Its own accessibility service, over the tunnel.
-            abilities.register(.accessibility) { RemoteAXAccessibility(identifier: identifier, devicectl: devicectl) }
+            abilities.register(.accessibility) { RemoteAXAccessibility(identifier: identifier, tunnel: tunnel) }
         }
         abilities.register(.pasteboard) { DevicectlPasteboard(udid: udid, devicectl: devicectl) }
         return abilities

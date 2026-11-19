@@ -21,7 +21,6 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     private let starter: any MediaStreamStarter
     private let openSocket: @Sendable () throws -> any DatagramSocket
     private let mac: @Sendable () -> MediaStreamOffer.Mac
-    private let interfaces: @Sendable () -> [String]
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var running = false
@@ -38,7 +37,6 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
          starter: any MediaStreamStarter = CoreDeviceMediaStream(),
          openSocket: @escaping @Sendable () throws -> any DatagramSocket = { try UDPSocket() },
          mac: @escaping @Sendable () -> MediaStreamOffer.Mac = { HostNetwork.mac },
-         interfaces: @escaping @Sendable () -> [String] = { HostNetwork.addresses() },
          now: @escaping @Sendable () -> Date = { Date() }) {
         self.identifier = identifier
         self.devicectl = devicectl
@@ -48,7 +46,6 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         self.starter = starter
         self.openSocket = openSocket
         self.mac = mac
-        self.interfaces = interfaces
         self.now = now
     }
 
@@ -89,22 +86,19 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     private func stream(_ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         // CoreDevice won't reach the phone's display service over a tunnel
         // that is down, and doesn't bring one up itself.
-        try tunnel.open(to: identifier)
+        let ends = try tunnel.open(to: identifier)
         let socket = try openSocket()
         lock.withLock { self.socket = socket }
         let port = socket.port
         let offer = MediaStreamOffer(
             receiver: UInt32.random(in: 1 ... .max), host: mac(), made: MediaStreamSession.ntpTime(now())).bytes
 
-        let (identifier, devicectl, interfaces) = (self.identifier, self.devicectl, self.interfaces)
+        let (identifier, devicectl) = (self.identifier, self.devicectl)
         // Asked while the stream starts: the size its pictures are cropped to.
         let screenSize = Answer<Size>()
         Thread.detachNewThread { screenSize.give(Self.screenPixels(identifier, devicectl: devicectl)) }
         let answer = try starter.start(on: identifier) {
-            guard let local = Self.localTunnelAddress(identifier, devicectl: devicectl, among: interfaces()) else {
-                throw StreamError.noTunnel
-            }
-            return MediaStreamSession.startRequest(offer: offer, receiverIP: local, port: port)
+            MediaStreamSession.startRequest(offer: offer, receiverIP: ends.mac, port: port)
         }
         guard let session = MediaStreamSession(answer: answer) else { throw StreamError.unexpectedAnswer }
         lock.withLock { self.session = session }
@@ -160,19 +154,6 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             .flatMap(PhysicalPhone.screenPixels(fromDisplaysJSON:))
     }
 
-    /// The Mac's end of the phone's tunnel, once the tunnel is up: the
-    /// address among `interfaces` on the prefix of the phone's tunnel
-    /// address, which devicectl lists (resolving its `.coredevice.local`
-    /// name instead can sit out a five-second mDNS timeout).
-    private static func localTunnelAddress(_ identifier: UUID, devicectl: Devicectl, among interfaces: [String]) -> String? {
-        guard let data = json(devicectl, ["list", "devices", "--quiet"], named: "tunnel"),
-              let phone = try? PhysicalPhone.list(fromDevicectlJSON: data)
-                .first(where: { $0.coreDeviceIdentifier == identifier }),
-              let address = phone.tunnelAddress
-        else { return nil }
-        return TunnelAddress.local(facing: address, among: interfaces)
-    }
-
     /// What devicectl writes with `--json-output`, read back.
     private static func json(_ devicectl: Devicectl, _ arguments: [String], named name: String) -> Data? {
         let file = FileManager.default.temporaryDirectory
@@ -202,6 +183,6 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     }
 
     enum StreamError: Error {
-        case notListed, noTunnel, unexpectedAnswer, silent
+        case notListed, unexpectedAnswer, silent
     }
 }

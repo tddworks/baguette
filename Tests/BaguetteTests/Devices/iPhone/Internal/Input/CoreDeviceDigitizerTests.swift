@@ -42,14 +42,21 @@ struct CoreDeviceDigitizerTests {
     /// A phone tunnel that comes up, or refuses to.
     private func tunnel(opens: Bool = true) -> MockTunnel {
         let tunnel = MockTunnel()
-        if opens { given(tunnel).open(to: .any).willReturn() } else { given(tunnel).open(to: .any).willThrow(Refused()) }
+        if opens {
+            given(tunnel).open(to: .any).willReturn(TunnelEnds(phone: PhoneJSON.tunnel, mac: PhoneJSON.mac))
+        } else {
+            given(tunnel).open(to: .any).willThrow(Refused())
+        }
         return tunnel
     }
 
     @Test func `should bring the phone's tunnel up before opening its touch service`() {
         let order = Order()
         let tunnel = MockTunnel()
-        given(tunnel).open(to: .any).willProduce { _ in order.note("tunnel") }
+        given(tunnel).open(to: .any).willProduce { _ in
+            order.note("tunnel")
+            return TunnelEnds(phone: PhoneJSON.tunnel, mac: PhoneJSON.mac)
+        }
         let hid = hid(opening: { order.note("touch service"); return OpenedCapability() })
         let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel)
 

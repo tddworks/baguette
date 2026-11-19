@@ -11,7 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Fixed
-- A phone's live screen shows on the first open instead of screenshots until a refresh, and keeps streaming past its first 15 seconds: baguette now keeps the phone's CoreDevice tunnel up. → [docs](docs/features/real-devices/design.md)
+- A phone's live screen shows on the first open instead of screenshots until a refresh, and keeps streaming past its first 15 seconds; `describe-ui` and touches reach it cold too: baguette now keeps the phone's CoreDevice tunnel up. → [docs](docs/features/real-devices/design.md)
 
 ### Changed
 - `baguette serve`'s page and every per-device route live under `/devices/<UDID>/…`, for a simulator or a phone alike; page controls show only what the device can do. `/simulators/<UDID>/…` still answers, deprecated (`Deprecation` header), and goes in a later release. → [docs](docs/serve.md)

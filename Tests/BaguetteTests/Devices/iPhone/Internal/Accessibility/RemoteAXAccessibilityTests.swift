@@ -14,7 +14,7 @@ private final class FakeAX: NSObject, @unchecked Sendable {
 }
 
 /// A phone's accessibility tree read over its tunnel, with the phone's two
-/// services, devicectl, nettop and Apple's translator stood in for.
+/// services, its tunnel, nettop and Apple's translator stood in for.
 @Suite("RemoteAXAccessibility")
 struct RemoteAXAccessibilityTests {
     private static let directoryPort: UInt16 = 55478
@@ -102,7 +102,7 @@ struct RemoteAXAccessibilityTests {
         let translator = MockAccessibilityTranslator()
         let directory: Service
         let ax: Service
-        let devicectl: FakeDevicectl
+        let tunnel = MockTunnel()
         let nettop: String
         private let lock = NSLock()
         private var _answering: (@Sendable (AnyObject) -> AnyObject?)?
@@ -114,13 +114,17 @@ struct RemoteAXAccessibilityTests {
         var token: String? { lock.withLock { _token } }
         var hosts: [String] { lock.withLock { _hosts } }
 
-        init(translates: Bool = true, tunnels: [String?] = [PhoneJSON.tunnel], nettop: String = RemoteAXAccessibilityTests.nettop,
+        init(translates: Bool = true, tunnelOpens: Bool = true, nettop: String = RemoteAXAccessibilityTests.nettop,
              directory: Data = RemoteAXAccessibilityTests.directory(offering: RemoteAXAccessibilityTests.offered),
              ax: Data) {
             self.directory = Service(directory)
             self.ax = Service(ax)
             self.nettop = nettop
-            devicectl = PhoneJSON.devicectl(listings: tunnels.map { [phone] in PhoneJSON.listing(tunnelAddress: $0, identifier: phone) })
+            if tunnelOpens {
+                given(tunnel).open(to: .any).willReturn(TunnelEnds(phone: PhoneJSON.tunnel, mac: PhoneJSON.mac))
+            } else {
+                given(tunnel).open(to: .any).willThrow(TunnelError.down)
+            }
             given(translator).isAvailable.willReturn(translates)
             given(translator).response().willProduce { FakeAX() }
             given(translator).tree(from: .any, token: .any, deadline: .any, answering: .any)
@@ -133,7 +137,7 @@ struct RemoteAXAccessibilityTests {
         func accessibility() -> RemoteAXAccessibility {
             let (directory, ax, nettop) = (directory, ax, nettop)
             return RemoteAXAccessibility(
-                identifier: phone, devicectl: Devicectl(makeSubprocess: devicectl.make), budget: 5,
+                identifier: phone, tunnel: tunnel, budget: 5,
                 translator: translator,
                 connect: { [self] host, port in
                     lock.withLock { _hosts.append(host) }
@@ -265,21 +269,22 @@ struct RemoteAXAccessibilityTests {
         let rig = Rig(translates: false, ax: try Self.axConversation())
 
         #expect(throws: RemoteAXAccessibility.Failure.translatorUnavailable) { try rig.accessibility().describeAll() }
-        #expect(rig.devicectl.arguments.isEmpty)
+        verify(rig.tunnel).open(to: .any).called(0)
     }
 
-    @Test func `should bring the phone's tunnel up when devicectl lists it down`() throws {
-        let rig = Rig(tunnels: [nil, PhoneJSON.tunnel], ax: try Self.axConversation())
+    @Test func `should reach the phone's accessibility service at its end of the tunnel`() throws {
+        let rig = Rig(ax: try Self.axConversation())
 
         #expect(try rig.accessibility().describeAll() == Self.node)
-        #expect(rig.devicectl.arguments.contains(
-            ["devicectl", "device", "info", "details", "--device", rig.phone.uuidString, "--quiet"]))
+        verify(rig.tunnel).open(to: .value(rig.phone)).called(1)
+        #expect(rig.hosts == [PhoneJSON.tunnel, PhoneJSON.tunnel])
     }
 
-    @Test func `should fail when the phone's tunnel stays down`() throws {
-        let rig = Rig(tunnels: [nil], ax: try Self.axConversation())
+    @Test func `should fail when the phone's tunnel can't be brought up`() throws {
+        let rig = Rig(tunnelOpens: false, ax: try Self.axConversation())
 
-        #expect(throws: RemoteAXAccessibility.Failure.noTunnel) { try rig.accessibility().describeAll() }
+        #expect(throws: TunnelError.down) { try rig.accessibility().describeAll() }
+        #expect(rig.hosts.isEmpty)
     }
 
     @Test func `should fail when remoted holds no connection to the phone's service directory`() throws {

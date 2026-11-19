@@ -13,13 +13,13 @@ import Foundation
 ///    Apple's translator (`AXPTranslatorBridge`), which builds the same
 ///    element tree a simulator's does, walked into an `AXNode`.
 ///
-/// The formats are pure values in `Devices/iPhone`; the connections, nettop
-/// and the translator are handed in (`TunnelConnection`,
-/// `AccessibilityTranslator`). Research: docs/features/real-devices/design.md.
+/// The formats are pure values in `Devices/iPhone`; the tunnel, the
+/// connections, nettop and the translator are handed in (`Tunnel`,
+/// `TunnelConnection`, `AccessibilityTranslator`). Research: docs/features/real-devices/design.md.
 final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     private static let service = "com.apple.accessibility.axAuditDaemon.remoteAXService"
     private let identifier: UUID
-    private let devicectl: Devicectl
+    private let tunnel: any Tunnel
     /// A tree takes about a second, plus ~15–45 ms an element.
     private let budget: TimeInterval
     private let translator: any AccessibilityTranslator
@@ -27,11 +27,10 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     private let nettop: @Sendable () -> String
 
     enum Failure: Error, CustomStringConvertible {
-        case noTunnel, noDirectory, noService, noTree, translatorUnavailable
+        case noDirectory, noService, noTree, translatorUnavailable
 
         var description: String {
             switch self {
-            case .noTunnel: "the phone's CoreDevice tunnel isn't up"
             case .noDirectory: "the phone's service directory isn't reachable (remoted holds no connection to it)"
             case .noService: "the phone doesn't offer its accessibility service"
             case .noTree: "the phone sent no accessibility tree; dismiss any alert on it and try again"
@@ -40,14 +39,14 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
         }
     }
 
-    init(identifier: UUID, devicectl: Devicectl = Devicectl(), budget: TimeInterval = 20,
+    init(identifier: UUID, tunnel: any Tunnel = CoreDeviceTunnel(), budget: TimeInterval = 20,
          translator: any AccessibilityTranslator = AXPTranslation(),
          connect: @escaping @Sendable (String, UInt16) throws -> any TunnelConnection = {
              try TunnelSocket(host: $0, port: $1, timeout: 5)
          },
          nettop: @escaping @Sendable () -> String = { Nettop.remotedConnections() }) {
         self.identifier = identifier
-        self.devicectl = devicectl
+        self.tunnel = tunnel
         self.budget = budget
         self.translator = translator
         self.connect = connect
@@ -86,7 +85,7 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     private func readTree() throws -> AXNode? {
         guard translator.isAvailable else { throw Failure.translatorUnavailable }
         let deadline = Date().addingTimeInterval(budget)
-        let address = try tunnelAddress()
+        let address = try tunnel.open(to: identifier).phone
         guard let directoryPort = ServiceDirectory.port(fromNettop: nettop(), phone: address) else {
             throw Failure.noDirectory
         }
@@ -130,25 +129,6 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     }
 
     // MARK: - Reaching the phone
-
-    /// The phone's end of the CoreDevice tunnel, bringing the tunnel up
-    /// (a devicectl info query does) when it's down.
-    private func tunnelAddress() throws -> String {
-        if let address = listedTunnelAddress() { return address }
-        _ = try? devicectl.runAndWait(["device", "info", "details", "--device", identifier.uuidString, "--quiet"])
-        guard let address = listedTunnelAddress() else { throw Failure.noTunnel }
-        return address
-    }
-
-    private func listedTunnelAddress() -> String? {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("baguette-ax-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: file) }
-        guard (try? devicectl.runAndWait(["list", "devices", "--quiet", "--json-output", file.path])) != nil,
-              let data = try? Data(contentsOf: file),
-              let phone = try? PhysicalPhone.list(fromDevicectlJSON: data).first(where: { $0.coreDeviceIdentifier == identifier })
-        else { return nil }
-        return phone.tunnelAddress
-    }
 
     /// The service directory's handshake, over RemoteXPC (HTTP/2).
     private static func directory(on socket: any TunnelConnection, by deadline: Date) throws -> ServiceDirectory {

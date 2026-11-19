@@ -77,8 +77,9 @@ struct MediaStreamScreenTests {
         init(inbound: [Data] = [], answer: [String: Any]? = MediaStreamScreenTests.answer, tunnelOpens: Bool = true) {
             self.inbound = inbound
             given(tunnel).open(to: .any).willProduce { [self] _ in
-                guard tunnelOpens else { throw MediaStreamScreen.StreamError.noTunnel }
+                guard tunnelOpens else { throw TunnelError.down }
                 lock.withLock { tunnelUp = true }
+                return TunnelEnds(phone: PhoneJSON.tunnel, mac: PhoneJSON.mac)
             }
             given(socket).port.willReturn(50001)
             given(socket).receive().willProduce { [self] in
@@ -107,7 +108,6 @@ struct MediaStreamScreenTests {
         }
 
         func screen(
-            interfaces: [String] = [PhoneJSON.mac, "::1"],
             openSocket: (@Sendable () throws -> any DatagramSocket)? = nil,
             clock: Clock = Clock(step: 0.001)
         ) -> MediaStreamScreen {
@@ -117,7 +117,7 @@ struct MediaStreamScreenTests {
                 makeDecoder: { [decoder] in decoder }, fallback: fallback, tunnel: tunnel, starter: starter,
                 openSocket: openSocket ?? { socket },
                 mac: { MediaStreamOffer.Mac(model: "Mac16,1", build: "25A1") },
-                interfaces: { interfaces }, now: clock.read)
+                now: clock.read)
         }
     }
 
@@ -219,17 +219,6 @@ struct MediaStreamScreenTests {
 
         #expect(rig.fellBack.wait())
         screen.stop()
-    }
-
-    @Test func `should show screenshots when this Mac has no address on the phone's tunnel`() throws {
-        let rig = Rig()
-        let screen = rig.screen(interfaces: ["::1"])
-
-        try screen.start { _ in }
-
-        #expect(rig.fellBack.wait())
-        screen.stop()
-        #expect(rig.request == nil)
     }
 
     @Test func `should show screenshots when no socket can be opened for the stream`() throws {
