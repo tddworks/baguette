@@ -52,11 +52,14 @@ jobs:
       - name: Build arm64
         run: |
           BAGUETTE_INJECTED_ARCHS=arm64 ./build.sh --arch arm64 --disable-sandbox
-          strip -rSTx .build/arm64-apple-macosx/release/Baguette
+          # SwiftPM decides where products land (Swift 6.4: .build/out/Products/Release).
+          echo "BUILD_DIR=$(swift build -c release --arch arm64 --show-bin-path)" >> "$GITHUB_ENV"
+
+      - name: Strip binary
+        run: strip -rSTx "$BUILD_DIR/Baguette"
 
       - name: Package binary + resource bundle
         run: |
-          BUILD_DIR=.build/arm64-apple-macosx/release
           STAGING=baguette-${{ steps.version.outputs.tag }}-macOS-arm64
           mkdir -p "$STAGING"
           cp "$BUILD_DIR/Baguette" "$STAGING/Baguette"
