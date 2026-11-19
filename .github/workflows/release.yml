@@ -36,7 +36,7 @@ jobs:
       - name: Setup Swift
         uses: SwiftyLab/setup-swift@latest
         with:
-          swift-version: "6.2"
+          swift-version: "6.4"
 
       - name: Swift version
         run: swift --version
