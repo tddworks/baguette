@@ -1,6 +1,6 @@
 # Android: design
 
-> Status: **slice 1 built** (listing), 2026-11-19; screen and input wait on the transport decision ([Open decisions](#open-decisions)). The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
+> Status: **slice 1 built** (listing), 2026-11-19; slice 2 — an emulator's screen and input over its own gRPC API — designed and proved by hand ([Transport](#transport-the-emulators-own-grpc-api-decided-2026-11-19)). The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
 
 ## Question
 
@@ -15,17 +15,24 @@
 
 ## The family
 
+Pure values the whole family shares sit at the top; everything else in `Internal/`: the family's source, adb in `Kit/`, and one folder per mechanism with the values and code only it uses — an emulator does everything through its control API, so `Emulator/` holds all of it, its socket in its own `Internal/System/`.
+
 ```
-Sources/Devices/Android/                    Android emulators and phones, through adb
-├── AndroidDevice.swift (+ AndroidDevices)  the source: adb's listing → Device; registers the abilities it performs
-├── AdbListing.swift  ◇                     pure: `adb devices -l` + getprop → serial, model, emulated or physical, state
-├── KeyEventCode.swift ◇                    pure: KeyboardKey and Navigation → Android KEYCODE_*
-├── UIHierarchy.swift ◇                     pure: `uiautomator dump` XML → AXNode (slice 3)
+Sources/Devices/Android/
+├── AdbListing.swift ◇               what adb lists — the family's own listing, for every Android device
 └── Internal/
-    ├── Kit/Adb.swift                       like Devicectl: `adb -s <serial> …` over Subprocess, unit-tested
-    ├── Screen/ · Input/                    each session's decisions, tested through a @Mockable role
-    └── System/                             the bare socket / process calls, ≤100 lines a file
+    ├── AndroidDevices.swift         the family's source, and AndroidDevice: what one can do
+    ├── Kit/                         Adb · AdbLocation — adb, shared by everything Android
+    └── Emulator/                    the emulator's control API: everything an emulator does through it
+        ├── EmulatorDiscovery.swift ◇   a running emulator's .ini → serial, gRPC port, token
+        ├── EmulatorWire.swift ◇        its protobuf messages
+        ├── GRPCCall.swift ◇            one call as HTTP/2 bytes; replies and flow control back
+        ├── EmulatorConnection.swift    the role screen and input share (next)
+        ├── EmulatorScreen.swift · EmulatorTouch.swift   frames from streamScreenshot; sendTouch, sendKey (next)
+        └── Internal/System/EmulatorSocket.swift          the one HTTP/2 connection to 127.0.0.1:<grpc.port>
 ```
+
+Phones, when they come, take `Internal/Phone/` beside `Emulator/`, with whatever their mechanism turns out to be.
 
 | Word | Means |
 |---|---|
@@ -52,32 +59,35 @@ Model: `ro.product.model`. An emulator's AVD name (`adb -s <serial> emu avd name
 
 A role is registered only when the family performs all of it ([solid.md §4, L](../devices/solid.md#4--each-principle-as-a-rule-with-an-owner)).
 
-## Transport: the open decision
+## Transport: the emulator's own gRPC API (decided 2026-11-19)
 
-`Touch` promises `touch1`, `touch2` and `twoFingerPath` as well as `tap` and `swipe`. `adb shell input` has no second finger, and each call starts a JVM on the device (~0.3 s), so live drags from the page lag. That makes the transport the decision that shapes the family:
+`Touch` promises `touch1`, `touch2` and `twoFingerPath` as well as `tap` and `swipe`; `adb shell input` has no second finger and starts a JVM per call (~0.3 s). An **emulator** has a better door: the Android Emulator serves Google's own control API, `android.emulation.control.EmulatorController`, over gRPC on loopback — what Android Studio's embedded emulator uses — and needs nothing installed on the device:
 
-| | A. scrcpy's server (recommended) | B. adb only |
+| Need | Call | Measured on `baguette_pixel` (Pixel 7, Android 15 arm64, emulator 37.2.13) |
 |---|---|---|
-| Screen | H.264 up to 60 fps over one socket, into the existing `VTStreamDecoder` | `screenrecord --output-format=h264`, restarted every 3 min (its limit); or `screencap` at ~3 fps |
-| Touch | multi-touch with pointer ids: all of `Touch` | tap and swipe only; `touch2` impossible, so `Touch` can't be registered |
-| Keys, text, back, home, clipboard | one control socket | `input keyevent` / `input text`, ~0.3 s each; no clipboard |
-| Cost | ship scrcpy's server jar (~90 KB, Apache-2.0 like baguette), pinned to one version, and speak its protocol | nothing shipped; a device that can't take baguette's gestures |
+| the screen | `streamScreenshot(ImageFormat)` — a frame pushed on each change; `getScreenshot` for one | `getScreenshot` returned a 1080 × 2400 PNG |
+| touch, multi-finger | `sendTouch(TouchEvent)` — a list of `Touch`es, each `identifier` a Linux multitouch slot; `pressure` 0 lifts | a 13-move one-finger swipe opened the app drawer |
+| keys and buttons | `sendKey(KeyboardEvent)` | — |
 
-Under A, the session is conversational I/O: one `@Mockable` collaborator named for what it is (`ScrcpySession`: start, video bytes, control messages, end), the orchestrator tested through `MockScrcpySession`, and the socket and `adb forward` in `Internal/System/`. The video and control messages are pure values, tested byte for byte.
+**Reaching it.** A running emulator writes `~/Library/Caches/TemporaryItems/avd/running/pid_<pid>.ini`: `port.serial` (5554 → `emulator-5554`, the adb serial), `grpc.port` (8554) and `grpc.token`, sent as `authorization: Bearer <token>`. An emulator started with `-port` or without gRPC has no endpoint and no screen or touch.
+
+**A minimal client of our own, no gRPC packages.** A call is HTTP/2 over cleartext TCP (prior knowledge): the preface and a SETTINGS frame, a HEADERS frame of HPACK literals (`:method POST`, `:path /android.emulation.control.EmulatorController/<call>`, `content-type application/grpc`, `te trailers`, the bearer token), and DATA frames each carrying a gRPC message (`0` + a 4-byte length + protobuf). baguette already frames HTTP/2 (`HTTP2Frame`, for the iPhone's RemoteXPC); the handful of messages are encoded by hand as tested values. Proved by a by-hand spike before any Swift. Offsider ([michael-palmes/offsider](https://github.com/michael-palmes/offsider)) takes the same API through grpc-swift and swift-protobuf; simvyn ([pranshuchittora/simvyn](https://github.com/pranshuchittora/simvyn)) uses adb only.
+
+**Phones** have no such API; their screen and input wait on a phone to test with — scrcpy's server (video, multi-touch) or adb only, decided then.
 
 ## Slices
 
 One PR each, test-first:
 
 1. **List** — built. `AndroidDevices` in `DeviceKinds`; `baguette list` shows emulators and phones from `adb devices -l` (`AdbListing`), adb found by `AdbLocation`. No abilities yet. Power (boot and shut down an emulator) moves to slice 2: booting needs the `emulator` binary, not installed here.
-2. **Screen and input.** The transport; `Navigation.back`; the page streams and touches an Android device.
+2. **An emulator's screen and input** over its gRPC API; `Navigation.back`; emulators power on and off (`emulator -avd`, `adb emu kill`). The page streams and touches an emulator.
 3. **The rest.** Accessibility, apps, orientation, location, pasteboard, logs.
 
 ## Open decisions
 
-1. **Transport** — scrcpy's server (A) or adb only (B). Recommended: A.
+1. **Transport** — decided for emulators: their own gRPC API, through a minimal client of our own. For phones: open until there is one to test.
 2. **Scope** — emulators and phones (the same adb path; power only for emulators), or emulators first. Recommended: both.
-3. **Tooling on the development Mac** — `adb` 37.0.1 (Homebrew's `android-platform-tools`) since 2026-11-19; no emulator or AVD, and no device attached yet, so the listing is checked against `adb`'s output format, not a live device.
+3. **Tooling on the development Mac** — `adb` 37.0.1 (Homebrew's `android-platform-tools`), the emulator 37.2.13 and an Android 15 arm64 image in `~/Library/Android/sdk`, AVD `baguette_pixel`, since 2026-11-19. `baguette list` shows it as `emulator-5554`, emulated.
 
 ## Risks
 
