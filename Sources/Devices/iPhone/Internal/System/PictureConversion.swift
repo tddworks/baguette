@@ -1,3 +1,4 @@
+import BaguetteDevice
 import CoreVideo
 import Foundation
 import IOSurface
@@ -5,7 +6,8 @@ import VideoToolbox
 
 /// AVConference's decoded pictures (`420f`, YUV) as the BGRA surfaces every
 /// `Screen` hands on, through a VideoToolbox pixel transfer into
-/// IOSurface-backed buffers. The last few are kept alive: the stream
+/// IOSurface-backed buffers, cut to the screen as `CleanAperture` says (VideoToolbox's
+/// clean-aperture crop, as `VTStreamDecoder` crops the other route). The last few are kept alive: the stream
 /// pipeline reads a surface a moment after it is handed on. Integration-only.
 final class PictureConversion: @unchecked Sendable {
     private var session: VTPixelTransferSession?
@@ -14,9 +16,25 @@ final class PictureConversion: @unchecked Sendable {
     private var recent: [CVPixelBuffer] = []
     private static let heldPictures = 6
 
-    func bgra(_ picture: CVPixelBuffer) -> IOSurface? {
-        let (width, height) = (CVPixelBufferGetWidth(picture), CVPixelBufferGetHeight(picture))
-        if session == nil { VTPixelTransferSessionCreate(allocator: nil, pixelTransferSessionOut: &session) }
+    func bgra(_ picture: CVPixelBuffer, croppedTo screen: Size?) -> IOSurface? {
+        let coded = Size(width: Double(CVPixelBufferGetWidth(picture)), height: Double(CVPixelBufferGetHeight(picture)))
+        let aperture = screen.flatMap { CleanAperture(screen: $0, picture: coded) }
+        let (width, height) = (Int(aperture?.width ?? coded.width), Int(aperture?.height ?? coded.height))
+        if session == nil {
+            VTPixelTransferSessionCreate(allocator: nil, pixelTransferSessionOut: &session)
+            if let session {
+                VTSessionSetProperty(session, key: kVTPixelTransferPropertyKey_ScalingMode,
+                                     value: kVTScalingMode_CropSourceToCleanAperture)
+            }
+        }
+        if let aperture {
+            CVBufferSetAttachment(picture, kCVImageBufferCleanApertureKey, [
+                kCVImageBufferCleanApertureWidthKey: aperture.width,
+                kCVImageBufferCleanApertureHeightKey: aperture.height,
+                kCVImageBufferCleanApertureHorizontalOffsetKey: aperture.horizontalOffset,
+                kCVImageBufferCleanApertureVerticalOffsetKey: aperture.verticalOffset,
+            ] as CFDictionary, .shouldNotPropagate)
+        }
         if pool == nil || poolSize != (width, height) {
             let attributes: [CFString: Any] = [
                 kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,

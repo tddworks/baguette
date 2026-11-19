@@ -73,7 +73,7 @@ struct CoreDevicePhone: Device {
                     return MediaStreamScreen(identifier: identifier, devicectl: devicectl,
                                              fallback: fallback, tunnel: tunnel)
                 case .avconference:
-                    return AVConferenceScreen(identifier: identifier, fallback: fallback, tunnel: tunnel)
+                    return AVConferenceScreen(identifier: identifier, devicectl: devicectl, fallback: fallback, tunnel: tunnel)
                 }
             }
         } else {

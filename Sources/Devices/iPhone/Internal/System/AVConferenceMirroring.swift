@@ -1,10 +1,13 @@
+import BaguetteDevice
+import CoreVideo
 import Foundation
 import IOSurface
 
 /// `Mirroring` through AVConference, in-process: its mode-5 negotiator for
 /// the offer and answer, an `AVCVideoStream` run in this process on a
-/// `LoopbackRelay`, its pictures through a `DecodedPictureTap`, as BGRA
-/// through `PictureConversion`. Integration-only; what goes where is
+/// `LoopbackRelay`, its pictures pushed through a `DecodedPictureTap` and
+/// made BGRA by `PictureConversion` on a queue of their own (the newest
+/// waiting picture wins, so AVConference's thread is never held). Integration-only; what goes where is
 /// `AVConferenceScreen`'s.
 final class AVConferenceMirroring: Mirroring, @unchecked Sendable {
     /// CoreDevice's screen sharing, in AVConference's negotiator.
@@ -16,7 +19,8 @@ final class AVConferenceMirroring: Mirroring, @unchecked Sendable {
     private let lock = NSLock()
     private var stream: AnyObject?
     private var tap: DecodedPictureTap?
-    private var converted: MirroredPicture?
+    private let pictures = DispatchQueue(label: "baguette.avconference.pictures", qos: .userInteractive)
+    private var waiting: CVPixelBuffer?
 
     init() throws {
         var error: NSError?
@@ -41,7 +45,7 @@ final class AVConferenceMirroring: Mirroring, @unchecked Sendable {
         }
     }
 
-    func start() throws {
+    func start(croppedTo screen: Size?, onPicture: @escaping @Sendable (IOSurface) -> Void) throws {
         var error: NSError?
         guard let configuration = AVConferenceRuntime.generate(
                   negotiator, "generateMediaStreamConfigurationWithError:", error: &error),
@@ -57,7 +61,10 @@ final class AVConferenceMirroring: Mirroring, @unchecked Sendable {
         guard let stream = AVConferenceRuntime.stream(sockets: sockets, options: options, error: &error),
               AVConferenceRuntime.configure(stream, configuration, error: &error)
         else { throw AVConferenceRefusal(step: "the in-process stream", error: error) }
-        guard let tap = DecodedPictureTap(stream: stream) else {
+        let tap = DecodedPictureTap(stream: stream) { [weak self] buffer in
+            self?.decoded(buffer, croppedTo: screen, onPicture)
+        }
+        guard let tap else {
             throw AVConferenceRefusal(step: "its decoded pictures", error: nil)
         }
         AVConferenceRuntime.void(stream, "start")
@@ -68,13 +75,17 @@ final class AVConferenceMirroring: Mirroring, @unchecked Sendable {
 
     func nextReport() -> Data? { relay.nextReport() }
 
-    func latestPicture() -> MirroredPicture? {
-        guard let newest = lock.withLock({ tap })?.newest() else { return nil }
-        if let converted = lock.withLock({ converted }), converted.sequence == newest.sequence { return converted }
-        guard let surface = conversion.bgra(newest.buffer) else { return nil }
-        let picture = MirroredPicture(surface: surface, sequence: newest.sequence)
-        lock.withLock { converted = picture }
-        return picture
+    /// On AVConference's thread: keep the picture, and convert it on ours.
+    private func decoded(_ buffer: CVPixelBuffer, croppedTo screen: Size?,
+                         _ onPicture: @escaping @Sendable (IOSurface) -> Void) {
+        let idle = lock.withLock { defer { waiting = buffer }; return waiting == nil }
+        guard idle else { return }
+        pictures.async { [self] in
+            guard let picture = lock.withLock({ defer { waiting = nil }; return waiting }),
+                  let surface = conversion.bgra(picture, croppedTo: screen)
+            else { return }
+            onPicture(surface)
+        }
     }
 
     func stop() {

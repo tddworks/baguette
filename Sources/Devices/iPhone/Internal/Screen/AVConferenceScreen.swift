@@ -9,13 +9,15 @@ import IOSurface
 /// The phone's stream is started through CoreDevice with AVConference's
 /// own offer; AVConference takes the answer, receives, paces and decodes
 /// (HEVC). This screen carries the datagrams between the tunnel and the
-/// mirroring, and hands each new decoded picture on. CoreDevice, the
+/// mirroring, and hands each picture on as the mirroring decodes it — a
+/// push, so pictures keep AVConference's own pacing. CoreDevice, the
 /// socket and AVConference are roles (`MediaStreamStarter`,
 /// `DatagramSocket`, `Mirroring`). When the stream can't start, or shows
 /// nothing within eight seconds, the screen falls back to `fallback`
 /// (screenshots). Research: docs/features/real-devices/design.md.
 final class AVConferenceScreen: Screen, @unchecked Sendable {
     private let identifier: UUID
+    private let devicectl: Devicectl
     private let fallback: any Screen
     private let tunnel: any Tunnel
     private let starter: any MediaStreamStarter
@@ -31,16 +33,20 @@ final class AVConferenceScreen: Screen, @unchecked Sendable {
     private var session: MediaStreamSession?
     private var usingFallback = false
     private var packets = 0
+    private var pictures = 0
+    private var shownAny = false
 
     init(identifier: UUID,
+         devicectl: Devicectl = Devicectl(),
          fallback: any Screen,
          tunnel: any Tunnel = CoreDeviceTunnel(),
          starter: any MediaStreamStarter = CoreDeviceMediaStream(),
          openSocket: @escaping @Sendable () throws -> any DatagramSocket = { try UDPSocket() },
          makeMirroring: @escaping @Sendable () throws -> any Mirroring = { try AVConferenceMirroring() },
          now: @escaping @Sendable () -> Date = { Date() },
-         pace: @escaping @Sendable () -> Void = { Thread.sleep(forTimeInterval: 1.0 / 60) }) {
+         pace: @escaping @Sendable () -> Void = { Thread.sleep(forTimeInterval: 0.05) }) {
         self.identifier = identifier
+        self.devicectl = devicectl
         self.fallback = fallback
         self.tunnel = tunnel
         self.starter = starter
@@ -112,10 +118,15 @@ final class AVConferenceScreen: Screen, @unchecked Sendable {
         else { throw MediaStreamScreen.StreamError.unexpectedAnswer }
         lock.withLock { self.session = session }
         try mirroring.accept(answer: negotiated)
-        try mirroring.start()
+        // The phone pads its pictures (1328 × 2896 for a 1320 × 2868 screen).
+        try mirroring.start(croppedTo: devicectl.screenPixels(of: identifier)) { [self] surface in
+            guard lock.withLock({ guard running && streaming else { return false }; pictures += 1; shownAny = true; return true })
+            else { return }
+            onFrame(surface)
+        }
 
         relay(socket: socket, mirroring: mirroring, session: session)
-        try showPictures(of: mirroring, onFrame)
+        try watch()
     }
 
     /// The phone's datagrams to the mirroring, and its reports back to the phone.
@@ -135,23 +146,22 @@ final class AVConferenceScreen: Screen, @unchecked Sendable {
         }
     }
 
-    /// Each new decoded picture, once; none within eight seconds gives up
-    /// for the screenshots.
-    private func showPictures(of mirroring: any Mirroring, _ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
+    /// While the stream runs: none of its pictures within eight seconds
+    /// gives up for the screenshots; every five, what came is logged.
+    private func watch() throws {
         let opened = now()
-        var shown: Int?
-        var stats = (pictures: 0, since: opened)
+        var since = opened
         while isStreaming {
-            if shown == nil, now().timeIntervalSince(opened) > 8 { throw MediaStreamScreen.StreamError.silent }
-            if now().timeIntervalSince(stats.since) >= 5 {
-                let packets = lock.withLock { defer { self.packets = 0 }; return self.packets }
-                log("[coredevice] stream (avconference): \(packets) packets, \(stats.pictures) frames")
-                stats = (0, now())
+            if !lock.withLock({ shownAny }), now().timeIntervalSince(opened) > 8 {
+                throw MediaStreamScreen.StreamError.silent
             }
-            if let picture = mirroring.latestPicture(), picture.sequence != shown {
-                shown = picture.sequence
-                stats.pictures += 1
-                onFrame(picture.surface)
+            if now().timeIntervalSince(since) >= 5 {
+                let (packets, pictures) = lock.withLock {
+                    defer { self.packets = 0; self.pictures = 0 }
+                    return (self.packets, self.pictures)
+                }
+                log("[coredevice] stream (avconference): \(packets) packets, \(pictures) frames")
+                since = now()
             }
             pace()
         }

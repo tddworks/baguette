@@ -96,7 +96,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         let (identifier, devicectl) = (self.identifier, self.devicectl)
         // Asked while the stream starts: the size its pictures are cropped to.
         let screenSize = Answer<Size>()
-        Thread.detachNewThread { screenSize.give(Self.screenPixels(identifier, devicectl: devicectl)) }
+        Thread.detachNewThread { screenSize.give(devicectl.screenPixels(of: identifier)) }
         let answer = try starter.start(on: identifier) {
             MediaStreamSession.startRequest(offer: offer, receiverIP: ends.mac, port: port)
         }
@@ -144,23 +144,6 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
             if firstFrame == nil { firstFrame = now() }
             lock.withLock { self.decoder }?.decode(unit.lengthPrefixedFrame)
         }
-    }
-
-    // MARK: - Asking devicectl
-
-    /// The phone's screen size in pixels, from `devicectl device info displays`.
-    private static func screenPixels(_ identifier: UUID, devicectl: Devicectl) -> Size? {
-        json(devicectl, ["device", "info", "displays", "--device", identifier.uuidString, "--quiet"], named: "displays")
-            .flatMap(PhysicalPhone.screenPixels(fromDisplaysJSON:))
-    }
-
-    /// What devicectl writes with `--json-output`, read back.
-    private static func json(_ devicectl: Devicectl, _ arguments: [String], named name: String) -> Data? {
-        let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("baguette-\(name)-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: file) }
-        guard (try? devicectl.runAndWait(arguments + ["--json-output", file.path])) != nil else { return nil }
-        return try? Data(contentsOf: file)
     }
 
     /// A value another thread hands over once; waiting gives up after a while.

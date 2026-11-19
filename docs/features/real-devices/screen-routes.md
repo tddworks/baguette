@@ -35,11 +35,13 @@ AVConferenceScreen.stream()
       socket.receive() → mirroring.deliver()      the phone's RTP/RTCP into AVConference
       mirroring.nextReport() → socket.send()      AVConference's RTCP back to the phone
     inside AVConference:           jitter buffer, depacketizing, loss recovery, rate control, HEVC decode
- 7. showPictures(), ~60 times a second:
-      mirroring.latestPicture()    requestLastDecodedFrame → the replaced sendLastRemoteVideoFrame:
-                                   (kept, never called through) → a 420f picture
-                                   → PictureConversion → BGRA IOSurface
-      a new sequence number?       onFrame
+ 7. each decoded picture, pushed as it is decoded:
+      _VCVideoStream_DidReceiveRemoteFrame     AVConference's per-picture C callback, after its jitter
+                                               buffer; DecodedPictureTap wraps it (calls the original)
+      → our queue (newest waiting wins)        AVConference's thread is never held
+      → PictureConversion                      BGRA IOSurface, cropped to the screen
+                                               (1328 × 2896 coded for 1320 × 2868; size from devicectl)
+      → onFrame                                the moment it's ready, no timer
 ```
 
 The decisions (order, relay, which picture goes on, the fallback, stopping) are `AVConferenceScreen`'s, tested through `MockMirroring`; the AVConference calls are `AVConferenceMirroring` and its neighbours in `Internal/System/`.
@@ -52,7 +54,7 @@ The decisions (order, relay, which picture goes on, the fallback, stopping) are 
 | RTP → frames | `VideoDepacketizer` | AVConference |
 | RTCP, loss recovery | `ReceiverFeedback`, `DecodeGate` | AVConference (its 5-second report fails, harmlessly) |
 | Decode | `VTStreamDecoder` (H.264) | AVConference (HEVC) |
-| Pictures out | pushed to `onFrame` as decoded | asked for ~60 times a second (a queue hop), then YUV → BGRA |
+| Pictures out | pushed to `onFrame` as decoded | pushed to `onFrame` as decoded, after YUV → BGRA |
 | Private surface | CoreDevice | CoreDevice, plus AVConference's internals (`_opaqueStream`, one replaced method) |
 | Fallback | screenshots | screenshots |
 
@@ -60,16 +62,27 @@ The decisions (order, relay, which picture goes on, the fallback, stopping) are 
 
 2026-11-19, iPhone 18 Pro Max (iOS 27.0.1) on a cable, macOS 26, debug builds. Each route ran 30 s through `baguette stream --format avcc` with a swipe every 1.5 s; frames are each route's own 5-second log line, CPU is `ps` on the baguette process (which also re-encodes the output as H.264).
 
-| | `rtp` | `avconference`, first cut | `avconference` |
+| | `rtp` | `avconference`, first cut (pull) | `avconference` (push) |
 |---|---|---|---|
-| Frames per 5 s | 157–168 (≈ 33 fps) | 146–158 (≈ 30 fps) | 147–204 (≈ 30–41 fps) |
+| Frames per 5 s | 157–168 (≈ 33 fps) | 146–158 (≈ 30 fps) | — |
 | Dropped | 0 | not counted | not counted (recovered inside AVConference) |
 | CPU | 104–105 % | 186–197 % | 106–107 % |
-| Output | 29.1 MiB | 37.3 MiB | 33.7 MiB |
 
-**The first cut's extra CPU was the pull, not the decoding.** `sample` put it in `-[VCVideoStream sendLastRemoteVideoFrame:]`, which the hook called through to: it hands each picture to `+[VideoUtil convertPixelBuffer:toImageType:…]`, a full-size JPEG encode for a remote client, on every request (~60 a second). The replaced method keeps the buffer and no longer calls through; asking is then only a hop onto AVConference's queue, and the route costs what baguette's own does. What remains of its own is `PictureConversion` (YUV → BGRA, done by vImage on the CPU). A true push — catching AVConference's C delegate table (`setDelegateFunctions:`) — wasn't worth its unknown signatures once the pull was this cheap.
+**Smoothness**, measured as the spacing between pictures while the screen moves: 22 s each through `baguette stream --format mjpeg` (its JPEG encoding adds the same noise to both), each JPEG timestamped as it arrived, gaps under 250 ms kept.
 
-**Not measured yet:** picture quality under motion (where HEVC might win), behaviour on a lossy link such as Wi-Fi (where AVConference's recovery might), a release build, and latency from a touch to the picture.
+| In motion | `rtp` | `avconference` (push) |
+|---|---|---|
+| Pictures in 22 s | 751 | 788 |
+| Median spacing | 18.8 ms (53 fps) | 18.0 ms (56 fps) |
+| p90 | 44.3 ms | 34.6 ms |
+| p99 | 68.6 ms | 103.7 ms |
+| Std dev | 13.5 ms | 15.1 ms |
+
+**Pull judders; push doesn't.** The first cut asked for the last decoded picture on its own 60 Hz timer: each answer came a tick late (asked asynchronously), the timer drifted against AVConference's display clock, and the H.264 pump downstream resampled again — two unsynchronised clocks over 30–50 fps content. Pictures now go on from AVConference's per-picture callback, as `rtp`'s do from the decoder.
+
+**The first cut's extra CPU was the pull, not the decoding.** `sample` put it in `-[VCVideoStream sendLastRemoteVideoFrame:]`: it hands each picture to `+[VideoUtil convertPixelBuffer:toImageType:…]`, a full-size JPEG encode for a remote client, on every request (~60 a second). The push never calls it. What remains of the route's own is `PictureConversion` (YUV → BGRA, done by vImage on the CPU).
+
+**Not measured yet:** picture quality under motion (where HEVC might win), the rarer long gaps (`avconference`'s p99), behaviour on a lossy link such as Wi-Fi (where AVConference's recovery might), a release build, and latency from a touch to the picture.
 
 ## Choosing
 

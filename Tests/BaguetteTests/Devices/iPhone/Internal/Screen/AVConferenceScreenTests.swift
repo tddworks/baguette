@@ -41,13 +41,16 @@ struct AVConferenceScreenTests {
         func read() -> Date { lock.withLock { defer { now += step }; return now } }
     }
 
-    /// Everything the screen talks to, recorded.
+    /// Everything the screen talks to, recorded. A test with no picture
+    /// meets the eight-second silence rule within a few thousand reads of
+    /// the fast clock, so each test not about silence gets one.
     private final class Rig: @unchecked Sendable {
         let tunnel = MockTunnel()
         let starter = MockMediaStreamStarter()
         let socket = MockDatagramSocket()
         let mirroring = MockMirroring()
         let fallback = MockScreen()
+        let devicectl = PhoneJSON.devicectl(listings: [PhoneJSON.listing(tunnelAddress: PhoneJSON.tunnel)])
         let fellBack = Signal()
         let delivered = Signal()
         let reported = Signal()
@@ -56,7 +59,10 @@ struct AVConferenceScreenTests {
         private let lock = NSLock()
         private var inbound: [Data]
         private var reports: [Data]
-        private var pictures: [MirroredPicture?]
+        private let pictures: Int
+        private var _onPicture: (@Sendable (IOSurface) -> Void)?
+        /// What the mirroring was told to call with each decoded picture.
+        var onPicture: (@Sendable (IOSurface) -> Void)? { lock.withLock { _onPicture } }
         private var _request: [String: Any]?
         private var _steps: [String] = []
         private var _frames = 0
@@ -65,7 +71,7 @@ struct AVConferenceScreenTests {
         var steps: [String] { lock.withLock { _steps } }
         var frames: Int { lock.withLock { _frames } }
 
-        init(inbound: [Data] = [], reports: [Data] = [], pictures: [MirroredPicture?] = [],
+        init(inbound: [Data] = [], reports: [Data] = [], pictures: Int = 0,
              answer: [String: Any] = AVConferenceScreenTests.answer, mirroringStarts: Bool = true) {
             self.inbound = inbound
             self.reports = reports
@@ -86,18 +92,16 @@ struct AVConferenceScreenTests {
             given(socket).close().willReturn()
             given(mirroring).offer().willReturn(AVConferenceScreenTests.offer)
             given(mirroring).accept(answer: .any).willProduce { [self] _ in lock.withLock { _steps.append("accept") } }
-            given(mirroring).start().willProduce { [self] in
-                lock.withLock { _steps.append("start mirroring") }
+            given(mirroring).start(croppedTo: .any, onPicture: .any).willProduce { [self] _, onPicture in
+                lock.withLock { _steps.append("start mirroring"); _onPicture = onPicture }
                 guard mirroringStarts else { throw TunnelError.down }
+                for _ in 0..<pictures { onPicture(AVConferenceScreenTests.surface()) }
             }
             given(mirroring).deliver(.any).willProduce { [self] _ in delivered.fire() }
             given(mirroring).nextReport().willProduce { [self] in
                 let next = lock.withLock { self.reports.isEmpty ? nil : self.reports.removeFirst() }
                 if next == nil { Thread.sleep(forTimeInterval: 0.002) }
                 return next
-            }
-            given(mirroring).latestPicture().willProduce { [self] in
-                lock.withLock { self.pictures.count > 1 ? self.pictures.removeFirst() : self.pictures.first ?? nil }
             }
             given(mirroring).stop().willProduce { [self] in stopped.fire() }
             given(fallback).start(onFrame: .any).willProduce { [self] _ in fellBack.fire() }
@@ -107,7 +111,8 @@ struct AVConferenceScreenTests {
         func screen(clock: Clock = Clock(step: 0.001)) -> AVConferenceScreen {
             let (socket, mirroring) = (socket, mirroring)
             return AVConferenceScreen(
-                identifier: PhoneJSON.identifier, fallback: fallback, tunnel: tunnel, starter: starter,
+                identifier: PhoneJSON.identifier, devicectl: Devicectl(makeSubprocess: devicectl.make),
+                fallback: fallback, tunnel: tunnel, starter: starter,
                 openSocket: { socket }, makeMirroring: { mirroring }, now: clock.read, pace: {})
         }
 
@@ -118,7 +123,7 @@ struct AVConferenceScreenTests {
     }
 
     @Test func `should start the phone's stream with the mirroring's offer, sent to this Mac's end of its tunnel`() throws {
-        let rig = Rig(pictures: [MirroredPicture(surface: Self.surface(), sequence: 1)])
+        let rig = Rig(pictures: 1)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
@@ -132,7 +137,7 @@ struct AVConferenceScreenTests {
     }
 
     @Test func `should hand the phone's answer to the mirroring before it starts`() throws {
-        let rig = Rig(pictures: [MirroredPicture(surface: Self.surface(), sequence: 1)])
+        let rig = Rig(pictures: 1)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
@@ -143,9 +148,20 @@ struct AVConferenceScreenTests {
         #expect(rig.steps == ["start stream", "accept", "start mirroring"])
     }
 
+    @Test func `should crop the phone's pictures to its screen`() throws {
+        let rig = Rig(pictures: 1)
+        let screen = rig.screen()
+
+        try screen.start { rig.onFrame($0) }
+        #expect(rig.pictured.wait())
+        screen.stop()
+
+        verify(rig.mirroring).start(croppedTo: .value(Size(width: 1320, height: 2868)), onPicture: .any).called(1)
+    }
+
     @Test func `should pass the phone's datagrams on to the mirroring`() throws {
         let datagram = Data([0x80, 0x64, 0, 1])
-        let rig = Rig(inbound: [datagram])
+        let rig = Rig(inbound: [datagram], pictures: 1)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
@@ -157,7 +173,7 @@ struct AVConferenceScreenTests {
 
     @Test func `should send the mirroring's reports to where the phone streams from`() throws {
         let report = Data([0x81, 0xC9, 0, 1])
-        let rig = Rig(reports: [report])
+        let rig = Rig(reports: [report], pictures: 1)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
@@ -167,23 +183,32 @@ struct AVConferenceScreenTests {
         verify(rig.socket).send(.value(report), to: .value(PhoneJSON.tunnel), port: .value(61000)).called(1)
     }
 
-    @Test func `should pass each new picture on once`() throws {
-        let surface = Self.surface()
-        let rig = Rig(pictures: [MirroredPicture(surface: surface, sequence: 1), MirroredPicture(surface: surface, sequence: 1),
-                                 MirroredPicture(surface: surface, sequence: 2)])
+    @Test func `should pass on each picture as the mirroring decodes it`() throws {
+        let rig = Rig(pictures: 2)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
         #expect(rig.pictured.wait())
         #expect(rig.pictured.wait())
-        Thread.sleep(forTimeInterval: 0.05)
         screen.stop()
 
         #expect(rig.frames == 2)
     }
 
+    @Test func `should pass on no picture once the screen stops`() throws {
+        let rig = Rig(pictures: 1)
+        let screen = rig.screen()
+
+        try screen.start { rig.onFrame($0) }
+        #expect(rig.pictured.wait())
+        screen.stop()
+        rig.onPicture?(Self.surface())
+
+        #expect(rig.frames == 1)
+    }
+
     @Test func `should stop the mirroring and close its socket when stopped`() throws {
-        let rig = Rig(pictures: [MirroredPicture(surface: Self.surface(), sequence: 1)])
+        let rig = Rig(pictures: 1)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
@@ -216,7 +241,7 @@ struct AVConferenceScreenTests {
 
         #expect(rig.fellBack.wait())
         screen.stop()
-        verify(rig.mirroring).start().called(0)
+        verify(rig.mirroring).start(croppedTo: .any, onPicture: .any).called(0)
     }
 
     @Test func `should show screenshots when no picture arrives within eight seconds`() throws {
