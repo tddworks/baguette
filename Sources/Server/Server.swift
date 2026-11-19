@@ -76,9 +76,10 @@ struct Server: Sendable {
     let devices: LiveCompanionPhones
     let twinScreens: TwinScreens
     let twinPoses: TwinPoses
-    /// Every physical device the `/devices/…` page can show — a view of
+    /// Every device attached beside the simulators — phones and emulators —
+    /// the `/devices/…` page can show; a view of
     /// `allDevices`, never a second list.
-    let physicalDevices: any Devices
+    let connectedDevices: any Devices
     /// Every device of every kind — what `/devices/:udid/…` resolves. Listed
     /// by `DeviceKinds`, outside the server.
     let allDevices: any Devices
@@ -107,7 +108,7 @@ struct Server: Sendable {
         self.twinScreens = twinScreens
         self.twinPoses = twinPoses
         self.allDevices = allDevices
-        self.physicalDevices = allDevices.physical
+        self.connectedDevices = allDevices.connected
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer

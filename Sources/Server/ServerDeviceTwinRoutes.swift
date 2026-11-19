@@ -28,7 +28,7 @@ extension Server {
             async throws -> RouterShouldUpgrade
     ) {
         let devices = self.devices
-        let physicalDevices = self.physicalDevices
+        let connectedDevices = self.connectedDevices
         let screens = self.twinScreens
         let models = self.models
         let chromes = self.chromes
@@ -243,7 +243,7 @@ extension Server {
             return Response(
                 status: .ok,
                 headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(string: physicalDevices.connectedJSON))
+                body: .init(byteBuffer: ByteBuffer(string: connectedDevices.connectedJSON))
             )
         }
 

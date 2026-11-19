@@ -38,12 +38,12 @@ public extension Devices {
 }
 
 public extension Devices {
-    /// The physical devices ready to drive, in the shape the serve page's
+    /// The attached devices ready to drive, in the shape the serve page's
     /// device list reads (`/devices.json`): identity, model, and what each
     /// can do.
     var connectedJSON: String {
         let connected = all
-            .filter { $0.kind.reality == .physical && $0.state == .ready }
+            .filter { $0.kind.reality != .simulated && $0.state == .ready }
             .map { device -> [String: Any] in
                 ["udid": device.id.raw, "name": device.name,
                  "model": device.kind.model, "capabilities": device.abilities.names]
@@ -140,19 +140,20 @@ private extension DeviceState {
 }
 
 public extension Devices {
-    /// The physical devices among these — what the device page lists as
-    /// connected. A view of the same list, never a second one.
-    var physical: any Devices { PhysicalDevices(of: self) }
+    /// The devices attached beside the simulators — phones on a cable and
+    /// emulators adb is attached to; what the device page lists as connected.
+    /// A view of the same list, never a second one.
+    var connected: any Devices { ConnectedDevices(of: self) }
 }
 
-private final class PhysicalDevices: Devices, @unchecked Sendable {
+private final class ConnectedDevices: Devices, @unchecked Sendable {
     private let base: any Devices
 
     init(of base: any Devices) { self.base = base }
 
-    var all: [any Device] { base.all.filter { $0.kind.reality == .physical } }
+    var all: [any Device] { base.all.filter { $0.kind.reality != .simulated } }
 
     func find(id: DeviceID) throws -> (any Device)? {
-        try base.find(id: id).flatMap { $0.kind.reality == .physical ? $0 : nil }
+        try base.find(id: id).flatMap { $0.kind.reality != .simulated ? $0 : nil }
     }
 }

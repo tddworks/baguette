@@ -78,17 +78,18 @@ struct DevicesTests {
         }
     }
 
-    @Test func `should keep only the physical devices of every device`() throws {
+    @Test func `should keep the devices attached beside the simulators — phones and emulators alike`() throws {
         let simulator = device("SIM-1")
         let phone = device("PHONE-1", kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"))
-        let physical = CombinedDevices([source(simulator, phone)]).physical
+        let emulator = device("emulator-5554", kind: DeviceKind(platform: .android, reality: .emulated, model: "sdk_gphone64_arm64"))
+        let connected = CombinedDevices([source(simulator, phone, emulator)]).connected
 
-        #expect(physical.all.map(\.id) == ["PHONE-1"])
-        #expect(try physical.find(id: "SIM-1") == nil)
-        #expect(try physical.find(id: "PHONE-1")?.id == "PHONE-1")
+        #expect(connected.all.map(\.id) == ["PHONE-1", "emulator-5554"])
+        #expect(try connected.find(id: "SIM-1") == nil)
+        #expect(try connected.find(id: "emulator-5554")?.id == "emulator-5554")
     }
 
-    @Test func `should list each ready physical device as connected, with what it can do`() {
+    @Test func `should list each ready attached device as connected, with what it can do`() {
         var abilities = Abilities(device: "han's iPhone")
         abilities.register(.screen) { MockScreen() }
         abilities.register(.orientation) { MockOrientation() }
@@ -100,6 +101,17 @@ struct DevicesTests {
         #expect(CombinedDevices([source(phone)]).connectedJSON == #"""
             {"connected":[{"capabilities":["screen","orientation"],"model":"iPhone19,7",\#
             "name":"han's iPhone","udid":"PHONE-1"}]}
+            """#)
+    }
+
+    @Test func `should list a running Android emulator as connected`() {
+        let emulator = device("emulator-5554", name: "sdk gphone64 arm64",
+                              kind: DeviceKind(platform: .android, reality: .emulated, model: "sdk_gphone64_arm64"),
+                              abilities: Abilities(device: "sdk gphone64 arm64"))
+
+        #expect(CombinedDevices([source(emulator)]).connectedJSON == #"""
+            {"connected":[{"capabilities":[],"model":"sdk_gphone64_arm64",\#
+            "name":"sdk gphone64 arm64","udid":"emulator-5554"}]}
             """#)
     }
 
