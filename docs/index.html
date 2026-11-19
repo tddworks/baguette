@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Baguette is a headless iOS simulator control plane for streaming, gestures, automation, and device farms.">
+  <meta name="description" content="Baguette is a headless control plane for iOS simulators, real iPhones and Android emulators: streaming, gestures, automation, and device farms.">
   <meta name="theme-color" content="#f5f6f8">
-  <title>Baguette — iOS simulator infrastructure</title>
+  <title>Baguette — device infrastructure for iOS and Android</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
@@ -220,10 +220,10 @@
   <main id="top">
     <div class="hero shell">
       <div class="hero-copy">
-        <div class="kicker">Built for iOS 26 · Apple Silicon</div>
-        <h1>Simulator infrastructure, <span>without the overhead.</span></h1>
+        <div class="kicker">iOS simulators · real iPhones · Android emulators</div>
+        <h1>Device infrastructure, <span>without the overhead.</span></h1>
         <div class="hero-bottom">
-          <p class="intro">Stream, inspect, and control iOS simulators from one lightweight command-line server. Built for local automation and device farms.</p>
+          <p class="intro">Stream, inspect, and control iOS simulators, iPhones on a cable and Android emulators from one lightweight command-line server. Built for local automation and device farms.</p>
           <div class="hero-actions"><a class="button primary" href="#install">Get started <span>→</span></a><a class="button secondary" href="https://github.com/tddworks/baguette#readme">Read the docs</a></div>
         </div>
       </div>
@@ -231,7 +231,7 @@
       <div class="product-frame" aria-label="Baguette device farm interface preview">
         <div class="frame-bar"><div class="dots"><i></i><i></i><i></i></div><div class="frame-title">localhost:8080/farm</div><div class="frame-status">connected</div></div>
         <div class="console">
-          <aside class="sidebar"><p class="side-label">Simulators / 03</p><div class="device active"><i class="device-icon"></i><div><b>iPhone 17 Pro</b><span>iOS 26.0</span></div><em></em></div><div class="device"><i class="device-icon"></i><div><b>iPhone Air</b><span>iOS 26.0</span></div><em></em></div><div class="device"><i class="device-icon"></i><div><b>iPad Pro 13</b><span>iPadOS 26.0</span></div><em></em></div></aside>
+          <aside class="sidebar"><p class="side-label">Devices / 03</p><div class="device active"><i class="device-icon"></i><div><b>iPhone 17 Pro</b><span>iOS 26.0</span></div><em></em></div><div class="device"><i class="device-icon"></i><div><b>iPhone Air</b><span>iOS 26.0 · on a cable</span></div><em></em></div><div class="device"><i class="device-icon"></i><div><b>Pixel 9</b><span>Android 15 · emulator</span></div><em></em></div></aside>
           <div class="workspace">
             <div class="workspace-head"><div><h3>iPhone 17 Pro</h3><p>8E3B0C42 · booted</p></div><div class="metrics"><div class="metric"><span>Latency</span><b>12 ms</b></div><div class="metric"><span>Stream</span><b>60 fps</b></div></div></div>
             <div class="stream"><div class="phone-stage"><div class="phone"><div class="screen"><div class="screen-time">09:41</div><div class="screen-date">Tuesday, July 21</div><div class="widget"><strong>Automation ready</strong><small>WebSocket session active</small></div></div></div></div><div class="log"><div class="log-title">Event stream <span>Live</span></div><div class="log-lines"><b>09:41:02</b> session.open<br><i>09:41:03</i> stream.h264 60fps<br><b>09:41:05</b> gesture.tap 214,482<br><i>09:41:06</i> ax.snapshot ready<br><b>09:41:08</b> device.status booted<br><i>09:41:10</i> frame.idr emitted<br><b>09:41:12</b> input.swipe complete</div></div></div>
@@ -243,7 +243,7 @@
     </div>
 
     <section id="capabilities" class="shell">
-      <div class="section-top"><div><div class="section-index">01 / Capabilities</div><h2>One surface for the full simulator loop.</h2></div><p class="section-copy">Baguette turns private simulator APIs into a focused, scriptable interface—from first boot to the last frame.</p></div>
+      <div class="section-top"><div><div class="section-index">01 / Capabilities</div><h2>One surface for every device you test on.</h2></div><p class="section-copy">Baguette turns SimulatorKit, CoreDevice and the Android Emulator&rsquo;s control API into one focused, scriptable interface—from first boot to the last frame.</p></div>
       <div class="capabilities">
         <article class="capability"><div class="cap-num">01</div><div class="cap-icon">▷</div><h3>Stream in real time</h3><p>Low-latency H.264 and JPEG streams with live bitrate, frame-rate, scale, snapshot, and IDR controls.</p></article>
         <article class="capability"><div class="cap-num">02</div><div class="cap-icon">↗</div><h3>Drive every gesture</h3><p>Dispatch taps, swipes, pinches, rotations, buttons, and keyboard input through one consistent wire protocol.</p></article>
@@ -252,15 +252,15 @@
     </section>
 
     <section id="workflow" class="shell">
-      <div class="workflow"><div class="workflow-copy"><div class="section-index">02 / Architecture</div><h2>Simple at every boundary.</h2><p>A Swift CLI and WebSocket server connect your tools to the same input and streaming pipeline.</p></div><div class="steps"><div class="step"><span>01</span><div><h3>Launch once</h3><p>Start Baguette as a long-running local process or HTTP server.</p></div></div><div class="step"><span>02</span><div><h3>Connect anything</h3><p>Use stdin JSON, a browser, WebSocket clients, or your existing automation stack.</p></div></div><div class="step"><span>03</span><div><h3>Control consistently</h3><p>Every client reaches the same gesture dispatcher and native simulator surface.</p></div></div><div class="step"><span>04</span><div><h3>Scale outward</h3><p>Move from one simulator to a focused multi-device farm without changing the protocol.</p></div></div></div></div>
+      <div class="workflow"><div class="workflow-copy"><div class="section-index">02 / Architecture</div><h2>Simple at every boundary.</h2><p>A Swift CLI and WebSocket server connect your tools to the same input and streaming pipeline.</p></div><div class="steps"><div class="step"><span>01</span><div><h3>Launch once</h3><p>Start Baguette as a long-running local process or HTTP server.</p></div></div><div class="step"><span>02</span><div><h3>Connect anything</h3><p>Use stdin JSON, a browser, WebSocket clients, or your existing automation stack.</p></div></div><div class="step"><span>03</span><div><h3>Control consistently</h3><p>Every client reaches the same gesture dispatcher, whichever device is on the other end.</p></div></div><div class="step"><span>04</span><div><h3>Scale outward</h3><p>Move from one simulator to a farm of simulators, phones and emulators without changing the protocol.</p></div></div></div></div>
     </section>
 
     <section id="install" class="install shell">
-      <div class="install-card"><div class="section-index">03 / Get started</div><h2>From install to first stream in minutes.</h2><p>Install Baguette with Homebrew and launch the server. Requires Xcode 26 on Apple Silicon.</p><div class="command"><code><span>$</span> brew install baguette</code><button class="copy-button" type="button" data-copy="brew install baguette">Copy</button></div></div>
+      <div class="install-card"><div class="section-index">03 / Get started</div><h2>From install to first stream in minutes.</h2><p>Install Baguette with Homebrew and launch the server. Requires Xcode 26 on Apple Silicon; the Android SDK for emulators.</p><div class="command"><code><span>$</span> brew install baguette</code><button class="copy-button" type="button" data-copy="brew install baguette">Copy</button></div></div>
     </section>
   </main>
 
-  <footer><div class="footer-row shell"><a class="brand" href="#top"><span class="brand-mark">B/</span><span>Baguette</span></a><div class="footer-copy">Open-source simulator infrastructure.</div><div class="footer-links"><a href="https://github.com/tddworks/baguette/releases">Releases</a><a href="./ARCHITECTURE.md">Architecture</a><a href="https://github.com/tddworks/baguette/issues">Issues</a></div></div></footer>
+  <footer><div class="footer-row shell"><a class="brand" href="#top"><span class="brand-mark">B/</span><span>Baguette</span></a><div class="footer-copy">Open-source device infrastructure.</div><div class="footer-links"><a href="https://github.com/tddworks/baguette/releases">Releases</a><a href="./ARCHITECTURE.md">Architecture</a><a href="https://github.com/tddworks/baguette/issues">Issues</a></div></div></footer>
   <script>
     const header = document.querySelector('header');
     const scrollEdge = document.querySelector('.scroll-edge');
