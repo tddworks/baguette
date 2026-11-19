@@ -242,6 +242,19 @@ struct CoreDevicePhonesTests {
         }
     }
 
+    @Test(.enabled(if: CoreDeviceFramework.isAvailable))
+    func `should show a phone's live screen through CoreDevice, whichever receiver its route picks`() throws {
+        for route in [PhoneScreenRoute.rtp, .avconference] {
+            let phone = CoreDevicePhone(
+                PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
+                              marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
+                              coreDeviceIdentifier: UUID()),
+                devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: route)
+
+            #expect(try phone.require(.screen) is CoreDeviceScreen)
+        }
+    }
+
     @Test func `should take no touch on a phone CoreDevice gave no identifier`() {
         let phone = CoreDevicePhone(
             PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",

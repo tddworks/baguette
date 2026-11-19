@@ -43,6 +43,17 @@ struct MediaStreamSessionTests {
         #expect(MediaStreamSession(answer: ["connection": ["streamConfig": ["SourceIP": "fdd3::1"]]]) == nil)
     }
 
+    @Test func `should read the negotiator's answer out of CoreDevice's answer`() {
+        let answer: [String: Any] = ["negotiatorAnswer": "AQID", "connection": [:] as [String: Any]]
+
+        #expect(MediaStreamSession.negotiatorAnswer(in: answer) == Data([1, 2, 3]))
+    }
+
+    @Test func `should read no negotiator's answer when CoreDevice sent none`() {
+        #expect(MediaStreamSession.negotiatorAnswer(in: ["connection": [:] as [String: Any]]) == nil)
+        #expect(MediaStreamSession.negotiatorAnswer(in: ["negotiatorAnswer": "not base64!"]) == nil)
+    }
+
     @Test func `should time the offer in NTP's seconds since 1900, the fraction in the low word`() {
         let unixEpoch = Date(timeIntervalSince1970: 0.5)
 

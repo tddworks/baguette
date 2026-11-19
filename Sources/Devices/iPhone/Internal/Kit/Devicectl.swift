@@ -97,3 +97,19 @@ private final class Outcome: @unchecked Sendable {
     func set(_ result: Result<Data, any Error>) { lock.withLock { self.result = result } }
     func get() throws -> Data { try lock.withLock { result }.get() }
 }
+
+extension Devicectl {
+    /// The phone's screen size in pixels (`identifier` is CoreDevice's), from
+    /// `devicectl device info displays` — what each of its live screens crops
+    /// the stream's padded pictures to. Nil when devicectl can't say.
+    func screenPixels(of identifier: UUID) -> Size? {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-displays-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard (try? runAndWait(["device", "info", "displays", "--device", identifier.uuidString,
+                                "--quiet", "--json-output", file.path])) != nil,
+              let data = try? Data(contentsOf: file)
+        else { return nil }
+        return PhysicalPhone.screenPixels(fromDisplaysJSON: data)
+    }
+}

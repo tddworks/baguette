@@ -38,7 +38,7 @@ crosshair opens the accessibility inspector over the phone's screen.
 | Ability | How | Note |
 |---|---|---|
 | touches (`tap`, `swipe`, `pinch`, `pan`, `input`) | CoreDevice's Universal HID | edge swipes too; no buttons, keys or scroll yet |
-| screen (`screenshot`, `stream`, `record`) | the phone's own H.264 stream, started through CoreDevice | live, up to 60 fps; screenshots stand in if it can't start |
+| screen (`screenshot`, `stream`, `record`) | the phone's own H.264 stream, started through CoreDevice and received by baguette (`BAGUETTE_PHONE_SCREEN=avconference` for AVConference's own receiver, HEVC) | live, up to 60 fps; a start that fails reports why. A Mac without CoreDevice shows screenshots instead, about 5 a second |
 | pasteboard (`clipboard`, text in `paste`) | `devicectl device pasteboard` | |
 | accessibility (`describe-ui`, `tap --label`) | the phone's own accessibility service, over the tunnel | the frontmost app's tree, ~2 s; `tap --label` lands as a touch on the element |
 
@@ -77,10 +77,12 @@ WS  /devices/<udid>/stream?format=mjpeg|avcc → frames down; stream controls an
 - **No apps, location, status bar or push.** `devicectl` covers part of each
   (install, a single location point); a phone registers an ability only when
   it can do all of it.
+- **Two receivers for the live screen.** By default baguette receives and decodes it (H.264); `BAGUETTE_PHONE_SCREEN=avconference` has AVConference do it (HEVC), in baguette's own process. Compared in [screen-routes.md](screen-routes.md).
 - **The first frame takes a second or two** while CoreDevice brings the tunnel up and the phone sends its first keyframe. While a stream runs, the phone shows that the Mac is viewing its screen.
 
 ## See also
 
 - [design.md](design.md) — how a touch reaches the phone, and how its live screen is received
+- [screen-routes.md](screen-routes.md) — the two receivers for its live screen, side by side and measured
 - [devices design](../devices/design.md) — one device model, and what each family registers
 - [device-twin](../device-twin/README.md) — a phone running the companion app, over Wi-Fi
