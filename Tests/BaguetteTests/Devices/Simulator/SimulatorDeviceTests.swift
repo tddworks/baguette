@@ -11,7 +11,7 @@ struct SimulatorDeviceTests {
 
         #expect(device.id == "SIM-1")
         #expect(device.name == "My iPhone")
-        #expect(device.kind == DeviceKind(platform: .iOS, reality: .simulated, model: "iPhone 17 Pro"))
+        #expect(device.kind == DeviceKind(platform: .iOS, reality: .simulated, model: "iPhone 17 Pro", os: "iOS 26.4"))
         #expect(device.state == .ready)
     }
 
@@ -23,6 +23,14 @@ struct SimulatorDeviceTests {
     ])
     func `should read a simulator's platform from its runtime`(runtime: String, platform: DeviceKind.Platform) {
         #expect(SimulatorDevice(simulator(runtime: runtime)).kind.platform == platform)
+    }
+
+    @Test func `should name a simulator's OS by its runtime`() {
+        #expect(SimulatorDevice(simulator(runtime: "iOS 18.2")).kind.os == "iOS 18.2")
+    }
+
+    @Test func `should name no OS for a simulator whose runtime the host didn't name`() {
+        #expect(SimulatorDevice(simulator(runtime: "")).kind.os == nil)
     }
 
     @Test func `should read a simulator whose runtime the host didn't name as iOS`() {
@@ -50,7 +58,7 @@ struct SimulatorDeviceTests {
         let device = SimulatorDevice(simulator())
 
         #expect(device.abilities.names == [
-            "power", "screen", "touch", "press", "key", "scroll", "displays", "hinge", "externalDisplays",
+            "power", "screen", "touch", "press", "key", "scroll", "type", "displays", "hinge", "externalDisplays",
             "accessibility", "logs", "orientation", "statusBar", "interface", "location",
             "motion", "network", "inputSurface", "camera", "pasteboard", "apps", "notify", "defaults", "photos", "shake",
             "watchPairing",

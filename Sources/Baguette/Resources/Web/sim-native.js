@@ -32,8 +32,8 @@
   // One page for every device. What it shows follows the device: each
   // control only when the device has the ability it drives
   // (`deviceAbilities`, from /devices/<id>/device.json), and a borrowed
-  // bezel plus a badge only for a physical device (`deviceMode`), whose
-  // model has no DeviceKit chrome of its own. Both are read at boot; the
+  // bezel plus a badge for anything but a simulator (`deviceMode`) — a
+  // phone, an emulator — whose model has no DeviceKit chrome of its own. Both are read at boot; the
   // URL's tree decides neither.
   let deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
   let deviceAbilities = null;
@@ -341,9 +341,9 @@
     const listing = await fetchDeviceListing(udid);
     if (listing) {
       deviceAbilities = listing.abilities || [];
-      deviceMode = !!(listing.kind && listing.kind.reality === 'physical');
+      deviceMode = !!(listing.kind && listing.kind.reality !== 'simulated');
     }
-    const meta = await fetchDeviceMeta(udid);
+    const meta = await fetchDeviceMeta(udid, listing);
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
     const osEl = document.getElementById('nativeDeviceOS');
@@ -1662,20 +1662,17 @@
     }
   }
 
-  async function fetchDeviceMeta(targetUdid) {
-    if (deviceMode) {
-      try {
-        const r = await fetch('/devices.json', { cache: 'no-store' });
-        if (!r.ok) throw new Error(String(r.status));
-        const json = await r.json();
-        const hit = (json.connected || []).find((d) => d.udid === targetUdid);
-        if (hit) {
-          // A connected companion is always live — 'Booted' keeps the
-          // power-card machinery quiet without a device special case.
-          return { name: hit.name || 'Device', runtime: hit.model || '', state: 'Booted' };
-        }
-      } catch { /* fall through to the placeholder */ }
-      return { name: 'Device', runtime: '', state: 'Booted' };
+  async function fetchDeviceMeta(targetUdid, known) {
+    // Anything but a simulator is described by its own listing — read
+    // fresh unless just read: its name, its OS (or model) and whether it
+    // is running, as 'Booted' / 'Shutdown', the words the power card reads.
+    const listing = known || await fetchDeviceListing(targetUdid);
+    if (listing && listing.kind && listing.kind.reality !== 'simulated') {
+      return {
+        name: listing.name || 'Device',
+        runtime: listing.kind.os || listing.kind.model || '',
+        state: listing.state === 'ready' ? 'Booted' : 'Shutdown',
+      };
     }
     try {
       const r = await fetch('/simulators.json', { cache: 'no-store' });
@@ -2193,7 +2190,7 @@
     });
   }
 
-  /// A physical device's badge says what it can do, from the abilities
+  /// A device that isn't a simulator has a badge saying what it can do, from the abilities
   /// the server lists for it. The controls themselves already follow
   /// those abilities (`buildToolbarClusters`), for every device.
   function applyDeviceModeChrome() {

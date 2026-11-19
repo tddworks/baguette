@@ -33,7 +33,7 @@ import NIOCore
 ///                                             device chrome (+ ?buttons=)
 ///   WS   /simulators/:udid/stream?format=   → frames      (TODO)
 ///   WS   /simulators/:udid/stream.3d.:format → live 3D AVCC/MJPEG frames
-///   GET  /devices.json                      → connected physical devices
+///   GET  /devices.json                      → every device: kind, OS, state, abilities
 ///   WS   /devices/:udid/companion/video     → companion app video ingest
 ///   WS   /devices/:udid/companion/motion    → companion app attitude ingest
 ///   WS   /devices/:udid/stream?format=      → physical-device mirror frames
@@ -76,9 +76,6 @@ struct Server: Sendable {
     let devices: LiveCompanionPhones
     let twinScreens: TwinScreens
     let twinPoses: TwinPoses
-    /// Every physical device the `/devices/…` page can show — a view of
-    /// `allDevices`, never a second list.
-    let physicalDevices: any Devices
     /// Every device of every kind — what `/devices/:udid/…` resolves. Listed
     /// by `DeviceKinds`, outside the server.
     let allDevices: any Devices
@@ -107,7 +104,6 @@ struct Server: Sendable {
         self.twinScreens = twinScreens
         self.twinPoses = twinPoses
         self.allDevices = allDevices
-        self.physicalDevices = allDevices.physical
         self.chromes = chromes
         self.models = models
         self.deviceRenderer = deviceRenderer
@@ -161,6 +157,16 @@ struct Server: Sendable {
         router.get("/simulators.json") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             return Self.listJSON(simulators)
+        }
+        // Every device of every family — simulators, emulators, phones — as
+        // the list page reads them: kind, OS, state and abilities.
+        router.get("/devices.json") { [allDevices] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(string: allDevices.listJSON))
+            )
         }
 
         // Stream page — same sim.html, JS routes the inner view based on URL.

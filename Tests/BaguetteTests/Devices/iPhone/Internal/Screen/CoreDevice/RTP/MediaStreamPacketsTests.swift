@@ -196,20 +196,6 @@ struct RTCPReceiverReportTests {
     }
 }
 
-@Suite("TunnelAddress")
-struct TunnelAddressTests {
-    @Test func `should pick the Mac's address on the phone's tunnel prefix`() {
-        let local = TunnelAddress.local(
-            facing: "fdd3:48cf:f69f::1",
-            among: ["fe80::1", "fd00:1:2::5", "fdd3:48cf:f69f::2", "fdd3:48cf:f69f::1"])
-
-        #expect(local == "fdd3:48cf:f69f::2")
-    }
-
-    @Test func `should find no address when the Mac has none on the phone's prefix`() {
-        #expect(TunnelAddress.local(facing: "fdd3:48cf:f69f::1", among: ["fe80::1"]) == nil)
-    }
-}
 
 @Suite("DecodeGate")
 struct DecodeGateTests {

@@ -56,7 +56,14 @@ struct ButtonSetsTests {
         verify(buttons).button(.value(.hardware(.power)), duration: .value(0)).called(1)
     }
 
-    @Test func `should offer every navigation and button on an iOS simulator, as it always has`() {
-        #expect(DeviceButton.onSimulator.count == Navigation.allCases.count + HardwareButton.allCases.count)
+    @Test func `should offer an iOS simulator iOS's navigations and every body button`() {
+        #expect(DeviceButton.onSimulator == Set(
+            [Navigation.home, .appSwitcher, .swipeToAppSwitcher, .swipeToHome, .pullDownToLockScreen,
+             .pullDownToNotificationCenter, .softwareKeyboard].map(DeviceButton.navigation)
+                + HardwareButton.allCases.map(DeviceButton.hardware)))
+    }
+
+    @Test func `should read back as a navigation by its wire name`() {
+        #expect(DeviceButton(rawValue: "back") == .navigation(.back))
     }
 }

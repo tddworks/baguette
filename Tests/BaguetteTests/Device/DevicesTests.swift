@@ -78,39 +78,6 @@ struct DevicesTests {
         }
     }
 
-    @Test func `should keep only the physical devices of every device`() throws {
-        let simulator = device("SIM-1")
-        let phone = device("PHONE-1", kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"))
-        let physical = CombinedDevices([source(simulator, phone)]).physical
-
-        #expect(physical.all.map(\.id) == ["PHONE-1"])
-        #expect(try physical.find(id: "SIM-1") == nil)
-        #expect(try physical.find(id: "PHONE-1")?.id == "PHONE-1")
-    }
-
-    @Test func `should list each ready physical device as connected, with what it can do`() {
-        var abilities = Abilities(device: "han's iPhone")
-        abilities.register(.screen) { MockScreen() }
-        abilities.register(.orientation) { MockOrientation() }
-        let phone = device(
-            "PHONE-1", name: "han's iPhone",
-            kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone19,7"),
-            abilities: abilities)
-
-        #expect(CombinedDevices([source(phone)]).connectedJSON == #"""
-            {"connected":[{"capabilities":["screen","orientation"],"model":"iPhone19,7",\#
-            "name":"han's iPhone","udid":"PHONE-1"}]}
-            """#)
-    }
-
-    @Test func `should leave a phone that isn't ready out of the connected devices`() {
-        let unplugged = device(
-            "PHONE-2", kind: DeviceKind(platform: .iOS, reality: .physical, model: "iPhone14,3"),
-            state: .unavailable(reason: "not connected"))
-
-        #expect(CombinedDevices([source(unplugged)]).connectedJSON == #"{"connected":[]}"#)
-    }
-
     @Test func `should list a physical phone on one line, in a simulator line's order`() {
         let phone = device(
             "PHONE-1", name: "han's iPhone",
@@ -135,6 +102,18 @@ struct DevicesTests {
         #expect(CombinedDevices([source(simulator)]).listJSON == #"""
             {"devices":[{"abilities":["shake","location"],"id":"SIM-1",\#
             "kind":{"model":"iPhone 17 Pro","platform":"iOS","reality":"simulated"},\#
+            "name":"iPhone 17 Pro","state":"ready"}]}
+            """#)
+    }
+
+    @Test func `should list a device's OS when its kind names one`() {
+        let simulator = device(
+            "SIM-1", name: "iPhone 17 Pro",
+            kind: DeviceKind(platform: .iOS, reality: .simulated, model: "iPhone 17 Pro", os: "iOS 26.4"))
+
+        #expect(CombinedDevices([source(simulator)]).listJSON == #"""
+            {"devices":[{"abilities":[],"id":"SIM-1",\#
+            "kind":{"model":"iPhone 17 Pro","os":"iOS 26.4","platform":"iOS","reality":"simulated"},\#
             "name":"iPhone 17 Pro","state":"ready"}]}
             """#)
     }

@@ -28,18 +28,21 @@ public extension Device {
 }
 
 public extension Abilities {
-    /// One screen's input: its touch, and the buttons, keys and wheel its
-    /// device has. One it lacks is absent — asking for it is refused by
-    /// name, never answered by a role that pretends.
+    /// One screen's input: its touch, and the buttons, keys, wheel and typing
+    /// its device has — a device with keys and no typing of its own types by
+    /// keystrokes. One it lacks is absent — asking for it is refused by name,
+    /// never answered by a role that pretends.
     static func input(
         of device: String, touch: any Touch,
-        press: (any Press)? = nil, key: (any Key)? = nil, scroll: (any Scroll)? = nil
+        press: (any Press)? = nil, key: (any Key)? = nil, scroll: (any Scroll)? = nil,
+        typing: (any Typing)? = nil
     ) -> Abilities {
         var abilities = Abilities(device: device)
         abilities.register(.touch) { touch }
         if let press { abilities.register(.press) { press } }
         if let key { abilities.register(.key) { key } }
         if let scroll { abilities.register(.scroll) { scroll } }
+        if let typing = typing ?? key.map(KeystrokeTyping.init(key:)) { abilities.register(.typing) { typing } }
         return abilities
     }
 
@@ -52,6 +55,7 @@ public extension Abilities {
         abilities.keep(.press)
         abilities.keep(.key)
         abilities.keep(.scroll)
+        abilities.keep(.typing)
         return abilities
     }
 

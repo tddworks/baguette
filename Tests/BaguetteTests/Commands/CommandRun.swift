@@ -20,7 +20,7 @@ func reaching(_ devices: any Devices, simulators: [any Simulator] = []) -> Devic
     let host = MockSimulators()
     given(host).all.willReturn(simulators)
     given(host).find(udid: .any).willProduce { udid in simulators.first { $0.udid == udid } }
-    return DeviceKinds(simulators: host, phones: devices)
+    return DeviceKinds(simulators: host, phones: devices, androids: AndroidDevices(adb: nil))
 }
 
 /// No device at all: every `--udid` names nothing.

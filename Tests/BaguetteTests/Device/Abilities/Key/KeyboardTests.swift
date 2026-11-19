@@ -178,15 +178,6 @@ struct TypeTextGestureTests {
         #expect(TypeText(typeable: "café") == nil)
     }
 
-    @Test func `should hold each typed key for 30 ms`() {
-        let input = InputMocks()
-        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
-
-        _ = TypeText(text: "aB").execute(on: input)
-
-        verify(input.key).key(.any, modifiers: .any, duration: .value(0.03)).called(2)
-    }
-
     @Test func `should keep a single key press at its own hold`() throws {
         let input = InputMocks()
         given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
@@ -213,26 +204,12 @@ struct TypeTextGestureTests {
         }
     }
 
-    @Test func `should type text as one key press per character`() {
-        let input = InputMocks()
-        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
+    @Test func `should type the text through the device's typing`() {
+        let typing = MockTyping()
+        given(typing).type(.any).willReturn(true)
 
-        let keyA = KeyboardKey.from(wireCode: "KeyA")!
-        _ = TypeText(text: "Aa").execute(on: input)
+        #expect(TypeText(text: "hi").execute(on: typing))
 
-        verify(input.key).key(
-            .value(keyA), modifiers: .value([.shift]), duration: .any
-        ).called(1)
-        verify(input.key).key(
-            .value(keyA), modifiers: .value([]), duration: .any
-        ).called(1)
-    }
-
-    @Test func `should succeed without pressing anything when the text is empty`() {
-        let input = InputMocks()
-        given(input.key).key(.any, modifiers: .any, duration: .any).willReturn(true)
-
-        #expect(TypeText(text: "").execute(on: input) == true)
-        verify(input.key).key(.any, modifiers: .any, duration: .any).called(0)
+        verify(typing).type(.value("hi")).called(1)
     }
 }

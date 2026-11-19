@@ -377,7 +377,7 @@ GET  /devices/:udid/describe-ui.json        Accessibility.describeAll / describe
 POST /devices/:udid/input                   GestureDispatcher (one envelope)
 WS   /devices/:udid/stream?format=…         Stream + GestureDispatcher on the device's GestureQueues lane;
                                             the companion app's video when it streams one
-GET  /devices.json                          Devices.connectedJSON (phones, with abilities)
+GET  /devices.json                          Devices.listJSON (every device: kind, OS, state, abilities)
 GET  /devices/:udid                         sim.html (same shell, device tree)
 GET  /devices/:udid/screenshot.{jpg,png}    devices.require(.screen, of:) — any family
 GET  /plugins.json                          Plugins.listJSON

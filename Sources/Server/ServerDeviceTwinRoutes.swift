@@ -12,7 +12,6 @@ import NIOCore
 /// function.
 ///
 /// ```text
-/// GET /devices.json                        → connected companions
 /// WS  /devices/:udid/companion/video       → that device's video ingest
 /// WS  /devices/:udid/companion/motion      → that device's attitude ingest
 /// WS  /devices/:udid/stream?format=        → mirror frames to the browser
@@ -28,7 +27,6 @@ extension Server {
             async throws -> RouterShouldUpgrade
     ) {
         let devices = self.devices
-        let physicalDevices = self.physicalDevices
         let screens = self.twinScreens
         let models = self.models
         let chromes = self.chromes
@@ -235,15 +233,6 @@ extension Server {
                 query: Self.twinQuery(context.request),
                 devices: devices, models: models, screens: screens, poses: poses,
                 inbound: inbound, outbound: outbound
-            )
-        }
-
-        router.get("/devices.json") { r, _ in
-            if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            return Response(
-                status: .ok,
-                headers: [.contentType: "application/json", .cacheControl: "no-cache"],
-                body: .init(byteBuffer: ByteBuffer(string: physicalDevices.connectedJSON))
             )
         }
 

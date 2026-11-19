@@ -1,0 +1,53 @@
+import Foundation
+
+/// A running emulator, as the discovery file it writes while it runs
+/// describes it (`~/Library/Caches/TemporaryItems/avd/running/pid_<pid>.ini`):
+/// its adb serial (`emulator-` + `port.serial`), its AVD, and where its control
+/// API answers — the gRPC port and token. An emulator started without gRPC
+/// is still that AVD, running; it just has no control API.
+struct RunningEmulator: Equatable, Sendable {
+    /// Where an emulator's control API answers.
+    struct ControlAPI: Equatable, Sendable {
+        let port: Int
+        let token: String
+    }
+
+    let serial: String
+    let avd: String
+    let control: ControlAPI?
+
+    init(serial: String, avd: String, control: ControlAPI?) {
+        self.serial = serial
+        self.avd = avd
+        self.control = control
+    }
+
+    init(serial: String, avd: String, port: Int, token: String) {
+        self.init(serial: serial, avd: avd, control: ControlAPI(port: port, token: token))
+    }
+
+    init?(ini: String) {
+        let values = Dictionary(ini.split(whereSeparator: \.isNewline).compactMap { line -> (String, String)? in
+            guard let equals = line.firstIndex(of: "=") else { return nil }
+            return (String(line[..<equals]), String(line[line.index(after: equals)...]))
+        }, uniquingKeysWith: { first, _ in first })
+        guard let console = values["port.serial"] else { return nil }
+        let control = values["grpc.port"].flatMap(Int.init).flatMap { port in
+            values["grpc.token"].map { ControlAPI(port: port, token: $0) }
+        }
+        self.init(serial: "emulator-\(console)", avd: values["avd.name"] ?? "", control: control)
+    }
+
+    /// Where running emulators write their discovery files.
+    static let folder = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Caches/TemporaryItems/avd/running")
+
+    /// Every emulator running now, from the discovery
+    /// files in `folder`.
+    static func all(in folder: URL = folder) -> [RunningEmulator] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "ini" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .compactMap { (try? String(contentsOf: $0, encoding: .utf8)).flatMap(RunningEmulator.init(ini:)) }
+    }
+}

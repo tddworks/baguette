@@ -1,5 +1,6 @@
-// ASC Pro Plugin UI - Simulator List
-// Self-contained simulator browser backed by the local /api/sim/devices API.
+// The device list — every device of every family, real or virtual, iOS or
+// Android, from `/devices.json`; what each row offers comes from the
+// device's abilities, never from which family it is.
 (function() {
   'use strict';
 
@@ -16,27 +17,17 @@
   }[c])));
 
   const state = {
-    devices: [],
-    physical: [],   // connected companions from /devices.json
+    devices: [],    // every device, as `/devices.json` lists it
     search: '',
-    family: 'iphones',
-    runtime: 'all',
+    platform: 'all',
+    reality: 'all',
+    os: 'all',
     loading: false,
     error: null,
-    // Per-device transition state — UDID → 'boot' | 'shutdown'.
-    // Drives in-row "Booting…" / "Shutting down…" chips so the user
-    // gets immediate feedback without wiping the whole table back to
-    // a loading skeleton (which felt like a full-page refresh).
+    // Per-device transition state — id → 'boot' | 'shutdown'. Drives the
+    // in-row "Booting…" / "Shutting down…" chip, so the table stays put.
     pending: Object.create(null)
   };
-
-  function getServerUrl() {
-    return window.DataProvider?._serverUrl || `${location.protocol}//${location.host}`;
-  }
-
-  function getSimAPI() {
-    return `${getServerUrl()}/api/sim`;
-  }
 
   function ensureShell() {
     if (document.getElementById('simListView') && document.getElementById('simPluginView')) return;
@@ -165,6 +156,12 @@
         vertical-align: 1px;
       }
       .asc-sim-dot.booted { background: var(--asc-sim-accent); }
+      .asc-sim-kind { color: #64748b; }
+      .asc-sim-badge {
+        display: inline-flex; align-items: center; height: 22px; padding: 0 9px; margin-right: 6px;
+        border: 1px solid #fde68a; border-radius: 99px; background: #fef3c7; color: #92400e;
+        font-size: 11px; font-weight: 700;
+      }
       .asc-sim-empty, .asc-sim-error {
         padding: 40px 24px;
         color: var(--asc-sim-muted);
@@ -179,7 +176,7 @@
         .asc-sim-spacer { display: none; }
         .asc-sim-input, .asc-sim-select { width: auto; flex: 1 1 140px; }
         .asc-sim-table { table-layout: auto; }
-        .asc-sim-table th:nth-child(3), .asc-sim-table td:nth-child(3) { display: none; }
+        .asc-sim-table th:nth-child(2), .asc-sim-table td:nth-child(2) { display: none; }
         .asc-sim-table th, .asc-sim-table td { padding: 10px 14px; height: auto; }
         .asc-sim-table td { line-height: 1.45; }
         .asc-sim-table td:first-child { width: 40%; white-space: normal; word-break: break-word; }
@@ -189,59 +186,65 @@
       @media (max-width: 440px) {
         .asc-sim-card { margin: 8px; }
         .asc-sim-table th, .asc-sim-table td { padding: 8px 10px; }
-        .asc-sim-table th:nth-child(2), .asc-sim-table td:nth-child(2) { display: none; }
+        .asc-sim-table th:nth-child(4), .asc-sim-table td:nth-child(4) { display: none; }
         .asc-sim-actions .asc-sim-button { padding: 0 8px; height: 26px; font-size: 10.5px; }
       }
     `;
     document.head.appendChild(style);
   }
 
-  function normalizeDevice(device) {
-    const id = device.id || device.udid || '';
-    const stateValue = device.state || (device.isBooted ? 'Booted' : 'Shutdown');
-    const runtime = device.displayRuntime || device.os || runtimeLabel(device.runtime || '');
-    const isBooted = typeof device.isBooted === 'boolean'
-      ? device.isBooted
-      : String(stateValue).toLowerCase() === 'booted';
+  const DeviceFilter = window.Baguette._DeviceFilter;
+
+  const PLATFORMS = { iOS: 'iOS', watchOS: 'watchOS', tvOS: 'tvOS', visionOS: 'visionOS', android: 'Android' };
+
+  /** A `/devices.json` entry as a row: its kind flattened beside it. */
+  function rowOf(device) {
+    const kind = device.kind || {};
     return {
-      id,
-      name: device.name || 'Simulator',
-      state: stateValue,
-      runtime,
-      isBooted,
-      affordances: device.affordances || defaultAffordances(id, isBooted)
+      id: device.id,
+      name: device.name || device.id,
+      platform: kind.platform || '',
+      reality: kind.reality || '',
+      model: kind.model || '',
+      os: kind.os || '',
+      state: device.state || '',
+      reason: device.reason || '',
+      abilities: device.abilities || [],
     };
   }
 
-  function runtimeLabel(runtime) {
-    return String(runtime || '')
-      .replace('com.apple.CoreSimulator.SimRuntime.', '')
-      .replace(/^iOS-/, 'iOS ')
-      .replace(/-/g, '.');
+  /** What a device is, in a few words: "Simulator", "Emulator", or its model on a real one. */
+  function kindLabel(device) {
+    if (device.reality === 'simulated') return 'Simulator';
+    if (device.reality === 'emulated') return 'Emulator';
+    return device.model || 'Device';
   }
 
-  function defaultAffordances(id, isBooted) {
-    return isBooted
-      ? { stream: `asc simulators stream --udid ${id}`, shutdown: `asc simulators shutdown --udid ${id}` }
-      : { boot: `asc simulators boot --udid ${id}` };
+  function stateLabel(device) {
+    switch (device.state) {
+      case 'ready': return 'Running';
+      case 'starting': return 'Starting';
+      case 'off': return 'Off';
+      case 'unavailable': return device.reason ? `Unavailable — ${device.reason}` : 'Unavailable';
+      default: return device.state;
+    }
   }
 
-  const DeviceFilter = window.Baguette._DeviceFilter;
-
-  function filteredDevices() {
-    return new DeviceFilter({
-      family: state.family, runtime: state.runtime, search: state.search,
-    }).apply(state.devices);
-  }
-
-  function runtimeOptions() {
-    const runtimes = Array.from(new Set(state.devices.map(d => d.runtime).filter(Boolean)))
-      .sort((a, b) => DeviceFilter.compareVersions(b, a));
-    return [
-      `<option value="all" ${state.runtime === 'all' ? 'selected' : ''}>All Runtimes</option>`,
-      `<option value="latest" ${state.runtime === 'latest' ? 'selected' : ''}>Latest Runtime</option>`,
-      ...runtimes.map(runtime => `<option value="${escapeHTML(runtime)}" ${state.runtime === runtime ? 'selected' : ''}>${escapeHTML(runtime)}</option>`)
-    ].join('');
+  /** The row's controls, from what the device can do. */
+  function actionsOf(device) {
+    const can = (ability) => device.abilities.includes(ability);
+    const actions = [];
+    if (device.state === 'ready' && can('screen')) {
+      if (!can('touch')) actions.push('<span class="asc-sim-badge">View-only</span>');
+      actions.push(`<a class="asc-sim-button" href="/devices/${encodeURIComponent(device.id)}">Open</a>`);
+    }
+    if (can('power')) {
+      const verb = device.state === 'off' ? 'boot' : device.state === 'ready' ? 'shutdown' : null;
+      if (verb) {
+        actions.push(`<button type="button" class="asc-sim-button" data-sim-action="${verb}" data-sim-id="${escapeHTML(device.id)}">${verb === 'boot' ? 'Boot' : 'Shutdown'}</button>`);
+      }
+    }
+    return actions.join(' ');
   }
 
   function renderRows(devices) {
@@ -249,23 +252,17 @@
       const pending = state.pending[device.id];
       const actions = pending
         ? `<span class="asc-sim-pending">${escapeHTML(pendingLabel(pending))}</span>`
-        : Object.keys(device.affordances || {})
-            .filter(key => key !== 'listSimulators')
-            .map(key => `<button type="button" class="asc-sim-button" data-sim-action="${escapeHTML(key)}" data-sim-id="${escapeHTML(device.id)}">${escapeHTML(actionLabel(key))}</button>`)
-            .join(' ');
-      const stateLabel = pending ? pendingLabel(pending) : device.state;
+        : actionsOf(device);
+      const os = device.os || PLATFORMS[device.platform] || device.platform;
       return `
         <tr>
           <td>${escapeHTML(device.name)}</td>
-          <td><span class="asc-sim-dot ${device.isBooted ? 'booted' : ''}"></span>${escapeHTML(stateLabel)}</td>
-          <td>${escapeHTML(device.runtime)}</td>
+          <td class="asc-sim-kind">${escapeHTML(kindLabel(device))}</td>
+          <td><span class="asc-sim-dot ${device.state === 'ready' ? 'booted' : ''}"></span>${escapeHTML(pending ? pendingLabel(pending) : stateLabel(device))}</td>
+          <td>${escapeHTML(os)}</td>
           <td class="asc-sim-actions">${actions}</td>
         </tr>`;
     }).join('');
-  }
-
-  function actionLabel(key) {
-    return key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
   }
 
   function pendingLabel(action) {
@@ -279,41 +276,37 @@
     return `
       <div class="asc-sim-section-title">${escapeHTML(title)}</div>
       <table class="asc-sim-table">
-        <thead><tr><th>Name</th><th>State</th><th>Runtime</th><th class="asc-sim-actions">Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Kind</th><th>State</th><th>OS</th><th class="asc-sim-actions">Actions</th></tr></thead>
         <tbody>${renderRows(devices)}</tbody>
       </table>`;
   }
 
-  // Physical phones mirrored by the companion app — the device-twin
-  // path. They live outside the simulator filters on purpose: a
-  // connected phone should never vanish behind a family dropdown.
-  function renderPhysicalSection() {
-    if (!state.physical.length) return '';
-    const rows = state.physical.map((device) => `
-        <tr>
-          <td>${escapeHTML(device.name)}</td>
-          <td><span class="asc-sim-dot" style="background:#2563eb"></span>Mirroring</td>
-          <td>${escapeHTML(device.model || '')}</td>
-          <td class="asc-sim-actions">
-            <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;margin-right:6px;border:1px solid #fde68a;border-radius:99px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700">View-only</span>
-            <a class="asc-sim-button" href="/devices/${encodeURIComponent(device.udid)}">Open</a>
-          </td>
-        </tr>`).join('');
-    return `
-      <div class="asc-sim-section-title">Devices</div>
-      <table class="asc-sim-table">
-        <thead><tr><th>Name</th><th>State</th><th>Hardware</th><th class="asc-sim-actions">Actions</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+  function option(value, label, selected) {
+    return `<option value="${escapeHTML(value)}" ${selected === value ? 'selected' : ''}>${escapeHTML(label)}</option>`;
   }
 
-  async function fetchPhysicalDevices() {
-    try {
-      const response = await fetch('/devices.json', { cache: 'no-store' });
-      if (!response.ok) return [];
-      const json = await response.json();
-      return json.connected || [];
-    } catch { return []; }
+  function platformOptions() {
+    const platforms = Array.from(new Set(state.devices.map(d => d.platform).filter(Boolean)));
+    return [option('all', 'All Platforms', state.platform),
+            ...platforms.map(p => option(p, PLATFORMS[p] || p, state.platform))].join('');
+  }
+
+  function realityOptions() {
+    return [option('all', 'Real & Virtual', state.reality),
+            option('real', 'Real Devices', state.reality),
+            option('virtual', 'Simulators & Emulators', state.reality)].join('');
+  }
+
+  function osOptions() {
+    return [option('all', 'All OS Versions', state.os),
+            option('latest', 'Latest OS', state.os),
+            ...DeviceFilter.osNames(state.devices).map(os => option(os, os, state.os))].join('');
+  }
+
+  function filteredDevices() {
+    return new DeviceFilter({
+      platform: state.platform, reality: state.reality, os: state.os, search: state.search,
+    }).apply(state.devices);
   }
 
   function render() {
@@ -326,28 +319,27 @@
     if (!list) return;
 
     const devices = filteredDevices();
-    const running = devices.filter(d => d.isBooted);
-    const available = devices.filter(d => !d.isBooted);
+    // Running first; real devices before virtual ones within each.
+    const order = (a, b) => (a.reality === 'physical' ? 0 : 1) - (b.reality === 'physical' ? 0 : 1);
+    const running = devices.filter(d => d.state === 'ready' || d.state === 'starting').sort(order);
+    const rest = devices.filter(d => d.state !== 'ready' && d.state !== 'starting').sort(order);
     const body = state.loading
-      ? '<div class="asc-sim-empty">Loading simulators...</div>'
+      ? '<div class="asc-sim-empty">Loading devices...</div>'
       : state.error
         ? `<div class="asc-sim-error">${escapeHTML(state.error)}</div>`
         : devices.length
-          ? `${renderSection('Running', running)}${renderPhysicalSection()}${renderSection('Available', available)}`
-          : `${renderPhysicalSection()}<div class="asc-sim-empty">No simulators match these filters.</div>`;
+          ? `${renderSection('Running', running)}${renderSection('Available', rest)}`
+          : '<div class="asc-sim-empty">No devices match these filters.</div>';
 
     list.innerHTML = `
       <div class="asc-sim-card">
         <div class="asc-sim-toolbar">
-          <h1 class="asc-sim-title">iOS Simulators</h1>
+          <h1 class="asc-sim-title">Devices</h1>
           <div class="asc-sim-spacer"></div>
           <input class="asc-sim-input" id="ascSimSearch" type="search" value="${escapeHTML(state.search)}" placeholder="Search devices...">
-          <select class="asc-sim-select" id="ascSimFamily">
-            <option value="iphones" ${state.family === 'iphones' ? 'selected' : ''}>iPhones</option>
-            <option value="ipads" ${state.family === 'ipads' ? 'selected' : ''}>iPads</option>
-            <option value="all" ${state.family === 'all' ? 'selected' : ''}>All Devices</option>
-          </select>
-          <select class="asc-sim-select" id="ascSimRuntime">${runtimeOptions()}</select>
+          <select class="asc-sim-select" id="ascSimPlatform">${platformOptions()}</select>
+          <select class="asc-sim-select" id="ascSimReality">${realityOptions()}</select>
+          <select class="asc-sim-select" id="ascSimOS">${osOptions()}</select>
           <a class="asc-sim-button" id="ascSimFarm" href="/farm">Device Farm</a>
           <button class="asc-sim-button" id="ascSimRefresh">Refresh</button>
         </div>
@@ -366,27 +358,20 @@
   }
 
   async function fetchDevices() {
-    // baguette serve exposes the list at /simulators.json, pre-split
-    // into running/available. We fold them back into a flat array
-    // because the IIFE renders its own RUNNING / AVAILABLE sections.
-    const response = await fetch('/simulators.json', { cache: 'no-store' });
+    const response = await fetch('/devices.json', { cache: 'no-store' });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const json = await response.json();
-    const flat = (json.running || []).concat(json.available || []);
-    return flat.map(normalizeDevice);
+    return (json.devices || []).map(rowOf);
   }
 
   async function loadSimDeviceList() {
-    // Only show the full-card "Loading…" placeholder on the first
-    // fetch (or after an error wiped the list). Subsequent refreshes
-    // — including the one after boot/shutdown — leave the existing
-    // table on screen so the page doesn't appear to reload.
+    // The full-card "Loading…" only on the first fetch (or after an error
+    // wiped the list); later refreshes leave the table on screen.
     const initial = state.devices.length === 0;
     if (initial) state.loading = true;
     state.error = null;
     if (initial) render();
     try {
-      state.physical = await fetchPhysicalDevices();
       state.devices = await fetchDevices();
     } catch (error) {
       state.error = error.message || String(error);
@@ -396,10 +381,8 @@
     }
   }
 
-  async function postSimAction(action, id) {
-    // POST /devices/<udid>/<action> — UDID lives in the path,
-    // body is empty. Matches the canonical /baguette serve route
-    // table (no /api/ prefix, no payload).
+  async function postPower(action, id) {
+    // POST /devices/<id>/<action> — any device that can be turned on and off.
     const response = await fetch(
       `/devices/${encodeURIComponent(id)}/${encodeURIComponent(action)}`,
       { method: 'POST' }
@@ -407,29 +390,32 @@
     if (!response.ok) throw new Error(`${action} failed: ${response.status}`);
   }
 
-  async function handleAction(action, id) {
+  /** Whether `id` has reached where `action` takes it. */
+  function arrived(action, id) {
     const device = state.devices.find(d => d.id === id);
-    if (!device) return;
+    if (!device) return action === 'shutdown';
+    return action === 'boot' ? device.state === 'ready' : device.state === 'off';
+  }
 
-    const handler = window.simAffordanceHandlers?.[action];
-    if (handler) {
-      handler(id, device.name, device);
-      return;
-    }
-
-    if (action === 'boot' || action === 'shutdown') {
-      if (state.pending[id]) return;
-      state.pending[id] = action;
-      render();
-      try {
-        await postSimAction(action, id);
+  async function handleAction(action, id) {
+    if (action !== 'boot' && action !== 'shutdown') return;
+    if (state.pending[id]) return;
+    state.pending[id] = action;
+    render();
+    try {
+      await postPower(action, id);
+      // An emulator answers before it is up: keep the chip until the
+      // list says it arrived, for up to a minute.
+      for (let i = 0; i < 60; i++) {
         await loadSimDeviceList();
-      } catch (error) {
-        state.error = error.message || String(error);
-      } finally {
-        delete state.pending[id];
-        render();
+        if (arrived(action, id)) break;
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
+    } catch (error) {
+      state.error = error.message || String(error);
+    } finally {
+      delete state.pending[id];
+      render();
     }
   }
 
@@ -440,14 +426,10 @@
   });
 
   document.addEventListener('change', event => {
-    if (event.target?.id === 'ascSimFamily') {
-      state.family = event.target.value;
-      render();
-    }
-    if (event.target?.id === 'ascSimRuntime') {
-      state.runtime = event.target.value;
-      render();
-    }
+    const field = { ascSimPlatform: 'platform', ascSimReality: 'reality', ascSimOS: 'os' }[event.target?.id];
+    if (!field) return;
+    state[field] = event.target.value;
+    render();
   });
 
   document.addEventListener('click', event => {
@@ -463,7 +445,6 @@
   });
 
   window.loadSimDeviceList = loadSimDeviceList;
-  window.simAffordanceHandlers = window.simAffordanceHandlers || {};
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loadSimDeviceList, { once: true });
@@ -471,5 +452,5 @@
     loadSimDeviceList();
   }
 
-  console.log('[ASC Pro] sim-list.js loaded');
+  console.log('[baguette] device list loaded');
 })();

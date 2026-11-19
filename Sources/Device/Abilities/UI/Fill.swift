@@ -131,7 +131,8 @@ public struct Fill: Equatable, Sendable {
             if let failure = await paste() { return failure }
             return outcome(readBack())
         }
-        guard typed.execute(on: keyboard) else { return .failed("couldn't send a key to \(name)") }
+        let typing = (try? input.require(.typing)) ?? KeystrokeTyping(key: keyboard)
+        guard typed.execute(on: typing) else { return .failed("couldn't send a key to \(name)") }
 
         // A field that's gone took the keys somewhere else: what has focus now isn't it.
         guard let first = readBack() else { return outcome(nil) }
@@ -160,8 +161,8 @@ public struct Fill: Equatable, Sendable {
     private func clear(on keyboard: any Key) -> Bool {
         guard let selectAll = KeyboardKey.from(wireCode: "KeyA"), let delete = KeyboardKey.from(wireCode: "Backspace")
         else { return false }
-        return selectAll.press(modifiers: [.command], duration: TypeText.keyHold, on: keyboard)
-            && delete.press(duration: TypeText.keyHold, on: keyboard)
+        return selectAll.press(modifiers: [.command], duration: KeystrokeTyping.keyHold, on: keyboard)
+            && delete.press(duration: KeystrokeTyping.keyHold, on: keyboard)
     }
 
     public init(label: String, text: String) {

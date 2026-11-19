@@ -23,7 +23,8 @@ struct SimulatorDevice: Device {
         DeviceKind(
             platform: DeviceKind.Platform(runtime: simulator.runtime),
             reality: .simulated,
-            model: simulator.deviceTypeName)
+            model: simulator.deviceTypeName,
+            os: simulator.runtime.isEmpty ? nil : simulator.runtime)
     }
 
     var abilities: Abilities {
@@ -38,6 +39,7 @@ struct SimulatorDevice: Device {
         abilities.register(.press) { hid.surface }
         abilities.register(.key) { hid.surface }
         abilities.register(.scroll) { hid.surface }
+        abilities.register(.typing) { KeystrokeTyping(key: hid.surface) }
         abilities.register(.displays) { sim.displays() }
         abilities.register(.hinge) { sim.hinge() }
         abilities.register(.externalDisplays) { sim.externalDisplays() }

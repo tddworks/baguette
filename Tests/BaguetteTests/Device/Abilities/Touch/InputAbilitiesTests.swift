@@ -29,7 +29,13 @@ struct InputAbilitiesTests {
         let sim = Abilities.input(of: "iPhone 17", all: AllInput())
 
         #expect(phone.names == ["touch"])
-        #expect(sim.names == ["touch", "press", "key", "scroll"])
+        #expect(sim.names == ["touch", "press", "key", "scroll", "type"])
+    }
+
+    @Test func `should type by keystrokes on a device that has keys`() throws {
+        let input = Abilities.input(of: "iPhone 17", touch: MockTouch(), key: MockKey())
+
+        #expect(try input.require(.typing) is KeystrokeTyping)
     }
 
     @Test func `should make a screen's input once, so a finger stays on the touch it went down on`() throws {
