@@ -15,8 +15,13 @@ struct AndroidDevicesTests {
 
         """.utf8)
 
-    private func devices(_ fake: FakeDevicectl, running: [RunningEmulator] = []) -> AndroidDevices {
-        AndroidDevices(adb: Adb(executable: Self.adbPath, makeSubprocess: fake.make), runningEmulators: { running })
+    private static let pixel = RunningEmulator(serial: "emulator-5554", avd: "baguette_pixel", port: 8554, token: "tok")
+
+    private func devices(_ fake: FakeDevicectl, running: [RunningEmulator] = [],
+                         installed: [String] = []) -> AndroidDevices {
+        AndroidDevices(adb: AndroidTool(executable: Self.adbPath, makeSubprocess: fake.make),
+                       emulator: URL(fileURLWithPath: "/sdk/emulator/emulator"),
+                       runningEmulators: { running }, installedAVDs: { installed })
     }
 
     @Test func `should list the Android devices adb is attached to`() {
@@ -52,14 +57,36 @@ struct AndroidDevicesTests {
         #expect(devices(fake).all.isEmpty)
     }
 
-    @Test func `should give an emulator with a control API its screen and every input role`() {
+    @Test func `should give an emulator with a control API its power, screen and every input role`() {
         let fake = FakeDevicectl()
         fake.output = Self.listing
-        let running = [RunningEmulator(serial: "emulator-5554", avd: "baguette_pixel", port: 8554, token: "tok")]
 
-        let emulator = devices(fake, running: running).all.first
+        let emulator = devices(fake, running: [Self.pixel]).all.first
 
-        #expect(emulator?.abilities.names == ["screen", "touch", "press", "key", "scroll"])
+        #expect(emulator?.abilities.names == ["power", "screen", "touch", "press", "key", "scroll"])
+    }
+
+    @Test func `should name a running emulator by its AVD, the same across boots`() throws {
+        let fake = FakeDevicectl()
+        fake.output = Self.listing
+
+        let all = devices(fake, running: [Self.pixel]).all
+
+        #expect(all.map(\.id) == ["baguette_pixel", "37201FDJH004VE"])
+        #expect(try devices(fake, running: [Self.pixel]).find(id: "baguette_pixel")?.state == .ready)
+    }
+
+    @Test func `should list an installed emulator that isn't running as off, to be turned on`() {
+        let fake = FakeDevicectl()
+        fake.output = Self.listing
+
+        let all = devices(fake, running: [Self.pixel], installed: ["baguette_pixel", "Pixel_9"]).all
+
+        #expect(all.map(\.id) == ["baguette_pixel", "37201FDJH004VE", "Pixel_9"])
+        let off = all.last
+        #expect(off?.state == .off)
+        #expect(off?.kind.reality == .emulated)
+        #expect(off?.abilities.names == ["power"])
     }
 
     @Test func `should give an Android device it can't reach yet no abilities`() {

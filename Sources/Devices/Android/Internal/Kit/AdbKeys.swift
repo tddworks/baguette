@@ -8,9 +8,9 @@ import Foundation
 /// held down is a long press; a key with modifiers is one key combination.
 final class AdbKeys: Press, Key, @unchecked Sendable {
     private let serial: String
-    private let adb: Adb
+    private let adb: AndroidTool
 
-    init(serial: String, adb: Adb) {
+    init(serial: String, adb: AndroidTool) {
         self.serial = serial
         self.adb = adb
     }

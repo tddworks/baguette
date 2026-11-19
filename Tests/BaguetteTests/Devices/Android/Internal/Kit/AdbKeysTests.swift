@@ -9,7 +9,7 @@ import Testing
 struct AdbKeysTests {
     private func keys(_ fake: FakeDevicectl) -> AdbKeys {
         AdbKeys(serial: "emulator-5554",
-                adb: Adb(executable: URL(fileURLWithPath: "/opt/homebrew/bin/adb"), makeSubprocess: fake.make))
+                adb: AndroidTool(executable: URL(fileURLWithPath: "/opt/homebrew/bin/adb"), makeSubprocess: fake.make))
     }
 
     @Test func `should press a button as its key event`() {

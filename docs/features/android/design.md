@@ -1,6 +1,6 @@
 # Android: design
 
-> Status: **slice 1 built** (listing), 2026-11-19; slice 2 — an emulator's screen and input over its own gRPC API — designed and proved by hand ([Transport](#transport-the-emulators-own-grpc-api-decided-2026-11-19)). The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
+> Status: **slices 1 and 2 built**, 2026-11-19 — emulators listed, turned on and off, streamed and driven (screen, touch, scroll, buttons, keys), checked on a running AVD. Phones and slice 3 open. The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
 
 ## Question
 
@@ -74,6 +74,19 @@ A role is registered only when the family performs all of it ([solid.md §4, L](
 **A minimal client of our own, no gRPC packages.** A call is HTTP/2 over cleartext TCP (prior knowledge): the preface and a SETTINGS frame, a HEADERS frame of HPACK literals (`:method POST`, `:path /android.emulation.control.EmulatorController/<call>`, `content-type application/grpc`, `te trailers`, the bearer token), and DATA frames each carrying a gRPC message (`0` + a 4-byte length + protobuf). baguette already frames HTTP/2 (`HTTP2Frame`, for the iPhone's RemoteXPC); the handful of messages are encoded by hand as tested values. Proved by a by-hand spike before any Swift. Offsider ([michael-palmes/offsider](https://github.com/michael-palmes/offsider)) takes the same API through grpc-swift and swift-protobuf; simvyn ([pranshuchittora/simvyn](https://github.com/pranshuchittora/simvyn)) uses adb only.
 
 **Phones** have no such API; their screen and input wait on a phone to test with — scrcpy's server (video, multi-touch) or adb only, decided then.
+
+## How an emulator plays the kernel's roles (built)
+
+| Role | Through | Why |
+|---|---|---|
+| `Power` | `emulator -avd <name> -no-window -no-audio`, detached · `adb emu kill` | headless, like `baguette boot`; outlives baguette |
+| `Screen` | the control API's `streamScreenshot` (RGBA → BGRA surfaces) | pushed on each change |
+| `Touch` · `Scroll` | the control API's `sendTouch`; a scroll is a finger drag | real multi-touch; a phone-shaped AVD has no mouse, so `injectWheel` (it exists) reaches nothing |
+| `Press` · `Key` | `adb shell input keyevent` / `keycombination`, by Android key codes | an AVD booted with `hw.keyboard=no` (phone profiles' default) drops the control API's key events; adb reaches every device |
+
+**Identity.** An emulator's `DeviceID` is its AVD name (`baguette_pixel`) — the same across boots, as a simulator's UDID; adb's serial (`emulator-5554`) only exists while it runs and can change, so it is mapped from the discovery file. An installed AVD that isn't running lists as `off`, with `power` alone. A phone is its serial.
+
+**The page.** `/devices.json` lists every device attached beside the simulators (`reality != .simulated`): phones and emulators alike.
 
 ## Slices
 

@@ -1,10 +1,11 @@
 import BaguetteDevice
 import Foundation
 
-/// `adb` — the Android Debug Bridge, the one door into every Android device:
-/// emulators and phones alike, on a cable or over Wi-Fi. One child per call;
-/// what it printed comes back, and a non-zero exit fails with adb's last line.
-struct Adb: Sendable {
+/// An Android SDK tool run as a child: `adb` — the Android Debug Bridge, the
+/// one door into every Android device, emulators and phones alike — or the
+/// `emulator`. One child per call; what it printed comes back, and a non-zero
+/// exit fails with the tool's last line.
+struct AndroidTool: Sendable {
     private let executable: URL
     private let makeSubprocess: @Sendable () -> any Subprocess
 
@@ -13,8 +14,10 @@ struct Adb: Sendable {
         self.makeSubprocess = makeSubprocess
     }
 
-    /// The adb this Mac has (`AdbLocation`), or nil when it has none.
-    static var installed: Adb? { AdbLocation.find().map { Adb(executable: $0) } }
+    /// The adb this Mac has, or nil when it has none.
+    static var adb: AndroidTool? { AndroidSDKLocation.adb().map { AndroidTool(executable: $0) } }
+    /// The Android Emulator this Mac has, or nil when it has none.
+    static var emulator: AndroidTool? { AndroidSDKLocation.emulator().map { AndroidTool(executable: $0) } }
 
     /// Run `adb <arguments>`, blocking until it exits.
     func runAndWait(_ arguments: [String]) throws -> Data {

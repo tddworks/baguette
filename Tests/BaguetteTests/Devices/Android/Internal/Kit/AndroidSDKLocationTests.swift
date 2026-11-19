@@ -4,12 +4,12 @@ import Testing
 
 /// Where `adb` is found: the SDK the environment names, Android Studio's own,
 /// or Homebrew's.
-@Suite("AdbLocation")
-struct AdbLocationTests {
+@Suite("AndroidSDKLocation")
+struct AndroidSDKLocationTests {
     private static let home = URL(fileURLWithPath: "/Users/someone")
 
     private static func find(_ environment: [String: String], installed: Set<String>) -> String? {
-        AdbLocation.find(environment: environment, home: home, isExecutable: { installed.contains($0) })?.path
+        AndroidSDKLocation.adb(environment: environment, home: home, isExecutable: { installed.contains($0) })?.path
     }
 
     @Test func `should find adb in the SDK ANDROID_HOME names`() {
@@ -34,5 +34,11 @@ struct AdbLocationTests {
 
     @Test func `should find no adb when none is installed`() {
         #expect(Self.find(["ANDROID_HOME": "/sdk"], installed: []) == nil)
+    }
+
+    @Test func `should find the emulator in the same SDK as adb`() {
+        #expect(AndroidSDKLocation.emulator(environment: [:], home: Self.home,
+                                            isExecutable: { $0 == "/Users/someone/Library/Android/sdk/emulator/emulator" })?.path
+            == "/Users/someone/Library/Android/sdk/emulator/emulator")
     }
 }

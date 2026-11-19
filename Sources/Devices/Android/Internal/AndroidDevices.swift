@@ -2,24 +2,41 @@ import BaguetteDevice
 import Foundation
 
 /// The Android family as a source of `Devices`: every emulator and phone
-/// `adb devices -l` lists, read fresh on every call. A Mac without adb (see
-/// `AdbLocation`) has none. Design: docs/features/android/design.md.
+/// `adb devices -l` lists, and every installed AVD that isn't running (off),
+/// read fresh on every call. An emulator is named by its AVD — the same across
+/// boots, as a simulator's UDID — a phone by its serial. A Mac without adb has
+/// none. Design: docs/features/android/design.md.
 final class AndroidDevices: Devices, @unchecked Sendable {
-    private let adb: Adb?
+    private let adb: AndroidTool?
+    private let emulator: URL?
     private let runningEmulators: @Sendable () -> [RunningEmulator]
+    private let installedAVDs: @Sendable () -> [String]
 
-    init(adb: Adb? = Adb.installed,
-         runningEmulators: @escaping @Sendable () -> [RunningEmulator] = { RunningEmulator.all() }) {
+    init(adb: AndroidTool? = AndroidTool.adb,
+         emulator: URL? = AndroidSDKLocation.emulator(),
+         runningEmulators: @escaping @Sendable () -> [RunningEmulator] = { RunningEmulator.all() },
+         installedAVDs: @escaping @Sendable () -> [String] = {
+             (AndroidTool.emulator.flatMap { try? $0.runAndWait(["-list-avds"]) })
+                 .map { AVDListing.names(in: String(decoding: $0, as: UTF8.self)) } ?? []
+         }) {
         self.adb = adb
+        self.emulator = emulator
         self.runningEmulators = runningEmulators
+        self.installedAVDs = installedAVDs
     }
 
     var all: [any Device] {
         guard let adb, let listing = try? adb.runAndWait(["devices", "-l"]) else { return [] }
         let running = runningEmulators()
-        return AdbListing.entries(in: String(decoding: listing, as: UTF8.self)).map { entry in
-            AndroidDevice(entry, emulator: running.first { $0.serial == entry.serial }, adb: adb)
+        let attached = AdbListing.entries(in: String(decoding: listing, as: UTF8.self)).map { entry in
+            AndroidDevice(attached: entry, emulator: running.first { $0.serial == entry.serial },
+                          adb: adb, emulatorTool: emulator)
         }
+        let on = Set(attached.compactMap(\.avd))
+        let off = installedAVDs().filter { !on.contains($0) }.map {
+            AndroidDevice(off: $0, adb: adb, emulatorTool: emulator)
+        }
+        return attached + off
     }
 
     func find(id: DeviceID) throws -> (any Device)? {
@@ -27,34 +44,61 @@ final class AndroidDevices: Devices, @unchecked Sendable {
     }
 }
 
-/// An Android emulator or phone as a `Device`, by its adb serial. The one
-/// place deciding what an Android device can do: an emulator whose control
-/// API answers has its screen and touchscreen through it, its buttons and
-/// keys through adb; anything else, nothing yet.
+/// An Android emulator or phone as a `Device`. The one place deciding what an
+/// Android device can do: an emulator can be turned on and off; one whose
+/// control API answers also has its screen and touchscreen through it, and
+/// its buttons and keys through adb. A phone, nothing yet.
 struct AndroidDevice: Device {
-    private let entry: AdbListing.Entry
+    let id: DeviceID
+    let name: String
+    let state: DeviceState
+    let kind: DeviceKind
+    /// The emulator's AVD; nil for a phone.
+    let avd: String?
+    private let serial: String?
     private let emulator: RunningEmulator?
-    private let adb: Adb
+    private let adb: AndroidTool
+    private let emulatorTool: URL?
 
-    init(_ entry: AdbListing.Entry, emulator: RunningEmulator?, adb: Adb) {
-        self.entry = entry
+    /// A device adb lists: an emulator by its AVD when its discovery file names
+    /// one, anything else by its serial.
+    init(attached entry: AdbListing.Entry, emulator: RunningEmulator?, adb: AndroidTool, emulatorTool: URL?) {
+        id = DeviceID(emulator?.avd ?? entry.serial)
+        name = entry.name
+        state = entry.state
+        kind = DeviceKind(platform: .android, reality: entry.reality, model: entry.model)
+        avd = emulator?.avd
+        serial = entry.serial
         self.emulator = emulator
         self.adb = adb
+        self.emulatorTool = emulatorTool
     }
 
-    var id: DeviceID { DeviceID(entry.serial) }
-    var name: String { entry.name }
-    var state: DeviceState { entry.state }
-    var kind: DeviceKind { DeviceKind(platform: .android, reality: entry.reality, model: entry.model) }
+    /// An installed AVD that isn't running.
+    init(off avd: String, adb: AndroidTool, emulatorTool: URL?) {
+        id = DeviceID(avd)
+        name = avd
+        state = .off
+        kind = DeviceKind(platform: .android, reality: .emulated, model: avd)
+        self.avd = avd
+        serial = nil
+        emulator = nil
+        self.adb = adb
+        self.emulatorTool = emulatorTool
+    }
 
     var abilities: Abilities {
-        var abilities = Abilities(device: entry.name)
-        guard let emulator else { return abilities }
+        var abilities = Abilities(device: name)
+        if let avd, let emulatorTool {
+            let (serial, adb) = (serial, adb)
+            abilities.register(.power) { EmulatorPower(avd: avd, serial: serial, emulator: emulatorTool, adb: adb) }
+        }
+        guard let emulator, let serial else { return abilities }
         abilities.register(.screen) { EmulatorScreen(emulator: emulator) }
         // The touchscreen through the control API, made when the first role
         // asks — its screen's size and density asked of adb once; buttons and
         // keys through adb, which reaches every Android device.
-        let (serial, adb) = (entry.serial, adb)
+        let adb = adb
         let input = OneInput { EmulatorInput.reaching(emulator, serial: serial, adb: adb) }
         let keys = AdbKeys(serial: serial, adb: adb)
         abilities.register(.touch) { input.value }
@@ -68,7 +112,7 @@ struct AndroidDevice: Device {
 extension EmulatorInput {
     /// The input of `emulator`, its screen's pixels and density asked of adb;
     /// a Pixel's (1080 × 2400 at 2.625) when adb can't say.
-    static func reaching(_ emulator: RunningEmulator, serial: String, adb: Adb) -> EmulatorInput {
+    static func reaching(_ emulator: RunningEmulator, serial: String, adb: AndroidTool) -> EmulatorInput {
         let ask = { (what: String) in
             (try? adb.runAndWait(["-s", serial, "shell", "wm", what])).map { String(decoding: $0, as: UTF8.self) } ?? ""
         }
