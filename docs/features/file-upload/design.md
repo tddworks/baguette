@@ -6,7 +6,7 @@ description: How uploads route to the Apps and PhotoLibrary collections, why dit
 
 ## Path
 
-- `baguette install`, `baguette add-media`, `POST /simulators/<UDID>/files?name=…`
+- `baguette install`, `baguette add-media`, `POST /devices/<UDID>/files?name=…` (or `/simulators/…`)
   (the drop target posts here)
 - → classify by extension on the values: `AppBundle.at` / `AppArchive.at` / `MediaItem.at` (pure)
 - → `Apps.install` / `Apps.install(archive:)` / `PhotoLibrary.add`

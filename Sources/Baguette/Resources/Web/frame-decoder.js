@@ -35,10 +35,16 @@
 
   function AvccDecoder({ onFrame, onLog }) {
     let ts = 0;
-    const decoder = new VideoDecoder({
+    // A VideoDecoder that reports an error is closed for good: every later
+    // chunk would be dropped and the page would sit on its last picture.
+    // So the last description is kept, and a closed decoder is replaced
+    // at the next keyframe — a delta before it has nothing to refer to.
+    let config = null;
+    const makeDecoder = () => new VideoDecoder({
       output: (frame) => onFrame(frame),
-      error: (err) => onLog && onLog('decoder: ' + err.message, true),
+      error: (err) => onLog && onLog('decoder: ' + err.message + ' — resuming at the next keyframe', true),
     });
+    let decoder = makeDecoder();
     return {
       feed(e) {
         if (!(e.data instanceof ArrayBuffer)) {
@@ -53,7 +59,7 @@
 
         if (type === 0x01) {
           // avcC description — configure the decoder.
-          const config = {
+          config = {
             codec: 'avc1.' + hex2(payload[1]) + hex2(payload[2]) + hex2(payload[3]),
             description: payload.buffer,
             optimizeForLatency: true,
@@ -88,10 +94,20 @@
             onLog && onLog('decode: mediaCapabilities unavailable ('
               + config.codec + ')', true);
           }
+          if (decoder.state === 'closed') decoder = makeDecoder();
           try {
             decoder.configure(config);
           } catch (ex) { onLog && onLog('config: ' + ex.message, true); }
-        } else if ((type === 0x02 || type === 0x03) && decoder.state === 'configured') {
+        } else if (type === 0x02 || type === 0x03) {
+          if (decoder.state === 'closed') {
+            if (type !== 0x02 || !config) return;
+            decoder = makeDecoder();
+            try { decoder.configure(config); } catch (ex) {
+              onLog && onLog('config: ' + ex.message, true);
+              return;
+            }
+          }
+          if (decoder.state !== 'configured') return;
           // 0x02 = key (IDR), 0x03 = delta.
           try {
             decoder.decode(new EncodedVideoChunk({

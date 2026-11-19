@@ -5,7 +5,7 @@
 // image/video lands in Photos.
 //
 // This is a dumb sender. For each dropped file it POSTs the raw bytes to
-// `POST /simulators/<udid>/files?name=<filename>` and shows the result.
+// `POST /devices/<udid>/files?name=<filename>` and shows the result.
 // All domain logic — which file is an app vs media, which simctl verb,
 // the "no home on a simulator" rejection — lives on the Swift side
 // (`Server.addFile`, `AppBundle`, `AppArchive`, `MediaItem`). See
@@ -332,7 +332,7 @@
       const busy = toast('Adding ' + displayName + '…', 'busy');
       try {
         const res = await fetch(
-          '/simulators/' + encodeURIComponent(udid) +
+          '/devices/' + encodeURIComponent(udid) +
             '/files?name=' + encodeURIComponent(name),
           { method: 'POST', body: blob }
         );

@@ -21,7 +21,7 @@ WebSocket, which agents can drive directly.
 The app must be (re)launched **after** Start — the camera is injected
 into apps at launch:
 
-1. Open `/simulators/<UDID>` in `baguette serve`; in the sidebar's
+1. Open `/devices/<UDID>` in `baguette serve`; in the sidebar's
    **Camera** disclosure pick a source (Webcam / Image / Video), a
    device or a file, and **Start**. Fit/Fill, Mirror and live FPS sit
    on the same card.
@@ -59,7 +59,8 @@ restarts.
 
 ## HTTP / WebSocket
 
-The browser opens `ws://<host>:<port>/simulators/<udid>/camera` and
+The browser opens `ws://<host>:<port>/devices/<udid>/camera` (or the old
+`/simulators/<udid>/camera`) and
 exchanges text frames. Commands may include a string `requestId`; their
 reply echoes it even on errors. Initial state and streaming heartbeats omit
 it, so clients can match a reply without treating a heartbeat as an ACK.
@@ -114,7 +115,7 @@ the staged host file for this udid. A missing `source` defaults to
 ### Uploading an image / video source
 
 ```
-POST /simulators/:udid/camera-source?name=<filename>
+POST /devices/:udid/camera-source?name=<filename>      (or /simulators/:udid/…)
      body = raw file bytes (application/octet-stream)
      → { "ok": true, "kind": "image" }   // or "video"
 ```

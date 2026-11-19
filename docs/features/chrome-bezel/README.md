@@ -38,21 +38,23 @@ merged composite pixel-for-pixel.
 
 ## HTTP
 
+Any device answers by its model; a simulator also under its old `/simulators/<UDID>/…`.
+
 | Route | Returns |
 |---|---|
-| `GET /simulators/<UDID>/bezel.png` | Merged composite (buttons baked in) |
-| `GET /simulators/<UDID>/bezel.png?buttons=false` | Bare body, no buttons |
-| `GET /simulators/<UDID>/chrome-button/<name>.png` | One button's rasterized image (e.g. `powerButton.png`, `powerButton-down.png`) |
-| `GET /simulators/<UDID>/screen-mask.png` | The lit panel's framebuffer mask; `404` when the chrome names none |
-| `GET /simulators/<UDID>/definition.json` | The SDK bootstrap — bezel URLs, screen rect, button boxes ([baguette-sdk](../baguette-sdk/README.md)) |
-| `GET /simulators/<UDID>/chrome.json` | The legacy layout JSON, still served for external tooling |
+| `GET /devices/<UDID>/bezel.png` | Merged composite (buttons baked in) |
+| `GET /devices/<UDID>/bezel.png?buttons=false` | Bare body, no buttons |
+| `GET /devices/<UDID>/chrome-button/<name>.png` | One button's rasterized image (e.g. `powerButton.png`, `powerButton-down.png`) |
+| `GET /devices/<UDID>/screen-mask.png` | The lit panel's framebuffer mask; `404` when the chrome names none |
+| `GET /devices/<UDID>/definition.json` | The SDK bootstrap — bezel URLs, screen rect, button boxes ([baguette-sdk](../baguette-sdk/README.md)) |
+| `GET /devices/<UDID>/chrome.json` | The legacy layout JSON, still served for external tooling |
 
 Each takes `?panel=` on a foldable. For a screenshot already composited into
 the bezel, use `screenshot-bezel.png` ([screenshot](../screenshot/README.md)).
 
 ```bash
-curl -s "http://127.0.0.1:8421/simulators/<UDID>/bezel.png?buttons=false" -o bare.png
-curl -s "http://127.0.0.1:8421/simulators/<UDID>/definition.json" | jq
+curl -s "http://127.0.0.1:8421/devices/<UDID>/bezel.png?buttons=false" -o bare.png
+curl -s "http://127.0.0.1:8421/devices/<UDID>/definition.json" | jq
 ```
 
 ## Gotchas

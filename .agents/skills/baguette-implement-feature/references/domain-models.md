@@ -1,9 +1,9 @@
 # Rich domain model patterns (baguette)
 
 baguette's domain layer is a small set of value types + `@Mockable`
-abstractions, organised by bounded context (`Domain/Input/`,
-`Domain/Screen/`, `Domain/Stream/`, `Domain/Chrome/`,
-`Domain/Simulator/`, `Domain/Accessibility/`, `Domain/Logs/`). The
+abstractions, organised by ability (`Device/Abilities/Touch/`,
+`Device/Abilities/Screen/`, `Device/Abilities/Capture/`, `Device/Chrome/`,
+`Devices/Simulator/`, `Device/Abilities/UI/`, `Device/Abilities/Logs/`). The
 two recurring patterns: **rich values that own their behaviour** (so
 the adapter stays a dumb wire emitter) and **wire DTOs with a
 one-line `execute(on:)`** (so dispatch logic stays tested at the
@@ -297,7 +297,7 @@ If you can't answer any of them concretely, the type is a struct.
 
 ## Adding a value type — checklist
 
-1. Create the type in `Domain/<Context>/<Name>.swift`. Make it
+1. Create the type in `Device/Abilities/<ability>/<Name>.swift`. Make it
    `Equatable, Sendable`. Add `Hashable` only if a Set/Dict needs it.
 2. Decide where domain knowledge lives — almost always on the value
    itself as computed properties or extension methods.
@@ -307,6 +307,6 @@ If you can't answer any of them concretely, the type is a struct.
 4. If it parses from the wire, add a sibling `<Name>: Gesture` that
    wraps it with `parse` + `execute`. Register on
    `GestureRegistry.standard`.
-5. Tests in `Tests/BaguetteTests/<Context>/`. Use Swift Testing
+5. Tests in `Tests/BaguetteTests/` at the source's path. Use Swift Testing
    `@Suite`/`@Test`/`#expect` (never XCTest). Test every branch of
    computed-property behaviour without booting a sim.

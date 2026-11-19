@@ -6,7 +6,7 @@ description: Why status-bar overrides go through simctl instead of SimulatorHID,
 
 ## Path
 
-- CLI `baguette status-bar override|clear`, `GET|POST|DELETE /simulators/<UDID>/status-bar`,
+- CLI `baguette status-bar override|clear`, `GET|POST|DELETE /devices/<UDID>/status-bar` (or `/simulators/…`),
   and the focus-mode panel (`sim-status-bar.js`)
 - → `StatusBarOverride` (value) → `StatusBar` (`Simulator.statusBar()` vends a fresh handle)
 - → `SimctlStatusBar` → `Subprocess.run("/usr/bin/xcrun", ["simctl","status_bar",udid,"override", …])`;

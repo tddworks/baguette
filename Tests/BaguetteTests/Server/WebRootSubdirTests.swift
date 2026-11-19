@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `WebRoot` resolves nested asset paths (e.g. `farm/farm.html`) so the
 /// device-farm UI can live in its own subfolder under `Resources/Web/`

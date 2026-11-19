@@ -150,11 +150,11 @@ test('asks the screenshot route for the picked size, fit and background', async 
   assert.equal(q.background, '#101010');
 });
 
-test('asks the simulator route when the page drives a simulator', async () => {
+test('asks the devices route when the page names no target', async () => {
   const { gallery, CaptureSettings, state } = galleryFor({ frameImg: null });
   await gallery.capture({ settings: new CaptureSettings({ withFrame: false }) });
 
-  assert.match(state.urls[0], /^\/simulators\/UD-1\/screenshot\.jpg\?/);
+  assert.match(state.urls[0], /^\/devices\/UD-1\/screenshot\.jpg\?/);
 });
 
 test("asks a physical device's own route when the page drives one", async () => {

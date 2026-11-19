@@ -21,10 +21,14 @@ toolbar control.
 ## HTTP
 
 ```
-POST /simulators/<UDID>/shake        → {"ok":true}
+POST /devices/<UDID>/shake           → {"ok":true}
                                        404 unknown udid
+                                       409 the device isn't running
+                                       422 the device can't shake
                                        500 shake failed (simctl error)
 ```
+
+A simulator answers under its old `/simulators/<UDID>/shake` too.
 
 ## Gotchas
 

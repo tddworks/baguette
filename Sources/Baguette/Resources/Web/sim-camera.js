@@ -6,7 +6,7 @@
 // device list + Start/Stop + Fit/Fill + Mirror + a live FPS readout.
 //
 // One panel per host element. Opens its own WebSocket to
-// `/simulators/<udid>/camera`; closing the panel (or the page) tears
+// `/devices/<udid>/camera`; closing the panel (or the page) tears
 // the socket down. The Mac side enumerates AVCaptureDevices and
 // pumps the chosen camera's BGRA frames into `/tmp/SimCam.bgra` — a
 // shared-memory ring buffer the VirtualCamera dylib reads inside the
@@ -14,7 +14,7 @@
 //
 // The source can also be an uploaded still image or a looping video
 // instead of a live webcam: pick image/video, choose a file (POSTed to
-// `/simulators/<udid>/camera-source`), then Start. The Mac side decodes
+// `/devices/<udid>/camera-source`), then Start. The Mac side decodes
 // and fits it into the same shared buffer, so the dylib is unchanged.
 
 (function () {
@@ -99,7 +99,7 @@
 
     _openSocket() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const url = `${proto}//${location.host}/simulators/${encodeURIComponent(this.udid)}/camera`;
+      const url = `${proto}//${location.host}/devices/${encodeURIComponent(this.udid)}/camera`;
       const ws = new WebSocket(url);
       this.ws = ws;
       ws.onmessage = (ev) => this._onMessage(ev);
@@ -393,7 +393,7 @@
 
       setStatus('var(--text-muted,#94a3b8)', 'uploading ' + file.name + '…');
       try {
-        const url = `/simulators/${encodeURIComponent(udid)}/camera-source?name=${encodeURIComponent(file.name)}`;
+        const url = `/devices/${encodeURIComponent(udid)}/camera-source?name=${encodeURIComponent(file.name)}`;
         const res = await fetch(url, { method: 'POST', body: file });
         const data = await res.json().catch(() => ({}));
         if (isStale()) return;

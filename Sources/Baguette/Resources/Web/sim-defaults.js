@@ -99,7 +99,7 @@
 
     get _R() { return window.Baguette._PreferenceRows; }
     _$(selector) { return this.host.querySelector(selector); }
-    _url(path) { return `/simulators/${encodeURIComponent(this.udid)}${path}`; }
+    _url(path) { return `/devices/${encodeURIComponent(this.udid)}${path}`; }
 
     _appName() {
       const app = this.apps.find((a) => a.bundleId === this.bundleId);

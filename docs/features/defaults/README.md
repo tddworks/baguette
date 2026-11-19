@@ -114,30 +114,33 @@ can't tell `1` from `1.0`.
 
 ## HTTP
 
+A simulator answers under its old `/simulators/<UDID>/…` too. A device with
+no defaults to edit, like a phone on a cable, answers `422` naming it.
+
 ```
-GET    /simulators/<UDID>/defaults.json?bundleId=com.x[&suite=group.x][&key=k]
+GET    /devices/<UDID>/defaults.json?bundleId=com.x[&suite=group.x][&key=k]
        → {"bundleId":"com.x","values":{"seen":{"type":"bool","value":false}},
           "lookups":{"answered":true,"live":["theme"],
                      "unset":[{"key":"theme","type":"string"},
                                               {"key":"volume","type":"float","registered":{"type":"float","value":0.5}}]}}
        → {"key":"k","present":false}                    (with &key=)
-POST   /simulators/<UDID>/defaults
+POST   /devices/<UDID>/defaults
        {"bundleId":"com.x","suite":"group.x"?,"key":"seen","type":"bool","value":false,
         "relaunch":true|false|"whenNeeded"?}
        → {"ok":true,"relaunched":false}
-POST   /simulators/<UDID>/defaults
+POST   /devices/<UDID>/defaults
        {"bundleId":"com.x","values":{…an export's values…},"relaunch":true?}
        → {"ok":true,"relaunched":false,"written":3}
-DELETE /simulators/<UDID>/defaults?bundleId=com.x[&suite=group.x]&key=seen[&relaunch=1|whenNeeded]
+DELETE /devices/<UDID>/defaults?bundleId=com.x[&suite=group.x]&key=seen[&relaunch=1|whenNeeded]
        → {"ok":true,"relaunched":false,"removed":true}
 ```
 
 The card also uses:
 
 ```
-GET    /simulators/<UDID>/apps.json                         → {"apps":[{"bundleId","name","system"}]}
-GET    /simulators/<UDID>/defaults-groups.json?bundleId=com.x → {"bundleId":"com.x","groups":["group.x"]}
-POST   /simulators/<UDID>/relaunch?bundleId=com.x            → {"ok":true}
+GET    /devices/<UDID>/apps.json                         → {"apps":[{"bundleId","name","system"}]}
+GET    /devices/<UDID>/defaults-groups.json?bundleId=com.x → {"bundleId":"com.x","groups":["group.x"]}
+POST   /devices/<UDID>/relaunch?bundleId=com.x            → {"ok":true}
 ```
 
 `defaults.json?…&plist=1` adds each array or dictionary's `"plist"` text, so

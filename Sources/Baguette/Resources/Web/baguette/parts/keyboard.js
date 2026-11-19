@@ -10,7 +10,7 @@
 // usage. Frontend stays a dumb sender — no HID page/usage table.
 //
 // Whitelist below mirrors what `KeyboardKey.from(wireCode:)` accepts
-// in `Sources/Baguette/Domain/Input/Keyboard.swift`; keep the two
+// in `Sources/Device/Abilities/Key/Keyboard.swift`; keep the two
 // in sync. Anything outside the set falls through to the host
 // browser (so Cmd+R / DevTools shortcuts still work).
 //

@@ -46,8 +46,8 @@ jobs:
 
       - name: Update version in source
         run: |
-          sed -i '' "s/let baguetteVersion = \".*\"/let baguetteVersion = \"${{ steps.version.outputs.version }}\"/" Sources/Baguette/App/Version.swift
-          grep baguetteVersion Sources/Baguette/App/Version.swift
+          sed -i '' "s/let baguetteVersion = \".*\"/let baguetteVersion = \"${{ steps.version.outputs.version }}\"/" Sources/Commands/Version.swift
+          grep baguetteVersion Sources/Commands/Version.swift
 
       - name: Build arm64
         run: |

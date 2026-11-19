@@ -5,7 +5,7 @@ description: Boot a shutdown simulator from the CLI, HTTP, the list page, the fa
 # Booting a device
 
 Every baguette surface that shows a simulator can also start one, including
-**focus mode** (`/simulators/<udid>`), where a deep link lands you. Every flag:
+**focus mode** (`/devices/<udid>`), where a deep link lands you. Every flag:
 [commands.md#baguette-boot](../../commands.md#baguette-boot).
 
 ## Quick start
@@ -15,13 +15,13 @@ baguette boot --udid <UDID>          # headless boot that survives the client di
 baguette shutdown --udid <UDID>
 ```
 
-Or open `/simulators/<UDID>` in `baguette serve` on a shutdown device: its
+Or open `/devices/<UDID>` in `baguette serve` on a shutdown device: its
 screen shows a **Boot** button.
 
 | Surface | How |
 |---------|-----|
 | CLI | `baguette boot --udid <UDID>` |
-| Focus mode | Open `/simulators/<UDID>` on a shutdown device; the screen shows **Boot** |
+| Focus mode | Open `/devices/<UDID>` on a shutdown device; the screen shows **Boot** |
 | List page | `/simulators`: boot / shutdown buttons per row |
 | Device farm | `/farm`: per-tile and bulk boot ([device farm](../device-farm/README.md)) |
 
@@ -51,11 +51,13 @@ active: they're how you leave a device that won't boot.
 
 | Method | Path | Returns |
 |---|---|---|
-| POST | `/simulators/<UDID>/boot` | `{"ok":true}`, or `{"ok":false,"error":"…"}` with 404 (unknown udid) / 500 (boot refused) |
-| POST | `/simulators/<UDID>/shutdown` | same shape |
+| POST | `/devices/<UDID>/boot` | `{"ok":true}`, or `{"ok":false,"error":"…"}` with 404 (unknown udid) / 422 (a device that can't be turned on, like a phone on a cable) / 500 (boot refused) |
+| POST | `/devices/<UDID>/shutdown` | same shape |
+
+A simulator answers under its old `/simulators/<UDID>/boot` and `/shutdown` too.
 
 ```bash
-curl -X POST http://127.0.0.1:8421/simulators/<UDID>/boot
+curl -X POST http://127.0.0.1:8421/devices/<UDID>/boot
 ```
 
 `GET /simulators.json` reports each device's `state`: `"Creating"`,

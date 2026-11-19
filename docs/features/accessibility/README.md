@@ -163,8 +163,8 @@ Over HTTP (a trusted browser, or a plugin whose grant carries
 `describe-ui`):
 
 ```http
-GET /simulators/<udid>/describe-ui.json
-GET /simulators/<udid>/describe-ui.json?x=172&y=880
+GET /devices/<udid>/describe-ui.json              (or /simulators/<udid>/…)
+GET /devices/<udid>/describe-ui.json?x=172&y=880
 ```
 
 ## Gotchas

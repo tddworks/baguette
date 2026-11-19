@@ -1,22 +1,21 @@
-// The one place the page knows WHAT it is driving. `/simulators/:udid`
-// and `/devices/:udid` serve the same sim.html; every module builds
-// its resource URLs through this seam so a physical device reuses the
-// whole page with the base path switched. Loaded before every other
-// script.
+// The one place the page builds a device's resource URLs: every device —
+// a simulator, a phone on a cable — answers under `/devices/:udid/…`.
+// `/devices/:udid` still serves this page, but its resources come from
+// the devices tree. Loaded before every other script.
 (function () {
   'use strict';
 
-  const parts = location.pathname.split('/').filter(Boolean);
-  const base = parts[0] === 'devices' ? 'devices' : 'simulators';
-
   window.BaguetteTarget = {
-    /** 'simulators' | 'devices' — the resource root this page drives. */
-    base,
-    /** True on /devices/:udid — a physical phone behind the mirror. */
-    isDevice: base === 'devices',
-    /** '/devices/<udid><rest>' or '/simulators/<udid><rest>'. */
+    /** The resource root every device's routes answer under. */
+    base: 'devices',
+    /**
+     * Whether the page drives a physical phone is the device's kind, not
+     * the URL: sim-native reads it from /devices/<udid>/device.json.
+     */
+    isDevice: false,
+    /** '/devices/<udid><rest>'. */
     path(udid, rest) {
-      return '/' + base + '/' + encodeURIComponent(udid) + (rest || '');
+      return '/devices/' + encodeURIComponent(udid) + (rest || '');
     },
   };
 })();

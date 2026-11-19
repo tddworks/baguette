@@ -6,7 +6,7 @@ description: Why companion screens work the way they do — the CarPlay HID serv
 
 ## Path
 
-- Page rail → `GET /simulators/:udid/companion-screens.json` → `CompanionScreens`
+- Page rail → `GET /devices/:udid/companion-screens.json` → `CompanionScreens`
   (CarPlay probe = the stream's own `Display.resolve()`; watch = one phone's
   side of `simctl list pairs -j`). `POST …/carplay-display` →
   `ExternalDisplays.enableCarPlay()`, which drives Simulator.app's
@@ -248,7 +248,7 @@ The pane also handles being wrong. `streamWS` writes
 `{"ok":false,"error":…}` on the socket and closes when `bind` throws,
 and the pane renders that under the frame with the same instructions the
 rail's card carries, plus the server's verbatim error
-(`noMatchingPort(carPlay)`) to search for. That answer used to go to
+(`noMatchingFramebuffer(carPlay)`) to search for. That answer used to go to
 `console.log` and nowhere else, which is what made the black rectangle
 so confusing.
 
@@ -388,8 +388,8 @@ Two things that log also settles:
 
 That also explains the intermittency. A framebuffer port only carries a
 surface while something is compositing to it, and
-`SimulatorKitFramebufferPorts.sizedPorts` drops any port it can't size —
-in practice, any port with no live surface, because `PortDefaultSize`
+`SimulatorKitFramebuffers.sizedFramebuffers` drops any port it can't size —
+in practice, any port with no live surface, because `FramebufferDefaultSize`
 reads its fallback keys off the port while the enumerate output shows
 them alongside the descriptor's surface. So the set of ports the binder
 sees changes from moment to moment: catch it while something has just

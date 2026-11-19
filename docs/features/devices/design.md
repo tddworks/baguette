@@ -7,7 +7,7 @@ description: Design of one Devices model for every kind of device baguette drive
 **Status:** BUILT for the CLI and the `/devices/…` page; the `/simulators/…`
 routes and the gesture commands still read `Simulators` (see §9). Slices 0–8
 are on `feat/devices`: `Infrastructure/` split by family; the device model
-(`DeviceState`, `AbilityTable`, `Device`, `Devices`, `CombinedDevices`); the
+(`DeviceState`, `Abilities`, `Device`, `Devices`, `CombinedDevices`); the
 simulator, companion and CoreDevice families as sources; the device-level
 commands, `baguette list`, `/devices.json`, and the device page's stream and
 touches reading it. A physical iPhone on a cable takes touches (CoreDevice Universal
@@ -22,7 +22,7 @@ and no law here repeats theirs:
 | what a simulator is made of — displays, panels, injection, heal | [CANONICAL_MODEL](../../CANONICAL_MODEL.md) |
 | whether CoreDevice will give an unentitled process a physical iPhone's screen and touches | [real-devices](../real-devices/design.md) (spike) |
 | the companion-app twin — ReplayKit pixels, CoreMotion pose | [device-twin](../device-twin/design.md) |
-| how a gesture reaches the screen once there is an `Input` | [ARCHITECTURE](../../ARCHITECTURE.md), [touches](../touches/design.md) |
+| how a gesture reaches the screen once there is a `Touch` (or `Press`, `Key`, `Scroll`) | [ARCHITECTURE](../../ARCHITECTURE.md), [touches](../touches/design.md) |
 
 ---
 
@@ -54,7 +54,7 @@ by name.**
 CoreSimulators  CoreDevicePhones  CompanionPhones   AndroidEmulators     ← one per device family
      │              │                 │                  │                 (Infrastructure)
 CoreSimulator   CoreDevicePhone   CompanionPhone     AndroidEmulator   : Device
-     └── abilities: AbilityTable ◇ ── .screen .input .location … (only what it can do)
+     └── abilities: Abilities ◇ ── .screen .input .location … (only what it can do)
                         │
              Screen ◆  Input ◆  Location ◆  Apps ◆ …   ← the roles that exist today, unchanged
 ```
@@ -105,12 +105,12 @@ Devices ◆                              every device baguette can see — all �
              ├─ kind : DeviceKind ◇    platform × reality × model
              ├─ state : DeviceState ◇  off · starting · ready · unavailable(reason)
              │                         ONLY READY ACCEPTS GESTURES AND STREAMS
-             └─ abilities : AbilityTable ◇
+             └─ abilities : Abilities ◇
                                        what this device can do   ANYTHING ELSE IS REFUSED BY NAME
                  └─ Ability<Role> ◇ → Role ◆   e.g. .location → any Location
 ```
 
-**What varies and what does not.** The roles (`Screen`, `Input`, `Location`,
+**What varies and what does not.** The roles (`Screen`, `Touch`, `Location`,
 `Apps`, …) do not vary: they are the domain, and each knows only its own job.
 What varies is *which* roles a device has and *who plays them*. That variation
 is data, registered by the device, never a branch: there is no
@@ -123,7 +123,7 @@ unsupported), and the page needs the abilities as a list it can render, which
 protocol conformances cannot give it.
 
 **Starting a device belongs to the device.** `boot` / `shutdown` is the
-`lifecycle` ability. A physical phone does not register it, so `baguette boot`
+`power` ability. A physical phone does not register it, so `baguette boot`
 on a phone is a refusal, not a special case.
 
 ## 3 · The rich types
@@ -143,7 +143,7 @@ on a phone is a refusal, not a special case.
 type (`CoreSimulator`, `CoreDevicePhone`, `CompanionPhone`, `AndroidEmulator`)
 and is the **only** place that decides what that family can do.
 
-### `AbilityTable` — what a device can do
+### `Abilities` — what a device can do
 
 > **Pointable as:** the cards the page shows for a device.
 
@@ -164,9 +164,10 @@ The abilities, from today's `Simulator` methods plus one new one:
 
 | Ability | Role | iOS simulator | physical iPhone (CoreDevice) | companion phone | Android emulator |
 |---|---|---|---|---|---|
-| `lifecycle` | `Lifecycle` (boot · shutdown) | ✓ | — | — | ✓ |
+| `power` | `Power` (turnOn · turnOff) | ✓ | — | — | ✓ |
 | `screen` | `Screen` | ✓ | ✓ (devicectl screenshots, ~1 fps) | ✓ once its video arrives | ✓ |
-| `input` | `Input` | ✓ | ✓ (CoreDevice Universal HID: touches; not buttons or keys) | later (runner) | ✓ |
+| `touch` | `Touch` | ✓ | ✓ (CoreDevice Universal HID) | later (runner) | ✓ |
+| `press` · `key` · `scroll` | `Press` · `Key` · `Scroll` | ✓ (one Indigo surface plays all four) | — (the digitizer sends only touches) | — | ✓ |
 | `displays` | `Displays` (phone · panels · CarPlay) | ✓ | — | — | — |
 | `accessibility` | `Accessibility` | ✓ | ✓ (its own accessibility service, over the tunnel) | — | ✓ |
 | `apps` · `logs` | `Apps` · `LogStream` | ✓ | — (devicectl can't push a notification; no syslog verb) | — | ✓ |
@@ -235,7 +236,7 @@ check a kind, and never word a refusal themselves:
 try devices.require(.location, of: id).set(coordinate)
 
 // baguette boot --udid X         (a phone refuses: "iPhone 18 Pro Max can't do lifecycle")
-try devices.require(.lifecycle, of: id).boot()
+try devices.require(.power, of: id).turnOn()
 
 // baguette tap / the stream socket
 Gesture.execute(on: try devices.require(.input, of: id))
@@ -246,10 +247,11 @@ try devices.require(.screen, of: id).start(onFrame: pump.push)
 // baguette list · GET /devices.json — kind and abilities per device; the page shows those cards
 devices.listJSON
 
-// composition root (App) — the only line that knows how many families exist
-let devices: any Devices = CombinedDevices([
-    CoreSimulators(deviceSet: path), CompanionPhones(), CoreDevicePhones(), AndroidEmulators(),
-])
+// DeviceKinds (App) — the one list of kinds, read by the CLI and by `serve`;
+// a new kind (Android) is one more source here
+let devices = DeviceKinds(simulators: CoreSimulators(deviceSetPath: path),
+                          companions: serving ? companionDevices : nil).devices
+let connected = devices.physical    // the device page's list: a view, not a second list
 ```
 
 A foldable keeps its own tell: `displays` and `hinge` are simulator abilities,
@@ -259,7 +261,7 @@ and `litPanelInput()` is built from them, as it is today.
 
 | Law | Owner |
 |---|---|
-| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `AbilityTable` |
+| a device does only what it registered; asking for anything else is a refusal naming the ability and the device, never a fallback | `Abilities` |
 | an id that no source knows is a refusal naming the id | `Devices.require(_:of:)` |
 | one id names one device across every source; asking for an id two sources claim is a refusal, never a pick (the list shows both, so the clash is visible) | `CombinedDevices` |
 | an ability that drives the running screen (screen, input, displays, hinge, orientation, shake, accessibility) is refused while the device isn't ready; the key says whether it needs one | `Device.require` (the key: `Ability.needsReady`) |
@@ -267,60 +269,58 @@ and `litPanelInput()` is built from them, as it is today.
 | the list a client sees names each device's abilities, and the page shows only those | `Devices.listJSON` |
 
 Laws that stay where CANONICAL §3 puts them, now for every family: coordinates
-are device points and each family's `Input` converts to its own units (Indigo
+are device points and each family's `Touch` converts to its own units (Indigo
 divides by size; adb scales to pixels); a screen and its input come from one
 binding (`Display`).
 
-## 6 · Infrastructure — split by what it talks to
+## 6 · The tree — outside in, split by what it talks to
 
-`Domain/` answers *what*, so it is split by context (the question), as now.
-`Infrastructure/` answers *how*, so it is split by what it talks to: one
-folder per device family, each sorted inside by the Domain's context names,
-plus `Host/` for the Mac itself.
+There is no `Domain/` or `Infrastructure/` folder. Each folder answers one
+question; its public face sits at the top and how it works — private APIs,
+host I/O — in its `Internal/` ([solid](solid.md)); the bare call to the
+outside world, in `Internal/System/`, thin by rule, is all unit coverage
+leaves out.
 
 ```
-Infrastructure/
-├── Simulator/   CoreSimulator · SimulatorKit · simctl · IndigoHID · AXPTranslator · guest helpers
-│   ├── CoreSimulators.swift  CoreSimulator.swift   ← the only files that register its abilities
-│   ├── Kit/     DeviceHost, framework loading, the simctl runner — shared inside the family
-│   └── Input/ Screen/ Accessibility/ Hinge/ Orientation/ Logs/ Location/ Apps/ Defaults/
-│       Pasteboard/ Photos/ StatusBar/ Interface/ Shake/ Motion/ Network/ Camera/ Injection/ …
-├── Companion/   the twin: LiveCompanionPhones, TwinScreen(s), TwinPoses, VTH264Decoder
-├── CoreDevice/  physical iPhone: devicectl, and CoreDevice.framework for touch
-│   └── Kit/     Devicectl; CoreDeviceFramework (RemoteDevice, CapabilityKind) and
-│                DigitizerReport, bound to the weak-linked framework in Swift; one C call
-│                (CoreDeviceABI) for the typed-throws send
-├── Android/     adb + emulator   (later, same shape)
-├── Host/        the Mac, shared by every family: Stream/ Recording/ Render/ Camera/ (AV capture)
-│                Chrome/ Bakery/ Plugin/ Subprocess/
-└── Server/      HTTP / WebSocket transport
+Sources/
+├── Commands/        the CLI — one file per `baguette` subcommand
+├── Server/          what `baguette serve` runs: routes, WebSocket transport
+├── Devices/         the families — the only code that knows what a kind is
+│   ├── DeviceKinds.swift   the one list of every family's device source
+│   ├── Simulator/   SimulatorDevice, its roles; Internal/: CoreSimulator · SimulatorKit ·
+│   │                simctl · IndigoHID · AXPTranslator · guest helpers, by ability
+│   │                (Input/ Screen/ Accessibility/ Hinge/ Logs/ Location/ Apps/ …)
+│   ├── iPhone/      a phone on a cable and its wire formats; Internal/: devicectl,
+│   │                CoreDevice (Kit/, weak-linked; one C call in CoreDeviceABI), tunnel services
+│   └── CompanionPhone/  the twin; Internal/: LiveCompanionPhones, TwinScreen(s), TwinPoses
+├── Plugins/         Plugin/ (manifests, grants, routes) · Bakery/ (where plugins come from)
+├── Device/          module BaguetteDevice — id, kind, power, Device, Devices, Abilities
+│   ├── Chrome/      how a device looks; Internal/: chrome store, RealityKit renderer
+│   ├── Abilities/<ability>/   each role and its values; Internal/: the Mac's side of it
+│   │                (Capture/Internal: encoders and pumps; Camera/Internal: AV capture)
+│   └── Internal/    what every family shares: Subprocess, Xcode, the log
+└── Baguette/        `@main` and the Resources the page and the guest helpers ship in
 ```
+
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder.
 
 | From | May import | Never |
 |---|---|---|
-| a family (`Simulator/`, `Companion/`, `CoreDevice/`, `Android/`) | Domain, `Host/` | another family |
-| `Host/` | Domain | any family — encoders take `IOSurface` or bytes, never a `SimDevice` |
-| `Server/` | Domain, `Host/` | a family (it reaches devices through `Devices`) |
-| App | everything — it is the composition root | — |
+| a family (`Devices/Simulator/`, `iPhone/`, `CompanionPhone/`) | `Device` | another family |
+| `Device` (and its `Internal/`) | nothing of baguette's | any family — encoders take `IOSurface` or bytes, never a `SimDevice` |
+| `Server/` | `Device`, `Plugins` | a family (it reaches devices through `Devices`) |
+| `Commands/` | everything — the composition root, with `DeviceKinds` | — |
 
-The host half is already platform-neutral in code. Of the stream, recording,
-screen and render files that mention SimulatorKit, the stream, recording and
-subprocess ones do so only in comments ("SimulatorKit recycles the IOSurface").
-Those comments now state the `Screen` contract instead ("a `Screen` may
-recycle the IOSurface"). `CaptureCanvas`, `ScreenSnapshot` and
-`RenderedScreen` turned out to be host code. One reach across the fence
-remains: `Host/Render/VerifiedDeviceAssets` defaults to
-`CoreSimulators.developerDir()`. Which Xcode is installed is a fact about the
-Mac, not the simulator family, so that lookup moves to `Host/` when a second
-family needs it (CoreDevice will).
+`Device` is its own module, so the compiler holds its fence. `Commands`,
+`Server`, `Devices` and `Plugins` still build as one target, so their fences
+are kept by review until each becomes its own module (solid step 8).
 
-AGENTS.md's layering sentence changes to:
-
-> `Domain/` splits by bounded context (the question). `Infrastructure/` splits
-> by what it talks to: one folder per device family, each sorted inside by the
-> Domain's context names, plus `Host/` for the Mac itself. A family never
-> imports another family; only its `Devices` source and its `Device` decide
-> what abilities it has.
+The host half is platform-neutral in code: stream, recording, screen and
+render code states the `Screen` contract ("a `Screen` may recycle the
+IOSurface") rather than SimulatorKit's. ~~`VerifiedDeviceAssets` defaults to
+`CoreSimulators.developerDir()`~~ — which Xcode is installed is a fact about
+the Mac, so the lookup is `Xcode.developerDir()` in `Device/Internal/`, which
+the simulator family forwards to.
 
 ## 7 · What dies
 
@@ -350,8 +350,8 @@ AGENTS.md's layering sentence changes to:
   (`PluginRoute`) and the page use `/simulators/`, so the old tree stays as an
   alias for at least one release.
 - **Platform-shaped words in the shared kernel.** `DeviceButton` (Common) is
-  iOS's buttons; Android has back and recents. Each family's `Input` refusing
-  what it lacks is the first answer, but the kernel may need a platform-neutral
+  iOS's buttons; Android has back and recents. A family not registering `Press`
+  when it lacks iOS's buttons is the first answer, but the kernel may need a platform-neutral
   set.
 - **Accessibility across platforms.** Can `AXNode` hold a uiautomator tree
   without iOS-only roles leaking into it? Decided when Android arrives.
@@ -380,10 +380,10 @@ AGENTS.md's layering sentence changes to:
   CoreDevice's Universal HID capability. Measured 2026-11-18; the research is
   in [real-devices](../real-devices/design.md#decision).
 - ~~Is a generic method on a `@Mockable` protocol a problem?~~ Avoided:
-  `require` lives on the `AbilityTable` value and in a `Devices` extension,
+  `require` lives on the `Abilities` value and in a `Devices` extension,
   so neither protocol has a generic member. `.location` resolves as an
   implicit member of `Ability<Role>` (keys are constrained extensions in
-  `Domain/Device/Abilities.swift`). Settled by slice 3's tests.
+  `Domain/Device/EveryAbility.swift`). Settled by slice 3's tests.
 - ~~Should two sources claiming one id hide the device from the list?~~ No:
   `all` lists both so the clash is visible, and `find(id:)` throws
   `claimedTwice` rather than pick. Settled in slice 4.
@@ -397,7 +397,7 @@ Each slice is green on its own. Test names are the `should …` sentences.
 | 0 | CANONICAL_MODEL (tree root, the §5 laws, the Device context), AGENTS.md's layering sentence, ARCHITECTURE.md | the design, before code |
 | 1 | Move only: `Infrastructure/` → `Simulator/`, `Companion/`, `Host/`; rewrite simulator-only comments in `Host/` | `swift build` and the whole `swift test` stay green; no new test (no behaviour) |
 | 2 | `DeviceID`, `DeviceKind`, `DeviceState` | "should accept gestures only when the device is ready"; "should read a booted simulator as ready" |
-| 3 | `Ability`, `AbilityTable` | "should refuse an ability the device never registered"; "should hand back the role registered for an ability"; "should name the abilities in the order they were registered" |
+| 3 | `Ability`, `Abilities` | "should refuse an ability the device never registered"; "should hand back the role registered for an ability"; "should name the abilities in the order they were registered" |
 | 4 | `Devices`, `CombinedDevices`, `require(_:of:)`, `listJSON` | "should list every device from every source when sources are combined"; "should refuse to combine two devices that claim one id"; "should refuse a device id no source knows"; "should list each device's kind and abilities" |
 | 5 | `SimulatorDevice` / `SimulatorDevices` present any `Simulator` / `Simulators` as a `Device` / `Devices` — adapters, because `Simulator.state` and `Device.state` (and both `all`s) are different types under one name | "should register every simulator role as an ability"; "should boot the simulator when its lifecycle is told to boot" |
 | 6 | the twin renamed `CompanionPhones`; `CompanionDevices` makes it a source; `/devices.json`, `definition.json`, `3d-model.json` and `/stream` read every physical device | "should show a companion's screen once its video has arrived"; "should list each ready physical device as connected, with what it can do" — **done** |

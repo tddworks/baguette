@@ -1,0 +1,49 @@
+import Foundation
+import Testing
+@testable import Baguette
+@testable import BaguetteDevice
+
+/// `baguette serve`: which plugins it offers, and how it says so. The
+/// server it composes and binds is integration-only.
+@Suite("Serve command")
+struct ServeCommandTests {
+
+    private func authoring() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("serve-\(UUID())")
+        let plugin = root.appendingPathComponent("probe-test")
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        try Data("""
+        { "name": "probe-test", "version": "1.0.0", "apiVersion": 1,
+          "contributes": { "commands": [ { "id": "go", "title": "Go", "run": ["true"] } ] } }
+        """.utf8).write(to: plugin.appendingPathComponent(FileSystemPlugins.manifestFilename))
+        return root
+    }
+
+    @Test func `should offer no plugin at all when told to ignore them`() throws {
+        let dir = try authoring()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let command = try ServeCommand.parse(["--no-plugins", "--plugin-dir", dir.path])
+
+        #expect(try command.plugins.all().isEmpty)
+    }
+
+    @Test func `should offer the plugins in the directories given`() throws {
+        let dir = try authoring()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let command = try ServeCommand.parse(["--plugin-dir", dir.path])
+
+        #expect(try command.plugins.all().contains { $0.id == "probe-test" })
+    }
+
+    @Test func `should name each plugin it offers, with its version`() async throws {
+        let dir = try authoring()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let plugins = FileSystemPlugins(roots: [dir])
+
+        let ran = try await run(reaching: reaching(noDevices())) { ServeCommand.announce(plugins) }
+
+        #expect(ran.told == ["plugin: probe-test 1.0.0"])
+    }
+}

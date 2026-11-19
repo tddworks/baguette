@@ -66,7 +66,7 @@ isn't real consent — the page sets the flag it then checks — and
 because trust is the decision that actually matters. Typing the command
 carries context a web page can't.
 
-The decision is `InstallDecision` in `Domain/Bakery/`, and every
+The decision is `InstallDecision` in `Plugins/Bakery/`, and every
 refusal path is unit-tested; installing still only copies files, so
 nothing runs until you open the plugin's panel.
 

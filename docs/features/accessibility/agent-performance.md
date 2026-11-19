@@ -120,7 +120,7 @@ Simulator  ◆
       └── Paste  ◇                     unchanged
 ```
 
-No new `@Mockable` role: `Accessibility`, `Input` and `Pasteboard` already exist, and the `Simulator` already hands them out. `Fill` takes them as arguments, as `Paste.execute(pasteboard:input:)` does, because a `baguette input` session has already bound its plane's `Input`. Only roles cross a fence; no adapter does.
+No new `@Mockable` role: `Accessibility`, `Pasteboard` and the input roles (`Touch`, `Key`) already exist, and the device already hands them out. `Fill` takes them as arguments, as `Paste.execute(pasteboard:input:)` does, because a `baguette input` session has already bound its plane's input abilities; it asks them for `Key` when it clears and types, and refuses by name on a device without one. Only roles cross a fence; no adapter does.
 
 ### `TextField` — one field on screen
 
@@ -191,7 +191,7 @@ guard let field = node.textField else { return .notATextField(name) }
 switch field.reading(of: text) { … }
 
 // `TypeText` keeps its one rule; `Fill` never tests for ASCII.
-if let typed = TypeText(typeable: text) { typed.execute(on: input) } else { paste }
+if let typed = TypeText(typeable: text) { typed.execute(on: keyboard) } else { paste }
 
 // The App doesn't branch on which read it was.
 let answer = describe.json(of: try describe.read(from: sim.accessibility()), style: style)
@@ -249,7 +249,7 @@ Not touched: `IndigoHIDInput`'s message path and any private symbol; its 100 ms 
 3. **`DescribeUI`, then `--short`.** *Pinned: `should answer a short read with what can be done and what the screen says`, `should leave how to act out of a short read`, `should refuse a short read at a point`, `should keep the whole tree when a read isn't short`, `should refuse a point with only one coordinate`.* Re-run.
 4. **`TextField` and `FieldReading`.** *Pinned: `should be a text field when it holds text`, `should not be a text field when it's a switch`, `should read a secure field by its number of characters`, `should call other punctuation reformatted`, `should say a field differs when a letter changed`.*
 5. **`Found.refusal`.** *Pinned: `should say why when no element matches a name`, `should say why when several elements match a name`, `should say why when an element is disabled`.*
-6. **`Fill`,** against `MockAccessibility`, `MockInput` and `MockPasteboard`. *Pinned: `should fill a text field and answer with what it shows`, `should type nothing when the element isn't a text field`, `should type nothing when a field never takes focus`, `should touch a field when a press doesn't focus it`, `should clear a field before entering text`, `should paste when the text can't be typed`, `should paste once when a field shows something else`, `should report what a field shows when it still differs after a paste`, `should keep a password off the pasteboard when it can be typed`, `should only clear when the text is empty`.*
+6. **`Fill`,** against `MockAccessibility`, `MockTouch`, `MockKey` and `MockPasteboard`. *Pinned: `should fill a text field and answer with what it shows`, `should type nothing when the element isn't a text field`, `should type nothing when a field never takes focus`, `should touch a field when a press doesn't focus it`, `should clear a field before entering text`, `should paste when the text can't be typed`, `should paste once when a field shows something else`, `should report what a field shows when it still differs after a paste`, `should keep a password off the pasteboard when it can be typed`, `should only clear when the text is empty`.*
 7. **Wiring.** `FillDispatch`, `FillCommand`, `input`, `RootCommand`, parsing tests, a smoke test on a booted sim. Re-run.
 8. **Docs.** A `fill` README, the hold into keyboard's design, `wire.md`, `skills/baguette`, `CHANGELOG`, `make docs`; then this file shrinks to what has no other home.
 
@@ -312,7 +312,7 @@ Not copying from simulator-use: its XCTest automation session, which its engine 
 2. **Does a search field count as a text field?** Unverified. `TextField` takes `AXTextField`, `AXTextArea` and `AXSecureTextField`, as `AXAffordance` did. Read a real search bar, then add the role in one place if it needs it.
 3. ~~**Where does `Fill` run?**~~ **ANSWERED: on the main actor.** `Fill.execute` is `@MainActor`, because its touch uses IndigoHID. `baguette input` calls it with `await`.
 4. ~~**Should the rules live in an App dispatcher beside `LabelTap`?**~~ **ANSWERED: no.** The App parses and calls, so the rules are on `Fill` and `TextField`, and the App only projects to JSON. Settled by review of the first draft.
-5. ~~**Should `Fill` be a method on `Simulator`?**~~ **ANSWERED: no.** A `baguette input` session has already bound its plane's `Input`, so `Fill` takes roles, as `Paste` does.
+5. ~~**Should `Fill` be a method on `Simulator`?**~~ **ANSWERED: no.** A `baguette input` session has already bound its plane's input abilities, so `Fill` takes roles, as `Paste` does.
 6. **Is an attached Device Hub always a dead input?** Measured twice: Device Hub opened after a boot left keys and touches dead (`dtuhidd.active` 1, and `heal` fixed it); booting with it already open also read 1, and a fill worked without healing. So `inputTaken` is only ever asked after a miss. That answer is unit-tested; the failure wasn't reproduced on a device after it was added.
 
 ## 9 · What Skylark found

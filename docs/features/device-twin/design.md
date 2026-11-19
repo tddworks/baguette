@@ -177,7 +177,7 @@ pipeline:
 - The decoded mirror is another `Screen` — "a stream of surfaces".
   `MJPEGStream`, `AVCCStream`, recording, capture, and the 3D
   `RenderedScreen` decorator consume that role today and don't change.
-- Control is another `Input` implementation behind the existing
+- Control is another `Touch` (and later `Press`) implementation behind the existing
   `GestureDispatcher`. The browser's gesture envelopes, the wire
   dialects in `GestureRegistry`, and the web UI don't change.
 - The twin **is** the existing 3D stage. `RealityKitDeviceScene`
@@ -190,7 +190,7 @@ pipeline:
 
 ## Domain
 
-New value types and abstractions in `Domain/Companion/`, all named for
+New value types and abstractions in `Devices/CompanionPhone/`, all named for
 their role:
 
 - `CompanionPhone` — identity of a paired physical phone (udid, name, model).
@@ -232,7 +232,7 @@ the control phase. Orchestrators depend on the nouns; tests drive
 
 ## Infrastructure
 
-`Infrastructure/Companion/` holds the irreducible I/O, split per the
+`Devices/CompanionPhone/Internal/` holds the irreducible I/O, split per the
 adapter rules:
 
 - `LiveCompanionPhones` — the in-memory `CompanionPhones` implementation, membership
@@ -251,9 +251,9 @@ adapter rules:
   with no changes. The orchestration is unit-covered via
   `MockH264Decoder`; `VTH264Decoder` (the irreducible
   `VTDecompressionSession` calls) is the only integration-only file.
-- The runner client — an `Input` implementation that serializes
+- The runner client — a `Touch` implementation that serializes
   dispatched gestures to the runner's HTTP endpoint. Mapping from
-  `Input` verbs to runner requests is unit-covered against
+  `Touch` verbs to runner requests is unit-covered against
   `MockRunner`.
 
 ## Companion (phone-side)
@@ -388,7 +388,7 @@ Each phase is independently shippable, matching pipe severability:
    signing burden on users beyond installing the companion.
 2. **Twin** — attitude on the motion socket driving the existing 3D
    stage; re-zero in the browser UI.
-3. **Control** — the runner target, `Input` implementation, gestures
+3. **Control** — the runner target, `Touch` implementation, gestures
    live on both 2D and 3D sockets.
 
 ## Known limits

@@ -73,7 +73,7 @@ instead of resetting every time the joystick moves.
 
 ## HTTP
 
-`POST /simulators/:udid/motion` accepts two spellings:
+`POST /devices/:udid/motion` (a simulator also answers under `/simulators/:udid/motion`) accepts two spellings:
 
 ```json
 { "activity": "running", "speed": 3.6, "confidence": "high" }
@@ -92,7 +92,7 @@ Both return the current state, which is also what `GET` answers:
   "steps": 24, "metres": 18.0, "speed": 1.40 }
 ```
 
-`DELETE /simulators/:udid/motion` parks the device as stationary and
+`DELETE /devices/:udid/motion` parks the device as stationary and
 disarms, including after the server restarts: it resumes the published
 pedometer totals, and a failed park or disarm returns an error and keeps the
 cleanup pending until the next explicit stop. Restarting the server alone

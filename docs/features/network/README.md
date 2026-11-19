@@ -99,9 +99,12 @@ is flaky", possibly days later. So:
 
 | Method | Path | Does |
 |---|---|---|
-| POST | `/simulators/<UDID>/network` | Set a condition |
-| GET | `/simulators/<UDID>/network` | Read the current state |
-| DELETE | `/simulators/<UDID>/network` | Clear, including for running apps |
+| POST | `/devices/<UDID>/network` | Set a condition |
+| GET | `/devices/<UDID>/network` | Read the current state |
+| DELETE | `/devices/<UDID>/network` | Clear, including for running apps |
+
+A simulator answers under its old `/simulators/<UDID>/network` too. A device
+that can't be conditioned, like a phone on a cable, answers `422` naming it.
 
 `POST` takes exactly one of three spellings (`"offline": false` doesn't count as
 a source):

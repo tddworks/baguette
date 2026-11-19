@@ -18,7 +18,7 @@ that one is for scripts and agents, this one is for humans asking "why is
 1. `baguette serve`, then open `http://127.0.0.1:8421/simulators`.
 2. **Sidebar mode** (`/simulators`): tick the checkbox on the "Accessibility"
    card in the right-hand sidebar; the selection shows inline in that card.
-   **Focus mode** (`/simulators/<UDID>`): click the inspector icon in the
+   **Focus mode** (`/devices/<UDID>`): click the inspector icon in the
    toolbar, next to the bezel-actionable toggle; the selection shows in a
    floating panel at the top right of the device column.
 3. Hover the screen. **Blue** is the node under the cursor; click to lock it

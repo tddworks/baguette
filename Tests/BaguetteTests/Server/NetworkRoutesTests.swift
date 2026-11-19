@@ -2,19 +2,19 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level coverage for the network routes.
 ///
 /// Same shape as the location and motion routes: the pure parse + dispatch
-/// helpers are driven with `MockSimulators` + `MockNetwork`, not the
+/// helpers are driven with one device's `MockNetwork`, not the
 /// Hummingbird `Response` wrappers.
 @Suite("Server network routes")
 @MainActor
 struct NetworkRoutesTests {
 
     private struct Wiring {
-        let simulators: MockSimulators
-        let sim: MockSimulator
+        let devices: any Devices
         let network: MockNetwork
         let captures: Captures
     }
@@ -28,24 +28,19 @@ struct NetworkRoutesTests {
         current: NetworkCondition? = nil,
         applyError: (any Error)? = nil
     ) -> Wiring {
-        let simulators = MockSimulators()
-        let sim = MockSimulator()
         let network = MockNetwork()
         let captures = Captures()
-        given(simulators).find(udid: .any).willReturn(sim)
-        given(sim).udid.willReturn("U")
-        given(sim).name.willReturn("iPhone 17 Pro")
-        given(sim).network().willReturn(network)
+        let devices = routeDevices(name: "iPhone 17 Pro") { $0.register(.network) { network } }
         if let applyError {
-            given(network).apply(.any, on: .any).willThrow(applyError)
+            given(network).apply(.any).willThrow(applyError)
         } else {
-            given(network).apply(.any, on: .any).willProduce { condition, _ in
+            given(network).apply(.any).willProduce { condition in
                 captures.applied.append(condition)
             }
         }
-        given(network).clear(on: .any).willReturn(())
-        given(network).current(on: .any).willReturn(current)
-        return Wiring(simulators: simulators, sim: sim, network: network, captures: captures)
+        given(network).clear().willReturn(())
+        given(network).current().willReturn(current)
+        return Wiring(devices: devices, network: network, captures: captures)
     }
 
     // MARK: - parse
@@ -110,18 +105,17 @@ struct NetworkRoutesTests {
         let w = makeWiring()
 
         let outcome = await Server.applyNetwork(
-            udid: "U", body: #"{"profile":"edge"}"#, simulators: w.simulators)
+            udid: "U", body: #"{"profile":"edge"}"#, devices: w.devices)
 
         #expect(outcome == .ok)
         #expect(w.captures.last == NetworkProfile.edge.condition)
     }
 
     @Test func `should report an unknown device when conditioning its network`() async {
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
+        let devices = routeDevices()
 
         let outcome = await Server.applyNetwork(
-            udid: "nope", body: #"{"profile":"edge"}"#, simulators: simulators)
+            udid: "nope", body: #"{"profile":"edge"}"#, devices: devices)
 
         #expect(outcome == .unknownDevice)
     }
@@ -129,7 +123,7 @@ struct NetworkRoutesTests {
     @Test func `should report an invalid body when the network request is malformed`() async {
         let w = makeWiring()
         let outcome = await Server.applyNetwork(
-            udid: "U", body: "not json", simulators: w.simulators)
+            udid: "U", body: "not json", devices: w.devices)
         #expect(outcome == .invalidBody)
     }
 
@@ -140,7 +134,7 @@ struct NetworkRoutesTests {
         let w = makeWiring(applyError: NetworkError.dylibMissing)
 
         let outcome = await Server.applyNetwork(
-            udid: "U", body: #"{"profile":"edge"}"#, simulators: w.simulators)
+            udid: "U", body: #"{"profile":"edge"}"#, devices: w.devices)
 
         #expect(outcome == .dispatchFailed)
     }
@@ -150,16 +144,15 @@ struct NetworkRoutesTests {
     @Test func `should stop conditioning the simulator's network`() async {
         let w = makeWiring()
 
-        let outcome = await Server.clearNetwork(udid: "U", simulators: w.simulators)
+        let outcome = await Server.clearNetwork(udid: "U", devices: w.devices)
 
         #expect(outcome == .ok)
-        verify(w.network).clear(on: .any).called(1)
+        verify(w.network).clear().called(1)
     }
 
     @Test func `should report an unknown device when clearing its network conditioning`() async {
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
-        #expect(await Server.clearNetwork(udid: "nope", simulators: simulators)
+        let devices = routeDevices()
+        #expect(await Server.clearNetwork(udid: "nope", devices: devices)
                     == .unknownDevice)
     }
 
@@ -168,7 +161,7 @@ struct NetworkRoutesTests {
     @Test func `should report the network condition the simulator is subject to`() async throws {
         let w = makeWiring(current: NetworkProfile.threeG.condition)
 
-        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", devices: w.devices) ?? ""
 
         #expect(json.contains(#""active":true"#))
         #expect(json.contains(#""latencyMs":200"#))
@@ -183,7 +176,7 @@ struct NetworkRoutesTests {
         // the whole design avoids.
         let w = makeWiring(current: NetworkProfile.threeG.condition)
 
-        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", devices: w.devices) ?? ""
 
         #expect(json.contains(#""profile":"3g""#))
     }
@@ -192,7 +185,7 @@ struct NetworkRoutesTests {
         let w = makeWiring(
             current: NetworkCondition(latencyMs: 317, bandwidthKbps: 411, lossPercent: 3)!)
 
-        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", devices: w.devices) ?? ""
 
         #expect(json.contains(#""profile":null"#))
     }
@@ -200,7 +193,7 @@ struct NetworkRoutesTests {
     @Test func `should report an unconditioned simulator as inactive`() async throws {
         let w = makeWiring(current: nil)
 
-        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", devices: w.devices) ?? ""
 
         #expect(json.contains(#""active":false"#))
     }
@@ -211,7 +204,7 @@ struct NetworkRoutesTests {
         // a second edit, and the figures behind each name stay in Swift.
         let w = makeWiring(current: nil)
 
-        let json = try await Server.networkStateJSON(udid: "U", simulators: w.simulators) ?? ""
+        let json = try await Server.networkStateJSON(udid: "U", devices: w.devices) ?? ""
 
         for profile in NetworkProfile.allCases {
             #expect(json.contains("\"\(profile.rawValue)\""), "\(profile.rawValue) missing")
@@ -222,10 +215,9 @@ struct NetworkRoutesTests {
         // "This device has no conditioning" and "there is no such device"
         // are different answers, and the first one reads as reassurance.
         // The route turns this nil into a 404, matching motion's read-back.
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(nil)
+        let devices = routeDevices()
 
-        #expect(try await Server.networkStateJSON(udid: "nope", simulators: simulators) == nil)
+        #expect(try await Server.networkStateJSON(udid: "nope", devices: devices) == nil)
     }
 
     @Test func `should fail rather than report inactive when the injection query fails`() async throws {
@@ -234,13 +226,11 @@ struct NetworkRoutesTests {
         try fixture.output("", stderr: "simulator unavailable", status: 2)
         let network = SharedFileNetwork(
             fileURL: fixture.directory.appendingPathComponent("network.json"),
-            dylibPath: "/builds/current/VirtualNetwork.dylib", injection: fixture.injection)
-        let simulators = MockSimulators()
-        given(simulators).find(udid: .any).willReturn(fixture.simulator)
-        given(fixture.simulator).network().willReturn(network)
+            dylibPath: "/builds/current/VirtualNetwork.dylib", injection: fixture.injection, simulator: fixture.simulator)
+        let devices = routeDevices { $0.register(.network) { network } }
 
         await #expect(throws: SimctlCapture.Failure.failed(udid: "U", status: 2, output: "simulator unavailable")) {
-            try await Server.networkStateJSON(udid: "U", simulators: simulators)
+            try await Server.networkStateJSON(udid: "U", devices: devices)
         }
     }
 }

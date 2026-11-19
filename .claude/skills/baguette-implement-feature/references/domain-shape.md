@@ -58,7 +58,7 @@ grep for; each example is one CANONICAL §6 lists.
 | 3 | **Does every law have one owner?** | the same rule twice, drifting; a caller reading state to decide | "is this a foldable" answered three ways; the phone target picked in two places |
 | 4 | **Is the business above, and the technique below?** | private API, argv or JSON assembled by the caller; a domain decision in `Server` | `Server` building `LitPanelInput` from two panels and a hinge (#124 moved it to `Simulator.litPanelInput()`); Domain's `StreamFormat` constructing Infrastructure streams |
 | 5 | **Does a new case add data, not an edit?** (SRP, OCP) | a `switch` on a device name; one type changing for several reasons | `GuestHingeMotor` changes for poses *and* keyboard keys |
-| 6 | **Does the question have a home?** | a context's rule only in a doc or in `Server` | "IndigoHID runs on the MainActor" is enforced by one hop in `Server.streamWS` and owned by no type |
+| 6 | **Does the question have a home?** | a context's rule only in a doc or in `Server` | "IndigoHID runs on the MainActor" was enforced by one hop in `Server.streamWS` and owned by no type (now `IndigoHIDInput`'s, for the build alone) |
 
 A finding is a row in CANONICAL §6 when a law already says what is right, or a
 line in §7 (Open) when the design must decide first.
@@ -74,15 +74,15 @@ have worked. Asking the questions of the types it touches finds the shape:
 | 1. Would the user say it? | *the lit panel* — yes, a word already on the wire |
 | 2. Does the thing decide about itself? | no: callers computed the lit panel from the angle; `Hinge.litPanel` owns it |
 | 3. Every state? | a touch has a state — *down on a panel* — that a per-gesture lookup forgot |
-| 4. As small as it can be? | one Domain decorator, `LitPanelInput`, a class only because a touch changes over time |
+| 4. As small as it can be? | one decorator in `Devices/Simulator/`, `LitPanelInput`, a class only because a touch changes over time |
 | 5. Data? | yes: two pinned panels from `Displays.panel(_:)`, no Duo branch |
 
 ```text
  NOW                                         PROPOSED
- Server.streamWS                             Server.streamWS
-  └─ input = sim.input()   (bound once)       └─ input = sim.litPanelInput()
-                                             Simulator.litPanelInput()
-                                              └─ LitPanelInput(cover:, unfolded:, hinge:)
+ Server.deviceStream                         Server.deviceStream
+  └─ input = device.input() (bound once)      └─ input = StreamDisplayPlan.bind(to: device)
+                                             a foldable's lit panel:
+                                              └─ LitPanelInput(displays:, hinge:)
                                                   ├─ each gesture → hinge.litPanel
                                                   └─ a touch keeps its panel until up
 ```

@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 @Suite("Server 3D render routes")
 struct Render3DRoutesTests {
@@ -24,7 +25,7 @@ struct Render3DRoutesTests {
             ),
             screenImage: Data("SCREEN".utf8),
             sourceSize: RenderDimensions(width: 100, height: 200),
-            simulators: simulators,
+            devices: SimulatorDevices(simulators),
             models: models,
             renderer: renderer
         )
@@ -72,7 +73,7 @@ struct Render3DRoutesTests {
             ),
             screenImage: Data("SCREEN".utf8),
             sourceSize: RenderDimensions(width: 100, height: 200),
-            simulators: simulators,
+            devices: SimulatorDevices(simulators),
             models: models,
             renderer: renderer
         )
@@ -95,7 +96,7 @@ struct Render3DRoutesTests {
             options: Self.defaults,
             screenImage: Data(),
             sourceSize: RenderDimensions(width: 100, height: 200),
-            simulators: simulators,
+            devices: SimulatorDevices(simulators),
             models: models,
             renderer: renderer
         )
@@ -108,7 +109,7 @@ struct Render3DRoutesTests {
 
         let json = try #require(Server.model3DJSONString(
             udid: "U",
-            simulators: simulators,
+            devices: SimulatorDevices(simulators),
             models: models
         ))
         let object = try #require(
@@ -137,7 +138,7 @@ struct Render3DRoutesTests {
         let plan = try Server.live3DPlan(
             udid: "U",
             options: options,
-            simulators: simulators,
+            devices: SimulatorDevices(simulators),
             models: models
         )
 
@@ -155,7 +156,7 @@ struct Render3DRoutesTests {
             _ = try Server.live3DPlan(
                 udid: "ghost",
                 options: .default,
-                simulators: simulators,
+                devices: SimulatorDevices(simulators),
                 models: models
             )
         }
@@ -290,10 +291,25 @@ private extension Render3DRoutesTests {
         let simulator = MockSimulator()
         given(simulator).deviceTypeName.willReturn("iPhone 17 Pro")
         given(simulator).name.willReturn("Demo")
+        given(simulator).udid.willReturn("U")
+        given(simulator).state.willReturn(.booted)
+        given(simulator).runtime.willReturn("iOS 26.4")
         let simulators = MockSimulators()
         given(simulators).find(udid: .value("U")).willReturn(simulator)
         let models = MockDeviceModels()
         given(models).match(deviceType: .any, deviceName: .any).willReturn(installed)
         return (simulators, simulator, models, installed)
+    }
+
+    @Test func `should answer the 3D routes under the devices tree and a simulator's old one`() {
+        for leaf in ["3d-model.json", "render-3d.png"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
+    }
+
+    @Test func `should answer the live 3D sockets under the devices tree and a simulator's old one`() {
+        for leaf in ["stream.3d.mjpeg", "stream.3d.avcc"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
     }
 }

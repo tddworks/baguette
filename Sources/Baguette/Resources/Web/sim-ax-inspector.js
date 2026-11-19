@@ -27,7 +27,7 @@
 //   - Sends   `{"type":"describe_ui"}`    over the stream WS.
 //   - Receives `{"type":"describe_ui_result","ok":true,"tree":…}`
 //     from same WS (or `{"ok":false,"error":…}` on failure).
-// AX tree shape mirrors `Domain/Accessibility/AXNode.swift`.
+// AX tree shape mirrors `Device/Abilities/UI/AXNode.swift`.
 
 (function () {
   'use strict';

@@ -36,7 +36,7 @@
     }
 
     /**
-     * Reads back what `GET /simulators/:udid/network` reports.
+     * Reads back what `GET /devices/:udid/network` reports.
      *
      * `profile` is carried across deliberately. The card posts a preset's
      * name and the device answers with numbers *plus* the preset they came

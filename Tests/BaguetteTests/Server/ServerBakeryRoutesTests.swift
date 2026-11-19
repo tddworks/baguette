@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level coverage for the bakery routes — the pure preview /
 /// install helpers, not the Hummingbird `Response` wrappers. Git is

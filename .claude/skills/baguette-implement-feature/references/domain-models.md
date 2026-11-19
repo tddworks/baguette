@@ -1,7 +1,8 @@
 # Rich domain model patterns (baguette)
 
 baguette's domain layer is value types plus `@Mockable` roles, one folder
-per bounded context (`Domain/<Context>/`; the contexts, the tree and every
+per ability (`Sources/Device/Abilities/<ability>/`) or device family
+(`Sources/Devices/<Family>/`; the contexts, the tree and every
 law's owner are in [CANONICAL_MODEL.md](../../../../docs/CANONICAL_MODEL.md)).
 Its patterns, each below:
 
@@ -12,48 +13,48 @@ Its patterns, each below:
 5. **A gesture parses itself and acts in one line**: `parse` then `execute(on:)`.
 6. **A Domain decorator may wrap a role** when it owns a rule.
 
-Every `@Mockable protocol` is named for its domain role (`Input`, `Screen`,
+Every `@Mockable protocol` is named for its domain role (`Touch`, `Screen`,
 `Hinge`, `Subprocess`), never `XxxPort` / `XxxService` / `XxxManager`.
 **Aggregate CRUD is the one carve-out**: the plural collection noun
 (`Simulators`, `Chromes`), never the suffix `XxxRepository`.
 
-## 1. The aggregate hands out roles
+## 1. A device hands out the abilities it has
 
-`Simulator` is the aggregate root: a `@Mockable protocol` whose requirements
-are the device's facts (`udid`, `state`, `deviceTypeName`), its commands
-(`boot`, `shutdown`), and **factories for its roles** (`input()`, `hinge()`,
-`displays()`, `accessibility()`, `defaults()`, …). The one adapter,
-`CoreSimulator`, builds the Infrastructure behind each role.
+`Devices` is the one list of every device of every family; a `Device` is
+identity + kind + state + its `Abilities`. A family registers an ability
+**only where it can perform it** — a role a device can't play is absent,
+never a `false`. Callers ask for the role by its `Ability` key and get it,
+or a refusal naming what's missing:
 
 ```swift
-// ✅ The caller asks the aggregate for the role it needs.
-let pose = try sim.hinge().fold(to: 130, over: 0.8)
-let input = sim.litPanelInput()
+// ✅ The way in asks for the role it needs.
+let hinge = try devices.require(.hinge, of: id)        // unknown / unable / not ready → refused
+try hinge.fold(to: 130, over: 0.8)
+let input = try device.input()                         // Touch & Press & Key & Scroll it has
 
-// ❌ The caller builds an adapter, or composes domain objects itself.
-let surface = SimctlInputSurface()                    // App reaching into Infrastructure
-let input = LitPanelInput(cover: …, unfolded: …, …)   // Server deciding the domain
+// ❌ The caller builds an adapter, or composes the device itself.
+let surface = SimctlInputSurface()                     // Commands reaching into a family's Internal/
+let input = LitPanelInput(displays: …, hinge: …)       // Server deciding what the device is
 ```
 
-Rules that need several roles live as **extension methods on the protocol**,
-so they're tested against `MockSimulator` with no device:
+Rules that need several of a device's roles live as **extension methods on
+`Device`**, tested against `routeDevices(…)` / mocks with no device:
 
 ```swift
-extension Simulator {
-    var canAcceptInput: Bool { state == .booted }
-
+public extension Device {
     func litPanel(in chromes: any Chromes) -> IntegratedPanel {
-        guard chromes.panels(forDeviceName: deviceTypeName).contains(.secondary) else {
-            return .primary       // one panel: never ask the hinge (a guest round trip)
+        guard chromes.panels(forDeviceName: kind.model).contains(.secondary) else {
+            return .primary                    // one panel: never ask the hinge
         }
-        return hinge().litPanel
+        return (try? abilities.require(.hinge))?.litPanel ?? .primary
     }
 }
 ```
 
-A new role is a new factory on `Simulator` and a new `@Mockable` protocol in
-its context. The App layer parses and calls; `Server` transports. Neither
-builds adapters or decides which composition of roles a use needs.
+A new role is a new `@Mockable` protocol and `Ability` key in
+`Device/Abilities/<ability>/`, registered by each family that can play it.
+`Commands` parse and call; `Server` transports. Neither builds adapters or
+decides which composition of roles a use needs.
 
 ## 2. A law lives on the node that holds its data
 
@@ -67,7 +68,7 @@ extension Hinge {
 }
 
 // ❌ the same rule at a call site is a second owner, and they drift
-let lit = sim.hinge().angle()?.litPanel ?? .primary
+let lit = try device.require(.hinge).angle()?.litPanel ?? .primary
 ```
 
 The smell is a `?? default`, an `if x.count > …`, or a `switch` over another
@@ -81,33 +82,32 @@ The value owns its identity and its behaviour against the role it dispatches
 into. `DeviceButton` and `KeyboardKey` are the canonical examples:
 
 ```swift
-enum DeviceButton: String, Sendable, Equatable, Hashable {
-    case home, lock, power, action
-    case volumeUp = "volume-up"
-    case volumeDown = "volume-down"
-    // … the watch buttons and the gesture shortcuts (`app-switcher`, …).
-    // `siri` is absent on purpose: every known path crashes backboardd.
+/// What `press` presses: a navigation the system performs, or a button on
+/// the device's body. Each device lists which it has (`Press.available`).
+enum DeviceButton: Hashable, Sendable {
+    case navigation(Navigation)        // home, app-switcher, the edge pulls, …
+    case hardware(HardwareButton)      // lock, power, volume, action, the watch's
 }
 
-extension DeviceButton {
+extension HardwareButton {
     /// Domain knowledge on the type, not in the adapter.
     var standardHIDUsage: HIDUsage? {
         switch self {
-        case .home, .lock: return nil   // the legacy button path
+        case .lock:       return nil   // a button message of its own
         case .power:      return HIDUsage(page: 12, usage: 48)
         case .volumeUp:   return HIDUsage(page: 12, usage: 233)
         case .volumeDown: return HIDUsage(page: 12, usage: 234)
         case .action:     return HIDUsage(page: 11, usage: 45)
-        // … the gesture shortcuts return nil; the watch buttons carry their
-        //   chrome.json codes
+        // … the watch buttons carry their chrome.json codes.
+        // `siri` is absent on purpose: every known path crashes backboardd.
         }
     }
 
     /// Tell, don't ask: the caller says "press this button"; the adapter
     /// picks the SimulatorKit symbol.
     @discardableResult
-    func press(duration: Double = 0, on input: any Input) -> Bool {
-        input.button(self, duration: duration)
+    func press(duration: Double = 0, on buttons: any Press) -> Bool {
+        buttons.button(self, duration: duration)
     }
 }
 ```
@@ -147,26 +147,28 @@ try HingeCommand.parse(pose: "ajar", angle: nil, duration: nil)   // throws Hing
 
 ## 5. A gesture parses itself and acts in one line
 
-baguette has no DTOs: a `Tap` or a `Press` *is* the domain concept, and it
+baguette has no DTOs: a `Tap` or a `ButtonPress` *is* the domain concept, and it
 reads itself from the wire (`parse`) and acts on the role (`execute(on:)`).
 Its rules live on the rich value it carries, so `execute` stays one line.
 
 ```swift
-struct Press: Gesture, Equatable {
+struct ButtonPress: Gesture, Equatable {
     static let wireType = "button"
     let button: DeviceButton
     let duration: Double
 
-    static func parse(_ dict: [String: Any]) throws -> Press {
+    static func parse(_ dict: [String: Any]) throws -> ButtonPress {
         let raw = try Field.requiredString(dict, "button")
         guard let button = DeviceButton(rawValue: raw) else {
             throw GestureError.invalidValue("button", expected: allowed)
         }
-        return Press(button: button, duration: Field.optionalDouble(dict, "duration", default: 0))
+        return ButtonPress(button: button, duration: Field.optionalDouble(dict, "duration", default: 0))
     }
 
-    func execute(on input: any Input) -> Bool {
-        button.press(duration: duration, on: input)   // ← one line
+    static var ability: Ability<any Press> { .press }
+
+    func execute(on buttons: any Press) -> Bool {
+        button.press(duration: duration, on: buttons)   // ← one line
     }
 }
 ```
@@ -179,9 +181,11 @@ struct Press: Gesture, Equatable {
 
 ## 6. A Domain decorator may wrap a role
 
-`IndigoHIDInput` is the only Infrastructure `Input`; tests use `MockInput`.
+`IndigoHIDInput` is the simulator's only input adapter, playing all four
+roles (its `HID`); tests mock the role they test (`MockTouch`, `MockKey`, …).
 Don't add a parallel hierarchy for testability. But a **Domain** type that
-wraps `Input` to own a rule is the right shape, composed by the aggregate:
+wraps a simulator's `HID` to own a rule is the right shape, composed by the
+aggregate:
 
 | Decorator | The rule it owns |
 |---|---|
@@ -189,7 +193,7 @@ wraps `Input` to own a rule is the right shape, composed by the aggregate:
 | `LitPanelInput` | on a socket that outlives a fold, each gesture goes to the lit panel; a touch stays on its digitizer until it lifts |
 
 A decorator forwards everything else unchanged, holds roles not adapters
-(`any Input`, `any Hinge`), and is built by a `Simulator` factory, not by
+(`any HID`, `any Hinge`), and is built by a `Simulator` factory, not by
 `Server`.
 
 ## struct vs class
@@ -231,11 +235,13 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
 
 - **A rule at the call site**: `?? .primary`, a count check, a `switch` on
   another type's state. Move it to the node that holds the data.
-- **The App or `Server` building adapters or composing roles**: ask the
-  `Simulator` for a role; add a factory if there isn't one.
-- **Domain reaching outward**: a Domain type importing an Infrastructure
-  type (`MJPEGStream`, `FrameSink`) or calling the App's `log(…)`. Domain
-  depends only on Foundation and IOSurface; a failure is its return value.
+- **`Commands` or `Server` building adapters or composing roles**: ask the
+  device for the ability (`devices.require(.x, of: id)`); register it in
+  the family if it isn't there.
+- **A value reaching outward**: a value in `Device/Abilities/` naming a
+  family's type (`SimDevice`, `CoreSimulators`) or a way in's. `BaguetteDevice`
+  imports nothing of ours — the compiler holds that; a failure is its
+  return value.
 - **A `Bool` flag the caller decides, or an optional meaning two things**:
   name the cases.
 - **Service objects with no state**: `OrderService.cancel(order)` belongs
@@ -244,11 +250,13 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
   behaviour.
 - **A device-name branch**: make the difference data.
 - **Async/await in the input path**: the HID API is synchronous and the wire
-  is request/ack. The only hop is `Server`'s to the `MainActor`.
+  is request/ack. A device's gestures run on its `GestureQueues` lane; the
+  only main-thread hop is `IndigoHIDInput`'s, for each message build.
 
 ## Adding a domain type — checklist
 
-1. Name its context (CANONICAL §5) and create it in `Domain/<Context>/`.
+1. Name its context (CANONICAL §5) and create it in `Device/Abilities/<ability>/`, or
+   `Devices/<Family>/` when only one family has it.
 2. Name the laws it owns (CANONICAL §3). Grep for each: if it already lives
    elsewhere, that's the owner, or the duplicate to remove.
 3. A value: `struct` or `enum`, `Equatable, Sendable`, invalid input refused
@@ -257,8 +265,8 @@ handle makes `CoreSimulator` a class, while the values it answers (`state`,
    (`press` · `apply` · `deliver`) that takes the role it acts on and
    forwards in one line.
 5. A role for the outside world: a `@Mockable` protocol named for the role,
-   handed out by a `Simulator` factory, implemented in `Infrastructure/<Context>/`.
+   registered on the device's `Abilities`, implemented in `Devices/<Family>/Internal/<ability>/`.
 6. A wire envelope: a sibling `Gesture` (or `parse(json:)`) with `parse`
    plus a one-line `execute`, registered on `GestureRegistry.standard`.
-7. Tests in `Tests/BaguetteTests/<Context>/`, named `should <outcome> [when
+7. Tests in `Tests/BaguetteTests/` at the source's path, named `should <outcome> [when
    <situation>]`, Swift Testing only, every branch covered without a sim.

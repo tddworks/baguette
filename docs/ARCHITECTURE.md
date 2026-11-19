@@ -46,8 +46,8 @@ first; the other two:
    rejects a replaced dylib at the same path.
 
 The HID recipe is commented in
-`Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift`; the
-camera pipeline lives in `Sources/Baguette/Infrastructure/Host/Camera/` and
+`Sources/Devices/Simulator/Internal/Input/IndigoHIDInput.swift`; the
+camera pipeline lives in `Sources/Device/Abilities/Camera/` and
 `Injected/VirtualCamera/` (see [`features/camera/README.md`](features/camera/README.md)).
 
 ## Two consumers
@@ -76,8 +76,8 @@ standalone web UI it serves itself).
                                   → booted iOS 26 simulator
 ```
 
-Both paths share the same Domain + Infrastructure layers. The only
-difference is the App-layer entry point: `InputCommand` reads stdin
+Both paths share everything under `Devices/` and `Device/`. The only
+difference is the way in: `InputCommand` reads stdin
 and writes stdout; `Server` (under `baguette serve`) opens a
 WebSocket and uses `WebSocketFrameSink` to push encoded frames back.
 
@@ -93,47 +93,58 @@ per-session warmup that should only happen once.
 > arrow; see [`features/plugins/README.md`](features/plugins/README.md) for the
 > second one.
 
-## Three-layer code split
+## Layout, outside in
 
-Cross-layer imports flow strictly inward: App depends on Domain +
-Infrastructure; Infrastructure depends on Domain; Domain depends on
-nothing but Foundation / IOSurface (a public Apple type).
+Imports flow strictly inward. The two ways in depend on the device
+families and the plugins; they depend on `BaguetteDevice`, which
+depends on nothing of baguette's — only Foundation / IOSurface (public
+Apple types) and Mockable.
 
 ```
-Sources/Baguette/
-├── App/                CLI dispatch + use-case orchestration
-├── Domain/             pure Swift, no private Apple APIs
-├── Infrastructure/     @Mockable protocols + concrete impls
-└── Resources/Web/      static HTML / JS / CSS for `serve`
+Sources/
+├── Commands/           the CLI: one file per `baguette` subcommand
+├── Server/             what `baguette serve` runs: routes, WebSocket, WebRoot
+├── Devices/            the device families, each with its own Internal/
+│   ├── Simulator/          CoreSimulator, SimulatorKit, simctl
+│   ├── iPhone/             a phone on a cable: CoreDevice, its tunnel services
+│   └── CompanionPhone/     the companion-app twin
+├── Plugins/
+│   ├── Plugin/             manifests, grants, routes a plugin may reach
+│   └── Bakery/             where plugins come from: repos, menus, trust
+├── Device/             module BaguetteDevice — what a device is: id, kind,
+│   │                   power, Device, Devices, Abilities
+│   ├── Chrome/             how it looks: bezel, 3D model, renderers
+│   ├── Abilities/<ability>/  one role and its values (Touch, Press, Key,
+│   │                       Screen, Capture, UI, Apps, Location, …)
+│   └── Internal/           host I/O every family shares (subprocess, Xcode, log)
+└── Baguette/           `@main` (RootCommand) and Resources/Web/ for `serve`
 ```
 
-`Domain/` is split into bounded-context subfolders (`Device/`,
-`Simulator/`, `CoreDevice/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`,
-`Accessibility/`, …), and `Tests/BaguetteTests/` mirrors that split.
-`Infrastructure/` is split by what it talks to: one folder per device
-family (`Simulator/` for CoreSimulator, SimulatorKit and simctl;
-`CoreDevice/` for a phone on a cable — CoreDevice, devicectl and the
-phone's own tunnel services; `Companion/` for the companion-app twin),
-each sorted inside by the same context names, plus `Host/` for what
-every family shares (encoders, recording, rendering, chrome, plugins)
-and `Server/`. A family never imports another family; `Host/` never
-imports a family. Why: [devices](features/devices/design.md).
+Every folder keeps its public face at the top and its implementations
+— private APIs, host I/O — in `Internal/`
+([solid](features/devices/solid.md)). The irreducible call to the outside
+world (a private symbol, VideoToolbox, a socket, a process) sits apart in
+`Internal/System/`, at most 100 lines a file: the only code unit coverage
+leaves out (`codecov.yml`, `make check-coverage`). A family never imports another
+family. Why: [devices](features/devices/design.md).
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder: a test
+sits in the folder of the source it covers.
 
-### Domain
+### Device: values and roles
 
-Pure value types with rich behaviour, plus `@Mockable` aggregate
-protocols at the boundaries the App layer wires up.
+Pure value types with rich behaviour, plus `@Mockable` role and
+aggregate protocols at the boundaries the ways in wire up.
 
 | Context | Type | Kind | Notes |
 |---|---|---|---|
-| Device | `Devices` / `Device` | aggregate | every device of every family in one list; a device is identity + kind + state + an `AbilityTable`. `devices.require(.input, of: id)` hands back the role, or refuses naming the ability ([devices](features/devices/design.md)) |
-| Device | `AbilityTable` / `Ability` | value | what one device can do, registered by its family only when it can do it |
+| Device | `Devices` / `Device` | aggregate | every device of every family in one list; a device is identity + kind + state + an `Abilities`. `devices.require(.input, of: id)` hands back the role, or refuses naming the ability ([devices](features/devices/design.md)) |
+| Device | `Abilities` / `Ability` | value | what one device can do, registered by its family only when it can do it |
 | CoreDevice | `PhysicalPhone` · `MediaStreamOffer` · `ReceiverFeedback` · `DTXMessage` · `XPCObject` · `ServiceDirectory` · `AXTreeDump` | value | a phone on a cable, and the wire formats of its screen stream and its services — pure, tested byte for byte ([real devices](features/real-devices/design.md)) |
 | Simulator | `Simulator` | value | identity (`udid`, `name`, `state`, `runtime`); rich verbs `boot()` / `shutdown()` / `screen()` / `input()` / `chrome(in:)` delegate to the injected aggregate |
 | Simulator | `Simulators` | aggregate | `@Mockable` protocol — `all`, `find`, `boot`, `shutdown`, `screen(for:)`, `input(for:)`. Default-impl `running` / `available` / `listJSON` |
 | Screen | `Screen` | port | `@Mockable` protocol — `start(onFrame:)` / `stop`. Emits `IOSurface` per frame |
-| Input | `Input` | port | `@Mockable` protocol — `tap` / `swipe` / `touch1` / `touch2` / `button` / `scroll` |
-| Input | `Gesture` | protocol | `Tap` / `Swipe` / `Touch1` / `Touch2` / `Press` / `Scroll` / `Pinch` / `Pan` value types |
+| Input | `Touch` · `Press` · `Key` · `Scroll` | role | `@Mockable` protocols, one per input ability — `tap` / `swipe` / `touch1` / `touch2` / `twoFingerPath`; `button`; `key`; `scroll`. A device registers only those it has |
+| Input | `Gesture` | protocol | one act of one ability, which it names: `Tap` / `Swipe` / `Touch1` / `Touch2` / `Pinch` / `Pan` (Touch), `ButtonPress` (Press), `Keystroke` / `TypeText` (Key), `WheelEvent` (Scroll) |
 | Input | `GestureRegistry` | strategy | maps wire `"type"` strings to per-gesture parsers |
 | Stream | `Stream` | port | `@Mockable` protocol — `start(on:)` / `stop` / `apply(_:)` / `requestKeyframe` / `requestSnapshot` |
 | Stream | `StreamConfig` / `StreamFormat` | value | runtime knobs + `mjpeg` / `avcc` enum |
@@ -157,12 +168,13 @@ protocols at the boundaries the App layer wires up.
 | Common | `Point` / `Size` / `Insets` / `Rect` | value | coordinate primitives |
 
 Adding a new gesture is one `Gesture`-conforming struct in
-`Domain/Input/` + one line in `GestureRegistry.standard`. Adding a
-new stream format is one `Stream` impl in `Infrastructure/Host/Stream/` +
-one case in `StreamFormat.makeStream`. Caller code stays unchanged
+its ability's folder (`Device/Abilities/Touch/`, …) + one line in `GestureRegistry.standard`. Adding a
+new stream format is one `Stream` impl in `Device/Abilities/Capture/Internal/` +
+one case in `StreamFormat.makeStream` (beside the encoders, not among
+the values). Caller code stays unchanged
 (OCP).
 
-### Infrastructure
+### Implementations (`Internal/`)
 
 `@Mockable` ports + concrete impls. The concrete impls do the
 ObjC-runtime / SimulatorKit / CoreGraphics work; tests substitute
@@ -172,7 +184,7 @@ mocks at the port boundary.
 |---|---|---|---|
 | Simulator | `Simulators` | `CoreSimulators` | CoreSimulator + SimulatorKit private classes via the ObjC runtime |
 | Screen | `Screen` | `SimulatorKitScreen` | `SimDevice.io` framebuffer callback registration |
-| Input | `Input` | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
+| Input | `Touch` · `Press` · `Key` · `Scroll` (a simulator's `HID`) | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
 | Stream | `Stream` | `MJPEGStream` / `AVCCStream` | `JPEGEncoder` + `H264Encoder` (VideoToolbox), envelope formatting |
 | Stream | `FrameSink` | `StdoutSink` / `WebSocketFrameSink` | per-process or per-WS sink for encoded bytes |
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
@@ -193,18 +205,19 @@ feeding. The WS sink also parses the encoder's HTTP-shaped envelopes
 (MJPEG multipart, AVCC length-prefix) into per-frame WS messages
 before forwarding.
 
-### App
+### Commands and Server
 
-Thin orchestration; ArgumentParser lives here.
+Thin orchestration; ArgumentParser lives in `Commands/`, Hummingbird in
+`Server/`.
 
-- `RootCommand` — top-level `AsyncParsableCommand`, registers all
+- `RootCommand` (`Sources/Baguette/`) — top-level `AsyncParsableCommand`, registers all
   subcommands.
 - `Commands/` — one file per subcommand. `InputCommand` reads stdin
   and runs `GestureDispatcher`. `ServeCommand` boots a `Server` with
   real `CoreSimulators` + `LiveChromes`. `StreamCommand` writes
   encoder bytes to stdout via `StdoutSink`.
 - `GestureDispatcher` — pure JSON-line-in → ack-JSON-out using
-  `GestureRegistry` + `Input`. Used by both `InputCommand` (over stdin)
+  `GestureRegistry` + the screen's input `Abilities`. Used by both `InputCommand` (over stdin)
   and `Server.streamWS` (over WebSocket text frames).
 - `ReconfigParser` — runtime stream-control parser (`set_bitrate` /
   `set_fps` / `set_scale`). Pure: takes a line + current config,
@@ -223,12 +236,14 @@ Thin orchestration; ArgumentParser lives here.
    space), serialises to JSON, sends as a text WS message.
 4. **`Server.streamWS`** — receives the text frame, runs
    `applyStreamControl` first (returns `false` since this isn't a
-   `set_*` / `force_idr` / `snapshot`), then hops to `MainActor` and
-   calls `GestureDispatcher.dispatch`.
+   `set_*` / `force_idr` / `snapshot`), then queues
+   `GestureDispatcher.dispatch` on the device's lane (`GestureQueues`):
+   one gesture at a time, in the order sent, off the event loop.
 5. **`GestureDispatcher`** — parses the JSON via
    `GestureRegistry.standard.parse`, gets back a `Tap` value type,
-   calls `tap.execute(on: input)`.
-6. **`Tap.execute`** — calls `input.tap(at:size:duration:)`.
+   asks the screen's input for `Tap.ability` (`.touch`) and calls
+   `tap.execute(on: touch)`; a screen without it is refused by name.
+6. **`Tap.execute`** — calls `touch.tap(at:size:duration:edge:)`.
 7. **`IndigoHIDInput.tap`** — lazily opens `SimDeviceLegacyHIDClient`
    and primes the input services. `IOHIDDigitizerDispatch` builds and patches
    digitizer down/up messages around the requested hold duration. Each send
@@ -242,10 +257,11 @@ Thin orchestration; ArgumentParser lives here.
 
 Total latency on warm services: a few milliseconds per gesture.
 
-The `MainActor` hop in step 4 matters: `IndigoHIDMessageForMouseNSEvent`
-reads AppKit / NSEvent thread-local state, so calling it from a NIO
-event-loop thread builds a malformed message that the simulator
-silently drops. Buttons (`IndigoHIDMessageForButton` — pure C, no
+The main-thread hop in step 7 matters: `IndigoHIDMessageForMouseNSEvent`
+reads AppKit / NSEvent thread-local state, so building it on any other
+thread makes a malformed message the simulator silently drops.
+`IndigoHIDInput` hops for each build alone (`onMainThread`), so a drag's
+waits hold its device's lane, never the main thread. Buttons (`IndigoHIDMessageForButton` — pure C, no
 AppKit dep) work from any thread, which was the diagnostic that
 isolated the issue.
 
@@ -287,7 +303,7 @@ Screen (IOSurface per frame)          Stream impl                        FrameSi
 that's `WebSocketFrameSink`, which parses the envelope back into
 per-frame chunks and emits them as WS binary messages.
 
-Format-specific envelopes live in `Domain/Stream/Envelope.swift`:
+Format-specific envelopes live in `Device/Abilities/Capture/Envelope.swift`:
 
 - `MJPEGEnvelope.header` / `framed(jpeg:)` — multipart MIME prologue
   + per-frame `--frame` boundary (so an HTTP `<img src=…/stream.mjpeg>`
@@ -328,9 +344,9 @@ the result.
 
 The `serve` page consumes this via two endpoints:
 
-- `GET /simulators/:udid/chrome.json` — `DeviceChrome.layoutJSON`
+- `GET /devices/:udid/chrome.json` — `DeviceChrome.layoutJSON`
   (composite size, screen rect, inner corner radius, buttons).
-- `GET /simulators/:udid/bezel.png` — the rasterized composite.
+- `GET /devices/:udid/bezel.png` — the rasterized composite.
 
 `DeviceFrame` (`device-frame.js`) overlays the screen `<canvas>` on
 top of the bezel `<img>` (z-index 2 vs 1), positioned by `screen.{x,y,width,height}`
@@ -348,21 +364,21 @@ GET  /                                      302 → /simulators
 GET  /simulators                            sim.html
 GET  /simulators.json                       Simulators.listJSON
 GET  /simulators/:udid                      sim.html (same shell)
-POST /simulators/:udid/boot                 simulator.boot()
-POST /simulators/:udid/shutdown             simulator.shutdown()
-GET  /simulators/:udid/chrome.json          DeviceChromeAssets.layoutJSON()
-GET  /simulators/:udid/bezel.png            composite.data
-GET  /simulators/:udid/interface.json       appearance + contrast + content size
-POST /simulators/:udid/interface            set any subset, answer the result
-GET  /simulators/:udid/companion-screens.json  CarPlay display + paired watch
-POST /simulators/:udid/carplay-display      attach/reattach CarPlay via Simulator.app
-GET  /simulators/:udid/describe-ui.json     Accessibility.describeAll / describeAt
-POST /simulators/:udid/input                GestureDispatcher (one envelope)
-WS   /simulators/:udid/stream?format=…      Stream + GestureDispatcher
+POST /devices/:udid/boot                    device.require(.power).turnOn()
+POST /devices/:udid/shutdown                device.require(.power).turnOff()
+GET  /devices/:udid/chrome.json             device.chrome(in:).layoutJSON()
+GET  /devices/:udid/bezel.png               composite.data
+GET  /devices/:udid/interface.json          appearance + contrast + content size
+POST /devices/:udid/interface               set any subset, answer the result
+GET  /devices/:udid/companion-screens.json   CarPlay display + paired watch
+POST /devices/:udid/carplay-display         attach/reattach CarPlay via Simulator.app
+GET  /devices/:udid/describe-ui.json        Accessibility.describeAll / describeAt
+POST /devices/:udid/input                   GestureDispatcher (one envelope)
+WS   /devices/:udid/stream?format=…         Stream + GestureDispatcher on the device's GestureQueues lane;
+                                            the companion app's video when it streams one
 GET  /devices.json                          Devices.connectedJSON (phones, with abilities)
 GET  /devices/:udid                         sim.html (same shell, device tree)
 GET  /devices/:udid/screenshot.{jpg,png}    devices.require(.screen, of:) — any family
-WS   /devices/:udid/stream?format=…         the device's Screen + Input; describe_ui from its Accessibility
 GET  /plugins.json                          Plugins.listJSON
 POST /plugins/:id/commands/:cmd?udid=       PluginDispatch → the plugin's rows
 GET  /bakeries.json                         trusted sources + pinned commits + install state
@@ -432,16 +448,15 @@ graph; vanilla `<script>` tags loaded in order.
 Chicago-school state-based tests throughout. 110+ tests; every
 external boundary is `@Mockable`, so tests substitute auto-generated
 fakes and assert on returned values rather than recorded calls.
-`Tests/BaguetteTests/` mirrors the same context split as `Sources/`
-(`Simulator/`, `Input/`, `Stream/`, `Chrome/`, plus `App/` for the
-App-layer dispatchers).
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder
+(`Devices/Simulator/`, `Device/Abilities/Touch/`, `Server/`, `Commands/`, …).
 
 - **Pure parsers** (`DeviceChrome`, `DeviceProfile`, `ReconfigParser`,
   `GestureRegistry`) — feed JSON / plist data, assert on the parsed
   value.
 - **Per-gesture parse + execute** — verify the wire dialect parses
-  to the expected value type and that `execute(on: input)` calls the
-  right `Input` method with the right args.
+  to the expected act and that `execute(on:)` calls the right method
+  on its role's mock (`MockTouch`, `MockPress`, `MockKey`, `MockScroll`).
 - **Aggregate semantics** — drive `MockSimulators` / `MockChromes`
   through their default-impl computed properties (`running`,
   `available`, `listJSON`). State, not interactions.
@@ -449,6 +464,12 @@ App-layer dispatchers).
   `PDFRasterizer`, exercise cache hits / misses / failure paths.
 - **Stream startup handshake** — verify the three-step
   screen-attach + sink-write contract.
+- **Routes, in process** — `Tests/BaguetteTests/Server/Router/` runs the
+  real router through `HummingbirdTesting` (`InProcessServer`): browser
+  trust, plugin grants, both trees, refusal codes, deprecation headers.
+- **System tests** — the few that drive the real thing an
+  `Internal/System/` file wraps (VideoToolbox, …) are tagged `.system` and
+  run only off CI (`SystemTests.available`).
 
 Swift Testing only (`@Suite`, `@Test`, `#expect`); no XCTest. The
 `MOCKING` flag is `.debug`-only so release builds carry no mock
@@ -477,6 +498,6 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 - [`features/real-devices/design.md`](features/real-devices/design.md) — how a
   phone on a cable is reached: touches through CoreDevice's Universal HID, its
   H.264 screen stream, and its accessibility tree over the tunnel.
-- `../Sources/Baguette/Infrastructure/Simulator/Input/IndigoHIDInput.swift` —
+- `../Sources/Devices/Simulator/Internal/Input/IndigoHIDInput.swift` —
   the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
   commented.

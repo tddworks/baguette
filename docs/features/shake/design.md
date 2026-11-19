@@ -6,7 +6,7 @@ description: Why baguette's shake posts a Darwin notification from a guest-spawn
 
 ## Path
 
-- `baguette shake`, `POST /simulators/<UDID>/shake` and the `serve` toolbar
+- `baguette shake`, `POST /devices/<UDID>/shake` (or `/simulators/…`) and the `serve` toolbar
   button share one dispatch → the `Shake` domain role → a spawned
   `simctl spawn … notifyutil`.
 - The spawn rides the shared `Subprocess` collaborator, so everything but the

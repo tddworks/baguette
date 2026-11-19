@@ -7,10 +7,12 @@ description: How baguette's hardware-button presses reach SimulatorKit — the l
 ## Path
 
 - `baguette press`, the `button` envelope on `baguette input` / the stream
-  WebSocket, and the page's bezel caps → `Press` gesture → `DeviceButton`
-  (which knows its own standard `(page, usage)`) → `Input.button(_:duration:)`.
-- `IndigoHIDInput.button` switches on the button to one of two irreducible
-  SimulatorKit calls, each dispatched via `SimDeviceLegacyHIDClient.send`:
+  WebSocket, and the page's bezel caps → `ButtonPress` act → `DeviceButton`,
+  a `Navigation` (home, the app switcher, the edge pulls) or a `HardwareButton`
+  (which knows its own standard `(page, usage)`) → refused by name unless the
+  `Press` ability lists it `available` → `button(_:duration:)`.
+- `IndigoHIDInput.button` (the simulator's `Press`) switches on the two kinds
+  to one of two irreducible SimulatorKit calls, or an edge-flagged drag, each dispatched via `SimDeviceLegacyHIDClient.send`:
 
 | Button         | Dispatch path |
 |----------------|---------------|
@@ -104,7 +106,7 @@ DeviceKit's `chrome.json` for each device declares the HID
 }
 ```
 
-`DeviceButton.standardHIDUsage` carries the same values, hardcoded.
+`HardwareButton.standardHIDUsage` carries the same values, hardcoded.
 chrome.json is consulted for *visual* button placement only — its
 HID fields agree with the spec across every iPhone chrome bundle
 we've inspected, so we don't read them at dispatch time. If a
@@ -128,7 +130,7 @@ honest without rendering inert caps.
 
 - **`siri`** — crashes `backboardd` via every known Indigo path (iOS 26.4);
   explicitly rejected. The button is parseable in chrome.json but unmapped in
-  `DeviceButton`; do not add a case until you have a tested recipe.
+  `HardwareButton`; do not add a case until you have a tested recipe.
 - **Holds beyond ~5 s** — the dispatch sleep blocks the calling
   thread. Streaming clients should split very long holds into separate
   `down` / `up` events through `touch1` if you need concurrent input

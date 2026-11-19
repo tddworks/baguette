@@ -94,7 +94,8 @@ MediaStreamScreen.start
 ```
 
 - **Why not AVConference's receiver.** CoreDevice's own client (`CoreDeviceMediaStreamSupport`, `VideoStreamConfiguration.receiveMirroredPrimary(layer:)`) negotiates fine and the phone starts streaming, but configuring the receiving `AVCVideoStream` asks `avconferenced`, which checks `com.apple.videoconference.allow-conferencing` — Device Hub has it; a self-signed binary claiming it is killed by AMFI.
-- **The receiver address** is the Mac's end of the CoreDevice tunnel: resolve `<CoreDevice identifier>.coredevice.local` (the phone, `…::1` on a `utun`) and take the local address on the same prefix (`…::2`). It exists once the tunnel is up, which the support-info query does.
+- **The receiver address** is the Mac's end of the CoreDevice tunnel: the phone is `…::1` on a `utun` (`devicectl list devices` lists it; resolving `<CoreDevice identifier>.coredevice.local` instead can sit out a five-second mDNS timeout), and the Mac is its own address on the same prefix (`…::2`). It exists once the tunnel is up.
+- **The tunnel is brought up first, and stays up.** CoreDevice drops an idle tunnel about 15 s after its last user — `devicectl` included — and its media-stream and Universal HID calls don't bring one back: on a cold phone they fail with `xpcConnectionUnavailable(target: remoteService)`, and a stream that started dies some 15 s in despite its RTP and RTCP (AXe saw the same). `RemoteDevice.connect()` brings it up in about half a second and keeps it until CoreDevice is told to disconnect or the phone goes, past the calling process's own exit. So `Tunnel` owns the phone's tunnel: one per phone, opened before the live screen, the touch service or accessibility, answering both ends (`TunnelEnds`). Baguette never disconnects, which could cut off Xcode's own session with the phone.
 - **Codec: H.264, never HEVC.** AVConference's own offer (`AVCMediaStreamNegotiator initWithMode:5`) lists H.264 (payload 123) and HEVC (payload 100), and the phone picks HEVC. That stream doesn't survive motion: in a recorded swipe every packet arrived (no sequence gaps; each picture's packet count, in the `0x9011` header extension, matched; its frame counter never skipped; references only to the previous one or two pictures in a 12-picture buffer), yet VideoToolbox and ffmpeg alike decoded it into the same mosaic, which stayed until the next keyframe. The same swipe offered H.264 only decodes whole in both. So `MediaStreamOffer` writes the offer itself, with AVConference's fields minus the HEVC entry, and the AVConference class is no longer loaded.
 - **H.264 parameter sets arrive outside the NAL units:** a payload starting `0x92` (not a NAL type) carries an `avc1` sample description whose `avcC` atom holds the SPS and PPS; the depacketizer hands them to the next IDR.
 - **Size.** Coded 1328 × 2896 for a 1320 × 2868 screen, padded right and bottom, with no crop window in the SPS; a smaller resolution in the offer is ignored. The phone's screen size comes from `devicectl device info displays` (the primary display's `nativeSize`), asked while the stream starts, and the decoder crops each picture to it — a clean aperture at the top-left, applied by VideoToolbox as it converts (`kVTScalingMode_CropSourceToCleanAperture`). So every consumer — the page, `screenshot`, `record` — gets the screen and never the padding.
@@ -104,7 +105,7 @@ MediaStreamScreen.start
 
 ```
 RemoteAXAccessibility.describeAll
-  → devicectl list devices                      the tunnel address (devicectl device info details brings a down tunnel up)
+  → Tunnel.open                                 the phone's end of its tunnel, brought up (RemoteDevice.connect())
   → nettop -m tcp -n -x -p remoted -J state     remoted's one connection to the phone = its service directory's port
   → ServiceDirectory (RemoteXPC over HTTP/2)    the handshake's Services: remoteAXService's Port
   → DTX to that port                            _notifyOfPublishedCapabilities:, then clientNeedsAccessibility: YES
@@ -128,7 +129,7 @@ RemoteAXAccessibility.describeAll
 ### How a touch reaches the phone
 
 ```
-DigitizerInput (gesture → reports, fractions of the screen)
+DigitizerTouch (gesture → reports, fractions of the screen; the phone's only input role)
   → CoreDeviceDigitizer.report
       → CoreDeviceFramework.device(<CoreDevice identifier>)        DeviceManager.allDevices()
       → RemoteDevice.open(.universalHID)                           getImplementation(for:) async throws

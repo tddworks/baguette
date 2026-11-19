@@ -15,8 +15,8 @@ For live video, see [recording](../recording/README.md).
 ```bash
 baguette screenshot --udid <UDID> > shot.jpg                  # stdout, JPEG
 baguette screenshot --udid <UDID> --output shot.png           # PNG, inferred from the name
-curl -o shot.png   'localhost:8421/simulators/<UDID>/screenshot.png'
-curl -o framed.png 'localhost:8421/simulators/<UDID>/screenshot-bezel.png'
+curl -o shot.png   'localhost:8421/devices/<UDID>/screenshot.png'
+curl -o framed.png 'localhost:8421/devices/<UDID>/screenshot-bezel.png'
 ```
 
 In the page, every capture surface — the stream sidebar, the focus-mode
@@ -41,7 +41,7 @@ baguette screenshot --udid <UDID> --size square --fit cover -o square.jpg
 
 # the bezelled device centred on a white square, in one GET, no browser
 curl -o square.png \
-  'localhost:8421/simulators/<UDID>/screenshot-bezel.png?size=square&background=ffffff'
+  'localhost:8421/devices/<UDID>/screenshot-bezel.png?size=square&background=ffffff'
 ```
 
 The size vocabulary (`appstore-6.9`, `square`, `WIDTHxHEIGHT`, `W:H`, fit,
@@ -55,7 +55,7 @@ baguette screenshot --udid <UDID> --quality 0.6 --scale 2 > thumb.jpg
 ```
 
 ```html
-<img src="http://127.0.0.1:8421/simulators/<UDID>/screenshot.jpg?t=1727180000">
+<img src="http://127.0.0.1:8421/devices/<UDID>/screenshot.jpg?t=1727180000">
 ```
 
 Rotate the `?t=` timestamp to refresh — no WebSocket plumbing in the
@@ -74,14 +74,16 @@ name.
 ## HTTP
 
 ```
-GET /simulators/:udid/screenshot.jpg         ─┐
-GET /simulators/:udid/screenshot.png          ├─ ?quality= &scale= &size=
-GET /simulators/:udid/screenshot-bezel.png   ─┘   &fit= &background=
+GET /devices/:udid/screenshot.jpg            ─┐   (any device; a simulator
+GET /devices/:udid/screenshot.png             ├─   also under /simulators/…)
+                                              │  ?quality= &scale= &size=
+GET /devices/:udid/screenshot-bezel.png   ─┘   &fit= &background=
                         (…and ?buttons=)
 
    200 image/jpeg | image/png
    400 application/json   {"ok":false,"error":"Unknown size '…'. …"}
-   404 application/json   {"ok":false,"error":"unknown udid: <udid>"}
+   404 application/json   {"ok":false,"error":"Device <udid> not found"}
+   409 application/json   the device isn't running
    404 application/json   {"ok":false,"error":"no bezel for udid <udid>"}
    500 application/json   {"ok":false,"error":"<details>"}
 ```

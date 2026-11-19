@@ -1,0 +1,56 @@
+import BaguetteDevice
+import ArgumentParser
+
+@main
+struct Baguette: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "baguette",
+        abstract: "Headless iOS simulator control",
+        version: baguetteVersion,
+        subcommands: [
+            ListCommand.self,
+            BootCommand.self,
+            ShutdownCommand.self,
+            LifetimeCommand.self,
+            LaunchCommand.self,
+            InputCommand.self,
+            StreamCommand.self,
+            TapCommand.self,
+            DoubleTapCommand.self,
+            SwipeCommand.self,
+            PinchCommand.self,
+            PanCommand.self,
+            PressCommand.self,
+            KeyCommand.self,
+            TypeCommand.self,
+            FillCommand.self,
+            PasteCommand.self,
+            ClipboardCommand.self,
+            ChromeCommand.self,
+            ScreenshotCommand.self,
+            RecordCommand.self,
+            Render3DCommand.self,
+            DescribeUICommand.self,
+            LogsCommand.self,
+            ServeCommand.self,
+            OrientationCommand.self,
+            HingeCLICommand.self,
+            ShakeCommand.self,
+            StatusBarCommand.self,
+            InterfaceCommand.self,
+            LocationCommand.self,
+            MotionCommand.self,
+            NetworkCommand.self,
+            InstallCommand.self,
+            AddMediaCommand.self,
+            OpenURLCommand.self,
+            NotifyCommand.self,
+            SchemesCommand.self,
+            PluginsCommand.self,
+            BakeryCommand.self,
+            DiagDigitizerTrackpadCommand.self,
+            HealCommand.self,
+            DefaultsCommand.self,
+        ]
+    )
+}

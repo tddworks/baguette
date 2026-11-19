@@ -113,7 +113,7 @@
       const target = root.BaguetteTarget;
       const base = target
         ? target.path(this.udid, '/screenshot.jpg')
-        : `/simulators/${encodeURIComponent(this.udid)}/screenshot.jpg`;
+        : `/devices/${encodeURIComponent(this.udid)}/screenshot.jpg`;
       const url = `${base}?${params.toString()}`;
       const res = await root.fetch(url);
       // The route answers a bad UDID or a failed grab with a JSON body,

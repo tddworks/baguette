@@ -68,7 +68,7 @@
     try {
       const targetPath = (u, rest) => (window.BaguetteTarget
           ? window.BaguetteTarget.path(u, rest)
-          : '/simulators/' + encodeURIComponent(u) + rest);
+          : '/devices/' + encodeURIComponent(u) + rest);
       const response = await fetch(
           targetPath(udid, '/3d-model.json'),
           { cache: 'no-store' }
@@ -384,7 +384,7 @@
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const base = (window.BaguetteTarget
         ? window.BaguetteTarget.path(this.udid, '')
-        : '/simulators/' + encodeURIComponent(this.udid));
+        : '/devices/' + encodeURIComponent(this.udid));
     const path = base + '/stream.3d.' + this.format + '?' + params.toString();
     this.setState('Loading model…', true);
     this.session = new window.StreamSession({
@@ -996,7 +996,7 @@
       const response = await fetch(
           (window.BaguetteTarget
               ? window.BaguetteTarget.path(this.udid, '/render-3d.png')
-              : '/simulators/' + encodeURIComponent(this.udid) + '/render-3d.png'),
+              : '/devices/' + encodeURIComponent(this.udid) + '/render-3d.png'),
           {
             method: 'POST',
             cache: 'no-store',
@@ -1050,7 +1050,7 @@
   };
 
   /**
-   * The `DeviceRenderOptions` JSON for `POST /simulators/:udid/render-3d.png`,
+   * The `DeviceRenderOptions` JSON for `POST /devices/:udid/render-3d.png`,
    * built from the current pose plus the shared CaptureSettings.
    *
    * Pure and static so the arithmetic is testable without a canvas: given

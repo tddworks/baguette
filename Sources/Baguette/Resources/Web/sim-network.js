@@ -5,7 +5,7 @@
 // network — latency, downlink bandwidth, request loss, and hard offline.
 //
 // The panel is a dumb sender: every change debounces into a
-// `POST /simulators/<udid>/network` and "Stop conditioning" sends `DELETE`.
+// `POST /devices/<udid>/network` and "Stop conditioning" sends `DELETE`.
 // Swift owns all domain logic — the preset figures, validation, and the
 // pacing arithmetic. Even the list of preset *names* comes from the server,
 // so adding one shows up here without an edit. The one piece of logic on
@@ -75,7 +75,7 @@
     // showing the truth rather than whatever was last typed into it.
     async _hydrate() {
       try {
-        const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/network`);
+        const res = await fetch(`/devices/${encodeURIComponent(this.udid)}/network`);
         if (!res.ok) return;
         this._absorb(await res.json());
       } catch (e) { /* keep what we have */ }
@@ -258,7 +258,7 @@
       // Nothing selected is a clear, not a POST the route would refuse.
       if (!body) return this._clear();
       try {
-        const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/network`, {
+        const res = await fetch(`/devices/${encodeURIComponent(this.udid)}/network`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -286,7 +286,7 @@
     async _clear() {
       if (!this.udid) return;
       try {
-        const res = await fetch(`/simulators/${encodeURIComponent(this.udid)}/network`,
+        const res = await fetch(`/devices/${encodeURIComponent(this.udid)}/network`,
                                 { method: 'DELETE' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (e) {

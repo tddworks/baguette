@@ -18,7 +18,7 @@ baguette install   --udid <UDID> MyApp.ipa      # or MyApp.app
 baguette add-media --udid <UDID> beach.heic
 ```
 
-In the browser: open `/simulators/<UDID>` and drag files onto the device. The
+In the browser: open `/devices/<UDID>` and drag files onto the device. The
 device's screen gets a dashed highlight; on drop each file is uploaded and a
 toast says `Installed …`, `Added …` or the server's error. Dropping a
 folder-form `.app` bundle works too: the page zips it and uploads the zip.
@@ -35,13 +35,16 @@ Extensions are matched case-insensitively.
 ## HTTP
 
 ```
-POST /simulators/<UDID>/files?name=<filename>
+POST /devices/<UDID>/files?name=<filename>
      body = raw file bytes (application/octet-stream)
 ```
 
+A simulator answers under its old `/simulators/<UDID>/files` too. Plugins use
+`/apps` and `/media`, which name the power they need; `/files` is closed to them.
+
 ```bash
 curl -X POST --data-binary @MyApp.ipa \
-  "http://127.0.0.1:8421/simulators/<UDID>/files?name=MyApp.ipa"
+  "http://127.0.0.1:8421/devices/<UDID>/files?name=MyApp.ipa"
 ```
 
 | Status | Body / meaning |
@@ -49,6 +52,7 @@ curl -X POST --data-binary @MyApp.ipa \
 | 200 | `{"ok":true,"kind":"app"}` or `{"ok":true,"kind":"media"}` |
 | 400 | Upload too large (> 1 GiB) or unreadable |
 | 404 | Unknown udid |
+| 422 | The device can't take that kind of file (no apps or Photos), named |
 | 415 | `no home for .<ext> …`; or a zip that isn't an installable app: corrupt, over the 4 GiB decompression cap, or not exactly one top-level `.app` (the reason is in `error`) |
 | 500 | simctl failed (device not booted, bad bundle) |
 

@@ -109,6 +109,6 @@ between events instead of relying on your stream timing.
 
 ## See also
 
-- [design.md](design.md) — why double-tap is a CLI composition, not an `Input` method
+- [design.md](design.md) — why double-tap is a CLI composition, not a `Touch` method
 - [buttons](../buttons/README.md)
 - [wire.md](../../wire.md) — `touch1-*` envelopes

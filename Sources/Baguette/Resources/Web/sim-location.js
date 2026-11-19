@@ -9,7 +9,7 @@
 // The panel is a dumb sender: "Set location" POSTs
 // `{latitude,longitude}`, "Start route" POSTs `{waypoints:[…],speed}`,
 // Walk mode POSTs `{latitude,longitude,bearing,speed}`, and "Clear"
-// sends DELETE — all to `/simulators/<udid>/location`. The Swift side
+// sends DELETE — all to `/devices/<udid>/location`. The Swift side
 // owns all domain logic (`simctl location` argv, range validation, the
 // walk→route projection). Map tiles come from OpenStreetMap at runtime;
 // only the Leaflet library itself is vendored. See
@@ -520,7 +520,7 @@
     }
 
     _applyMotionToggle(on) {
-      const url = `/simulators/${encodeURIComponent(this.udid)}/motion`;
+      const url = `/devices/${encodeURIComponent(this.udid)}/motion`;
       if (!on) {
         this._stopMotionPoll();
         // A failed DELETE must not read as stopped: the dylib is still armed,
@@ -578,7 +578,7 @@
     }
 
     _refreshMotion() {
-      fetch(`/simulators/${encodeURIComponent(this.udid)}/motion`)
+      fetch(`/devices/${encodeURIComponent(this.udid)}/motion`)
         .then((res) => (res.ok ? res.json() : Promise.reject(res)))
         .then((state) => {
           const box = this.host.querySelector('#nativeLocationMotion');
@@ -1151,7 +1151,7 @@
     // repaints the live position every frame and must not have it
     // stomped by a "sent ✓" from an in-flight vector.
     _post(body, { quiet = false } = {}) {
-      return fetch(`/simulators/${encodeURIComponent(this.udid)}/location`, {
+      return fetch(`/devices/${encodeURIComponent(this.udid)}/location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -1163,7 +1163,7 @@
     }
 
     _clear() {
-      fetch(`/simulators/${encodeURIComponent(this.udid)}/location`, { method: 'DELETE' })
+      fetch(`/devices/${encodeURIComponent(this.udid)}/location`, { method: 'DELETE' })
         .then((res) => this._readout(res.ok ? 'Cleared — live location restored.' : 'Clear failed.'))
         .catch(() => this._readout('Clear failed — network error.'));
       this._reset();

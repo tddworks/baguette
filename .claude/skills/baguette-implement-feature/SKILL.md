@@ -5,8 +5,8 @@ description: |
   that drives iOS simulators (private SimulatorKit) and physical iPhones on a
   cable (private CoreDevice and the phone's own services). Use this skill when:
   (1) Adding a new gesture, button, keyboard surface, stream format, or
-      device-chrome behaviour (anything that lands across Domain / Infrastructure /
-      App + Resources/Web).
+      device-chrome behaviour (anything that lands across Device/, Devices/,
+      Commands/, Server/ + Resources/Web).
   (2) Extending an existing wire-protocol envelope, CLI subcommand, or HTTP route.
   (3) User asks "add feature X to baguette", "implement <gesture>", "wire <new
       verb> through serve / input / CLI", or similar.
@@ -21,13 +21,15 @@ description: |
 
 baguette is a **CLI + WebSocket server**, not a SwiftUI app. There is no
 ViewModel layer, no async actors in the input path — gestures are
-synchronous `Bool`-returning calls into the `@Mockable` `Input`
-abstraction whose only concrete adapter is `IndigoHIDInput`. The frontend
+synchronous `Bool`-returning calls into one of four `@Mockable` input
+roles — `Touch`, `Press`, `Key`, `Scroll` — each a device ability.
+A simulator's `IndigoHIDInput` plays all four (its `HID`); a phone on a
+cable plays `Touch` only and registers nothing else. The frontend
 is hand-written vanilla JS IIFEs (no bundler) that talk to the server
 via one WebSocket per stream.
 
 **Naming abstractions**: every `@Mockable protocol` in this codebase is
-a **domain noun for the role it plays** — `Input`, `Screen`,
+a **domain noun for the role it plays** — `Touch`, `Key`, `Screen`,
 `Accessibility`, `LogStream`, `DeviceHost`, `Subprocess`, `Chromes`,
 `Simulators`. The pattern-label suffixes **"Port" / "Service" /
 "Manager" never appear**. If you reach for `XxxPort`, the abstraction
@@ -51,6 +53,26 @@ the naming rule, and the orchestrator-vs-collaborator split for adapters
 that wrap 3rd-party I/O are authoritative there. This skill describes
 the **process** of adding features that fit those rules.
 
+## The tree you are adding to
+
+Outside in — a layer only imports layers below it, and families never
+import each other:
+
+```
+Sources/
+├── Commands/   Server/        the two ways in: the CLI and `baguette serve`
+├── Devices/<Family>/          Simulator · iPhone · CompanionPhone — what only one family does
+├── Plugins/{Plugin,Bakery}/
+├── Device/                    module BaguetteDevice: id, kind, power, Chrome/, Abilities/<ability>/
+└── Baguette/                  @main + Resources/Web
+```
+
+Every folder: its public face at the top, its implementations in
+`Internal/`, and the bare call to the outside world (a private symbol,
+VideoToolbox, a socket, a process, a signal) in `Internal/System/`,
+≤100 lines a file — the only code unit coverage leaves out.
+`Tests/BaguetteTests/` mirrors `Sources/` folder for folder.
+
 ## Workflow
 
 ```
@@ -59,19 +81,19 @@ the **process** of adding features that fit those rules.
 │     place it in CANONICAL_MODEL · think the domain first     │
 │     wire shape · domain types · adapter split · risks        │
 ├──────────────────────────────────────────────────────────────┤
-│  1. DOMAIN TDD                                                │
-│     value types · pure static factories · @Mockable          │
-│     abstractions · rich-domain methods                        │
+│  1. THE ABILITY (Device/Abilities/<ability>/) — TDD           │
+│     value types · pure static factories · the @Mockable role │
+│     · rich-domain methods · the `Ability` key                 │
 ├──────────────────────────────────────────────────────────────┤
-│  2. INFRASTRUCTURE TDD                                        │
-│     concrete adapter impl. If the adapter wraps 3rd-party I/O │
-│     and the call is conversational, introduce a domain-named │
-│     `@Mockable` collaborator (`Subprocess`) and split the    │
-│     orchestrator from the thin `HostXxx` impl.                │
+│  2. THE FAMILY (Devices/<Family>/) — TDD                      │
+│     register the ability where the family can perform it;   │
+│     its adapter in Internal/ (decisions, tested via a role's │
+│     MockXxx), the bare call in Internal/System/ (≤100 lines) │
 ├──────────────────────────────────────────────────────────────┤
-│  3. WIRING                                                    │
-│     register on GestureRegistry (gestures only) · CLI         │
-│     subcommand · WS route · browser IIFE (when user-facing)  │
+│  3. THE WAYS IN (Commands/, Server/, the page) — TDD          │
+│     GestureRegistry (gestures) · CLI subcommand run against │
+│     DeviceOption.$reachable · route through InProcessServer │
+│     · browser IIFE shown by the device's abilities           │
 ├──────────────────────────────────────────────────────────────┤
 │  4. DOCS + CHANGELOG (mandatory before reporting "done")      │
 │     `docs/features/<feature>/README.md` (+ `design.md` for    │
@@ -82,7 +104,7 @@ the **process** of adding features that fit those rules.
 
 ## Phase 0: Architecture Design (mandatory)
 
-For any feature that crosses a layer boundary or touches the
+For any feature that crosses a folder boundary or touches the
 SimulatorKit / IndigoHID / AXPTranslator / CoreDevice / spawn surface,
 **stop and design before coding**. A bug fix that moves a rule or adds a type goes
 through Steps A and B too.
@@ -94,10 +116,10 @@ tree, the words, every law and its one owner, the contexts — then answer:
 
 | Question | If yes |
 |---|---|
-| Which context owns the question it answers? (CANONICAL §5) | the files go in `Domain/<Context>/`, `Infrastructure/<Family>/<Context>/` (`Simulator/`, `CoreDevice/`, `Companion/`; `Host/` for what every family shares — families never reference each other), `Tests/BaguetteTests/<Context>/`; one that fits no context is a missing word — ask before inventing a folder |
-| Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; the App only parses and calls it |
+| Which context owns the question it answers? (CANONICAL §5) | a role or value of what a device is or can do goes in `Sources/Device/Abilities/<ability>/` (module `BaguetteDevice`, `public`), its host implementation in that ability's `Internal/`; what only one family does goes in `Sources/Devices/<Family>/` (`Simulator/`, `iPhone/`, `CompanionPhone/`), its private-API adapter in `Devices/<Family>/Internal/<ability>/` — families never reference each other; plugins in `Sources/Plugins/`; the test in `Tests/BaguetteTests/` at the same path as the source; one that fits no context is a missing word — ask before inventing a folder |
+| Which node is told? (CANONICAL §2) | a new verb lands on one node of the tree; `Commands`/`Server` only parse and call it |
 | Does it add or change a law? (CANONICAL §3) | it gets **one** owner — the node that holds the data. Grep for the rule first: if it's already written somewhere, that's the owner, or the duplicate to remove |
-| Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `AbilityTable` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by the App or `Server` ([devices design](../../../docs/features/devices/design.md)) |
+| Does it need a new role for the outside world? | a `@Mockable` protocol named for the role, an `Ability` each device family registers in its `Abilities` only when it can perform it, and reached through `devices.require(.xxx, of: id)` — never built by `Commands` or `Server` ([devices design](../../../docs/features/devices/design.md)) |
 | Does what differ between devices become a branch? | make it data: profile, chrome, model, a registration table |
 
 When the doc doesn't cover it, write the change into CANONICAL_MODEL.md first
@@ -117,11 +139,11 @@ Briefly produce:
 
 1. **Wire shape** — the JSON envelope on `baguette serve` WS / `baguette input` stdin. Field names, optional vs required, default values.
 2. **CLI surface** — subcommand + flag names. Match existing patterns (`--udid`, `--width`, `--height`).
-3. **Domain types** — value types (struct/enum) and which `@Mockable` abstraction is added/changed. Rich domain: behaviour lives on the value, not in a service (`DeviceButton.press`, `KeyboardKey.press` are the templates). **Name new abstractions for their domain role** — `Subprocess`, `DeviceHost`, `Accessibility`. **Never `XxxPort` / `XxxService` / `XxxManager`, and never the suffix `XxxRepository`.** If the abstraction *is* aggregate CRUD (load / save / delete by identity for an aggregate root), name it as the **plural collection noun** — `Simulators`, `Chromes`, `Books`. If the noun isn't obvious, the abstraction probably shouldn't exist yet.
+3. **Device types** — value types (struct/enum) and which `@Mockable` abstraction is added/changed. Rich domain: behaviour lives on the value, not in a service (`DeviceButton.press`, `KeyboardKey.press` are the templates). **Name new abstractions for their domain role** — `Subprocess`, `DeviceHost`, `Accessibility`. **Never `XxxPort` / `XxxService` / `XxxManager`, and never the suffix `XxxRepository`.** If the abstraction *is* aggregate CRUD (load / save / delete by identity for an aggregate root), name it as the **plural collection noun** — `Simulators`, `Chromes`, `Books`. If the noun isn't obvious, the abstraction probably shouldn't exist yet.
 4. **Adapter changes** — how the production class (`IndigoHIDInput`, `AXPTranslatorAccessibility`, `SimDeviceLogStream`, …) handles it. Which private-API symbol, which arg shape. Flag iOS-26-specific gotchas explicitly (signature drift between idb/AXe and Xcode 26 has burned us before — see [`buttons/design.md`](../../../docs/features/buttons/design.md) for the canonical example).
 5. **I/O split (only when the adapter wraps 3rd-party I/O)** — read [AGENTS.md's "Splitting an adapter that wraps 3rd-party I/O"](../../../AGENTS.md#splitting-an-adapter-that-wraps-3rd-party-io) section and pick a pattern:
-   - **One-shot fetch** (single private-API call → operate on the value): lift the post-fetch logic into a pure static factory in `Domain/` (`AXNode.walk(from:transform:)`, `AXFrameTransform`, `LineBuffer`). The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
-   - **Conversational I/O** (start / stream / signal-exit / terminate): introduce one small `@Mockable` collaborator named like a domain noun (`Subprocess`, never `LogProcessPort`). The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess`. The concrete impl (`HostSubprocess` ~30–50 LOC) is integration-only and should be excluded from coverage.
+   - **One-shot fetch** (single private-API call → operate on the value): lift the post-fetch logic into a pure static factory beside its ability (`AXNode.walk(from:transform:)`, `AXFrameTransform`, `LineBuffer`). The adapter shrinks to "make the call, hand the result to the static factory." No new abstraction needed.
+   - **Conversational I/O** (start / stream / signal-exit / terminate): introduce one small `@Mockable` collaborator named like a domain noun (`Subprocess`, never `LogProcessPort`). The orchestrator depends on `any Subprocess`; tests inject `MockSubprocess`. The concrete impl (`HostSubprocess` ~30–50 LOC) is integration-only and lives in `Internal/System/`, which coverage leaves out.
 6. **Frontend** — does the browser need to send / receive this? If yes, which IIFE(s) change.
 
 Present the CANONICAL_MODEL diff (if any), a short ASCII diagram and a
@@ -130,48 +152,39 @@ SimulatorKit signature is a `backboardd` crash, not just a failing test.
 
 ### Architecture diagram templates
 
-**Gesture-style feature** (single private-API call, no conversation):
+**Gesture-style feature** (a new act of an input role):
 
 ```
-Wire JSON                Domain                       Infrastructure
-{type:"<verb>",          ┌─────────────┐             ┌────────────────┐
- …}                ─────▶│ <Verb>      │             │ IndigoHIDInput │
-                         │ Gesture +   │ Input       │ adapter        │
-                         │ value types │ ───────────▶│ (SimulatorKit) │
-                         └─────────────┘             └────────────────┘
-                              ▲                              │
-                              │                              ▼
-                         GestureRegistry                  iOS sim
-                              ▲
-       CLI ─── ArgumentParser ┤
-       WS  ─── Server.streamWS┤
-       JS  ─── baguette/gestures/*.js
+Wire JSON           Device/Abilities/Touch|Key|…   Devices/Simulator/Internal/
+{type:"<verb>",     ┌──────────────┐  role        ┌────────────────┐ IndigoChannel ┌─────────────────────┐
+ …}           ─────▶│ <Verb>       │ ────────────▶│ IndigoHIDInput │ ─────────────▶│ System/             │
+                    │ Gesture +    │ Touch/Press/ │ (which messages│               │ SimulatorKitIndigo- │
+                    │ value types  │ Key/Scroll   │  in what order)│               │ Channel (9-arg call)│
+                    └──────────────┘              └────────────────┘               └─────────────────────┘
+                         ▲
+                    GestureRegistry ◀── Commands/ (ArgumentParser) · Server.deviceStream (WS) · baguette/gestures/*.js
 ```
 
 **Conversational-I/O feature** (start / stream / terminate — split
 the orchestrator from the host-process collaborator):
 
 ```
-Wire JSON              Domain                   Infrastructure
-{type:"<verb>",        ┌─────────────────┐      ┌──────────────────────┐
- …}              ─────▶│ <Feature>       │      │ <Feature>Orchestrator│
-                       │ value types,    │ ───▶ │ (state machine,      │
-                       │ pure factories  │      │  error mapping)      │
-                       │                 │      └──────────────────────┘
-                       │ <Collaborator>  │              │ depends on
-                       │ @Mockable       │ ◀─────       ▼
-                       │ (e.g. Subprocess)│      ┌──────────────────────┐
-                       └─────────────────┘      │ Host<Collaborator>   │
-                              ▲                 │ (~30–50 LOC, the     │
-                              │                 │  irreducible private │
-                              │                 │  / OS call)          │
-       CLI ─── ArgumentParser ┤                 └──────────────────────┘
-       WS  ─── /…/<feature> route
+Device/Abilities/<x>/       <x>/Internal/ (or Devices/<F>/Internal/)   …/Internal/System/
+┌─────────────────┐         ┌──────────────────────┐  any <Role>     ┌──────────────────────┐
+│ value types,    │ ──────▶ │ <Feature> adapter     │ ──────────────▶ │ the concrete <Role>  │
+│ pure factories, │         │ (state machine, order,│                 │ (≤100 lines: only    │
+│ the ability's   │         │  retries, error map)  │ ◀── Mock<Role>  │  the outside call)   │
+│ role            │         └──────────────────────┘    in tests     └──────────────────────┘
+└─────────────────┘                    ▲
+       Commands/ (CLI) · Server/ (/devices/:udid/<feature>, both trees)
 ```
 
-## Phase 1: Domain TDD
+The worked example to copy: `H264Encoder` → `CompressionSession` (role) →
+`System/VideoToolboxSession` in `Device/Abilities/Capture/`.
 
-Write the failing test FIRST, in `Tests/BaguetteTests/<Context>/`, named
+## Phase 1: The ability (Device/Abilities/<ability>/)
+
+Write the failing test FIRST, in `Tests/BaguetteTests/<the source's folder>/`, named
 `should <outcome> [when <situation>]` in domain language — see
 [Naming tests](references/tdd-patterns.md#naming-tests).
 
@@ -182,15 +195,18 @@ Patterns that already exist — match them:
 - **Rich domain methods** — verbs live on the value:
   ```swift
   extension DeviceButton {
-      func press(duration: Double = 0, on input: any Input) -> Bool {
-          input.button(self, duration: duration)
+      func press(duration: Double = 0, on buttons: any Press) -> Bool {
+          buttons.button(self, duration: duration)
       }
   }
   ```
-- **Gesture protocol** — a domain value (a tap, a press) that parses
-  itself from the wire: `static let wireType` + `static func parse` +
-  `func execute(on input: any Input)`. The body of `execute` should be
-  one line that delegates to a rich-domain method.
+- **Gesture protocol** — one act of one input ability (a tap, a
+  keystroke, a button press) that parses itself from the wire:
+  `static let wireType` + `static func parse` + `static var ability`
+  (the role it needs: `.touch`, `.press`, `.key`, `.scroll`) +
+  `func execute(on role:)`. The body of `execute` should be one line that
+  delegates to a rich-domain method. Name the act for what it is
+  (`Keystroke`, `ButtonPress`, `WheelEvent`), never the ability's name.
 - **Field extractors** — use `Field.requiredString` / `requiredDouble`
   / `optionalDouble`. Don't open-code `dict["…"] as? Double`.
 
@@ -208,25 +224,29 @@ struct KeyboardKeyTests {
 
 Run `swift test --filter <Suite>` after each red→green cycle.
 
-## Phase 2: Infrastructure TDD
+## Phase 2: The family (Devices/<Family>/)
 
-`@Mockable` abstractions in this layer get auto-generated `MockXxx`
-companions; tests substitute the mock and assert on returned state:
+The family registers the ability in its `Abilities` only where it can
+perform it, and implements its role in `Internal/`. `@Mockable` roles get
+auto-generated `MockXxx` companions; tests substitute the mock and assert
+on returned state:
 
 ```swift
-let input = MockInput()
-given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
+let keyboard = MockKey()
+given(keyboard).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
-KeyboardKey.from(wireCode: "KeyA")!.press(modifiers: [.shift], on: input)
-verify(input).key(.value(_), modifiers: .value([.shift]), duration: .value(0))
+KeyboardKey.from(wireCode: "KeyA")!.press(modifiers: [.shift], on: keyboard)
+verify(keyboard).key(.any, modifiers: .value([.shift]), duration: .value(0))
     .called(1)
 ```
 
 If the feature needs a new method on an existing abstraction, add it
 to the protocol with a doc comment, then update the production
 adapter. **Do not** introduce a parallel hierarchy just to enable
-testing — each family has one `Input` (`IndigoHIDInput` for a simulator,
-`DigitizerInput` for a phone), and that's all there needs to be.
+testing — each family has one adapter per role it plays (`IndigoHIDInput`
+for all four on a simulator, `DigitizerTouch` for a phone's `Touch`), and
+that's all there needs to be. A role a device can't play is not registered,
+never implemented as `false`.
 
 ### Adapter wraps 3rd-party I/O? Pick the split.
 
@@ -234,11 +254,11 @@ If your adapter touches a private framework, `Foundation.Process`,
 `dlopen`, `Pipe`, `kill(pid)`, or any external XPC, **do not pile
 all of that into one class**. Use one of the two splits.
 
-**(a) One-shot fetch — pure factory in Domain.** When the
+**(a) One-shot fetch — pure factory beside its ability.** When the
 private-API call is "make one call, get a value back, operate on the
 value" (`AXPTranslator.frontmostApplicationWithDisplayId:` returns
 one `AXPMacPlatformElement`), lift the post-fetch logic into a pure
-static factory in Domain and drive it with `Fake…` `NSObject`s that
+static factory beside its ability and drive it with `Fake…` `NSObject`s that
 override KVC / selectors. The adapter shrinks to "make the call,
 hand the result to the factory." Examples:
 
@@ -247,15 +267,15 @@ hand the result to the factory." Examples:
 - `LineBuffer.append(_ bytes: Data) -> [String]`
 - `AXElementReader.string/bool/frame/children(...)`
 
-These all live in `Domain/<Context>/`, are exercised by direct unit
-tests, and the Infrastructure adapter calls them after the
-irreducible private-API call.
+These all live in `Device/Abilities/<ability>/`, are exercised by direct unit
+tests, and the adapter calls them after the irreducible private-API
+call.
 
 **(b) Conversational I/O — domain-named collaborator.** When the
 adapter has a real conversation with the outside (`start` → many
 `onBytes` → `onExit`, plus a `terminate` poke), pure helpers don't
 capture the state machine cleanly. Introduce one small `@Mockable`
-collaborator in Domain, named like a noun for what it *is*
+collaborator beside the adapter, named like a noun for what it *is*
 (`Subprocess`, never `LogProcessPort`):
 
 ```swift
@@ -270,19 +290,20 @@ protocol Subprocess: AnyObject, Sendable {
 
 The orchestrator depends on `any Subprocess`. Tests inject
 `MockSubprocess` and drive every byte/exit/terminate path. The
-concrete impl (`HostSubprocess` ~30–50 LOC, wraps
-`Foundation.Process`) is the **only** integration-only file —
-exclude it from coverage and rely on a manual smoke test. Excluding
-means adding it to **both** `codecov.yml` (`ignore:`) and
-`.github/workflows/ci.yml` (`-ignore-filename-regex`), kept in step;
-everything else it uses must be a tested value.
+concrete impl (wraps `Foundation.Process`, a private symbol, a
+socket…) is the **only** integration-only file. It goes in that
+folder's `Internal/System/` (≤100 lines), which `codecov.yml` leaves
+out by one rule — never add a file path to the ignore list. CI builds
+its regex from that list; `make check-coverage` fails a `System/` file
+that grew decisions. Everything else it uses must be a tested value.
 
 ### Coverage expectation per file
 
 After the split:
-- Domain pure factories / value types: **100%** unit-tested.
-- Orchestrator (`<Feature>Orchestrator` or `Sim<Feature>Stream`): **≥ 90%** unit-tested via the collaborator's `MockXxx`.
-- `Host<Collaborator>` (the irreducible call): integration-only, excluded from coverage.
+- Pure factories / value types: **100%** unit-tested.
+- The adapter in `Internal/` (`H264Encoder`, `IndigoHIDInput`, `SimDeviceLogStream`): **≥ 90%** unit-tested via its role's `MockXxx`.
+- The irreducible call, in `Internal/System/`: integration-only, left out of coverage by its folder. Prove it with a test against the real thing, tagged `.tags(.system), .enabled(if: SystemTests.available)` with a `.timeLimit` (see `VideoToolboxSessionTests`).
+- A route: drive it through the real router with `InProcessServer` (`Tests/BaguetteTests/Server/Router/`), not just its static handler.
 
 If you can't get the orchestrator into a `MockXxx`-driven test, it's
 not split correctly — go back to Phase 0.
@@ -291,8 +312,11 @@ not split correctly — go back to Phase 0.
 
 For `IndigoHIDInput` (and any future direct private-symbol caller):
 
-- Resolve the symbol in `resolveFunctions()` and log presence in the
-  `[hid] symbols resolved …` line.
+- `IndigoHIDInput` decides which messages, in what order; it sends them
+  through `IndigoChannel`. The `dlsym` table is `System/IndigoFunctions.swift`
+  and the 9-arg build-and-send is `System/SimulatorKitIndigoChannel.swift`,
+  built on the main thread. A new symbol goes there, logged in the
+  `[hid] symbols resolved …` line; its decisions go in the input.
 - Match the arg signature against a verified open-source bridge (see
   the `kittyfarm` typedef approach used for the buttons feature in
   [`docs/features/buttons/design.md`](../../../docs/features/buttons/design.md)) —
@@ -305,11 +329,11 @@ For `IndigoHIDInput` (and any future direct private-symbol caller):
 
 ### When the adapter reaches a physical phone (CoreDevice, tunnel services)
 
-For anything under `Infrastructure/CoreDevice/` (research:
+For anything under `Devices/iPhone/Internal/` (research:
 [`docs/features/real-devices/design.md`](../../../docs/features/real-devices/design.md)):
 
 - **Bind CoreDevice in Swift** with `@_silgen_name` on stand-in types
-  (`CoreDeviceFramework.swift`); it's weak-linked, and a Mac — or CI —
+  (`Internal/System/CoreDeviceSymbols.swift` and its neighbours); it's weak-linked, and a Mac — or CI —
   without it builds with no `COREDEVICE` define. Every member the
   `COREDEVICE` side adds needs its stub in the `#else` branch, or CI's
   build fails where yours passes. Check with `hasCoreDevice = false` in
@@ -319,29 +343,36 @@ For anything under `Infrastructure/CoreDevice/` (research:
   locked phone or a stalled tunnel never answers.
 - **Check a resilient type's size** (`CoreDeviceFramework.valueSize`)
   before CoreDevice writes one into a fixed buffer.
-- **Wire formats are Domain values** (`Domain/CoreDevice/`: `DTXMessage`,
+- **Wire formats are values** (`Devices/iPhone/`: `DTXMessage`,
   `XPCObject`, `HTTP2Frame`, `MediaStreamOffer`, `ReceiverFeedback`,
   `AXTreeDump`), unit-tested byte for byte; the socket and the private call
-  are the only untested lines, and join the coverage exclusions.
+  are the only untested lines, and live in `Internal/System/`.
 - **A phone serves one session** per service at a time and is shared
   with the user — share reads (`SharedRead`) rather than open a second.
 - **Look before you touch.** Screenshot the user's phone before sending
   any input, and only send input that can be undone: it is someone's
   real device, with real apps open.
 
-## Phase 3: Wiring
+## Phase 3: The ways in (Commands/, Server/, the page)
 
 Each new gesture / verb flows through the same checklist:
 
 1. **`GestureRegistry.standard`** — one `r.register(<Verb>.self)`
-   line in `Domain/Input/GestureRegistry.swift`.
+   line in `Device/Abilities/Touch/GestureRegistry.swift`.
 2. **CLI subcommand** — new `struct …Command: ParsableCommand` in
-   `App/Commands/GestureCommands.swift` (or a sibling). Add to
-   `RootCommand.subcommands`. Update `CommandParsingTests`.
-3. **Server WS** — usually nothing: `Server.streamWS` already routes
-   wire JSON through `GestureDispatcher.dispatch(line:)`. New behaviour
-   only if you're adding a *control* verb that bypasses the gesture
-   path.
+   `Sources/Commands/GestureCommands.swift` (or a sibling). Add to
+   `RootCommand.subcommands`. Update `CommandParsingTests`, and test its
+   `run()` against mocks: `run(_:on:terminal:)` in
+   `Tests/BaguetteTests/Commands/CommandRun.swift` sets
+   `DeviceOption.$reachable`, `CommandOutput.$current` and
+   `Terminal.$current`. Its stdin / signal / port I/O goes in
+   `Commands/Internal/System/`.
+3. **Server** — a gesture needs nothing: `Server.deviceStream` already
+   routes wire JSON through `GestureDispatcher.dispatch(line:)`. A new
+   route registers under both trees with `Server.deviceRoutes("<leaf>")`,
+   reaches its role with `Server.role(_:of:in:)` (refusals 422 / 409 /
+   404), and is tested through the real router with `InProcessServer`
+   (`Tests/BaguetteTests/Server/Router/`).
 4. **Browser** — when the feature is user-facing:
    - Build the wire envelope in `Resources/Web/baguette/gestures/`
      (`gesture-envelope.js`; a new pointer source beside the mouse,
@@ -359,9 +390,9 @@ Each new gesture / verb flows through the same checklist:
    - Small, reusable browser logic gets a `node:test` unit test —
      see [references/js-testing.md](references/js-testing.md).
 
-A new **stream format** is one `Stream` impl in `Infrastructure/Host/Stream/`
-plus one case in `StreamFormat.makeStream`; its byte envelope lives in
-`Domain/Stream/Envelope.swift`. No call site switches on the format.
+A new **stream format** is one `Stream` impl in `Device/Abilities/Capture/Internal/`
+plus one case in `StreamFormat.makeStream` (same folder); its byte envelope lives in
+`Device/Abilities/Capture/Envelope.swift`. No call site switches on the format.
 
 ## Phase 4: Docs + Changelog (mandatory before "done")
 
@@ -433,30 +464,36 @@ not the flag table — `make docs` writes that).
   can't implement a feature, fail loudly with a parse error — silent
   drops mid-string are worse than an explicit `{"ok":false,"error":"…"}`.
 - **Adding a Mockable abstraction with one concrete impl just for
-  testing.** One `Input` per family (`IndigoHIDInput`, `DigitizerInput`)
-  is enough; don't invent a parallel hierarchy. The exception is the
+  testing.** One adapter per role a family plays (`IndigoHIDInput`,
+  `DigitizerTouch`) is enough; don't invent a parallel hierarchy. The exception is the
   orchestrator + collaborator split for 3rd-party I/O — there the
   collaborator (`Subprocess`) earns its `MockSubprocess` because the
   state machine is real.
 - **Naming an abstraction `XxxPort` / `XxxService` / `XxxManager`,
   or suffixing aggregate persistence with `XxxRepository`.** These
   are pattern labels, not domain nouns. The codebase uses role-named
-  protocols (`Input`, `Screen`, `Accessibility`, `LogStream`,
+  protocols (`Touch`, `Key`, `Screen`, `Accessibility`, `LogStream`,
   `DeviceHost`, `Subprocess`). For aggregate CRUD specifically, use
   the **plural collection noun** (`Simulators`, `Chromes`, `Books`)
   — not `BookRepository`. If the noun isn't obvious, the abstraction
   probably shouldn't exist yet — keep the logic inline or push it
   into a pure helper instead.
 - **Cramming the irreducible private-API call AND the orchestration
-  logic into one Infrastructure file.** That's the original sin
-  that kept `AXPTranslatorAccessibility` and `SimDeviceLogStream` at
-  18% / 33% coverage. Always split per the Phase-2 rule.
+  logic into one file.** That's the original sin that kept
+  `IndigoHIDInput` at 14% and `H264Encoder` at 18% coverage, excluded
+  wholesale. The decisions go in `Internal/`, the bare call in
+  `Internal/System/`; `make check-coverage` fails a System file over 100
+  lines.
 - **A rule at the call site.** `hinge.angle()?.litPanel ?? .primary` in
   four places is four owners; the rule lives on the node that holds the
   data (`Hinge.litPanel`) and callers ask it. Grep before you write a rule.
-- **A domain decision in `Server` or a command.** The transport parses and
+- **A domain decision in `Server` or a command.** The way in parses and
   calls; which input follows a fold, or which surface heals, is the
-  `Simulator`'s (`sim.litPanelInput()`), built where it can be tested.
+  device's (`LitPanelInput`, the `.inputSurface` ability), built where it
+  can be tested.
+- **A file path on the coverage ignore list.** `codecov.yml` leaves out
+  kinds of code (`**/Internal/System/**`), never a file; a file that needs
+  leaving out is a file that wants splitting.
 - **`MOCKING` outside the test target.** It's `.debug`-only by design
   so release builds carry no mock code. Don't reach for `MockXxx`
   from production code.
@@ -488,32 +525,34 @@ not the flag table — `make docs` writes that).
 - [ ] CANONICAL_MODEL updated first when the tree, a law or an owner changes
 - [ ] Wire JSON shape sketched (required vs optional fields)
 - [ ] CLI subcommand + flag names follow existing patterns
-- [ ] Domain types listed (value types + which `@Mockable` abstraction is added/changed)
+- [ ] Device types listed (value types + which `@Mockable` abstraction is added/changed)
 - [ ] New abstraction names are domain nouns (no `XxxPort / XxxService / XxxManager`; aggregate CRUD uses the plural collection noun like `Books`, not `BookRepository`)
 - [ ] Adapter private-API symbol + arg signature verified against a known-good source
 - [ ] If the adapter wraps 3rd-party I/O, the orchestrator-vs-collaborator split is decided (one-shot factory vs `@Mockable` collaborator)
 - [ ] iOS-26 gotchas flagged (MainActor? new symbol? signature drift?)
 - [ ] User has approved the design
 
-### Phase 1 — Domain (red → green → refactor)
-- [ ] Failing test in `Tests/BaguetteTests/<Context>/`
-- [ ] Value types in `Domain/<Context>/`
+### Phase 1 — The ability (red → green → refactor)
+- [ ] Failing test in `Tests/BaguetteTests/<the source's folder>/`
+- [ ] Value types in `Device/Abilities/<ability>/` (or `Devices/<Family>/`)
 - [ ] Rich-domain method on the value (e.g. `.press(...)`)
-- [ ] If the feature introduces a Domain pure factory (`AXNode.walk`, `LineBuffer.append`, `AXFrameTransform.map`), it's covered at 100%
+- [ ] If the feature introduces a pure factory (`AXNode.walk`, `LineBuffer.append`, `AXFrameTransform.map`), it's covered at 100%
 - [ ] If a new collaborator was introduced, it's `@Mockable` and named for its domain role
 - [ ] `swift test --filter <Suite>` green
 
-### Phase 2 — Infrastructure
-- [ ] Existing abstraction extended with a doc comment (or new collaborator added)
-- [ ] Production adapter impl with `[<context>]` log lines at branches
-- [ ] If 3rd-party I/O: orchestrator depends on `any <Collaborator>`, and the `Host<Collaborator>` is a thin (~30–50 LOC) integration-only file
-- [ ] Mockable test stubs return values; verify(...).called(N) on the right method
-- [ ] Coverage: orchestrator ≥ 90%; pure factories at 100%
+### Phase 2 — The family
+- [ ] The ability registered in the family's `Abilities` only where it can perform it
+- [ ] Existing role extended with a doc comment (or new role added)
+- [ ] Adapter in `Internal/` with `[<context>]` log lines at branches
+- [ ] If 3rd-party I/O: the adapter depends on `any <Role>`; the concrete role is in `Internal/System/`, ≤100 lines, deciding nothing; a `.system`-tagged test proves it against the real thing
+- [ ] Mockable: one stub per member (`.willProduce` to branch), every `verify` correct — a failing one crashes the runner
+- [ ] Coverage: adapter ≥ 90%; pure factories at 100%; `make check-coverage` clean
 - [ ] `swift test` green
 
-### Phase 3 — Wiring
+### Phase 3 — The ways in
 - [ ] `GestureRegistry.standard` registers the new gesture (gestures only)
-- [ ] CLI subcommand registered in `RootCommand`; `CommandParsingTests` updated
+- [ ] CLI subcommand registered in `RootCommand`; `CommandParsingTests` updated; its `run()` tested against mocks (`run(_:on:terminal:)`)
+- [ ] A new route under both trees (`Server.deviceRoutes`), tested through `InProcessServer`
 - [ ] Browser changes (if any) span `baguette/gestures/` (wire envelopes),
       relevant IIFE, URLs through `BaguetteTarget.path`, and BOTH
       `sim.html` + `farm/farm.html` script tags

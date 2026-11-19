@@ -3,6 +3,7 @@ import Mockable
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// `GET /simulators/:udid/companion-screens.json` — what the focus-mode
 /// screens rail asks before it offers anything. A device with no CarPlay
@@ -28,7 +29,7 @@ struct CompanionScreensRouteTests {
                 )
             )
         } else {
-            given(display).resolve().willThrow(FramebufferSelectionError.noMatchingPort(.carPlay))
+            given(display).resolve().willThrow(FramebufferSelectionError.noMatchingFramebuffer(.carPlay))
         }
         given(displays).carPlay.willReturn(display)
         given(pairing).watch.willReturn(watch)
@@ -40,14 +41,15 @@ struct CompanionScreensRouteTests {
     @Test func `should offer both CarPlay and the watch when the device has both screens`() {
         let sim = simulator(
             carPlayBinds: true,
-            watch: PairedWatch(udid: "WATCH-1", name: "Apple Watch Ultra 3", state: .booted)
+            watch: PairedWatch(udid: "WATCH-1", name: "Apple Watch Ultra 3", state: .ready)
         )
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .value("PHONE-1")).willReturn(sim)
+        Self.ready(sim)
 
         #expect(
-            Server.readCompanionScreens(udid: "PHONE-1", simulators: simulators)
+            Server.readCompanionScreens(udid: "PHONE-1", devices: SimulatorDevices(simulators))
                 == .ok("""
                     {"external":{"available":true,"height":480,"width":720},"watch":{"available":true,\
                     "name":"Apple Watch Ultra 3","state":"Booted","udid":"WATCH-1"}}
@@ -60,9 +62,10 @@ struct CompanionScreensRouteTests {
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .value("PHONE-1")).willReturn(sim)
+        Self.ready(sim)
 
         #expect(
-            Server.readCompanionScreens(udid: "PHONE-1", simulators: simulators)
+            Server.readCompanionScreens(udid: "PHONE-1", devices: SimulatorDevices(simulators))
                 == .ok(#"{"external":{"available":false},"watch":{"available":false}}"#)
         )
     }
@@ -72,7 +75,7 @@ struct CompanionScreensRouteTests {
         given(simulators).find(udid: .any).willReturn(nil)
 
         #expect(
-            Server.readCompanionScreens(udid: "nope", simulators: simulators) == .unknownDevice
+            Server.readCompanionScreens(udid: "nope", devices: SimulatorDevices(simulators)) == .unknownDevice
         )
     }
 
@@ -91,9 +94,10 @@ struct CompanionScreensRouteTests {
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(sim)
+        Self.ready(sim)
 
         #expect(
-            Server.readCompanionScreens(udid: "PHONE-1", simulators: simulators)
+            Server.readCompanionScreens(udid: "PHONE-1", devices: SimulatorDevices(simulators))
                 == .ok(#"{"external":{"available":false},"watch":{"available":false}}"#)
         )
     }
@@ -143,9 +147,10 @@ struct CompanionScreensRouteTests {
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(sim)
+        Self.ready(sim)
 
         #expect(
-            Server.reattachCarPlay(udid: "PHONE-1", simulators: simulators)
+            Server.reattachCarPlay(udid: "PHONE-1", devices: SimulatorDevices(simulators))
                 == .ok(#"{"external":{"available":true,"height":480,"width":720},"watch":{"available":false}}"#)
         )
         verify(external).reattachCarPlay().called(1)
@@ -163,9 +168,10 @@ struct CompanionScreensRouteTests {
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(sim)
+        Self.ready(sim)
 
         #expect(
-            Server.reattachCarPlay(udid: "PHONE-1", simulators: simulators)
+            Server.reattachCarPlay(udid: "PHONE-1", devices: SimulatorDevices(simulators))
                 == .ok(#"{"external":{"available":false},"watch":{"available":false}}"#)
         )
     }
@@ -182,9 +188,10 @@ struct CompanionScreensRouteTests {
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(sim)
+        Self.ready(sim)
 
         guard case .failed(let message) = Server.reattachCarPlay(
-            udid: "PHONE-1", simulators: simulators
+            udid: "PHONE-1", devices: SimulatorDevices(simulators)
         ) else {
             Issue.record("expected a failure outcome")
             return
@@ -196,7 +203,7 @@ struct CompanionScreensRouteTests {
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(nil)
 
-        #expect(Server.reattachCarPlay(udid: "nope", simulators: simulators) == .unknownDevice)
+        #expect(Server.reattachCarPlay(udid: "nope", devices: SimulatorDevices(simulators)) == .unknownDevice)
     }
 
     /// A shutdown device resolves nothing at all. That is an answer the
@@ -214,10 +221,31 @@ struct CompanionScreensRouteTests {
 
         let simulators = MockSimulators()
         given(simulators).find(udid: .any).willReturn(sim)
+        Self.ready(sim)
 
         #expect(
-            Server.readCompanionScreens(udid: "PHONE-1", simulators: simulators)
+            Server.readCompanionScreens(udid: "PHONE-1", devices: SimulatorDevices(simulators))
                 == .ok(#"{"external":{"available":false},"watch":{"available":false}}"#)
         )
+    }
+
+    @Test func `should refuse companion screens for a device that has none, naming it`() {
+        #expect(Server.readCompanionScreens(udid: "U", devices: routeDevices(name: "han's iPhone"))
+            == .refused(.unable(ability: "displays", device: "han's iPhone")))
+    }
+
+    @Test func `should answer companion screens under the devices tree and a simulator's old one`() {
+        for leaf in ["companion-screens.json", "carplay-display"] {
+            #expect(Server.deviceRoutes(leaf) == ["/devices/:udid/\(leaf)", "/simulators/:udid/\(leaf)"])
+        }
+    }
+
+    /// A booted simulator as `SimulatorDevices` reads it.
+    static func ready(_ sim: MockSimulator) {
+        given(sim).udid.willReturn("PHONE-1")
+        given(sim).name.willReturn("iPhone 17")
+        given(sim).state.willReturn(.booted)
+        given(sim).runtime.willReturn("iOS 26.4")
+        given(sim).deviceTypeName.willReturn("iPhone 17")
     }
 }

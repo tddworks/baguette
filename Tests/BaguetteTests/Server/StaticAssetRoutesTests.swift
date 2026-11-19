@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// The static UI lives in subfolders under `Resources/Web/` (`farm/`,
 /// `baguette/gestures/`, `sim-list/`, …) and Hummingbird needs one
@@ -42,11 +43,7 @@ struct StaticAssetRoutesTests {
     /// `Tests/BaguetteTests/Server/<this file>` → repo root →
     /// `Sources/Baguette/Resources/Web`.
     private static func sourceWebRoot() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // Server/
-            .deletingLastPathComponent()  // BaguetteTests/
-            .deletingLastPathComponent()  // Tests/
-            .deletingLastPathComponent()  // repo root
+        RepoRoot.url
             .appendingPathComponent("Sources/Baguette/Resources/Web")
     }
 

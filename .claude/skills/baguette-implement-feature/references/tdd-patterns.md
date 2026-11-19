@@ -2,7 +2,7 @@
 
 baguette uses **Chicago school** state-based TDD with
 **Swift Testing** — never XCTest. Tests live in `Tests/BaguetteTests/`,
-mirroring the Domain/Infrastructure split. The full suite runs in
+mirroring `Sources/` folder for folder. The full suite runs in
 ~50 ms with no booted simulator required (the private SimulatorKit
 boundary lives behind `@Mockable`).
 
@@ -30,18 +30,17 @@ import Foundation
 import Mockable
 @testable import Baguette
 
-@Suite("DeviceButton")
-struct DeviceButtonTests {
+@Suite("HardwareButton")
+struct HardwareButtonTests {
     @Test func `should give the arbitrary-HID buttons their iPhone-family codes`() {
-        #expect(DeviceButton.power.standardHIDUsage      == HIDUsage(page: 12, usage: 48))
-        #expect(DeviceButton.volumeUp.standardHIDUsage   == HIDUsage(page: 12, usage: 233))
-        #expect(DeviceButton.volumeDown.standardHIDUsage == HIDUsage(page: 12, usage: 234))
-        #expect(DeviceButton.action.standardHIDUsage     == HIDUsage(page: 11, usage: 45))
+        #expect(HardwareButton.power.standardHIDUsage      == HIDUsage(page: 12, usage: 48))
+        #expect(HardwareButton.volumeUp.standardHIDUsage   == HIDUsage(page: 12, usage: 233))
+        #expect(HardwareButton.volumeDown.standardHIDUsage == HIDUsage(page: 12, usage: 234))
+        #expect(HardwareButton.action.standardHIDUsage     == HIDUsage(page: 11, usage: 45))
     }
 
-    @Test func `should leave home and lock without a standard HID usage`() {
-        #expect(DeviceButton.home.standardHIDUsage == nil)
-        #expect(DeviceButton.lock.standardHIDUsage == nil)
+    @Test func `should give lock no standard HID usage, as it is a button message of its own`() {
+        #expect(HardwareButton.lock.standardHIDUsage == nil)
     }
 }
 ```
@@ -116,23 +115,23 @@ struct PressTests {
             "button",
             expected: "home | lock | power | volume-up | volume-down | action"
         )) {
-            try Press.parse(["button": "siri"])
+            try ButtonPress.parse(["button": "siri"])
         }
     }
 
     @Test func `should press the home button on the simulator`() {
-        let input = MockInput()
-        given(input).button(.any, duration: .any).willReturn(true)
+        let buttons = MockPress()
+        given(buttons).button(.any, duration: .any).willReturn(true)
 
-        _ = Press(button: .home).execute(on: input)
-        verify(input).button(.value(.home), duration: .value(0)).called(1)
+        _ = ButtonPress(button: .home).execute(on: buttons)
+        verify(buttons).button(.value(.home), duration: .value(0)).called(1)
     }
 }
 ```
 
 Notes:
 
-- Parse tests build a `[String: Any]` dict and call `Press.parse(...)`
+- Parse tests build a `[String: Any]` dict and call `ButtonPress.parse(...)`
   directly — no JSON round-trip, the registry already covers that.
 - Reject tests pin the exact `GestureError` (matters for the wire
   ack the user sees: `{"ok":false,"error":"<message>"}`).
@@ -144,10 +143,10 @@ Notes:
 ## Mockable cheatsheet
 
 ```swift
-let input = MockInput()
+let touch = MockTouch()
 
 // Stub a return value (Chicago school: data, not call counts).
-given(input).tap(at: .any, size: .any, duration: .any).willReturn(true)
+given(touch).tap(at: .any, size: .any, duration: .any).willReturn(true)
 given(input).button(.any, duration: .any).willReturn(true)
 given(input).key(.any, modifiers: .any, duration: .any).willReturn(true)
 
@@ -172,7 +171,7 @@ Matchers:
   SimulatorKit; covering it requires a booted sim and isn't part
   of `swift test`. Trust the Mockable boundary.
 - **The `MOCKING` flag itself.** It's `.debug`-only; tests run in
-  debug, so `MockInput` is always available. Don't write tests that
+  debug, so `MockTouch`, `MockPress`, `MockKey` and `MockScroll` are always available. Don't write tests that
   assert build conditionals.
 - **Hand-rolled mocks.** `@Mockable` generates them; if a port
   changes, regenerate by rebuilding rather than editing fakes.

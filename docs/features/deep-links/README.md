@@ -97,17 +97,17 @@ only what you submit.
 
 | Route | Answers |
 |---|---|
-| `POST /simulators/:udid/openurl?url=<encoded>` | `{"ok":true,"routing":"app"}`, or `"browser"` with a `warning` |
-| `GET /simulators/:udid/schemes.json[?q=…]` | `{"schemes":[{"scheme","completion","app","bundleId"}]}` |
+| `POST /devices/:udid/openurl?url=<encoded>` | `{"ok":true,"routing":"app"}`, or `"browser"` with a `warning` |
+| `GET /devices/:udid/schemes.json[?q=…]` | `{"schemes":[{"scheme","completion","app","bundleId"}]}` |
 
 ```bash
-curl -X POST 'localhost:8421/simulators/<UDID>/openurl?url=myapp%3A%2F%2Fprofile%2F42'
-curl 'localhost:8421/simulators/<UDID>/schemes.json?q=my'
+curl -X POST 'localhost:8421/devices/<UDID>/openurl?url=myapp%3A%2F%2Fprofile%2F42'
+curl 'localhost:8421/devices/<UDID>/schemes.json?q=my'
 ```
 
 `?q=` narrows and ranks against what's been typed; omit it for the whole
 inventory. Both routes are reachable by a plugin holding the `open-url`
-capability, and by a trusted browser. Failures answer
+capability, and by a trusted browser, under either spelling. Failures answer
 `{"ok":false,"error":…}` — `400` for something that isn't a URL, `404` for an
 unknown udid, `500` when simctl itself failed.
 

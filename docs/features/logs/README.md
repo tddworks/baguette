@@ -31,9 +31,10 @@ One socket per consumer. The filter is fixed at connect time — restart the
 socket to change it. URL-encode `predicate` values that include spaces or quotes.
 
 ```
-WS /simulators/<UDID>/logs?level=info&style=compact
-WS /simulators/<UDID>/logs?bundleId=com.apple.MobileSafari
-WS /simulators/<UDID>/logs?level=debug&predicate=subsystem%20%3D%3D%20%22com.apple.UIKit%22
+WS /devices/<UDID>/logs?level=info&style=compact
+WS /devices/<UDID>/logs?bundleId=com.apple.MobileSafari
+WS /devices/<UDID>/logs?level=debug&predicate=subsystem%20%3D%3D%20%22com.apple.UIKit%22
+   (a simulator also answers under /simulators/<UDID>/logs)
 ```
 
 Server frames:

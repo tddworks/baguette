@@ -22,13 +22,16 @@ jobs:
       - name: Check links, budgets and changelog
         run: python3 scripts/check-docs.py --strict
 
+      - name: Check coverage exclusions
+        run: python3 scripts/check-coverage.py
+
       - name: Changelog release scripts
         run: scripts/test-changelog-release.sh
 
       - name: Setup Swift
         uses: SwiftyLab/setup-swift@latest
         with:
-          swift-version: "6.2"
+          swift-version: "6.4"
 
       - name: Swift version
         run: swift --version
@@ -48,17 +51,20 @@ jobs:
       - name: Generate lcov report
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          XCTEST="$BIN_PATH/BaguettePackageTests.xctest/Contents/MacOS/BaguettePackageTests"
-          PROFDATA="$BIN_PATH/codecov/default.profdata"
-          # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
-          # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,
-          # stdin/stdout) and the thin command-layer files that do nothing
-          # but wire those shims together — they need a booted simulator or
-          # live socket to exercise meaningfully.
+          # The bundle's name depends on the build system: the native one
+          # makes BaguettePackageTests.xctest, swiftbuild (Swift 6.4's
+          # default) names it after the target, BaguetteTests.xctest.
+          BUNDLE=$(find "$BIN_PATH" -maxdepth 1 -name '*Tests.xctest' | head -1)
+          [ -n "$BUNDLE" ] || { echo "::error::No test bundle in $BIN_PATH"; exit 1; }
+          XCTEST="$BUNDLE/Contents/MacOS/$(basename "$BUNDLE" .xctest)"
+          PROFDATA="$(dirname "$(swift test --show-codecov-path)")/default.profdata"
+          # What is left out lives in codecov.yml's `ignore:`, one list;
+          # the regex is generated from it.
+          IGNORE=$(python3 scripts/check-coverage.py --regex)
           xcrun llvm-cov export "$XCTEST" \
             -instr-profile "$PROFDATA" \
             -format=lcov \
-            -ignore-filename-regex=".build|Tests|Resources|Mock|Infrastructure/Server/|Infrastructure/Simulator/[^/]+\\.swift|Infrastructure/Simulator/Input/|Infrastructure/Simulator/Screen/|Infrastructure/Host/Screen/|Infrastructure/Host/Stream/|Infrastructure/Host/Chrome/PDFRasterizer|Infrastructure/CoreDevice/Kit/CoreDeviceFramework|Infrastructure/CoreDevice/Kit/DigitizerReport|Infrastructure/CoreDevice/Input/CoreDeviceDigitizer|Infrastructure/CoreDevice/Screen/MediaStreamScreen|Infrastructure/CoreDevice/Accessibility/|App/Commands/|App/Logger" \
+            -ignore-filename-regex="$IGNORE" \
             > coverage.lcov
 
       - name: Upload coverage to Codecov

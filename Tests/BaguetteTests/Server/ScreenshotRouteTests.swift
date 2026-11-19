@@ -4,6 +4,7 @@ import ImageIO
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDevice
 
 /// Handler-level tests for the sized screenshot routes.
 ///

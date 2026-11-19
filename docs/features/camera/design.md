@@ -32,7 +32,7 @@ the injection and the dylib stay the same.
 ```
    Browser              Server (baguette)                         iOS Simulator
 ┌────────────┐  WS    ┌────────────────────────┐               ┌──────────────────┐
-│ sim-camera │◀─────▶│ /simulators/:udid/camera │               │ AVCaptureVideo   │
+│ sim-camera │◀─────▶│  /devices/:udid/camera   │               │ AVCaptureVideo   │
 │ .js (card) │  JSON  │  CameraSession (state) │               │ PreviewLayer .   │
 └────────────┘        │   ├─ AVCameraCapture   │               │  setSession:     │
                       │   │   (BGRAConverter)  │               │  hook  ▲         │

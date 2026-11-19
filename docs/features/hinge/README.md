@@ -26,9 +26,9 @@ hinge moves, and the page, the lit panel and the chrome all follow.
 ## HTTP / WebSocket
 
 ```http
-POST /simulators/<udid>/hinge?pose=open
-POST /simulators/<udid>/hinge?angle=95&duration=1.2
-GET  /simulators/<udid>/hinge
+POST /devices/<udid>/hinge?pose=open
+POST /devices/<udid>/hinge?angle=95&duration=1.2
+GET  /devices/<udid>/hinge                  (or /simulators/<udid>/hinge)
 ```
 
 The `POST` blocks for the sweep and answers `{"ok":true}`; `400` for a

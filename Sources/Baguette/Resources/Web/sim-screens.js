@@ -7,7 +7,7 @@
 // and attached a CarPlay display whether you wanted one or not.
 //
 // This rail makes it a choice. It asks the host what is actually there
-// (`/simulators/<udid>/companion-screens.json`), offers what it can
+// (`/devices/<udid>/companion-screens.json`), offers what it can
 // show, and for what it can't, says how to get one — a device with no
 // CarPlay display and no paired watch is the common case, so "nothing
 // here" has to be a useful answer rather than an empty rail.
@@ -17,8 +17,8 @@
 // sim-native.js, which owns every StreamSession on the page.
 //
 // Wire:
-//   GET  /simulators/<udid>/companion-screens.json  → what's attached
-//   POST /simulators/<udid>/boot                    → boot a paired watch
+//   GET  /devices/<udid>/companion-screens.json  → what's attached
+//   POST /devices/<udid>/boot                    → boot a paired watch
 (function (root) {
   'use strict';
 
@@ -124,7 +124,7 @@
     async probe() {
       try {
         const res = await fetch(
-          '/simulators/' + encodeURIComponent(this.udid) + '/companion-screens.json',
+          '/devices/' + encodeURIComponent(this.udid) + '/companion-screens.json',
           { cache: 'no-store' }
         );
         if (!res.ok) return null;
@@ -369,7 +369,7 @@
         let failure = null;
         try {
           const res = await fetch(
-            '/simulators/' + encodeURIComponent(this.udid) + '/carplay-display',
+            '/devices/' + encodeURIComponent(this.udid) + '/carplay-display',
             { method: 'POST' }
           );
           payload = await res.json();
@@ -439,7 +439,7 @@
         button.disabled = true;
         button.textContent = 'Booting…';
         try {
-          await fetch('/simulators/' + encodeURIComponent(entry.udid) + '/boot',
+          await fetch('/devices/' + encodeURIComponent(entry.udid) + '/boot',
             { method: 'POST' });
         } catch (_) { /* the poll below is the real answer */ }
         this.pollForBoot(entry.udid, note, button);

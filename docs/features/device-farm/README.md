@@ -98,7 +98,7 @@ working after a device is renamed; unavailable metadata is `null`.
 Everything else is shared with the single-device page: each tile opens the
 per-device stream WebSocket, and profile changes are ordinary `set_fps` /
 `set_scale` / `set_bitrate` messages ([wire.md](../../wire.md)). Bulk actions
-fan out one `POST /simulators/<UDID>/boot` or `/shutdown` per device
+fan out one `POST /devices/<UDID>/boot` or `/shutdown` per device
 ([boot](../boot/README.md)); there are no bulk endpoints.
 
 ## Gotchas
