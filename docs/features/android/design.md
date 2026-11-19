@@ -15,24 +15,24 @@
 
 ## The family
 
-Pure values the whole family shares sit at the top; everything else in `Internal/`: the family's source, adb in `Kit/`, and one folder per mechanism with the values and code only it uses — an emulator does everything through its control API, so `Emulator/` holds all of it, its socket in its own `Internal/System/`.
+Laid out as the iPhone family is: pure values the whole family shares at the top; in `Internal/`, the family's source, then one folder per ability — the mechanism one level down, so an adb screen for phones lands beside `EmulatorScreen` as `DevicectlScreen` sits beside `CoreDevice/` — what abilities share in `Kit/`, and the bare calls in one `System/`.
 
 ```
 Sources/Devices/Android/
-├── AdbListing.swift ◇               what adb lists — the family's own listing, for every Android device
+├── AdbListing · AVDListing ◇        what adb lists; the AVDs installed
+├── AndroidKeyCode · AndroidScreenSize ◇   buttons and keys as key codes; wm size / density
 └── Internal/
     ├── AndroidDevices.swift         the family's source, and AndroidDevice: what one can do
-    ├── Kit/                         Adb · AdbLocation — adb, shared by everything Android
-    └── Emulator/                    the emulator's control API: everything an emulator does through it
-        ├── RunningEmulator.swift ◇   a running emulator's .ini → serial, gRPC port, token
-        ├── EmulatorControl.swift ◇        its protobuf messages
-        ├── GRPCCall.swift ◇            one call as HTTP/2 bytes; replies and flow control back
-        ├── EmulatorConnection.swift    the role screen and input share (next)
-        ├── EmulatorScreen.swift · EmulatorTouch.swift   frames from streamScreenshot; sendTouch, sendKey (next)
-        └── Internal/System/EmulatorSocket.swift          the one HTTP/2 connection to 127.0.0.1:<grpc.port>
+    ├── Screen/  EmulatorScreen      frames from streamScreenshot
+    ├── Input/   EmulatorInput       touches and scroll through sendTouch (its screen asked of adb once)
+    │            AdbKeys             buttons, keys and typing through adb — every Android device
+    ├── Power/   EmulatorPower       launch the AVD; `adb emu kill`
+    ├── Kit/     AndroidTool · AndroidSDKLocation      an SDK tool, found
+    │            RunningEmulator ◇   a running emulator's .ini → serial, gRPC port, token
+    │            EmulatorControl ◇ · GRPCCall ◇        the control API's messages, as HTTP/2 bytes
+    │            EmulatorConnection · EmulatorLink      one connection to the control API, screen and input each their own
+    └── System/  TCPLink · DetachedLaunch   the socket to 127.0.0.1:<grpc.port>; a process left running
 ```
-
-Phones, when they come, take `Internal/Phone/` beside `Emulator/`, with whatever their mechanism turns out to be.
 
 | Word | Means |
 |---|---|

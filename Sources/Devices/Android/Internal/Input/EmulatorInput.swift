@@ -102,3 +102,34 @@ final class EmulatorInput: Touch, Scroll, @unchecked Sendable {
         }
     }
 }
+
+extension EmulatorInput {
+    /// The input of `emulator`, its screen's pixels and density asked of adb;
+    /// a Pixel's (1080 × 2400 at 2.625) when adb can't say.
+    static func reaching(_ emulator: RunningEmulator, serial: String, adb: AndroidTool) -> EmulatorInput {
+        let ask = { (what: String) in
+            (try? adb.runAndWait(["-s", serial, "shell", "wm", what])).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }
+        let screen = AndroidScreenSize.pixels(fromWmSize: ask("size")) ?? Size(width: 1080, height: 2400)
+        let pixelsPerPoint = AndroidScreenSize.pixelsPerPoint(fromWmDensity: ask("density")) ?? 2.625
+        return EmulatorInput(connection: EmulatorConnection(to: emulator), screen: screen, pixelsPerPoint: pixelsPerPoint)
+    }
+}
+
+/// A value made the first time it is asked for, then shared.
+final class OneInput: @unchecked Sendable {
+    private let make: @Sendable () -> EmulatorInput
+    private let lock = NSLock()
+    private var made: EmulatorInput?
+
+    init(_ make: @escaping @Sendable () -> EmulatorInput) { self.make = make }
+
+    var value: EmulatorInput {
+        lock.withLock {
+            if let made { return made }
+            let input = make()
+            made = input
+            return input
+        }
+    }
+}
