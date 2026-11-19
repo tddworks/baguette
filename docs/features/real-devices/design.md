@@ -79,7 +79,7 @@ Outcome: **Go** for touch and the live screen. Built: `CoreDevicePhones` registe
 ### How the screen reaches the Mac
 
 ```
-MediaStreamScreen.start
+PhoneScreen.start, with RTPReceiver
   → MediaStreamOffer(...).bytes                    our own offer: H.264 only, 6 Mbit/s cap (mode 5, video)
   → RemoteDevice.startMediaStream { request }      MediaStreamFunctions: support info (tunnel up), then start
         request: StartRequest as JSON through CoreDevice's own Decodable —

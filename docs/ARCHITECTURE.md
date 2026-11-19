@@ -286,7 +286,8 @@ in points too — same unit system end to end.
 ```
 Screen (IOSurface per frame)          Stream impl                        FrameSink
   SimulatorKitScreen — a simulator's framebuffer
-  MediaStreamScreen  — a phone's own H.264, received over its tunnel,
+  PhoneScreen        — a phone's own stream, received over its tunnel by its
+                       ScreenReceiver (RTPReceiver or AVConferenceReceiver),
                        decoded and cropped to its screen
 ─────────────────────────────         ───────────                        ─────────
   framebuffer callbacks      ──►      MJPEG / AVCC encode loop  ──►     StdoutSink

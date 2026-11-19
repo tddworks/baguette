@@ -1,50 +1,53 @@
 # A phone's screen: two receivers
 
-> Both routes start the phone's own stream through CoreDevice, over the same tunnel. They differ in who writes the offer, and who receives, reassembles and decodes the stream: Apple's AVConference, run in baguette's own process (`avconference`, the default), or baguette (`rtp`). Pick one with `BAGUETTE_PHONE_SCREEN`; the research behind the second is in [design.md](design.md#the-screen-through-avconference-in-process-spike-2026-11-19).
+> One `PhoneScreen` runs every phone's live screen; only its `ScreenReceiver` — who turns the stream into pictures — differs: baguette's own (`rtp`, the default) or Apple's AVConference, run in baguette's own process (`avconference`). Pick one with `BAGUETTE_PHONE_SCREEN`; the research behind the second is in [design.md](design.md#the-screen-through-avconference-in-process-spike-2026-11-19).
 
-## `rtp` — `MediaStreamScreen`, baguette's own receiver
+## The session — `PhoneScreen`, every rule once
 
 ```
-MediaStreamScreen.stream()
+PhoneScreen.stream()
  1. tunnel.open(to:)               RemoteDevice.connect() → TunnelEnds (phone …::1, Mac …::2)
  2. openSocket()                   UDPSocket, IPv6, any port
- 3. MediaStreamOffer(...).bytes    our offer: AVConference's fields minus HEVC → H.264 only
- 4. starter.start(on:)             CoreDevice startMediaStream(StartRequest{negotiatorOffer, receiverIP, port})
-                                   ← StartResponse: streamConfig (SourceIP/Port, SSRCs)
- 5. receive() loop:
-      socket.receive()             the phone's RTP datagrams
-      RTPPacket → VideoDepacketizer   H.264 frames (single NALs, FU-A; 0x92 carries the avcC's SPS/PPS)
-      ReceiverFeedback             our RTCP: receiver reports, picture-loss requests
-      DecodeGate                   nothing until a keyframe after a loss
-      VTStreamDecoder              VideoToolbox: H.264 → BGRA IOSurface → onFrame
+    receiver.offer()               the receiver's own offer
+    starter.start(on:)             CoreDevice startMediaStream(StartRequest{negotiatorOffer, receiverIP, port})
+                                   ← StartResponse: streamConfig (SourceIP/Port, SSRCs), negotiatorAnswer
+    receiver.accept(answer)        each receiver reads its own part
+ 3. receiver.start(croppedTo:)     the phone's screen size, from devicectl displays
+    relay:  socket.receive() → receiver.receive()       the phone's datagrams
+            receiver.nextReport() → socket.send()       its reports, back to where the phone streams from
+ 4. onPicture → onFrame            each picture as the receiver decodes it — a push, no timer
+ 5. no picture in 8 s → screenshots (DevicectlScreen); stop → RTCP goodbye, receiver stopped, socket closed
 ```
 
-Everything after the start is baguette's code and unit-tested byte for byte (`MediaStreamPackets`, `ReceiverFeedback`, `MediaStreamSession`).
+Tested through `MockScreenReceiver`, `MockTunnel`, `MockMediaStreamStarter`, `MockDatagramSocket`. `PhoneScreenRoute` picks the receiver.
 
-## `avconference` — `AVConferenceScreen`, AVConference's receiver in-process
+## `rtp` — `RTPReceiver`, baguette's own (`Screen/RTP/`)
 
 ```
-AVConferenceScreen.stream()
- 1. tunnel.open(to:)               the same
- 2. openSocket()                   the same UDPSocket on the tunnel
- 3. mirroring.offer()              Apple's offer: AVCMediaStreamNegotiator, mode 5 → negotiates HEVC
- 4. starter.start(on:)             the same CoreDevice call; the StartResponse also carries negotiatorAnswer
- 5. mirroring.accept(answer:)      the negotiator takes the phone's answer
-    mirroring.start()              an AVCVideoStream run in-process, on a LoopbackRelay (IPv4 loopback pair)
- 6. relay — baguette only carries bytes:
-      socket.receive() → mirroring.deliver()      the phone's RTP/RTCP into AVConference
-      mirroring.nextReport() → socket.send()      AVConference's RTCP back to the phone
-    inside AVConference:           jitter buffer, depacketizing, loss recovery, rate control, HEVC decode
- 7. each decoded picture, pushed as it is decoded:
-      _VCVideoStream_DidReceiveRemoteFrame     AVConference's per-picture C callback, after its jitter
-                                               buffer; DecodedPictureTap wraps it (calls the original)
-      → our queue (newest waiting wins)        AVConference's thread is never held
-      → PictureConversion                      BGRA IOSurface, cropped to the screen
-                                               (1328 × 2896 coded for 1320 × 2868; size from devicectl)
-      → onFrame                                the moment it's ready, no timer
+offer()      MediaStreamOffer: AVConference's fields minus HEVC → H.264 only
+accept()     the two sources (SSRCs) from streamConfig
+receive()    RTPPacket → VideoDepacketizer   H.264 frames (single NALs, FU-A; 0x92 carries the avcC's SPS/PPS)
+             DecodeGate                      nothing until a keyframe after a loss
+             VTStreamDecoder                 H.264 → BGRA IOSurface, cropped to the screen (clean aperture)
+nextReport() ReceiverFeedback                receiver reports, picture-loss requests
 ```
 
-The decisions (order, relay, which picture goes on, the fallback, stopping) are `AVConferenceScreen`'s, tested through `MockMirroring`; the AVConference calls are `AVConferenceMirroring` and its neighbours in `Internal/System/`.
+All pure values but the decoder, unit-tested byte for byte (`RTPReceiverTests`, `MediaStreamPackets`, `ReceiverFeedback`).
+
+## `avconference` — `AVConferenceReceiver`, Apple's, in-process (`Screen/AVConference/`)
+
+```
+offer()      AVCMediaStreamNegotiator, mode 5 → negotiates HEVC
+accept()     negotiatorAnswer → the negotiator
+start()      an AVCVideoStream run in-process (avcMediaStreamOptionRunInProcess), on a LoopbackRelay
+receive()    → the relay → AVConference: jitter buffer, depacketizing, loss recovery, rate control, HEVC decode
+nextReport() ← the relay ← AVConference's RTCP
+pictures     _VCVideoStream_DidReceiveRemoteFrame, AVConference's per-picture C callback, wrapped by
+             DecodedPictureTap → our queue (NewestWaiting: the newest picture wins, AVConference's
+             thread never held) → PictureConversion: BGRA IOSurface, cropped to the screen
+```
+
+Its private calls are in `Screen/AVConference/System/` (≤ 100 lines a file, left out of coverage like every `Internal/…/System/`); `NewestWaiting` is tested.
 
 ## Side by side
 
@@ -87,7 +90,7 @@ The decisions (order, relay, which picture goes on, the fallback, stopping) are 
 ## Choosing
 
 ```bash
-BAGUETTE_PHONE_SCREEN=rtp baguette serve     # or stream, record, screenshot
+BAGUETTE_PHONE_SCREEN=avconference baguette serve     # or stream, record, screenshot
 ```
 
-Anything else, or nothing, is `avconference`. When AVConference can't start the stream, the phone shows screenshots — set `rtp` to use baguette's own receiver instead. The route is read when baguette starts, for every phone it streams.
+Anything else, or nothing, is `rtp`. When AVConference can't start the stream, the phone shows screenshots. **Known issue:** while the screen scrolls, `avconference` shows some frames scaled rather than cropped (the stream's padding as a strip at the right and bottom); `rtp` doesn't — the reason the default stayed `rtp`. The route is read when baguette starts, for every phone it streams.

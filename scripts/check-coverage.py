@@ -8,7 +8,8 @@
 Rules:
   1. Every `ignore:` entry still matches a file, so a stale line can't
      quietly hide a new one that reuses its path.
-  2. A file in an `Internal/System/` folder is at most MAX_LINES lines —
+  2. A file in an `Internal/System/` folder (or a `System/` folder deeper
+     inside `Internal/`) is at most MAX_LINES lines —
      the irreducible call to the outside world and nothing else. A file
      that needs more is deciding something, and that part is measured.
 """
@@ -70,7 +71,7 @@ def main() -> int:
         if not any(pattern.match(f) for f in files):
             problems.append(f"codecov.yml: `{glob}` matches no file")
 
-    for path in sorted(ROOT.glob("Sources/**/Internal/System/*.swift")):
+    for path in sorted(ROOT.glob("Sources/**/Internal/**/System/*.swift")):
         lines = len(path.read_text().splitlines())
         if lines > MAX_LINES:
             rel = path.relative_to(ROOT)

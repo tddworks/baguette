@@ -27,13 +27,22 @@ final class PictureConversion: @unchecked Sendable {
                                      value: kVTScalingMode_CropSourceToCleanAperture)
             }
         }
-        if let aperture {
-            CVBufferSetAttachment(picture, kCVImageBufferCleanApertureKey, [
+        // The crop goes on a buffer of our own over the same surface, never
+        // on AVConference's: it changes its own buffer's attachments as it
+        // displays it, and a crop lost that way scales the padding in.
+        var source = picture
+        if let aperture, let surface = CVPixelBufferGetIOSurface(picture)?.takeUnretainedValue() {
+            var ours: Unmanaged<CVPixelBuffer>?
+            guard CVPixelBufferCreateWithIOSurface(nil, surface, nil, &ours) == kCVReturnSuccess,
+                  let wrapped = ours?.takeRetainedValue()
+            else { return nil }
+            CVBufferSetAttachment(wrapped, kCVImageBufferCleanApertureKey, [
                 kCVImageBufferCleanApertureWidthKey: aperture.width,
                 kCVImageBufferCleanApertureHeightKey: aperture.height,
                 kCVImageBufferCleanApertureHorizontalOffsetKey: aperture.horizontalOffset,
                 kCVImageBufferCleanApertureVerticalOffsetKey: aperture.verticalOffset,
             ] as CFDictionary, .shouldNotPropagate)
+            source = wrapped
         }
         if pool == nil || poolSize != (width, height) {
             let attributes: [CFString: Any] = [
@@ -48,7 +57,7 @@ final class PictureConversion: @unchecked Sendable {
         guard let session, let pool else { return nil }
         var output: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &output) == kCVReturnSuccess, let output,
-              VTPixelTransferSessionTransferImage(session, from: picture, to: output) == noErr,
+              VTPixelTransferSessionTransferImage(session, from: source, to: output) == noErr,
               let surface = CVPixelBufferGetIOSurface(output)?.takeUnretainedValue()
         else { return nil }
         recent.append(output)

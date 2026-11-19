@@ -243,25 +243,16 @@ struct CoreDevicePhonesTests {
     }
 
     @Test(.enabled(if: CoreDeviceFramework.isAvailable))
-    func `should show a phone's screen through AVConference by default`() throws {
-        let phone = CoreDevicePhone(
-            PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
-                          marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
-                          coreDeviceIdentifier: UUID()),
-            devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: .avconference)
+    func `should show a phone's live screen through one phone screen, whichever receiver its route picks`() throws {
+        for route in [PhoneScreenRoute.rtp, .avconference] {
+            let phone = CoreDevicePhone(
+                PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
+                              marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
+                              coreDeviceIdentifier: UUID()),
+                devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: route)
 
-        #expect(try phone.require(.screen) is AVConferenceScreen)
-    }
-
-    @Test(.enabled(if: CoreDeviceFramework.isAvailable))
-    func `should show a phone's screen through baguette's own receiver when its route says rtp`() throws {
-        let phone = CoreDevicePhone(
-            PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
-                          marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
-                          coreDeviceIdentifier: UUID()),
-            devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: .rtp)
-
-        #expect(try phone.require(.screen) is MediaStreamScreen)
+            #expect(try phone.require(.screen) is PhoneScreen)
+        }
     }
 
     @Test func `should take no touch on a phone CoreDevice gave no identifier`() {

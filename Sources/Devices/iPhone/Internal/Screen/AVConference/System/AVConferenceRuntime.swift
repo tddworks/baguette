@@ -56,8 +56,23 @@ enum AVConferenceRuntime {
         return unsafeBitCast(send, to: Call.self)(negotiator, NSSelectorFromString(selector), &error)
     }
 
+    /// An `AVCVideoStream` run in this process (`avcMediaStreamOptionRunInProcess`,
+    /// which never asks `avconferenced`) on the socket `descriptor`, configured.
+    static func inProcessStream(on descriptor: Int32, generated: NSDictionary, configuration: AnyObject,
+                                error: inout NSError?) -> AnyObject? {
+        let options = NSMutableDictionary(dictionary: generated)
+        options.addEntries(from: negotiatorOptions as! [AnyHashable: Any])
+        options["avcMediaStreamOptionRunInProcess"] = true
+        let sockets = xpc_dictionary_create(nil, nil, 0)
+        xpc_dictionary_set_fd(sockets, "avcKeySharedSocket", descriptor)
+        guard let stream = stream(sockets: sockets, options: options, error: &error),
+              configure(stream, configuration, error: &error)
+        else { return nil }
+        return stream
+    }
+
     /// `AVCVideoStream initWithNetworkSockets:options:error:`
-    static func stream(sockets: xpc_object_t, options: NSDictionary, error: inout NSError?) -> AnyObject? {
+    private static func stream(sockets: xpc_object_t, options: NSDictionary, error: inout NSError?) -> AnyObject? {
         guard let cls = streamClass, let allocated = alloc(cls) else { return nil }
         typealias Call = @convention(c) (AnyObject, Selector, AnyObject, NSDictionary, UnsafeMutablePointer<NSError?>) -> AnyObject?
         return unsafeBitCast(send, to: Call.self)(
@@ -65,7 +80,7 @@ enum AVConferenceRuntime {
     }
 
     /// `configure:error:`
-    static func configure(_ stream: AnyObject, _ configuration: AnyObject, error: inout NSError?) -> Bool {
+    private static func configure(_ stream: AnyObject, _ configuration: AnyObject, error: inout NSError?) -> Bool {
         typealias Call = @convention(c) (AnyObject, Selector, AnyObject, UnsafeMutablePointer<NSError?>) -> Bool
         return unsafeBitCast(send, to: Call.self)(stream, NSSelectorFromString("configure:error:"), configuration, &error)
     }

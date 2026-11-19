@@ -5,12 +5,12 @@ import Testing
 @testable import Baguette
 @testable import BaguetteDevice
 
-/// A phone's live screen through AVConference's own receiver, with the
-/// tunnel, CoreDevice, the socket, the mirroring and the screenshots stood
-/// in for: what the phone is asked, which datagrams go where, which pictures
-/// go on, and when it falls back to screenshots.
-@Suite("AVConferenceScreen")
-struct AVConferenceScreenTests {
+/// A phone's live screen, whichever receiver turns its stream into pictures:
+/// with the tunnel, CoreDevice, the socket, the receiver and the screenshots
+/// stood in for — what the phone is asked, which datagrams go where, which
+/// pictures go on, and when it falls back to screenshots.
+@Suite("PhoneScreen")
+struct PhoneScreenTests {
     private static let offer = Data([0x62, 0x70, 0x6C, 0x69])
     private static let negotiated = Data([7, 7, 7])
     nonisolated(unsafe) private static let answer: [String: Any] = [
@@ -48,7 +48,7 @@ struct AVConferenceScreenTests {
         let tunnel = MockTunnel()
         let starter = MockMediaStreamStarter()
         let socket = MockDatagramSocket()
-        let mirroring = MockMirroring()
+        let receiver = MockScreenReceiver()
         let fallback = MockScreen()
         let devicectl = PhoneJSON.devicectl(listings: [PhoneJSON.listing(tunnelAddress: PhoneJSON.tunnel)])
         let fellBack = Signal()
@@ -61,10 +61,13 @@ struct AVConferenceScreenTests {
         private var reports: [Data]
         private let pictures: Int
         private var _onPicture: (@Sendable (IOSurface) -> Void)?
-        /// What the mirroring was told to call with each decoded picture.
+        /// What the receiver was told to call with each decoded picture.
         var onPicture: (@Sendable (IOSurface) -> Void)? { lock.withLock { _onPicture } }
         private var _request: [String: Any]?
         private var _steps: [String] = []
+        private var _accepted: String?
+        /// The part of CoreDevice's answer the receiver was handed, by its negotiator's answer.
+        var accepted: String? { lock.withLock { _accepted } }
         private var _frames = 0
 
         var request: [String: Any]? { lock.withLock { _request } }
@@ -72,7 +75,7 @@ struct AVConferenceScreenTests {
         var frames: Int { lock.withLock { _frames } }
 
         init(inbound: [Data] = [], reports: [Data] = [], pictures: Int = 0,
-             answer: [String: Any] = AVConferenceScreenTests.answer, mirroringStarts: Bool = true) {
+             answer: [String: Any] = PhoneScreenTests.answer, receiverStarts: Bool = true) {
             self.inbound = inbound
             self.reports = reports
             self.pictures = pictures
@@ -90,30 +93,32 @@ struct AVConferenceScreenTests {
             }
             given(socket).send(.any, to: .any, port: .any).willProduce { [self] _, _, _ in reported.fire() }
             given(socket).close().willReturn()
-            given(mirroring).offer().willReturn(AVConferenceScreenTests.offer)
-            given(mirroring).accept(answer: .any).willProduce { [self] _ in lock.withLock { _steps.append("accept") } }
-            given(mirroring).start(croppedTo: .any, onPicture: .any).willProduce { [self] _, onPicture in
-                lock.withLock { _steps.append("start mirroring"); _onPicture = onPicture }
-                guard mirroringStarts else { throw TunnelError.down }
-                for _ in 0..<pictures { onPicture(AVConferenceScreenTests.surface()) }
+            given(receiver).offer().willReturn(PhoneScreenTests.offer)
+            given(receiver).accept(.any).willProduce { [self] answer in
+                lock.withLock { _steps.append("accept"); _accepted = answer["negotiatorAnswer"] as? String }
             }
-            given(mirroring).deliver(.any).willProduce { [self] _ in delivered.fire() }
-            given(mirroring).nextReport().willProduce { [self] in
+            given(receiver).start(croppedTo: .any, onPicture: .any).willProduce { [self] _, onPicture in
+                lock.withLock { _steps.append("start receiving"); _onPicture = onPicture }
+                guard receiverStarts else { throw TunnelError.down }
+                for _ in 0..<pictures { onPicture(PhoneScreenTests.surface()) }
+            }
+            given(receiver).receive(.any).willProduce { [self] _ in delivered.fire() }
+            given(receiver).nextReport().willProduce { [self] in
                 let next = lock.withLock { self.reports.isEmpty ? nil : self.reports.removeFirst() }
                 if next == nil { Thread.sleep(forTimeInterval: 0.002) }
                 return next
             }
-            given(mirroring).stop().willProduce { [self] in stopped.fire() }
+            given(receiver).stop().willProduce { [self] in stopped.fire() }
             given(fallback).start(onFrame: .any).willProduce { [self] _ in fellBack.fire() }
             given(fallback).stop().willReturn()
         }
 
-        func screen(clock: Clock = Clock(step: 0.001)) -> AVConferenceScreen {
-            let (socket, mirroring) = (socket, mirroring)
-            return AVConferenceScreen(
+        func screen(clock: Clock = Clock(step: 0.001)) -> PhoneScreen {
+            let (socket, receiver) = (socket, receiver)
+            return PhoneScreen(
                 identifier: PhoneJSON.identifier, devicectl: Devicectl(makeSubprocess: devicectl.make),
                 fallback: fallback, tunnel: tunnel, starter: starter,
-                openSocket: { socket }, makeMirroring: { mirroring }, now: clock.read, pace: {})
+                openSocket: { socket }, makeReceiver: { receiver }, now: clock.read, pace: {})
         }
 
         func onFrame(_ surface: IOSurface) {
@@ -122,7 +127,7 @@ struct AVConferenceScreenTests {
         }
     }
 
-    @Test func `should start the phone's stream with the mirroring's offer, sent to this Mac's end of its tunnel`() throws {
+    @Test func `should start the phone's stream with the receiver's offer, sent to this Mac's end of its tunnel`() throws {
         let rig = Rig(pictures: 1)
         let screen = rig.screen()
 
@@ -136,7 +141,7 @@ struct AVConferenceScreenTests {
         verify(rig.tunnel).open(to: .value(PhoneJSON.identifier)).called(1)
     }
 
-    @Test func `should hand the phone's answer to the mirroring before it starts`() throws {
+    @Test func `should hand CoreDevice's answer to the receiver before it starts`() throws {
         let rig = Rig(pictures: 1)
         let screen = rig.screen()
 
@@ -144,8 +149,8 @@ struct AVConferenceScreenTests {
         #expect(rig.pictured.wait())
         screen.stop()
 
-        verify(rig.mirroring).accept(answer: .value(Self.negotiated)).called(1)
-        #expect(rig.steps == ["start stream", "accept", "start mirroring"])
+        #expect(rig.accepted == Self.negotiated.base64EncodedString())
+        #expect(rig.steps == ["start stream", "accept", "start receiving"])
     }
 
     @Test func `should crop the phone's pictures to its screen`() throws {
@@ -156,10 +161,10 @@ struct AVConferenceScreenTests {
         #expect(rig.pictured.wait())
         screen.stop()
 
-        verify(rig.mirroring).start(croppedTo: .value(Size(width: 1320, height: 2868)), onPicture: .any).called(1)
+        verify(rig.receiver).start(croppedTo: .value(Size(width: 1320, height: 2868)), onPicture: .any).called(1)
     }
 
-    @Test func `should pass the phone's datagrams on to the mirroring`() throws {
+    @Test func `should pass the phone's datagrams on to the receiver`() throws {
         let datagram = Data([0x80, 0x64, 0, 1])
         let rig = Rig(inbound: [datagram], pictures: 1)
         let screen = rig.screen()
@@ -168,10 +173,10 @@ struct AVConferenceScreenTests {
         #expect(rig.delivered.wait())
         screen.stop()
 
-        verify(rig.mirroring).deliver(.value(datagram)).called(1)
+        verify(rig.receiver).receive(.value(datagram)).called(1)
     }
 
-    @Test func `should send the mirroring's reports to where the phone streams from`() throws {
+    @Test func `should send the receiver's reports to where the phone streams from`() throws {
         let report = Data([0x81, 0xC9, 0, 1])
         let rig = Rig(reports: [report], pictures: 1)
         let screen = rig.screen()
@@ -183,7 +188,7 @@ struct AVConferenceScreenTests {
         verify(rig.socket).send(.value(report), to: .value(PhoneJSON.tunnel), port: .value(61000)).called(1)
     }
 
-    @Test func `should pass on each picture as the mirroring decodes it`() throws {
+    @Test func `should pass on each picture as the receiver decodes it`() throws {
         let rig = Rig(pictures: 2)
         let screen = rig.screen()
 
@@ -207,7 +212,7 @@ struct AVConferenceScreenTests {
         #expect(rig.frames == 1)
     }
 
-    @Test func `should stop the mirroring and close its socket when stopped`() throws {
+    @Test func `should stop the receiver and close its socket when stopped`() throws {
         let rig = Rig(pictures: 1)
         let screen = rig.screen()
 
@@ -220,8 +225,8 @@ struct AVConferenceScreenTests {
         verify(rig.fallback).stop().called(0)
     }
 
-    @Test func `should show screenshots when the mirroring can't start`() throws {
-        let rig = Rig(mirroringStarts: false)
+    @Test func `should show screenshots when the receiver can't start`() throws {
+        let rig = Rig(receiverStarts: false)
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
@@ -231,17 +236,15 @@ struct AVConferenceScreenTests {
         verify(rig.fallback).stop().called(1)
     }
 
-    @Test func `should show screenshots when CoreDevice's answer carries no negotiator's answer`() throws {
-        var answer = Self.answer
-        answer["negotiatorAnswer"] = nil
-        let rig = Rig(answer: answer)
+    @Test func `should show screenshots when CoreDevice's answer doesn't say where the stream comes from`() throws {
+        let rig = Rig(answer: ["negotiatorAnswer": Self.negotiated.base64EncodedString()])
         let screen = rig.screen()
 
         try screen.start { rig.onFrame($0) }
 
         #expect(rig.fellBack.wait())
         screen.stop()
-        verify(rig.mirroring).start(croppedTo: .any, onPicture: .any).called(0)
+        verify(rig.receiver).start(croppedTo: .any, onPicture: .any).called(0)
     }
 
     @Test func `should show screenshots when no picture arrives within eight seconds`() throws {
