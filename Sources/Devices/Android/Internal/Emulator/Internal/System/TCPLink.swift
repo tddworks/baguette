@@ -28,6 +28,9 @@ final class TCPLink: EmulatorLink, @unchecked Sendable {
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         var one: Int32 = 1
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, socklen_t(MemoryLayout<Int32>.size))
+        // A write after the emulator closed its end fails rather than
+        // raising SIGPIPE, which would end the whole server without a word.
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
     }
 
     func send(_ bytes: Data) throws {

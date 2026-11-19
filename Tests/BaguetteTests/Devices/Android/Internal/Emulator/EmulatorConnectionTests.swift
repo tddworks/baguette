@@ -99,6 +99,44 @@ struct EmulatorConnectionTests {
         #expect(link.sent.contains(GRPCFrame.bytes(kind: 4, flags: 1, stream: 0, Data())))
     }
 
+    @Test func `should carry a call on a fresh link when the emulator has closed the old one`() throws {
+        let closedByEmulator = MockEmulatorLink()
+        given(closedByEmulator).send(.any).willThrow(Closed())
+        given(closedByEmulator).receive().willReturn(nil)
+        given(closedByEmulator).close().willReturn()
+        let fresh = Link()
+        let links = Links([closedByEmulator, fresh.link])
+        let connection = EmulatorConnection(to: Self.emulator, openLink: { _ in links.next() })
+
+        try connection.send("sendTouch", Data([1]))
+        connection.close()
+
+        #expect(fresh.sent == [
+            GRPCCall.opening,
+            GRPCCall(method: "sendTouch", stream: 1, authority: "localhost:8554", token: "tok", message: Data([1])).bytes,
+        ])
+    }
+
+    @Test func `should refuse a call when no fresh link reaches the emulator either`() {
+        let closedByEmulator = MockEmulatorLink()
+        given(closedByEmulator).send(.any).willThrow(Closed())
+        given(closedByEmulator).receive().willReturn(nil)
+        given(closedByEmulator).close().willReturn()
+        let connection = EmulatorConnection(to: Self.emulator, openLink: { _ in closedByEmulator })
+
+        #expect(throws: Closed.self) { try connection.send("sendTouch", Data([1])) }
+    }
+
+    private struct Closed: Error {}
+
+    /// Hands out the links in order, as each reconnect asks for one.
+    private final class Links: @unchecked Sendable {
+        private let lock = NSLock()
+        private var links: [any EmulatorLink]
+        init(_ links: [any EmulatorLink]) { self.links = links }
+        func next() -> any EmulatorLink { lock.withLock { links.count > 1 ? links.removeFirst() : links[0] } }
+    }
+
     @Test func `should close its link when closed`() throws {
         let link = Link()
         let connection = connection(link)

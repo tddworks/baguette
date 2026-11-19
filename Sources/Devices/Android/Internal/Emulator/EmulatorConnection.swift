@@ -41,21 +41,15 @@ final class EmulatorConnection: @unchecked Sendable {
         link?.close()
     }
 
-    private var isOpen: Bool { lock.withLock { !closed } }
-
     private func call(_ method: String, _ message: Data, reading onMessage: (@Sendable (Data) -> Void)?) throws {
-        let (link, stream, opened) = try lock.withLock { () -> (any EmulatorLink, UInt32, Bool) in
-            let opened = self.link == nil
-            let link = try self.link ?? openLink(emulator.port)
-            if opened {
-                try link.send(GRPCCall.opening)
-                self.link = link
-            }
-            let stream = nextStream
-            nextStream += 2
-            try link.send(GRPCCall(method: method, stream: stream, authority: "localhost:\(emulator.port)",
-                                   token: emulator.token, message: message).bytes)
-            return (link, stream, opened)
+        let (link, stream, opened): (any EmulatorLink, UInt32, Bool)
+        do {
+            (link, stream, opened) = try place(method, message)
+        } catch {
+            // The emulator closed the link (idle, restarted, an HTTP/2
+            // error): once more on a fresh one, from stream 1.
+            drop()
+            (link, stream, opened) = try place(method, message)
         }
         // One reader a connection, started with its first call: for a stream,
         // its messages; for sends, only what the emulator is owed.
@@ -64,10 +58,35 @@ final class EmulatorConnection: @unchecked Sendable {
         }
     }
 
+    /// Writes the call on this connection's link, opening one first if there is none.
+    private func place(_ method: String, _ message: Data) throws -> (any EmulatorLink, UInt32, Bool) {
+        try lock.withLock {
+            let opened = self.link == nil
+            let link = try self.link ?? openLink(emulator.port)
+            if opened {
+                self.link = link
+                nextStream = 1
+                try link.send(GRPCCall.opening)
+            }
+            let stream = nextStream
+            nextStream += 2
+            try link.send(GRPCCall(method: method, stream: stream, authority: "localhost:\(emulator.port)",
+                                   token: emulator.token, message: message).bytes)
+            return (link, stream, opened)
+        }
+    }
+
+    /// Lets go of a link the emulator closed, so the next call opens another.
+    private func drop() {
+        let link = lock.withLock { defer { self.link = nil }; return self.link }
+        link?.close()
+    }
+
     private func read(_ link: any EmulatorLink, replies: GRPCReplies, _ onMessage: @escaping @Sendable (Data) -> Void) {
         Thread.detachNewThread { [self] in
             var replies = replies
-            while isOpen {
+            // Until the connection closes or lets go of this link.
+            while lock.withLock({ !closed && self.link === link }) {
                 guard let bytes = link.receive() else { continue }
                 let messages = replies.push(bytes)
                 let owed = replies.takeAnswers()
