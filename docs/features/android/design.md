@@ -83,6 +83,7 @@ A role is registered only when the family performs all of it ([solid.md §4, L](
 | `Screen` | the control API's `streamScreenshot` (RGBA → BGRA surfaces) | pushed on each change |
 | `Touch` · `Scroll` | the control API's `sendTouch`; a scroll is a finger drag | real multi-touch; a phone-shaped AVD has no mouse, so `injectWheel` (it exists) reaches nothing |
 | `Press` · `Key` | `adb shell input keyevent` / `keycombination`, by Android key codes | an AVD booted with `hw.keyboard=no` (phone profiles' default) drops the control API's key events; adb reaches every device |
+| `Typing` | `adb shell input text`, the whole string (space as `%s`, the shell's characters escaped) | one command instead of a keystroke a character; an iOS simulator types by keystrokes (`KeystrokeTyping`) |
 
 **Identity.** An emulator's `DeviceID` is its AVD name (`baguette_pixel`) — the same across boots, as a simulator's UDID; adb's serial (`emulator-5554`) only exists while it runs and can change, so it is mapped from the discovery file. An installed AVD that isn't running lists as `off`, with `power` alone. A phone is its serial.
 
@@ -108,3 +109,5 @@ One PR each, test-first:
 - **scrcpy protocol drift.** The server and its client protocol change between versions; the jar and the protocol are pinned together, and a mismatch is refused by name.
 - **Accessibility vocabulary.** `AXNode` roles are iOS's; a uiautomator `class` maps onto them where one fits and stays as the raw class otherwise — decided in slice 3.
 - **Chrome.** No Android bezels ship; the page shows the bare screen until one does.
+
+**Gboard's stylus tutorial.** On an emulator with stylus handwriting on (the default), tapping a text field can open Gboard's "Try out your stylus" about a second later; typed text lands there. `back` closes it.

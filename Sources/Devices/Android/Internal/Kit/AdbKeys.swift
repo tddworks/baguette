@@ -6,7 +6,7 @@ import Foundation
 /// device, emulator or phone, with a hardware keyboard or without one (an
 /// emulator booted without one drops its control API's key events). A key
 /// held down is a long press; a key with modifiers is one key combination.
-final class AdbKeys: Press, Key, @unchecked Sendable {
+final class AdbKeys: Press, Key, Typing, @unchecked Sendable {
     private let serial: String
     private let adb: AndroidTool
 
@@ -30,6 +30,20 @@ final class AdbKeys: Press, Key, @unchecked Sendable {
         }
         let held = KeyModifier.allCases.filter(modifiers.contains).map { "\(AndroidKeyCode.of($0))" }
         return input(["keycombination"] + held + ["\(code)"])
+    }
+
+    /// The whole text in one `input text`: a space is `%s` there, and the
+    /// device's shell reads the rest, so its own characters are escaped.
+    func type(_ text: String) -> Bool {
+        let escaped = text.reduce(into: "") { out, character in
+            switch character {
+            case " ": out += "%s"
+            case "\\", "'", "\"", "&", "|", ";", "<", ">", "(", ")", "$", "`", "*", "?", "#", "~", "!":
+                out += "\\" + String(character)
+            default: out.append(character)
+            }
+        }
+        return input(["text", escaped])
     }
 
     private func input(_ arguments: [String]) -> Bool {

@@ -33,6 +33,7 @@ struct GestureCommandsRunTests {
             $0.register(.touch) { touch }
             $0.register(.press) { press }
             $0.register(.key) { key }
+            $0.register(.typing) { KeystrokeTyping(key: key) }
             $0.register(.accessibility) { accessibility }
         }
     }

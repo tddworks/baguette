@@ -50,6 +50,22 @@ struct AdbKeysTests {
         #expect(fake.arguments == [["-s", "emulator-5554", "shell", "input", "keycombination", "59", "29"]])
     }
 
+    @Test func `should type text in one input command, its spaces as %s`() {
+        let fake = FakeDevicectl()
+
+        #expect(keys(fake).type("hi there"))
+
+        #expect(fake.arguments == [["-s", "emulator-5554", "shell", "input", "text", "hi%sthere"]])
+    }
+
+    @Test func `should keep the device's shell from reading what is typed`() {
+        let fake = FakeDevicectl()
+
+        _ = keys(fake).type("a&b'c")
+
+        #expect(fake.arguments == [["-s", "emulator-5554", "shell", "input", "text", #"a\&b\'c"#]])
+    }
+
     @Test func `should refuse a key Android has no code for`() {
         let fake = FakeDevicectl()
 

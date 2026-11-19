@@ -105,6 +105,7 @@ struct AndroidDevice: Device {
         abilities.register(.press) { keys }
         abilities.register(.key) { keys }
         abilities.register(.scroll) { input.value }
+        abilities.register(.typing) { keys }
         return abilities
     }
 }

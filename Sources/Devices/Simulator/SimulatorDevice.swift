@@ -38,6 +38,7 @@ struct SimulatorDevice: Device {
         abilities.register(.press) { hid.surface }
         abilities.register(.key) { hid.surface }
         abilities.register(.scroll) { hid.surface }
+        abilities.register(.typing) { KeystrokeTyping(key: hid.surface) }
         abilities.register(.displays) { sim.displays() }
         abilities.register(.hinge) { sim.hinge() }
         abilities.register(.externalDisplays) { sim.externalDisplays() }

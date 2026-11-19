@@ -63,7 +63,7 @@ struct AndroidDevicesTests {
 
         let emulator = devices(fake, running: [Self.pixel]).all.first
 
-        #expect(emulator?.abilities.names == ["power", "screen", "touch", "press", "key", "scroll"])
+        #expect(emulator?.abilities.names == ["power", "screen", "touch", "press", "key", "scroll", "type"])
     }
 
     @Test func `should name a running emulator by its AVD, the same across boots`() throws {

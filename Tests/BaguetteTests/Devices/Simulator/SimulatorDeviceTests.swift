@@ -50,7 +50,7 @@ struct SimulatorDeviceTests {
         let device = SimulatorDevice(simulator())
 
         #expect(device.abilities.names == [
-            "power", "screen", "touch", "press", "key", "scroll", "displays", "hinge", "externalDisplays",
+            "power", "screen", "touch", "press", "key", "scroll", "type", "displays", "hinge", "externalDisplays",
             "accessibility", "logs", "orientation", "statusBar", "interface", "location",
             "motion", "network", "inputSurface", "camera", "pasteboard", "apps", "notify", "defaults", "photos", "shake",
             "watchPairing",
