@@ -204,7 +204,7 @@ struct CoreDevicePhonesTests {
         fake.writeFile = { path, _ in
             FileManager.default.createFile(atPath: path, contents: Data(#"""
             {"result":{"devices":[{"connectionProperties":{"pairingState":"paired","tunnelState":"disconnected"},
-             "deviceProperties":{"name":"han's iPhone","bootState":"booted","developerModeStatus":"enabled"},
+             "deviceProperties":{"name":"han's iPhone","bootState":"booted","developerModeStatus":"enabled","osVersionNumber":"27.0.1"},
              "hardwareProperties":{"udid":"\#(phoneUDID)","reality":"physical","productType":"iPhone19,7",
                "marketingName":"iPhone 18 Pro Max","platform":"iOS"}}]}}
             """#.utf8))
@@ -214,7 +214,8 @@ struct CoreDevicePhonesTests {
         let device = try #require(try phones.find(id: DeviceID(phoneUDID)))
 
         #expect(device.name == "han's iPhone")
-        #expect(device.kind == DeviceKind(platform: .iOS, reality: .physical, model: "iPhone 18 Pro Max", hardware: "iPhone19,7"))
+        #expect(device.kind == DeviceKind(platform: .iOS, reality: .physical, model: "iPhone 18 Pro Max",
+                                          hardware: "iPhone19,7", os: "iOS 27.0.1"))
         #expect(device.state == .ready)
         #expect(Array(fake.arguments[0].prefix(4)) == ["devicectl", "list", "devices", "--quiet"])
     }

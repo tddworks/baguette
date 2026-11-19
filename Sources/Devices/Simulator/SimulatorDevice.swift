@@ -23,7 +23,8 @@ struct SimulatorDevice: Device {
         DeviceKind(
             platform: DeviceKind.Platform(runtime: simulator.runtime),
             reality: .simulated,
-            model: simulator.deviceTypeName)
+            model: simulator.deviceTypeName,
+            os: simulator.runtime.isEmpty ? nil : simulator.runtime)
     }
 
     var abilities: Abilities {

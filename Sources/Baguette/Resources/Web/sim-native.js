@@ -343,7 +343,7 @@
       deviceAbilities = listing.abilities || [];
       deviceMode = !!(listing.kind && listing.kind.reality === 'physical');
     }
-    const meta = await fetchDeviceMeta(udid);
+    const meta = await fetchDeviceMeta(udid, listing);
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
     const osEl = document.getElementById('nativeDeviceOS');
@@ -1662,20 +1662,17 @@
     }
   }
 
-  async function fetchDeviceMeta(targetUdid) {
-    if (deviceMode) {
-      try {
-        const r = await fetch('/devices.json', { cache: 'no-store' });
-        if (!r.ok) throw new Error(String(r.status));
-        const json = await r.json();
-        const hit = (json.connected || []).find((d) => d.udid === targetUdid);
-        if (hit) {
-          // A connected companion is always live — 'Booted' keeps the
-          // power-card machinery quiet without a device special case.
-          return { name: hit.name || 'Device', runtime: hit.model || '', state: 'Booted' };
-        }
-      } catch { /* fall through to the placeholder */ }
-      return { name: 'Device', runtime: '', state: 'Booted' };
+  async function fetchDeviceMeta(targetUdid, known) {
+    // Anything but a simulator is described by its own listing — read
+    // fresh unless just read: its name, its OS (or model) and whether it
+    // is running, as 'Booted' / 'Shutdown', the words the power card reads.
+    const listing = known || await fetchDeviceListing(targetUdid);
+    if (listing && listing.kind && listing.kind.reality !== 'simulated') {
+      return {
+        name: listing.name || 'Device',
+        runtime: listing.kind.os || listing.kind.model || '',
+        state: listing.state === 'ready' ? 'Booted' : 'Shutdown',
+      };
     }
     try {
       const r = await fetch('/simulators.json', { cache: 'no-store' });

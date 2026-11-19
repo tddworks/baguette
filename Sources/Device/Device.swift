@@ -41,11 +41,15 @@ public struct DeviceKind: Equatable, Sendable {
     /// The hardware identifier ("iPhone19,7") 3D models are matched by,
     /// when the device reports one.
     public let hardware: String?
+    /// The system it runs, by name and version ("iOS 26.4", "Android 15"),
+    /// when its family can say.
+    public let os: String?
 
-    public init(platform: Platform, reality: Reality, model: String, hardware: String? = nil) {
+    public init(platform: Platform, reality: Reality, model: String, hardware: String? = nil, os: String? = nil) {
         self.platform = platform
         self.reality = reality
         self.model = model
         self.hardware = hardware
+        self.os = os
     }
 }

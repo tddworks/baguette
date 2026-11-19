@@ -55,7 +55,8 @@ struct CoreDevicePhone: Device {
     var state: DeviceState { phone.state }
     var kind: DeviceKind {
         DeviceKind(platform: phone.platform, reality: .physical,
-                   model: phone.marketingName, hardware: phone.productType)
+                   model: phone.marketingName, hardware: phone.productType,
+                   os: phone.osVersion.map { "\(phone.platform.rawValue) \($0)" })
     }
 
     var abilities: Abilities {

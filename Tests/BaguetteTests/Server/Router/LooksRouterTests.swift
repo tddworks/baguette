@@ -369,12 +369,16 @@ struct PageRouterTests {
         }
     }
 
-    @Test func `should list the connected physical devices`() async throws {
+    @Test func `should list every device, simulators beside real ones`() async throws {
         try await InProcessServer().test { client in
             let response = try await client.send(.get, "/devices.json")
 
             #expect(response.status == .ok)
-            #expect(response.text == #"{"connected":[]}"#)
+            #expect(response.text == #"""
+                {"devices":[{"abilities":[],"id":"U",\#
+                "kind":{"model":"iPhone 17","platform":"iOS","reality":"simulated"},\#
+                "name":"iPhone 17","state":"ready"}]}
+                """#)
         }
     }
 }

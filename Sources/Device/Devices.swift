@@ -37,23 +37,6 @@ public extension Devices {
     }
 }
 
-public extension Devices {
-    /// The attached devices ready to drive, in the shape the serve page's
-    /// device list reads (`/devices.json`): identity, model, and what each
-    /// can do.
-    var connectedJSON: String {
-        let connected = all
-            .filter { $0.kind.reality != .simulated && $0.state == .ready }
-            .map { device -> [String: Any] in
-                ["udid": device.id.raw, "name": device.name,
-                 "model": device.kind.model, "capabilities": device.abilities.names]
-            }
-        let data = try! JSONSerialization.data(
-            withJSONObject: ["connected": connected], options: [.sortedKeys])
-        return String(decoding: data, as: UTF8.self)
-    }
-}
-
 public extension Device {
     /// The role playing `ability` on this device: refused when the device
     /// never registered it, or when it acts on a running device and this
@@ -112,14 +95,16 @@ public extension Device {
     /// The device as a client reads it: id, name, kind, state and what it
     /// can do.
     var listing: [String: Any] {
+        var described: [String: Any] = [
+            "platform": kind.platform.rawValue,
+            "reality": kind.reality.rawValue,
+            "model": kind.model,
+        ]
+        if let os = kind.os { described["os"] = os }
         var result: [String: Any] = [
             "id": id.raw,
             "name": name,
-            "kind": [
-                "platform": kind.platform.rawValue,
-                "reality": kind.reality.rawValue,
-                "model": kind.model,
-            ],
+            "kind": described,
             "state": state.wireName,
             "abilities": abilities.names,
         ]
@@ -136,24 +121,5 @@ private extension DeviceState {
         case .ready:       return "ready"
         case .unavailable: return "unavailable"
         }
-    }
-}
-
-public extension Devices {
-    /// The devices attached beside the simulators — phones on a cable and
-    /// emulators adb is attached to; what the device page lists as connected.
-    /// A view of the same list, never a second one.
-    var connected: any Devices { ConnectedDevices(of: self) }
-}
-
-private final class ConnectedDevices: Devices, @unchecked Sendable {
-    private let base: any Devices
-
-    init(of base: any Devices) { self.base = base }
-
-    var all: [any Device] { base.all.filter { $0.kind.reality != .simulated } }
-
-    func find(id: DeviceID) throws -> (any Device)? {
-        try base.find(id: id).flatMap { $0.kind.reality != .simulated ? $0 : nil }
     }
 }

@@ -27,6 +27,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `GET` | `/` | 302 → `/simulators` | |
 | `GET` | `/simulators` | device list page | |
 | `GET` | `/simulators.json` | `{running, available}`, same as `baguette list --json` | |
+| `GET` | `/devices.json` | `{devices}`: every device of every family, its kind (platform, reality, model, OS), state and abilities; what the list page reads | |
 | `GET` | `/devices/:udid` | focus-mode page, for any device (`/simulators/:udid` serves it too) | [baguette-sdk](features/baguette-sdk/README.md) |
 | `POST` | `/devices/:udid/boot`, `/shutdown` *any device* | boot / shut down | [boot](features/boot/README.md) |
 | `POST` | `/devices/:udid/orientation?value=` *any device* | `portrait`, `landscape-left`, `landscape-right`, `portrait-upside-down`; `504` when an iPhone Duo change is unconfirmed | [hinge](features/hinge/README.md#rotation) |
@@ -62,7 +63,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/plugins/:id/commands/:cmd?udid=` | run one plugin contribution | [plugins](features/plugins/README.md) |
 | `GET` | `/bakeries.json` | trusted bakeries, pinned commits, install state | [plugins](features/plugins/README.md) |
 | `POST` | `/bakeries/preview`, `/bakeries/install` | read a bakery's menu; install from an already-trusted one | [plugins](features/plugins/README.md) |
-| `GET` `WS` | `/devices.json`, `/devices/:udid/…` | physical-device twin (preview) | [device-twin](features/device-twin/README.md) |
+| `GET` `WS` | `/devices/:udid/…` | physical-device twin (preview) | [device-twin](features/device-twin/README.md) |
 | `GET` | `/farm` | device-farm page | [device-farm](features/device-farm/README.md) |
 | `GET` | `/<dir>/:file`, `/:file` | static UI assets from `Resources/Web/` | |
 
