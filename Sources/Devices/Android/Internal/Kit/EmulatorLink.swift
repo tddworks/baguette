@@ -7,8 +7,8 @@ import Mockable
 @Mockable
 protocol EmulatorLink: AnyObject, Sendable {
     func send(_ bytes: Data) throws
-    /// What arrived next, or nil when nothing did within a short wait (or
-    /// the link is closed).
-    func receive() -> Data?
+    /// What arrived next, or nil when nothing did within a short wait.
+    /// Throws once the emulator has closed its end.
+    func receive() throws -> Data?
     func close()
 }

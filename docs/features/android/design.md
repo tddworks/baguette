@@ -1,6 +1,6 @@
 # Android: design
 
-> Status: **slices 1 and 2 built**, 2026-11-19 — emulators listed, turned on and off, streamed and driven (screen, touch, scroll, buttons, keys), checked on a running AVD. Phones and slice 3 open. The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
+> Status: **slices 1 and 2 built**, 2026-11-19 — emulators listed, turned on and off, streamed and driven (screen, touch, scroll, buttons, keys, typing), checked on a running AVD. Phones (through scrcpy's server) and slice 3 next. The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
 
 ## Question
 
@@ -23,7 +23,8 @@ Sources/Devices/Android/
 ├── AndroidKeyCode · AndroidScreenSize ◇   buttons and keys as key codes; wm size / density
 └── Internal/
     ├── AndroidDevices.swift         the family's source, and AndroidDevice: what one can do
-    ├── Screen/  EmulatorScreen      frames from streamScreenshot
+    ├── Screen/  EmulatorScreen      pictures drawn into shared memory, a notice each over streamScreenshot
+    │            SharedPicture       the role: the memory emulator and baguette share
     ├── Input/   EmulatorInput       touches and scroll through sendTouch (its screen asked of adb once)
     │            AdbKeys             buttons, keys and typing through adb — every Android device
     ├── Power/   EmulatorPower       launch the AVD; `adb emu kill`
@@ -31,7 +32,8 @@ Sources/Devices/Android/
     │            RunningEmulator ◇   a running emulator's .ini → serial, gRPC port, token
     │            EmulatorControl ◇ · GRPCCall ◇        the control API's messages, as HTTP/2 bytes
     │            EmulatorConnection · EmulatorLink      one connection to the control API, screen and input each their own
-    └── System/  TCPLink · DetachedLaunch   the socket to 127.0.0.1:<grpc.port>; a process left running
+    └── System/  TCPLink · DetachedLaunch · MappedSharedPicture
+                                     the socket to 127.0.0.1:<grpc.port>; a process left running; an mmap'd file
 ```
 
 | Word | Means |
@@ -80,12 +82,26 @@ A role is registered only when the family performs all of it ([solid.md §4, L](
 | Role | Through | Why |
 |---|---|---|
 | `Power` | `emulator -avd <name> -no-window -no-audio`, detached · `adb emu kill` | headless, like `baguette boot`; outlives baguette |
-| `Screen` | the control API's `streamScreenshot` (RGBA → BGRA surfaces) | pushed on each change; 1080 × 2400 is 10 MB a picture, so the connection opens with a 16 MB window (the 64 KB default held it to 23 fps) and vImage swaps the channels (a Swift byte loop took 206 ms a picture in a debug build, 4 fps): ~45 fps measured |
+| `Screen` | the control API's `streamScreenshot`, its pictures drawn into shared memory (`ImageTransport` MMAP: a file both map) | pushed on each change; only a 149-byte notice crosses the socket, where a raw 1080 × 2400 picture is 10 MB. vImage swaps RGBA → BGRA from the mapped memory into the surface VideoToolbox encodes, as a simulator's `IOSurface` is: ~40 fps of H.264 measured |
 | `Touch` · `Scroll` | the control API's `sendTouch`; a scroll is a finger drag | real multi-touch; a phone-shaped AVD has no mouse, so `injectWheel` (it exists) reaches nothing |
 | `Press` · `Key` | `adb shell input keyevent` / `keycombination`, by Android key codes | an AVD booted with `hw.keyboard=no` (phone profiles' default) drops the control API's key events; adb reaches every device |
 | `Typing` | `adb shell input text`, the whole string (space as `%s`, the shell's characters escaped) | one command instead of a keystroke a character; an iOS simulator types by keystrokes (`KeystrokeTyping`) |
 
 **Identity.** An emulator's `DeviceID` is its AVD name (`baguette_pixel`) — the same across boots, as a simulator's UDID; adb's serial (`emulator-5554`) only exists while it runs and can change, so it is mapped from the discovery file. An installed AVD that isn't running lists as `off`, with `power` alone. A phone is its serial.
+
+**The screen, as a simulator's.** A simulator hands baguette its framebuffer as an `IOSurface`, shared memory. An emulator does the same through its control API, given a file to draw into:
+
+```
+ iOS Simulator:  framebuffer ──IOSurface (shared)───────────────────────────▶ VideoToolbox H.264 ──▶ page
+ Emulator:       framebuffer ──mmap'd file (shared)──┐
+                             ──149 B notice (gRPC)───┴▶ vImage RGBA→BGRA ──▶ IOSurface ──▶ VideoToolbox H.264 ──▶ page
+
+ start:  SharedPicture (w × h × 4, from `wm size`) ─▶ streamScreenshot(RGBA, MMAP, file://…)
+ each:   notice (width, height) ─▶ surface from the shared memory ─▶ onFrame
+ ended by the emulator ─▶ the feed again in 1 s, same memory  ·  stop ─▶ close, unmap, delete the file
+```
+
+Measured on the Pixel 7 AVD, the same swipes: raw pictures were 10,368,037 bytes a message; shared memory, 149. Before either, the 64 KB HTTP/2 window held raw pictures to 23 fps and a Swift byte loop to 4 fps in a debug build; the 16 MB window and vImage stay.
 
 **The page.** `/devices.json` lists every device attached beside the simulators (`reality != .simulated`): phones and emulators alike.
 
@@ -97,17 +113,30 @@ One PR each, test-first:
 2. **An emulator's screen and input** over its gRPC API; `Navigation.back`; emulators power on and off (`emulator -avd`, `adb emu kill`). The page streams and touches an emulator.
 3. **The rest.** Accessibility, apps, orientation, location, pasteboard, logs.
 
-## Open decisions
+## Decisions
 
-1. **Transport** — decided for emulators: their own gRPC API, through a minimal client of our own. For phones: open until there is one to test.
-2. **Scope** — emulators and phones (the same adb path; power only for emulators), or emulators first. Recommended: both.
-3. **Tooling on the development Mac** — `adb` 37.0.1 (Homebrew's `android-platform-tools`), the emulator 37.2.13 and an Android 15 arm64 image in `~/Library/Android/sdk`, AVD `baguette_pixel`, since 2026-11-19. `baguette list` shows it as `emulator-5554`, emulated.
+1. **Transport.**
+   - **Emulators:** their own gRPC control API, through a minimal client of our own. Built: screen at ~45 fps; touch, scroll; power through the emulator binary and `adb emu kill`.
+   - **Phones: scrcpy's server, pinned to one version.** From first principles, a phone has no control API. What adb gives us is a shell and `app_process`, which runs code of ours on the phone. Video at speed needs MediaCodec (the phone's hardware H.264 of its display), and touch at speed needs InputManager (injecting events directly); only code running on the phone can use either. `screencap` (a PNG per call) and `input` (one process per tap) are too slow to drive a phone live, and they aren't a fallback either. scrcpy's server is exactly that program: Apache-2.0, maintained, with its protocol versioned alongside it. It runs on an emulator too, so it can be built and verified before a phone is at hand.
+   - **Buttons, keys and typing** stay on adb for every Android device (`AdbKeys`): the control API's `sendKey` is dropped when an AVD has no hardware keyboard.
+2. **Scope.** Both. Every emulator and phone is listed; emulators are driven now; phones get abilities through (1).
+3. **Accessibility vocabulary (slice 3).** uiautomator's dump becomes `AXNode`s. A widget class maps onto the iOS role it plays: `Button`; `EditText` → text field; `TextView` → static text; `ImageView` → image; `CheckBox`, `Switch`, `ScrollView`, … onto their own roles. A class with no counterpart keeps its own name as the role, never a guess.
+4. **Frame.** Anything that isn't a simulator borrows a DeviceKit frame the viewer picks (`?chrome=`). No Android frame ships: Android Studio's device art comes with Android Studio, not the SDK. One is bundled when baguette ships its own.
 
 ## Risks
 
-- **adb resolution.** `adb` may not be on `PATH`; look in `$ANDROID_HOME`, `$ANDROID_SDK_ROOT` and `~/Library/Android/sdk/platform-tools` before giving up, and say where it was looked for.
-- **scrcpy protocol drift.** The server and its client protocol change between versions; the jar and the protocol are pinned together, and a mismatch is refused by name.
-- **Accessibility vocabulary.** `AXNode` roles are iOS's; a uiautomator `class` maps onto them where one fits and stays as the raw class otherwise — decided in slice 3.
-- **Chrome.** No Android bezels ship; the page shows the bare screen until one does.
+- **scrcpy protocol drift** (phones). The server and its protocol change together between versions, so the jar's version and the protocol are pinned as one value. A server that answers with another version is refused by name, never half-understood.
+- **Tearing.** The emulator may start drawing the next picture while baguette reads the last from shared memory. The read is one vImage pass (~1 ms) as the notice arrives, so none has been seen; a torn picture would last one frame.
+- **Gboard's stylus tutorial.** On an emulator with stylus handwriting on (the default), tapping a text field can open Gboard's "Try out your stylus" about a second later; typed text lands there. `back` closes it. It's the emulator's setting, not something baguette changes.
 
-**Gboard's stylus tutorial.** On an emulator with stylus handwriting on (the default), tapping a text field can open Gboard's "Try out your stylus" about a second later; typed text lands there. `back` closes it.
+Resolved while building:
+
+- **adb not on `PATH`** — `AndroidSDKLocation` looks in `$ANDROID_HOME`, `$ANDROID_SDK_ROOT`, `~/Library/Android/sdk` and Homebrew's paths.
+- **The emulator closing a connection** — the socket sets `SO_NOSIGPIPE`, so a write after the emulator closed its end fails instead of ending the server. A call that fails goes once more on a fresh link. The screen starts its feed again, a second later, for as long as it's started.
+- **A finger off the screen** — kept on its edge, and a negative `int32` is written as protobuf does, never a trap.
+- **Slow pictures** — the connection opens with a 16 MB window, and vImage swaps the channels: 4 fps → ~45 fps.
+- **Screen bandwidth** — 10 MB a picture through loopback (~450 MB/s at 45 fps) is gone: the emulator draws into shared memory and sends a 149-byte notice.
+
+## Development setup
+
+`adb` 37.0.1 (Homebrew's `android-platform-tools`), the emulator 37.2.13 and an Android 15 arm64 image in `~/Library/Android/sdk`, AVD `baguette_pixel`, since 2026-11-19. `baguette list` shows it by its AVD name, emulated. `baguette boot` starts it headless. For its own window, run `emulator -avd baguette_pixel`; baguette finds a running emulator either way.

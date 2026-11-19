@@ -50,7 +50,7 @@ struct GRPCCall: Sendable {
 /// The replies on one stream, read out of whatever bytes the connection
 /// delivers: frames are cut out as they complete, the stream's DATA joined
 /// and split into gRPC messages. What the connection owes the server back —
-/// the window each DATA frame used, an ack of its settings — waits in
+/// the window each DATA frame used, an ack of its settings and pings — waits in
 /// `takeAnswers()`.
 struct GRPCReplies: Sendable {
     let stream: UInt32
@@ -82,6 +82,10 @@ struct GRPCReplies: Sendable {
                 }
             case 4 where flags & 0x01 == 0:
                 answers += GRPCFrame.bytes(kind: 4, flags: 0x01, stream: 0, Data())
+            case 6 where flags & 0x01 == 0:
+                // A keepalive: answered with its own eight bytes, or the
+                // emulator takes the connection for dead.
+                answers += GRPCFrame.bytes(kind: 6, flags: 0x01, stream: 0, payload)
             default:
                 break
             }

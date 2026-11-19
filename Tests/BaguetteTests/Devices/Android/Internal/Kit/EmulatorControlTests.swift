@@ -52,6 +52,42 @@ struct EmulatorControlTests {
         #expect(image.sequence == 7)
     }
 
+    @Test func `should ask for pictures drawn into shared memory, naming its file`() {
+        let format = EmulatorControl.ImageFormat(format: .rgba8888, sharedMemory: "file:///p")
+        let handle = Data("file:///p".utf8)
+
+        #expect(format.bytes == Data([0x08, 0x01, 0x32, UInt8(4 + handle.count), 0x08, 0x01, 0x12, UInt8(handle.count)])
+            + handle)
+    }
+
+    @Test func `should read the notice of a picture drawn into shared memory, its size and no pixels`() throws {
+        // Image { format: { RGBA8888, 2 × 1 }, seq: 7 } — the pixels are in shared memory
+        let image = try #require(EmulatorControl.Image(Data([0x0A, 0x06, 0x08, 0x01, 0x18, 0x02, 0x20, 0x01, 0x28, 0x07])))
+
+        #expect(image.width == 2)
+        #expect(image.height == 1)
+        #expect(image.pixels.isEmpty)
+    }
+
+    @Test func `should hand a picture in shared memory on as a BGRA surface, red and blue swapped`() throws {
+        let rgba: [UInt8] = [0xFF, 0, 0, 0xFF, 0, 0, 0xFF, 0xFF]   // red, then blue
+
+        let surface = try #require(rgba.withUnsafeBytes {
+            EmulatorControl.Image.bgraSurface(width: 2, height: 1, pixels: $0)
+        })
+
+        surface.lock(options: .readOnly, seed: nil)
+        defer { surface.unlock(options: .readOnly, seed: nil) }
+        let out = surface.baseAddress.assumingMemoryBound(to: UInt8.self)
+        #expect((0..<8).map { out[$0] } == [0, 0, 0xFF, 0xFF, 0xFF, 0, 0, 0xFF])
+    }
+
+    @Test func `should hand on no surface when the shared memory holds less than the picture`() {
+        let rgba = [UInt8](repeating: 0, count: 4)
+
+        #expect(rgba.withUnsafeBytes { EmulatorControl.Image.bgraSurface(width: 2, height: 1, pixels: $0) } == nil)
+    }
+
     @Test func `should read no picture from bytes that aren't an image`() {
         #expect(EmulatorControl.Image(Data([0xFF, 0xFF, 0xFF])) == nil)
     }

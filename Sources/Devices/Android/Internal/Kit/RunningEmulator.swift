@@ -4,18 +4,26 @@ import Foundation
 /// describes it (`~/Library/Caches/TemporaryItems/avd/running/pid_<pid>.ini`):
 /// its adb serial (`emulator-` + `port.serial`), its AVD, and where its control
 /// API answers — the gRPC port and token. An emulator started without gRPC
-/// has no control API, so none.
+/// is still that AVD, running; it just has no control API.
 struct RunningEmulator: Equatable, Sendable {
+    /// Where an emulator's control API answers.
+    struct ControlAPI: Equatable, Sendable {
+        let port: Int
+        let token: String
+    }
+
     let serial: String
     let avd: String
-    let port: Int
-    let token: String
+    let control: ControlAPI?
 
-    init(serial: String, avd: String, port: Int, token: String) {
+    init(serial: String, avd: String, control: ControlAPI?) {
         self.serial = serial
         self.avd = avd
-        self.port = port
-        self.token = token
+        self.control = control
+    }
+
+    init(serial: String, avd: String, port: Int, token: String) {
+        self.init(serial: serial, avd: avd, control: ControlAPI(port: port, token: token))
     }
 
     init?(ini: String) {
@@ -23,17 +31,18 @@ struct RunningEmulator: Equatable, Sendable {
             guard let equals = line.firstIndex(of: "=") else { return nil }
             return (String(line[..<equals]), String(line[line.index(after: equals)...]))
         }, uniquingKeysWith: { first, _ in first })
-        guard let console = values["port.serial"], let port = values["grpc.port"].flatMap(Int.init),
-              let token = values["grpc.token"]
-        else { return nil }
-        self.init(serial: "emulator-\(console)", avd: values["avd.name"] ?? "", port: port, token: token)
+        guard let console = values["port.serial"] else { return nil }
+        let control = values["grpc.port"].flatMap(Int.init).flatMap { port in
+            values["grpc.token"].map { ControlAPI(port: port, token: $0) }
+        }
+        self.init(serial: "emulator-\(console)", avd: values["avd.name"] ?? "", control: control)
     }
 
     /// Where running emulators write their discovery files.
     static let folder = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Caches/TemporaryItems/avd/running")
 
-    /// Every emulator running now with a control API, from the discovery
+    /// Every emulator running now, from the discovery
     /// files in `folder`.
     static func all(in folder: URL = folder) -> [RunningEmulator] {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []

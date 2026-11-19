@@ -94,17 +94,21 @@ struct AndroidDevice: Device {
             abilities.register(.power) { EmulatorPower(avd: avd, serial: serial, emulator: emulatorTool, adb: adb) }
         }
         guard let emulator, let serial else { return abilities }
-        abilities.register(.screen) { EmulatorScreen(emulator: emulator) }
-        // The touchscreen through the control API, made when the first role
-        // asks — its screen's size and density asked of adb once; buttons and
-        // keys through adb, which reaches every Android device.
+        // The screen and touchscreen through the control API, when the
+        // emulator has one — the touchscreen made when the first role asks,
+        // its screen's size and density asked of adb once; buttons, keys and
+        // typing through adb, which reaches every Android device.
         let adb = adb
-        let input = OneInput { EmulatorInput.reaching(emulator, serial: serial, adb: adb) }
         let keys = AdbKeys(serial: serial, adb: adb)
-        abilities.register(.touch) { input.value }
+        let input = emulator.control == nil ? nil
+            : OneInput { EmulatorInput.reaching(emulator, serial: serial, adb: adb) }
+        if input != nil {
+            abilities.register(.screen) { EmulatorScreen(emulator: emulator, screen: adb.screenPixels(of: serial)) }
+        }
+        if let input { abilities.register(.touch) { input.value } }
         abilities.register(.press) { keys }
         abilities.register(.key) { keys }
-        abilities.register(.scroll) { input.value }
+        if let input { abilities.register(.scroll) { input.value } }
         abilities.register(.typing) { keys }
         return abilities
     }

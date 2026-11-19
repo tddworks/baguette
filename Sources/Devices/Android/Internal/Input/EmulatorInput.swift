@@ -25,6 +25,9 @@ final class EmulatorInput: Touch, Scroll, @unchecked Sendable {
         self.pause = pause
     }
 
+    /// Let go: its connection, and the reader holding it, end with it.
+    deinit { connection.close() }
+
     // MARK: - Touch
 
     func tap(at point: Point, size: Size, duration: Double, edge: DeviceEdge?) -> Bool {
@@ -50,15 +53,23 @@ final class EmulatorInput: Touch, Scroll, @unchecked Sendable {
     }
 
     /// Each finger down at its start, moved in steps to its end, and lifted.
+    /// A step that fails lifts the fingers where they last were: the
+    /// emulator holds a finger down until told otherwise.
     private func twoPath(_ fingers: [(start: Point, end: Point)], size: Size, duration: Double) -> Bool {
         let steps = max(2, Int(duration * Self.stepsPerSecond))
+        var down: [(point: Point, identifier: Int, down: Bool)] = []
         for step in 0...steps {
             let t = Double(step) / Double(steps)
             let points = fingers.enumerated().map { index, finger in
-                (Point(x: finger.start.x + (finger.end.x - finger.start.x) * t,
-                       y: finger.start.y + (finger.end.y - finger.start.y) * t), index + 1, true)
+                (point: Point(x: finger.start.x + (finger.end.x - finger.start.x) * t,
+                              y: finger.start.y + (finger.end.y - finger.start.y) * t),
+                 identifier: index + 1, down: true)
             }
-            guard touch(points, size) else { return false }
+            guard touch(points, size) else {
+                if !down.isEmpty { _ = touch(down.map { ($0.point, $0.identifier, false) }, size) }
+                return false
+            }
+            down = points
             if step < steps { pause(duration / Double(steps)) }
         }
         return touch(fingers.enumerated().map { ($1.end, $0 + 1, false) }, size)
@@ -104,15 +115,10 @@ final class EmulatorInput: Touch, Scroll, @unchecked Sendable {
 }
 
 extension EmulatorInput {
-    /// The input of `emulator`, its screen's pixels and density asked of adb;
-    /// a Pixel's (1080 × 2400 at 2.625) when adb can't say.
+    /// The input of `emulator`, its screen's pixels and density asked of adb.
     static func reaching(_ emulator: RunningEmulator, serial: String, adb: AndroidTool) -> EmulatorInput {
-        let ask = { (what: String) in
-            (try? adb.runAndWait(["-s", serial, "shell", "wm", what])).map { String(decoding: $0, as: UTF8.self) } ?? ""
-        }
-        let screen = AndroidScreenSize.pixels(fromWmSize: ask("size")) ?? Size(width: 1080, height: 2400)
-        let pixelsPerPoint = AndroidScreenSize.pixelsPerPoint(fromWmDensity: ask("density")) ?? 2.625
-        return EmulatorInput(connection: EmulatorConnection(to: emulator), screen: screen, pixelsPerPoint: pixelsPerPoint)
+        EmulatorInput(connection: EmulatorConnection(to: emulator), screen: adb.screenPixels(of: serial),
+                      pixelsPerPoint: adb.pixelsPerPoint(of: serial))
     }
 }
 

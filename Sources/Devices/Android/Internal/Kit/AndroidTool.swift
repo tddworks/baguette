@@ -4,13 +4,18 @@ import Foundation
 /// An Android SDK tool run as a child: `adb` — the Android Debug Bridge, the
 /// one door into every Android device, emulators and phones alike — or the
 /// `emulator`. One child per call; what it printed comes back, and a non-zero
-/// exit fails with the tool's last line.
+/// exit fails with the tool's last line. A tool that doesn't answer within
+/// `timeout` is stopped and refused: a hung adb must not hold up every
+/// device lookup behind it.
 struct AndroidTool: Sendable {
     private let executable: URL
+    private let timeout: TimeInterval
     private let makeSubprocess: @Sendable () -> any Subprocess
 
-    init(executable: URL, makeSubprocess: @escaping @Sendable () -> any Subprocess = { HostSubprocess() }) {
+    init(executable: URL, timeout: TimeInterval = 15,
+         makeSubprocess: @escaping @Sendable () -> any Subprocess = { HostSubprocess() }) {
         self.executable = executable
+        self.timeout = timeout
         self.makeSubprocess = makeSubprocess
     }
 
@@ -36,7 +41,10 @@ struct AndroidTool: Sendable {
                             : .failure(AdbError.failed(status: status, message: Self.lastLine(of: output.data))))
                 done.signal()
             })
-        done.wait()
+        guard done.wait(timeout: .now() + timeout) == .success else {
+            subprocess.terminate()
+            throw AdbError.timedOut
+        }
         return try outcome.get()
     }
 
@@ -45,12 +53,31 @@ struct AndroidTool: Sendable {
     }
 }
 
+extension AndroidTool {
+    /// The screen of the device `serial` names, in pixels (`wm size`); a
+    /// Pixel's 1080 × 2400 when adb can't say.
+    func screenPixels(of serial: String) -> Size {
+        AndroidScreenSize.pixels(fromWmSize: wm("size", serial)) ?? Size(width: 1080, height: 2400)
+    }
+
+    /// Its pixels per point (`wm density` ÷ 160); a Pixel's 2.625 when adb can't say.
+    func pixelsPerPoint(of serial: String) -> Double {
+        AndroidScreenSize.pixelsPerPoint(fromWmDensity: wm("density", serial)) ?? 2.625
+    }
+
+    private func wm(_ what: String, _ serial: String) -> String {
+        (try? runAndWait(["-s", serial, "shell", "wm", what])).map { String(decoding: $0, as: UTF8.self) } ?? ""
+    }
+}
+
 enum AdbError: Error, Equatable, CustomStringConvertible {
     case failed(status: Int32, message: String)
+    case timedOut
 
     var description: String {
         switch self {
         case let .failed(status, message): message.isEmpty ? "adb exited \(status)" : message
+        case .timedOut: "adb didn't answer in time"
         }
     }
 }

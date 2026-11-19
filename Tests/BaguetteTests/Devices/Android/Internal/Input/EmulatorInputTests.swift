@@ -95,6 +95,52 @@ struct EmulatorInputTests {
         #expect(recorder.calls.map(\.message) == [Self.touches((0, 2400, 1, 1))])
     }
 
+    @Test func `should close its connection when let go`() {
+        let recorder = Recorder()
+        do {
+            let input = input(recorder)
+            _ = input.touch1(phase: .down, at: Point(x: 4, y: 4), size: Self.points, edge: nil)
+        }
+
+        verify(recorder.link).close().called(.moreOrEqual(to: 1))
+    }
+
+    @Test func `should lift its fingers where they were when a gesture fails midway`() {
+        let link = Failing(failing: [3, 4])   // the move, and the fresh link's opening
+        let input = EmulatorInput(connection: EmulatorConnection(to: Self.emulator, openLink: { _ in link.link }),
+                                  screen: Self.pixels, pixelsPerPoint: 2.5, pause: { _ in })
+
+        #expect(!input.swipe(from: Point(x: 0, y: 0), to: Point(x: 0, y: 960), size: Self.points, duration: 0.1))
+
+        #expect(link.sent.last == GRPCCall(method: "sendTouch", stream: 1, authority: "localhost:8554", token: "tok",
+                                           message: Self.touches((0, 0, 1, 0))).bytes)
+    }
+
+    /// A link whose sends fail at the given counts (1-based), recording the rest.
+    private final class Failing: @unchecked Sendable {
+        let link = MockEmulatorLink()
+        private let lock = NSLock()
+        private var count = 0
+        private var _sent: [Data] = []
+        var sent: [Data] { lock.withLock { _sent } }
+
+        init(failing: Set<Int>) {
+            given(link).send(.any).willProduce { [self] data in
+                let failed = lock.withLock { () -> Bool in
+                    count += 1
+                    if failing.contains(count) { return true }
+                    _sent.append(data)
+                    return false
+                }
+                if failed { throw Failed() }
+            }
+            given(link).receive().willProduce { Thread.sleep(forTimeInterval: 0.002); return nil }
+            given(link).close().willReturn()
+        }
+    }
+
+    private struct Failed: Error {}
+
     @Test func `should put two fingers down as two touches`() {
         let recorder = Recorder()
 

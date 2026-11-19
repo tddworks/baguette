@@ -14,7 +14,7 @@ struct EmulatorConnectionTests {
     private final class Signal: @unchecked Sendable {
         private let semaphore = DispatchSemaphore(value: 0)
         func fire() { semaphore.signal() }
-        func wait() -> Bool { semaphore.wait(timeout: .now() + 5) == .success }
+        func wait(seconds: Double = 5) -> Bool { semaphore.wait(timeout: .now() + seconds) == .success }
     }
 
     /// The emulator's side of the link: hands out what it sends, keeps what it is sent.
@@ -135,6 +135,48 @@ struct EmulatorConnectionTests {
         private var links: [any EmulatorLink]
         init(_ links: [any EmulatorLink]) { self.links = links }
         func next() -> any EmulatorLink { lock.withLock { links.count > 1 ? links.removeFirst() : links[0] } }
+    }
+
+    @Test func `should tell a stream it ended when the emulator closes its link`() throws {
+        let link = MockEmulatorLink()
+        given(link).send(.any).willReturn()
+        given(link).receive().willThrow(Closed())
+        given(link).close().willReturn()
+        let connection = EmulatorConnection(to: Self.emulator, openLink: { _ in link })
+        let ended = Signal()
+
+        try connection.stream("streamScreenshot", Data(), onMessage: { _ in }, onEnd: { ended.fire() })
+
+        #expect(ended.wait())
+        connection.close()
+    }
+
+    @Test func `should not tell a stream it ended when the connection itself was closed`() throws {
+        let link = Link()
+        let connection = connection(link)
+        let ended = Signal()
+
+        try connection.stream("streamScreenshot", Data(), onMessage: { _ in }, onEnd: { ended.fire() })
+        connection.close()
+
+        #expect(!ended.wait(seconds: 0.2))
+    }
+
+    @Test func `should refuse a call once closed, opening no link`() {
+        let opened = Counter()
+        let connection = EmulatorConnection(to: Self.emulator, openLink: { _ in opened.add(); return Link().link })
+
+        connection.close()
+
+        #expect(throws: (any Error).self) { try connection.send("sendTouch", Data([1])) }
+        #expect(opened.count == 0)
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _count = 0
+        var count: Int { lock.withLock { _count } }
+        func add() { lock.withLock { _count += 1 } }
     }
 
     @Test func `should close its link when closed`() throws {

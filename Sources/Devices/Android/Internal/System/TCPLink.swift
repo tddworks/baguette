@@ -26,6 +26,9 @@ final class TCPLink: EmulatorLink, @unchecked Sendable {
         guard connected else { Darwin.close(fd); throw Failure() }
         var timeout = timeval(tv_sec: 0, tv_usec: 20_000)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        // A write the emulator stops reading gives up after a second.
+        var writeTimeout = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &writeTimeout, socklen_t(MemoryLayout<timeval>.size))
         var one: Int32 = 1
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, socklen_t(MemoryLayout<Int32>.size))
         // A write after the emulator closed its end fails rather than
@@ -44,16 +47,25 @@ final class TCPLink: EmulatorLink, @unchecked Sendable {
         }
     }
 
-    func receive() -> Data? {
-        guard !lock.withLock({ closed }) else { return nil }
+    func receive() throws -> Data? {
+        guard !lock.withLock({ closed }) else { throw Failure() }
         let count = recv(fd, &buffer, buffer.count, 0)
-        return count > 0 ? Data(buffer[0..<count]) : nil
+        if count > 0 { return Data(buffer[0..<count]) }
+        // 0: the emulator closed its end. -1 with EAGAIN: the wait ran out.
+        if count == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) { throw Failure() }
+        return nil
     }
 
+    /// Ends both directions at once (a waiting `recv` returns), but keeps the
+    /// descriptor until the link is gone: closed now, its number could be
+    /// reused by another socket while a reader still holds it.
     func close() {
         guard lock.withLock({ defer { closed = true }; return !closed }) else { return }
-        Darwin.close(fd)
+        shutdown(fd, SHUT_RDWR)
     }
 
-    deinit { close() }
+    deinit {
+        shutdown(fd, SHUT_RDWR)
+        Darwin.close(fd)
+    }
 }

@@ -21,8 +21,9 @@ struct RunningEmulatorTests {
         #expect(found == RunningEmulator(serial: "emulator-5554", avd: "baguette_pixel", port: 8554, token: "s3cr3t-token"))
     }
 
-    @Test func `should read no control API from an emulator started without gRPC`() {
-        #expect(RunningEmulator(ini: "port.serial=5554\navd.name=baguette_pixel\n") == nil)
+    @Test func `should know an emulator started without gRPC by its AVD, with no control API`() {
+        #expect(RunningEmulator(ini: "port.serial=5554\navd.name=baguette_pixel\n")
+            == RunningEmulator(serial: "emulator-5554", avd: "baguette_pixel", control: nil))
     }
 
     @Test func `should find the emulators running from their discovery files`() throws {
@@ -33,7 +34,7 @@ struct RunningEmulatorTests {
         try "port.serial=5556\n".write(to: folder.appendingPathComponent("pid_1.ini"), atomically: true, encoding: .utf8)
         try "not an emulator".write(to: folder.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
 
-        #expect(RunningEmulator.all(in: folder).map(\.serial) == ["emulator-5554"])
+        #expect(RunningEmulator.all(in: folder).map(\.serial) == ["emulator-5556", "emulator-5554"])
     }
 
     @Test func `should find no emulators running when the folder isn't there`() {

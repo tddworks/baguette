@@ -66,6 +66,17 @@ struct AndroidDevicesTests {
         #expect(emulator?.abilities.names == ["power", "screen", "touch", "press", "key", "scroll", "type"])
     }
 
+    @Test func `should list an emulator started without a control API once, by its AVD, driven through adb alone`() {
+        let fake = FakeDevicectl()
+        fake.output = Self.listing
+        let noControl = RunningEmulator(serial: "emulator-5554", avd: "baguette_pixel", control: nil)
+
+        let all = devices(fake, running: [noControl], installed: ["baguette_pixel"]).all
+
+        #expect(all.map(\.id) == ["baguette_pixel", "37201FDJH004VE"])
+        #expect(all.first?.abilities.names == ["power", "press", "key", "type"])
+    }
+
     @Test func `should name a running emulator by its AVD, the same across boots`() throws {
         let fake = FakeDevicectl()
         fake.output = Self.listing

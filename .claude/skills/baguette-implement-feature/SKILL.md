@@ -343,9 +343,10 @@ For anything under `Devices/iPhone/Internal/` (research:
   locked phone or a stalled tunnel never answers.
 - **Check a resilient type's size** (`CoreDeviceFramework.valueSize`)
   before CoreDevice writes one into a fixed buffer.
-- **Wire formats are values** (`Devices/iPhone/`: `DTXMessage`,
-  `XPCObject`, `HTTP2Frame`, `MediaStreamOffer`, `ReceiverFeedback`,
-  `AXTreeDump`), unit-tested byte for byte; the socket and the private call
+- **Wire formats are values**, beside the mechanism that uses them
+  (`Internal/Accessibility/`: `DTXMessage`, `XPCObject`, `HTTP2Frame`,
+  `AXTreeDump`; `Internal/Screen/CoreDevice/RTP/`: `MediaStreamOffer`,
+  `ReceiverFeedback`), unit-tested byte for byte; the socket and the private call
   are the only untested lines, and live in `Internal/System/`.
 - **A phone serves one session** per service at a time and is shared
   with the user — share reads (`SharedRead`) rather than open a second.

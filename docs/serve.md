@@ -18,9 +18,9 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 
 ## Routes
 
-`:udid` is a simulator UDID. Rows without a feature link are documented here only.
+`:udid` is a device's ID as `/devices.json` lists it: a simulator's or iPhone's UDID, an emulator's AVD name, a phone's adb serial. Rows without a feature link are documented here only.
 
-**One tree: `/devices/:udid/…`.** A route marked *any device* answers for every device — a simulator, a phone on a cable. A device that can't do what's asked answers `422` naming it (`han's iPhone can't do orientation`); one that isn't running, `409`. A plugin's grant covers the route under either spelling. The old `/simulators/:udid/…` spelling still answers, with `Deprecation: true` and a `Link` to its `/devices` successor; it goes in a later release.
+**One tree: `/devices/:udid/…`.** A route marked *any device* answers for every device — a simulator, a phone on a cable, an emulator. A device that can't do what's asked answers `422` naming it (`han's iPhone can't do orientation`); one that isn't running, `409`. A plugin's grant covers the route under either spelling. The old `/simulators/:udid/…` spelling still answers, with `Deprecation: true` and a `Link` to its `/devices` successor; it goes in a later release.
 
 | Method | Path | What | Docs |
 |---|---|---|---|

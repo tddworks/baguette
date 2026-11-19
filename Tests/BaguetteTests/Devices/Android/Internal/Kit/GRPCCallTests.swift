@@ -61,6 +61,23 @@ struct GRPCCallTests {
         #expect(replies.takeAnswers().isEmpty)
     }
 
+    @Test func `should answer the emulator's ping with the same eight bytes`() {
+        var replies = GRPCReplies(stream: 1)
+        let ping = Data([1, 2, 3, 4, 5, 6, 7, 8])
+
+        _ = replies.push(GRPCFrame.bytes(kind: 6, flags: 0, stream: 0, ping))
+
+        #expect(replies.takeAnswers() == GRPCFrame.bytes(kind: 6, flags: 0x01, stream: 0, ping))
+    }
+
+    @Test func `should not answer a ping that is itself an answer`() {
+        var replies = GRPCReplies(stream: 1)
+
+        _ = replies.push(GRPCFrame.bytes(kind: 6, flags: 0x01, stream: 0, Data(count: 8)))
+
+        #expect(replies.takeAnswers().isEmpty)
+    }
+
     @Test func `should acknowledge the server's settings`() {
         var replies = GRPCReplies(stream: 1)
 

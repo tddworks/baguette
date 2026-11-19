@@ -8,12 +8,20 @@ import IOSurface
 /// `emulator_controller.proto`, proto3, so a field at its default (0) is
 /// left out. Design: docs/features/android/design.md.
 enum EmulatorControl {
-    /// What kind of picture `getScreenshot` / `streamScreenshot` hand back.
+    /// What kind of picture `getScreenshot` / `streamScreenshot` hand back,
+    /// and how: in the message, or — with `sharedMemory`, a `file://` URL —
+    /// drawn by the emulator into that file, mapped by both, the message
+    /// only a notice (`ImageTransport { channel: MMAP, handle }`).
     struct ImageFormat: Equatable, Sendable {
         enum Format: UInt64, Sendable { case png = 0, rgba8888 = 1, rgb888 = 2 }
         let format: Format
+        var sharedMemory: String? = nil
 
-        var bytes: Data { Protobuf.varint(field: 1, format.rawValue) }
+        var bytes: Data {
+            Protobuf.varint(field: 1, format.rawValue)
+                + (sharedMemory.map { Protobuf.message(field: 6, Protobuf.varint(field: 1, 1)
+                                                        + Protobuf.message(field: 2, Data($0.utf8))) } ?? Data())
+        }
     }
 
     /// Fingers on the screen, each by its `identifier` (a multitouch slot);
@@ -38,7 +46,8 @@ enum EmulatorControl {
         }
     }
 
-    /// A picture of the screen: its size (in its format) and its pixels.
+    /// A picture of the screen: its size (in its format) and its pixels —
+    /// none in the message when the emulator drew them into shared memory.
     struct Image: Equatable, Sendable {
         let width: Int
         let height: Int
@@ -47,11 +56,10 @@ enum EmulatorControl {
 
         init?(_ bytes: Data) {
             guard let fields = Protobuf.fields(bytes) else { return nil }
-            let format = fields.first { $0.number == 1 }.flatMap { $0.bytes.flatMap(Protobuf.fields) } ?? []
-            guard let pixels = fields.first(where: { $0.number == 4 })?.bytes else { return nil }
+            guard let format = fields.first(where: { $0.number == 1 })?.bytes.flatMap(Protobuf.fields) else { return nil }
             width = Int(format.first { $0.number == 3 }?.varint ?? 0)
             height = Int(format.first { $0.number == 4 }?.varint ?? 0)
-            self.pixels = pixels
+            pixels = fields.first(where: { $0.number == 4 })?.bytes ?? Data()
             sequence = Int(fields.first { $0.number == 5 }?.varint ?? 0)
         }
 
@@ -59,22 +67,24 @@ enum EmulatorControl {
         /// emulator's RGBA with red and blue swapped. Nil when its pixels
         /// don't fill its size.
         func bgraSurface() -> IOSurface? {
+            pixels.withUnsafeBytes { Self.bgraSurface(width: width, height: height, pixels: $0) }
+        }
+
+        /// A `width` × `height` RGBA picture at `pixels` as a BGRA surface, in
+        /// one vectorized pass straight into it; nil when `pixels` holds less.
+        static func bgraSurface(width: Int, height: Int, pixels: UnsafeRawBufferPointer) -> IOSurface? {
             let bytesPerRow = width * 4
-            guard width > 0, height > 0, pixels.count >= bytesPerRow * height,
+            guard width > 0, height > 0, pixels.count >= bytesPerRow * height, let base = pixels.baseAddress,
                   let surface = IOSurface(properties: [.width: width, .height: height, .bytesPerElement: 4,
                                                        .bytesPerRow: bytesPerRow, .pixelFormat: 0x4247_5241])
             else { return nil }
             surface.lock(options: [], seed: nil)
             defer { surface.unlock(options: [], seed: nil) }
-            // RGBA → BGRA in one vectorized pass, straight into the surface.
-            pixels.withUnsafeBytes { raw in
-                var from = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: raw.baseAddress!),
-                                         height: vImagePixelCount(height), width: vImagePixelCount(width),
-                                         rowBytes: bytesPerRow)
-                var to = vImage_Buffer(data: surface.baseAddress, height: vImagePixelCount(height),
-                                       width: vImagePixelCount(width), rowBytes: surface.bytesPerRow)
-                _ = vImagePermuteChannels_ARGB8888(&from, &to, [2, 1, 0, 3], vImage_Flags(kvImageNoFlags))
-            }
+            var from = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: base), height: vImagePixelCount(height),
+                                     width: vImagePixelCount(width), rowBytes: bytesPerRow)
+            var to = vImage_Buffer(data: surface.baseAddress, height: vImagePixelCount(height),
+                                   width: vImagePixelCount(width), rowBytes: surface.bytesPerRow)
+            _ = vImagePermuteChannels_ARGB8888(&from, &to, [2, 1, 0, 3], vImage_Flags(kvImageNoFlags))
             return surface
         }
     }
