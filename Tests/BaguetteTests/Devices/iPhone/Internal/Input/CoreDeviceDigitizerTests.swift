@@ -18,6 +18,14 @@ struct CoreDeviceDigitizerTests {
 
     private struct Refused: Error {}
 
+    /// What happened, in order.
+    private final class Order: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _steps: [String] = []
+        var steps: [String] { lock.withLock { _steps } }
+        func note(_ step: String) { lock.withLock { _steps.append(step) } }
+    }
+
     /// Universal HID that can build reports, opens with `opening`, and takes
     /// every report sent.
     private func hid(
@@ -31,9 +39,38 @@ struct CoreDeviceDigitizerTests {
         return hid
     }
 
+    /// A phone tunnel that comes up, or refuses to.
+    private func tunnel(opens: Bool = true) -> MockTunnel {
+        let tunnel = MockTunnel()
+        if opens { given(tunnel).open(to: .any).willReturn() } else { given(tunnel).open(to: .any).willThrow(Refused()) }
+        return tunnel
+    }
+
+    @Test func `should bring the phone's tunnel up before opening its touch service`() {
+        let order = Order()
+        let tunnel = MockTunnel()
+        given(tunnel).open(to: .any).willProduce { _ in order.note("tunnel") }
+        let hid = hid(opening: { order.note("touch service"); return OpenedCapability() })
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel)
+
+        #expect(digitizer.report(finger, touching: true, edge: nil))
+
+        verify(tunnel).open(to: .value(phone)).called(1)
+        #expect(order.steps == ["tunnel", "touch service"])
+    }
+
+    @Test func `should land no touch when the phone's tunnel can't be brought up`() {
+        let hid = hid()
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel(opens: false))
+
+        #expect(!digitizer.report(finger, touching: true, edge: nil))
+
+        verify(hid).open(on: .any).called(0)
+    }
+
     @Test func `should land the fingers on the phone's main touchscreen`() {
         let hid = hid()
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid)
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel())
 
         #expect(digitizer.report(finger, touching: true, edge: .bottom))
 
@@ -43,7 +80,7 @@ struct CoreDeviceDigitizerTests {
 
     @Test func `should send nothing when no finger or more than two are on the glass`() {
         let hid = hid()
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid)
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel())
 
         #expect(!digitizer.report([], touching: true, edge: nil))
         #expect(!digitizer.report(finger + finger + finger, touching: true, edge: nil))
@@ -53,7 +90,7 @@ struct CoreDeviceDigitizerTests {
 
     @Test func `should open the phone's touch service once and keep it`() {
         let hid = hid()
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid)
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel())
 
         _ = digitizer.report(finger, touching: true, edge: nil)
         _ = digitizer.report(finger, touching: false, edge: nil)
@@ -65,7 +102,7 @@ struct CoreDeviceDigitizerTests {
     @Test func `should not ask CoreDevice again within ten seconds of failing to open the touch service`() {
         let clock = Clock()
         let hid = hid(opening: { throw Refused() })
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, now: { clock.now })
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel(), now: { clock.now })
 
         #expect(!digitizer.report(finger, touching: true, edge: nil))
         clock.now += 9
@@ -78,7 +115,7 @@ struct CoreDeviceDigitizerTests {
     @Test func `should ask CoreDevice again once ten seconds have passed since it failed`() {
         let clock = Clock()
         let hid = hid(opening: { throw Refused() })
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, now: { clock.now })
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel(), now: { clock.now })
 
         _ = digitizer.report(finger, touching: true, edge: nil)
         clock.now += 10
@@ -89,7 +126,7 @@ struct CoreDeviceDigitizerTests {
 
     @Test func `should wait out ten seconds too when CoreDevice doesn't list the phone`() {
         let hid = hid(opening: { nil })
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid)
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel())
 
         #expect(!digitizer.report(finger, touching: true, edge: nil))
         #expect(!digitizer.report(finger, touching: true, edge: nil))
@@ -99,7 +136,7 @@ struct CoreDeviceDigitizerTests {
 
     @Test func `should open nothing when this Xcode's Universal HID can't build a touch report`() {
         let hid = hid(builds: false)
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid)
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel())
 
         #expect(!digitizer.report(finger, touching: true, edge: nil))
         #expect(!digitizer.report(finger, touching: true, edge: nil))
@@ -112,7 +149,7 @@ struct CoreDeviceDigitizerTests {
         let clock = Clock()
         let attempts = Attempts()
         let hid = hid(opening: { attempts.next() == 1 ? nil : OpenedCapability() })
-        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, now: { clock.now })
+        let digitizer = CoreDeviceDigitizer(identifier: phone, hid: hid, tunnel: tunnel(), now: { clock.now })
 
         #expect(!digitizer.report(finger, touching: true, edge: nil))
         clock.now += 10

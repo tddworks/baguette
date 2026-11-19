@@ -10,13 +10,14 @@ import IOSurface
 ///
 /// The packets, frames and RTCP are pure values (`MediaStreamPackets.swift`,
 /// `MediaStreamSession`), decoding is `H264Decoder`'s, and CoreDevice and
-/// the socket are roles (`MediaStreamStarter`, `DatagramSocket`). When the
+/// the socket are roles (`Tunnel`, `MediaStreamStarter`, `DatagramSocket`). When the
 /// stream can't start, the screen falls back to `fallback` (screenshots).
 final class MediaStreamScreen: Screen, @unchecked Sendable {
     private let identifier: UUID
     private let devicectl: Devicectl
     private let makeDecoder: @Sendable () -> any StreamDecoder
     private let fallback: any Screen
+    private let tunnel: any Tunnel
     private let starter: any MediaStreamStarter
     private let openSocket: @Sendable () throws -> any DatagramSocket
     private let mac: @Sendable () -> MediaStreamOffer.Mac
@@ -33,6 +34,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
          devicectl: Devicectl = Devicectl(),
          makeDecoder: @escaping @Sendable () -> any StreamDecoder = { VTStreamDecoder() },
          fallback: any Screen,
+         tunnel: any Tunnel = CoreDeviceTunnel(),
          starter: any MediaStreamStarter = CoreDeviceMediaStream(),
          openSocket: @escaping @Sendable () throws -> any DatagramSocket = { try UDPSocket() },
          mac: @escaping @Sendable () -> MediaStreamOffer.Mac = { HostNetwork.mac },
@@ -42,6 +44,7 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
         self.devicectl = devicectl
         self.makeDecoder = makeDecoder
         self.fallback = fallback
+        self.tunnel = tunnel
         self.starter = starter
         self.openSocket = openSocket
         self.mac = mac
@@ -84,6 +87,9 @@ final class MediaStreamScreen: Screen, @unchecked Sendable {
     // MARK: - The stream
 
     private func stream(_ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
+        // CoreDevice won't reach the phone's display service over a tunnel
+        // that is down, and doesn't bring one up itself.
+        try tunnel.open(to: identifier)
         let socket = try openSocket()
         lock.withLock { self.socket = socket }
         let port = socket.port

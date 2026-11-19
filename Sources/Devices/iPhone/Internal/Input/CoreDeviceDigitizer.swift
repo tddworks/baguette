@@ -13,6 +13,7 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
 
     private let identifier: UUID
     private let hid: any UniversalHID
+    private let tunnel: any Tunnel
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var capability: OpenedCapability?
@@ -23,9 +24,11 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
 
     /// - Parameter identifier: CoreDevice's identifier for the phone (not its UDID).
     init(identifier: UUID, hid: any UniversalHID = CoreDeviceUniversalHID(),
+         tunnel: any Tunnel = CoreDeviceTunnel(),
          now: @escaping @Sendable () -> Date = { Date() }) {
         self.identifier = identifier
         self.hid = hid
+        self.tunnel = tunnel
         self.now = now
     }
 
@@ -45,6 +48,7 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
                 return nil
             }
             do {
+                try tunnel.open(to: identifier)
                 capability = try hid.open(on: identifier)
                 if capability == nil { log("[coredevice] CoreDevice does not list \(identifier)") }
             } catch {

@@ -8,6 +8,12 @@ struct RemoteDevice: @unchecked Sendable {
 
     var identifier: UUID { object.identifier() }
 
+    /// Bring this device's tunnel up, and keep it. Blocks until CoreDevice answers.
+    func connect() throws {
+        let object = self.object
+        try CoreDeviceAnswer.wait(upTo: 15, for: "connecting") { try await object.connect() }
+    }
+
     /// Open `kind` on this device. Blocks until CoreDevice answers.
     func open(_ kind: CapabilityKind) throws -> OpenedCapability {
         guard let type = CoreDeviceFramework.symbol(kind.typeSymbol),

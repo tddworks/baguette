@@ -55,6 +55,7 @@ struct MediaStreamScreenTests {
         let starter = MockMediaStreamStarter()
         let decoder = MockStreamDecoder()
         let fallback = MockScreen()
+        let tunnel = MockTunnel()
         let devicectl = PhoneJSON.devicectl(listings: [PhoneJSON.listing(tunnelAddress: PhoneJSON.tunnel)])
         let fellBack = Signal()
         let decoded = Signal()
@@ -64,13 +65,21 @@ struct MediaStreamScreenTests {
         private var _sent: [(Data, String, UInt16)] = []
         private var _request: [String: Any]?
         private var _cropped: Size?
+        private var tunnelUp = false
+        private var _tunnelWasUpAtStart: Bool?
+        /// Whether the phone's tunnel was up when CoreDevice was asked to start the stream.
+        var tunnelWasUpAtStart: Bool? { lock.withLock { _tunnelWasUpAtStart } }
 
         var sent: [(Data, String, UInt16)] { lock.withLock { _sent } }
         var request: [String: Any]? { lock.withLock { _request } }
         var cropped: Size? { lock.withLock { _cropped } }
 
-        init(inbound: [Data] = [], answer: [String: Any]? = MediaStreamScreenTests.answer) {
+        init(inbound: [Data] = [], answer: [String: Any]? = MediaStreamScreenTests.answer, tunnelOpens: Bool = true) {
             self.inbound = inbound
+            given(tunnel).open(to: .any).willProduce { [self] _ in
+                guard tunnelOpens else { throw MediaStreamScreen.StreamError.noTunnel }
+                lock.withLock { tunnelUp = true }
+            }
             given(socket).port.willReturn(50001)
             given(socket).receive().willProduce { [self] in
                 let next = lock.withLock { self.inbound.isEmpty ? nil : self.inbound.removeFirst() }
@@ -82,6 +91,7 @@ struct MediaStreamScreenTests {
             }
             given(socket).close().willProduce { [self] in closed.fire() }
             given(starter).start(on: .any, request: .any).willProduce { [self] _, makeRequest in
+                lock.withLock { _tunnelWasUpAtStart = tunnelUp }
                 let request = try makeRequest()
                 lock.withLock { _request = request }
                 guard let answer else { throw MediaStreamScreen.StreamError.notListed }
@@ -104,7 +114,7 @@ struct MediaStreamScreenTests {
             let socket = socket
             return MediaStreamScreen(
                 identifier: PhoneJSON.identifier, devicectl: Devicectl(makeSubprocess: devicectl.make),
-                makeDecoder: { [decoder] in decoder }, fallback: fallback, starter: starter,
+                makeDecoder: { [decoder] in decoder }, fallback: fallback, tunnel: tunnel, starter: starter,
                 openSocket: openSocket ?? { socket },
                 mac: { MediaStreamOffer.Mac(model: "Mac16,1", build: "25A1") },
                 interfaces: { interfaces }, now: clock.read)
@@ -138,6 +148,29 @@ struct MediaStreamScreenTests {
         #expect(rig.request?["receiverIP"] as? String == PhoneJSON.mac)
         #expect(rig.request?["receiverPort"] as? Int == 50001)
         verify(rig.starter).start(on: .value(PhoneJSON.identifier), request: .any).called(1)
+    }
+
+    @Test func `should bring the phone's tunnel up before starting its live screen`() throws {
+        let rig = Rig(inbound: Self.keyframe)
+        let screen = rig.screen()
+
+        try screen.start { _ in }
+        #expect(rig.decoded.wait())
+        screen.stop()
+
+        verify(rig.tunnel).open(to: .value(PhoneJSON.identifier)).called(1)
+        #expect(rig.tunnelWasUpAtStart == true)
+    }
+
+    @Test func `should show screenshots when the phone's tunnel can't be brought up`() throws {
+        let rig = Rig(tunnelOpens: false)
+        let screen = rig.screen()
+
+        try screen.start { _ in }
+
+        #expect(rig.fellBack.wait())
+        screen.stop()
+        verify(rig.starter).start(on: .any, request: .any).called(0)
     }
 
     @Test func `should ask the phone for a keyframe where it streams from while it has sent none`() throws {

@@ -32,6 +32,9 @@ class RemoteDeviceObject {
     /// RemoteDevice.deviceIdentifier
     @_silgen_name("$s10CoreDevice06RemoteB0C16deviceIdentifier10Foundation4UUIDVvgTj")
     final func identifier() -> UUID
+    /// RemoteDevice.connect() async throws
+    @_silgen_name("$s10CoreDevice06RemoteB0C7connectyyYaKFTj")
+    final func connect() async throws
     /// RemoteDevice.getImplementation(for:) async throws
     @_silgen_name("$s10CoreDevice06RemoteB0C17getImplementation3for12ProtocolTypeQzAA22CapabilityStaticMemberVyxG_tYaKAA0bI0RzlFTj")
     final func implementation(_ result: UnsafeMutableRawPointer, _ member: UnsafeRawPointer,
