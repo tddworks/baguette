@@ -24,8 +24,8 @@ Sources/Devices/Android/
     ├── AndroidDevices.swift         the family's source, and AndroidDevice: what one can do
     ├── Kit/                         Adb · AdbLocation — adb, shared by everything Android
     └── Emulator/                    the emulator's control API: everything an emulator does through it
-        ├── EmulatorDiscovery.swift ◇   a running emulator's .ini → serial, gRPC port, token
-        ├── EmulatorWire.swift ◇        its protobuf messages
+        ├── RunningEmulator.swift ◇   a running emulator's .ini → serial, gRPC port, token
+        ├── EmulatorControl.swift ◇        its protobuf messages
         ├── GRPCCall.swift ◇            one call as HTTP/2 bytes; replies and flow control back
         ├── EmulatorConnection.swift    the role screen and input share (next)
         ├── EmulatorScreen.swift · EmulatorTouch.swift   frames from streamScreenshot; sendTouch, sendKey (next)

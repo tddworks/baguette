@@ -5,7 +5,7 @@ import Foundation
 /// reads, encoded by hand: field numbers from Google's
 /// `emulator_controller.proto`, proto3, so a field at its default (0) is
 /// left out. Design: docs/features/android/design.md.
-enum EmulatorWire {
+enum EmulatorControl {
     /// What kind of picture `getScreenshot` / `streamScreenshot` hand back.
     struct ImageFormat: Equatable, Sendable {
         enum Format: UInt64, Sendable { case png = 0, rgba8888 = 1, rgb888 = 2 }

@@ -1,10 +1,11 @@
 import Foundation
 
-/// Where a running emulator's control API answers, from the file it writes
-/// while it runs (`~/Library/Caches/TemporaryItems/avd/running/pid_<pid>.ini`):
-/// its adb serial (`emulator-` + `port.serial`), its AVD, and its gRPC port
-/// and token. An emulator started without gRPC has no endpoint, so none.
-struct EmulatorDiscovery: Equatable, Sendable {
+/// A running emulator, as the discovery file it writes while it runs
+/// describes it (`~/Library/Caches/TemporaryItems/avd/running/pid_<pid>.ini`):
+/// its adb serial (`emulator-` + `port.serial`), its AVD, and where its control
+/// API answers — the gRPC port and token. An emulator started without gRPC
+/// has no control API, so none.
+struct RunningEmulator: Equatable, Sendable {
     let serial: String
     let avd: String
     let port: Int

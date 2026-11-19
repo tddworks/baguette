@@ -4,26 +4,26 @@ import Testing
 
 /// The emulator control API's messages, as protobuf bytes on the wire — the
 /// handful baguette sends and reads (android.emulation.control, emulator 37).
-@Suite("EmulatorWire")
-struct EmulatorWireTests {
+@Suite("EmulatorControl")
+struct EmulatorControlTests {
     @Test func `should ask for pictures as RGBA pixels`() {
-        #expect(EmulatorWire.ImageFormat(format: .rgba8888).bytes == Data([0x08, 0x01]))
+        #expect(EmulatorControl.ImageFormat(format: .rgba8888).bytes == Data([0x08, 0x01]))
     }
 
     @Test func `should put a finger on the screen at its point, by its identifier`() {
-        let event = EmulatorWire.TouchEvent(touches: [.init(x: 540, y: 1200, identifier: 1, pressure: 1)])
+        let event = EmulatorControl.TouchEvent(touches: [.init(x: 540, y: 1200, identifier: 1, pressure: 1)])
 
         #expect(event.bytes == Data([0x0A, 0x0A, 0x08, 0x9C, 0x04, 0x10, 0xB0, 0x09, 0x18, 0x01, 0x20, 0x01]))
     }
 
     @Test func `should lift a finger by sending it with no pressure`() {
-        let event = EmulatorWire.TouchEvent(touches: [.init(x: 540, y: 1200, identifier: 1, pressure: 0)])
+        let event = EmulatorControl.TouchEvent(touches: [.init(x: 540, y: 1200, identifier: 1, pressure: 0)])
 
         #expect(event.bytes == Data([0x0A, 0x08, 0x08, 0x9C, 0x04, 0x10, 0xB0, 0x09, 0x18, 0x01]))
     }
 
     @Test func `should send two fingers as two touches`() {
-        let event = EmulatorWire.TouchEvent(touches: [.init(x: 1, y: 2, identifier: 1, pressure: 1),
+        let event = EmulatorControl.TouchEvent(touches: [.init(x: 1, y: 2, identifier: 1, pressure: 1),
                                                       .init(x: 3, y: 4, identifier: 2, pressure: 1)])
 
         #expect(event.bytes == Data([0x0A, 0x08, 0x08, 0x01, 0x10, 0x02, 0x18, 0x01, 0x20, 0x01,
@@ -31,8 +31,8 @@ struct EmulatorWireTests {
     }
 
     @Test func `should press a key by its USB HID usage`() {
-        #expect(EmulatorWire.KeyboardEvent(usage: 0x04, kind: .press).bytes == Data([0x10, 0x02, 0x18, 0x04]))
-        #expect(EmulatorWire.KeyboardEvent(usage: 0x04, kind: .down).bytes == Data([0x18, 0x04]))
+        #expect(EmulatorControl.KeyboardEvent(usage: 0x04, kind: .press).bytes == Data([0x10, 0x02, 0x18, 0x04]))
+        #expect(EmulatorControl.KeyboardEvent(usage: 0x04, kind: .down).bytes == Data([0x18, 0x04]))
     }
 
     @Test func `should read a picture's size and pixels from the emulator's image`() throws {
@@ -41,7 +41,7 @@ struct EmulatorWireTests {
                           0x22, 0x08, 1, 2, 3, 4, 5, 6, 7, 8,
                           0x28, 0x07])
 
-        let image = try #require(EmulatorWire.Image(bytes))
+        let image = try #require(EmulatorControl.Image(bytes))
 
         #expect(image.width == 2)
         #expect(image.height == 1)
@@ -50,6 +50,6 @@ struct EmulatorWireTests {
     }
 
     @Test func `should read no picture from bytes that aren't an image`() {
-        #expect(EmulatorWire.Image(Data([0xFF, 0xFF, 0xFF])) == nil)
+        #expect(EmulatorControl.Image(Data([0xFF, 0xFF, 0xFF])) == nil)
     }
 }
