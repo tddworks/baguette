@@ -15,13 +15,12 @@ coverage:
 #
 # What is left out is a kind of code, not a list of files: an irreducible
 # call to the outside world (a private framework, VideoToolbox, a socket, a
-# process) lives in an `Internal/System/` folder — or a `System/` folder
-# deeper inside `Internal/`, beside the implementation it serves (an iPhone
-# screen receiver's) — thin by rule: the check fails a file there over 100 lines. Everything that decides something
+# process) lives in an `Internal/System/` folder, thin by rule — the check
+# fails a file there over 100 lines. Everything that decides something
 # stays outside `System/` and is measured.
 ignore:
   - "Sources/Baguette/Resources/**"
-  - "**/Internal/**/System/**"
+  - "**/Internal/System/**"
   # The one CoreDevice call Swift can't spell, in C: a system call by
   # nature, in a target of its own.
   - "Sources/CoreDeviceABI/**"

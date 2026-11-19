@@ -38,7 +38,7 @@ crosshair opens the accessibility inspector over the phone's screen.
 | Ability | How | Note |
 |---|---|---|
 | touches (`tap`, `swipe`, `pinch`, `pan`, `input`) | CoreDevice's Universal HID | edge swipes too; no buttons, keys or scroll yet |
-| screen (`screenshot`, `stream`, `record`) | the phone's own H.264 stream, started through CoreDevice and received by baguette (`BAGUETTE_PHONE_SCREEN=avconference` for AVConference's own receiver, HEVC) | live, up to 60 fps; screenshots stand in if it can't start |
+| screen (`screenshot`, `stream`, `record`) | the phone's own H.264 stream, started through CoreDevice and received by baguette (`BAGUETTE_PHONE_SCREEN=avconference` for AVConference's own receiver, HEVC) | live, up to 60 fps; a start that fails reports why. A Mac without CoreDevice shows screenshots instead, about 5 a second |
 | pasteboard (`clipboard`, text in `paste`) | `devicectl device pasteboard` | |
 | accessibility (`describe-ui`, `tap --label`) | the phone's own accessibility service, over the tunnel | the frontmost app's tree, ~2 s; `tap --label` lands as a touch on the element |
 

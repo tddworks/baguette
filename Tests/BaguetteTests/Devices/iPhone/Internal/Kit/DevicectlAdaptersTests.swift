@@ -243,7 +243,7 @@ struct CoreDevicePhonesTests {
     }
 
     @Test(.enabled(if: CoreDeviceFramework.isAvailable))
-    func `should show a phone's live screen through one phone screen, whichever receiver its route picks`() throws {
+    func `should show a phone's live screen through CoreDevice, whichever receiver its route picks`() throws {
         for route in [PhoneScreenRoute.rtp, .avconference] {
             let phone = CoreDevicePhone(
                 PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
@@ -251,7 +251,7 @@ struct CoreDevicePhonesTests {
                               coreDeviceIdentifier: UUID()),
                 devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: route)
 
-            #expect(try phone.require(.screen) is PhoneScreen)
+            #expect(try phone.require(.screen) is CoreDeviceScreen)
         }
     }
 

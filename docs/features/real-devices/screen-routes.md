@@ -1,11 +1,11 @@
 # A phone's screen: two receivers
 
-> One `PhoneScreen` runs every phone's live screen; only its `ScreenReceiver` — who turns the stream into pictures — differs: baguette's own (`rtp`, the default) or Apple's AVConference, run in baguette's own process (`avconference`). Pick one with `BAGUETTE_PHONE_SCREEN`; the research behind the second is in [design.md](design.md#the-screen-through-avconference-in-process-spike-2026-11-19).
+> One `CoreDeviceScreen` runs every phone's live screen (a Mac without CoreDevice shows stills instead, through `DevicectlScreen`); only its `ScreenReceiver` — who turns the stream into pictures — differs: baguette's own (`rtp`, the default) or Apple's AVConference, run in baguette's own process (`avconference`). Pick one with `BAGUETTE_PHONE_SCREEN`; the research behind the second is in [design.md](design.md#the-screen-through-avconference-in-process-spike-2026-11-19).
 
-## The session — `PhoneScreen`, every rule once
+## The session — `CoreDeviceScreen`, every rule once (`Screen/CoreDevice/`)
 
 ```
-PhoneScreen.stream()
+CoreDeviceScreen.start()   — synchronous: it throws when the session can't start
  1. tunnel.open(to:)               RemoteDevice.connect() → TunnelEnds (phone …::1, Mac …::2)
  2. openSocket()                   UDPSocket, IPv6, any port
     receiver.offer()               the receiver's own offer
@@ -16,12 +16,14 @@ PhoneScreen.stream()
     relay:  socket.receive() → receiver.receive()       the phone's datagrams
             receiver.nextReport() → socket.send()       its reports, back to where the phone streams from
  4. onPicture → onFrame            each picture as the receiver decodes it — a push, no timer
- 5. no picture in 8 s → screenshots (DevicectlScreen); stop → RTCP goodbye, receiver stopped, socket closed
+ 5. stop, or no picture in 8 s → RTCP goodbye, receiver stopped, socket closed — never a silent switch to stills
 ```
 
 Tested through `MockScreenReceiver`, `MockTunnel`, `MockMediaStreamStarter`, `MockDatagramSocket`. `PhoneScreenRoute` picks the receiver.
 
-## `rtp` — `RTPReceiver`, baguette's own (`Screen/RTP/`)
+**Why no fallback to stills.** A start that fails is a failure to see, not one to paper over: the screenshot fallback once hid a dead tunnel as "first open shows stale screenshots until a refresh". Whether a phone can stream live at all is known before anything starts — it has CoreDevice or it doesn't — so the phone registers `CoreDeviceScreen` or `DevicectlScreen`, never both.
+
+## `rtp` — `RTPReceiver`, baguette's own (`Screen/CoreDevice/RTP/`)
 
 ```
 offer()      MediaStreamOffer: AVConference's fields minus HEVC → H.264 only
@@ -34,7 +36,7 @@ nextReport() ReceiverFeedback                receiver reports, picture-loss requ
 
 All pure values but the decoder, unit-tested byte for byte (`RTPReceiverTests`, `MediaStreamPackets`, `ReceiverFeedback`).
 
-## `avconference` — `AVConferenceReceiver`, Apple's, in-process (`Screen/AVConference/`)
+## `avconference` — `AVConferenceReceiver`, Apple's, in-process (`Screen/CoreDevice/AVConference/`)
 
 ```
 offer()      AVCMediaStreamNegotiator, mode 5 → negotiates HEVC
@@ -47,7 +49,7 @@ pictures     _VCVideoStream_DidReceiveRemoteFrame, AVConference's per-picture C 
              thread never held) → PictureConversion: BGRA IOSurface, cropped to the screen
 ```
 
-Its private calls are in `Screen/AVConference/System/` (≤ 100 lines a file, left out of coverage like every `Internal/…/System/`); `NewestWaiting` is tested.
+Its private calls are in `AVConference/Internal/System/` (≤ 100 lines a file, left out of coverage like every `Internal/System/`); `NewestWaiting` is tested.
 
 ## Side by side
 
@@ -59,7 +61,7 @@ Its private calls are in `Screen/AVConference/System/` (≤ 100 lines a file, le
 | Decode | `VTStreamDecoder` (H.264) | AVConference (HEVC) |
 | Pictures out | pushed to `onFrame` as decoded | pushed to `onFrame` as decoded, after YUV → BGRA |
 | Private surface | CoreDevice | CoreDevice, plus AVConference's internals (`_opaqueStream`, one replaced method) |
-| Fallback | screenshots | screenshots |
+| A failed start | an error, reported | an error, reported |
 
 ## Measured
 
@@ -93,4 +95,4 @@ Its private calls are in `Screen/AVConference/System/` (≤ 100 lines a file, le
 BAGUETTE_PHONE_SCREEN=avconference baguette serve     # or stream, record, screenshot
 ```
 
-Anything else, or nothing, is `rtp`. When AVConference can't start the stream, the phone shows screenshots. **Known issue:** while the screen scrolls, `avconference` shows some frames scaled rather than cropped (the stream's padding as a strip at the right and bottom); `rtp` doesn't — the reason the default stayed `rtp`. The route is read when baguette starts, for every phone it streams.
+Anything else, or nothing, is `rtp`. A route that can't start reports why (the page shows the error, `stream` exits with it). **Known issue:** while the screen scrolls, `avconference` shows some frames scaled rather than cropped (the stream's padding as a strip at the right and bottom); `rtp` doesn't — the reason the default stayed `rtp`. The route is read when baguette starts, for every phone it streams.

@@ -8,7 +8,7 @@ import IOSurface
 /// a `LoopbackRelay`, its pictures pushed through a `DecodedPictureTap` and
 /// made BGRA by `PictureConversion` on a queue of their own (the newest
 /// waiting picture wins, so AVConference's thread is never held). Its
-/// private calls are in `System/`; the session around it is `PhoneScreen`'s.
+/// private calls are in `System/`; the session around it is `CoreDeviceScreen`'s.
 /// Measured against `RTPReceiver` in docs/features/real-devices/screen-routes.md.
 final class AVConferenceReceiver: ScreenReceiver, @unchecked Sendable {
     /// CoreDevice's screen sharing, in AVConference's negotiator.

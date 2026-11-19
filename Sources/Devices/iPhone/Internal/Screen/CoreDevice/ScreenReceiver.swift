@@ -9,7 +9,7 @@ import Mockable
 /// datagrams in, hands its reports for the phone out, and decodes, handing
 /// each picture over the moment it is decoded. Single-use: one per session.
 /// Decides nothing about the session — reaching the phone, where datagrams
-/// go, when to give up for screenshots — which is `PhoneScreen`'s.
+/// go, when the session ends — which is `CoreDeviceScreen`'s.
 ///
 /// Two play it: `RTPReceiver` (baguette's own, H.264) and
 /// `AVConferenceReceiver` (Apple's, in-process, HEVC); `PhoneScreenRoute`

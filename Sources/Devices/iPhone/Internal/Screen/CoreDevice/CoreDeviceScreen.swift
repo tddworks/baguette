@@ -2,26 +2,29 @@ import BaguetteDevice
 import Foundation
 import IOSurface
 
-/// A physical phone's live screen, one session from start to stop, each of
-/// its rules owned here once:
+/// A physical phone's live screen through CoreDevice — beside
+/// `DevicectlScreen`, its stills through devicectl; the phone registers one
+/// of the two, by whether this Mac has CoreDevice. One session from start to
+/// stop, each of its rules owned here once:
 ///
 /// 1. reach the phone — its tunnel brought up (`Tunnel`);
-/// 2. ask it for its screen — the receiver's offer through CoreDevice
-///    (`MediaStreamStarter`), CoreDevice's answer back to the receiver;
+/// 2. ask it for its screen — the receiver's offer through CoreDevice's
+///    media stream (`MediaStreamStarter`), CoreDevice's answer back to it;
 /// 3. carry the datagrams — the phone's into the receiver, the receiver's
 ///    reports back to where the phone streams from (`DatagramSocket`);
 /// 4. hand each picture on as the receiver decodes it, cropped to the
 ///    phone's screen;
-/// 5. fall back to `fallback` (screenshots) when the stream can't start or
-///    shows nothing within eight seconds; say goodbye when it stops.
+/// 5. end — on `stop`, or when no picture comes within eight seconds —
+///    with a goodbye to the phone.
 ///
-/// Who turns the stream into pictures is the `ScreenReceiver`
-/// (`RTPReceiver` or `AVConferenceReceiver`, as `PhoneScreenRoute` says).
-/// Research: docs/features/real-devices/design.md and screen-routes.md.
-final class PhoneScreen: Screen, @unchecked Sendable {
+/// A start that fails throws, so the failure is seen rather than hidden
+/// behind stills. Who turns the stream into pictures is the
+/// `ScreenReceiver` (`RTPReceiver` or `AVConferenceReceiver`, as
+/// `PhoneScreenRoute` says). Research: docs/features/real-devices/design.md
+/// and screen-routes.md.
+final class CoreDeviceScreen: Screen, @unchecked Sendable {
     private let identifier: UUID
     private let devicectl: Devicectl
-    private let fallback: any Screen
     private let tunnel: any Tunnel
     private let starter: any MediaStreamStarter
     private let openSocket: @Sendable () throws -> any DatagramSocket
@@ -34,14 +37,12 @@ final class PhoneScreen: Screen, @unchecked Sendable {
     private var socket: (any DatagramSocket)?
     private var receiver: (any ScreenReceiver)?
     private var session: MediaStreamSession?
-    private var usingFallback = false
     private var packets = 0
     private var pictures = 0
     private var shownAny = false
 
     init(identifier: UUID,
          devicectl: Devicectl = Devicectl(),
-         fallback: any Screen,
          tunnel: any Tunnel = CoreDeviceTunnel(),
          starter: any MediaStreamStarter = CoreDeviceMediaStream(),
          openSocket: @escaping @Sendable () throws -> any DatagramSocket = { try UDPSocket() },
@@ -50,7 +51,6 @@ final class PhoneScreen: Screen, @unchecked Sendable {
          pace: @escaping @Sendable () -> Void = { Thread.sleep(forTimeInterval: 0.05) }) {
         self.identifier = identifier
         self.devicectl = devicectl
-        self.fallback = fallback
         self.tunnel = tunnel
         self.starter = starter
         self.openSocket = openSocket
@@ -59,28 +59,22 @@ final class PhoneScreen: Screen, @unchecked Sendable {
         self.pace = pace
     }
 
+    /// Starts the session, or throws why it couldn't; pictures then come
+    /// to `onFrame` as they are decoded.
     func start(onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         lock.withLock { running = true }
-        Thread.detachNewThread { [self] in
-            do {
-                try stream(onFrame)
-            } catch {
-                endSession()
-                guard isRunning else { return }
-                log("[coredevice] live screen unavailable (\(error)); showing screenshots")
-                lock.withLock { usingFallback = true }
-                try? fallback.start(onFrame: onFrame)
-            }
+        do {
+            try begin(onFrame)
+        } catch {
+            endSession()
+            throw error
         }
+        Thread.detachNewThread { [self] in watch() }
     }
 
     func stop() {
-        let fellBack = lock.withLock {
-            running = false
-            return usingFallback
-        }
+        lock.withLock { running = false }
         endSession()
-        if fellBack { fallback.stop() }
     }
 
     private var isRunning: Bool { lock.withLock { running } }
@@ -102,7 +96,7 @@ final class PhoneScreen: Screen, @unchecked Sendable {
 
     // MARK: - The stream
 
-    private func stream(_ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
+    private func begin(_ onFrame: @escaping @Sendable (IOSurface) -> Void) throws {
         let ends = try tunnel.open(to: identifier)
         let socket = try openSocket()
         let receiver = try makeReceiver()
@@ -127,7 +121,6 @@ final class PhoneScreen: Screen, @unchecked Sendable {
         }
 
         relay(socket: socket, receiver: receiver, session: session)
-        try watch()
     }
 
     /// The phone's datagrams to the receiver, and its reports back to the phone.
@@ -147,14 +140,16 @@ final class PhoneScreen: Screen, @unchecked Sendable {
         }
     }
 
-    /// While the stream runs: none of its pictures within eight seconds
-    /// gives up for the screenshots; every five, what came is logged.
-    private func watch() throws {
+    /// While the stream runs: every five seconds, what came is logged; no
+    /// picture within the first eight ends the session.
+    private func watch() {
         let opened = now()
         var since = opened
         while isStreaming {
             if !lock.withLock({ shownAny }), now().timeIntervalSince(opened) > 8 {
-                throw StreamError.silent
+                log("[coredevice] the phone sent no picture within eight seconds; live screen ended")
+                endSession()
+                return
             }
             if now().timeIntervalSince(since) >= 5 {
                 let (packets, pictures) = lock.withLock {
@@ -169,6 +164,6 @@ final class PhoneScreen: Screen, @unchecked Sendable {
     }
 
     enum StreamError: Error {
-        case notListed, unexpectedAnswer, silent
+        case notListed, unexpectedAnswer
     }
 }

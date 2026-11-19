@@ -44,7 +44,7 @@ final class RTPReceiver: ScreenReceiver, @unchecked Sendable {
 
     /// The two sources in CoreDevice's answer: the phone's, and ours as its receiver.
     func accept(_ answer: [String: Any]) throws {
-        guard let session = MediaStreamSession(answer: answer) else { throw PhoneScreen.StreamError.unexpectedAnswer }
+        guard let session = MediaStreamSession(answer: answer) else { throw CoreDeviceScreen.StreamError.unexpectedAnswer }
         lock.withLock { feedback = ReceiverFeedback(reporter: session.ourSource, source: session.phoneSource) }
     }
 

@@ -116,7 +116,7 @@ struct RTPReceiverTests {
     @Test func `should refuse an answer that doesn't say where the stream comes from`() {
         let receiver = RTPReceiver(makeDecoder: { MockStreamDecoder() }, pause: {})
 
-        #expect(throws: PhoneScreen.StreamError.unexpectedAnswer) { try receiver.accept([:]) }
+        #expect(throws: CoreDeviceScreen.StreamError.unexpectedAnswer) { try receiver.accept([:]) }
     }
 
     @Test func `should stop its decoder when stopped`() throws {

@@ -5,12 +5,12 @@ import Testing
 @testable import Baguette
 @testable import BaguetteDevice
 
-/// A phone's live screen, whichever receiver turns its stream into pictures:
-/// with the tunnel, CoreDevice, the socket, the receiver and the screenshots
-/// stood in for — what the phone is asked, which datagrams go where, which
-/// pictures go on, and when it falls back to screenshots.
-@Suite("PhoneScreen")
-struct PhoneScreenTests {
+/// A phone's live screen through CoreDevice, whichever receiver turns its
+/// stream into pictures: with the tunnel, CoreDevice, the socket and the
+/// receiver stood in for — what the phone is asked, which datagrams go where,
+/// which pictures go on, and when it refuses to start or ends.
+@Suite("CoreDeviceScreen")
+struct CoreDeviceScreenTests {
     private static let offer = Data([0x62, 0x70, 0x6C, 0x69])
     private static let negotiated = Data([7, 7, 7])
     nonisolated(unsafe) private static let answer: [String: Any] = [
@@ -49,9 +49,7 @@ struct PhoneScreenTests {
         let starter = MockMediaStreamStarter()
         let socket = MockDatagramSocket()
         let receiver = MockScreenReceiver()
-        let fallback = MockScreen()
         let devicectl = PhoneJSON.devicectl(listings: [PhoneJSON.listing(tunnelAddress: PhoneJSON.tunnel)])
-        let fellBack = Signal()
         let delivered = Signal()
         let reported = Signal()
         let pictured = Signal()
@@ -75,7 +73,7 @@ struct PhoneScreenTests {
         var frames: Int { lock.withLock { _frames } }
 
         init(inbound: [Data] = [], reports: [Data] = [], pictures: Int = 0,
-             answer: [String: Any] = PhoneScreenTests.answer, receiverStarts: Bool = true) {
+             answer: [String: Any] = CoreDeviceScreenTests.answer, receiverStarts: Bool = true) {
             self.inbound = inbound
             self.reports = reports
             self.pictures = pictures
@@ -93,14 +91,14 @@ struct PhoneScreenTests {
             }
             given(socket).send(.any, to: .any, port: .any).willProduce { [self] _, _, _ in reported.fire() }
             given(socket).close().willReturn()
-            given(receiver).offer().willReturn(PhoneScreenTests.offer)
+            given(receiver).offer().willReturn(CoreDeviceScreenTests.offer)
             given(receiver).accept(.any).willProduce { [self] answer in
                 lock.withLock { _steps.append("accept"); _accepted = answer["negotiatorAnswer"] as? String }
             }
             given(receiver).start(croppedTo: .any, onPicture: .any).willProduce { [self] _, onPicture in
                 lock.withLock { _steps.append("start receiving"); _onPicture = onPicture }
                 guard receiverStarts else { throw TunnelError.down }
-                for _ in 0..<pictures { onPicture(PhoneScreenTests.surface()) }
+                for _ in 0..<pictures { onPicture(CoreDeviceScreenTests.surface()) }
             }
             given(receiver).receive(.any).willProduce { [self] _ in delivered.fire() }
             given(receiver).nextReport().willProduce { [self] in
@@ -109,15 +107,13 @@ struct PhoneScreenTests {
                 return next
             }
             given(receiver).stop().willProduce { [self] in stopped.fire() }
-            given(fallback).start(onFrame: .any).willProduce { [self] _ in fellBack.fire() }
-            given(fallback).stop().willReturn()
         }
 
-        func screen(clock: Clock = Clock(step: 0.001)) -> PhoneScreen {
+        func screen(clock: Clock = Clock(step: 0.001)) -> CoreDeviceScreen {
             let (socket, receiver) = (socket, receiver)
-            return PhoneScreen(
+            return CoreDeviceScreen(
                 identifier: PhoneJSON.identifier, devicectl: Devicectl(makeSubprocess: devicectl.make),
-                fallback: fallback, tunnel: tunnel, starter: starter,
+                tunnel: tunnel, starter: starter,
                 openSocket: { socket }, makeReceiver: { receiver }, now: clock.read, pace: {})
         }
 
@@ -222,39 +218,34 @@ struct PhoneScreenTests {
 
         #expect(rig.stopped.wait())
         verify(rig.socket).close().called(.moreOrEqual(to: 1))
-        verify(rig.fallback).stop().called(0)
     }
 
-    @Test func `should show screenshots when the receiver can't start`() throws {
+    @Test func `should refuse to start when the receiver can't start`() throws {
         let rig = Rig(receiverStarts: false)
         let screen = rig.screen()
 
-        try screen.start { rig.onFrame($0) }
+        #expect(throws: TunnelError.down) { try screen.start { rig.onFrame($0) } }
 
-        #expect(rig.fellBack.wait())
-        screen.stop()
-        verify(rig.fallback).stop().called(1)
+        verify(rig.socket).close().called(.moreOrEqual(to: 1))
     }
 
-    @Test func `should show screenshots when CoreDevice's answer doesn't say where the stream comes from`() throws {
+    @Test func `should refuse to start when CoreDevice's answer doesn't say where the stream comes from`() throws {
         let rig = Rig(answer: ["negotiatorAnswer": Self.negotiated.base64EncodedString()])
         let screen = rig.screen()
 
-        try screen.start { rig.onFrame($0) }
+        #expect(throws: CoreDeviceScreen.StreamError.unexpectedAnswer) { try screen.start { rig.onFrame($0) } }
 
-        #expect(rig.fellBack.wait())
-        screen.stop()
         verify(rig.receiver).start(croppedTo: .any, onPicture: .any).called(0)
     }
 
-    @Test func `should show screenshots when no picture arrives within eight seconds`() throws {
+    @Test func `should end the session when no picture arrives within eight seconds`() throws {
         let rig = Rig()
         let screen = rig.screen(clock: Clock(step: 1))
 
         try screen.start { rig.onFrame($0) }
 
-        #expect(rig.fellBack.wait())
-        screen.stop()
+        #expect(rig.stopped.wait())
+        verify(rig.socket).close().called(.moreOrEqual(to: 1))
         #expect(rig.frames == 0)
     }
 }

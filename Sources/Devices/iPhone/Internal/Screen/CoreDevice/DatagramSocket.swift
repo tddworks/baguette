@@ -3,7 +3,7 @@ import Mockable
 
 /// The UDP socket a phone's live screen arrives on, and its RTCP goes back
 /// through. Decides nothing — which datagrams are pictures and what to
-/// answer is the `ScreenReceiver`'s, and where they go is `PhoneScreen`'s. The real one is `UDPSocket`.
+/// answer is the `ScreenReceiver`'s, and where they go is `CoreDeviceScreen`'s. The real one is `UDPSocket`.
 @Mockable
 protocol DatagramSocket: AnyObject, Sendable {
     /// The port it receives on.

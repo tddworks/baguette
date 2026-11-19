@@ -32,8 +32,10 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
 }
 
 /// A real phone as a `Device`. The one place deciding what the CoreDevice
-/// family can do: its screen and pasteboard through devicectl, and touches
-/// through CoreDevice's Universal HID service. Not orientation: devicectl's
+/// family can do: its screen live through CoreDevice (`CoreDeviceScreen`) —
+/// or as stills through devicectl (`DevicectlScreen`) on a Mac without
+/// CoreDevice — its pasteboard through devicectl, and touches through
+/// CoreDevice's Universal HID service. Not orientation: devicectl's
 /// `orientation set` exits 0 on a phone and leaves it as its sensors hold it.
 /// Apps and location wait on verbs devicectl lacks (a push, a route).
 struct CoreDevicePhone: Device {
@@ -62,14 +64,12 @@ struct CoreDevicePhone: Device {
         // One tunnel for every service reached through it.
         let tunnel = CoreDeviceTunnel(devicectl: devicectl)
         if let identifier = phone.coreDeviceIdentifier, CoreDeviceFramework.isAvailable {
-            // The phone's own stream, turned into pictures by the receiver
-            // `PhoneScreenRoute` picks; the devicectl screenshots stand in
-            // when it can't start.
+            // Live through CoreDevice, turned into pictures by the receiver
+            // `PhoneScreenRoute` picks; without CoreDevice, stills.
             let route = screenRoute
             abilities.register(.screen) {
-                PhoneScreen(identifier: identifier, devicectl: devicectl,
-                            fallback: DevicectlScreen(udid: udid, devicectl: devicectl), tunnel: tunnel,
-                            makeReceiver: { try route.receiver() })
+                CoreDeviceScreen(identifier: identifier, devicectl: devicectl, tunnel: tunnel,
+                                 makeReceiver: { try route.receiver() })
             }
         } else {
             abilities.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }
