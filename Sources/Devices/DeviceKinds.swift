@@ -10,9 +10,11 @@ struct DeviceKinds {
     let simulators: any Simulators
     var companions: (any Devices)? = nil
     var phones: any Devices = CoreDevicePhones()
+    var androids: any Devices = AndroidDevices()
 
-    /// Simulators, then companion phones, then phones on a cable.
+    /// Simulators, then companion phones, then phones on a cable, then
+    /// Android emulators and phones.
     var devices: any Devices {
-        CombinedDevices([SimulatorDevices(simulators)] + (companions.map { [$0] } ?? []) + [phones])
+        CombinedDevices([SimulatorDevices(simulators)] + (companions.map { [$0] } ?? []) + [phones, androids])
     }
 }

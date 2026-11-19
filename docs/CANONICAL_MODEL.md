@@ -63,7 +63,7 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
                                             parse(dict); execute(on:) its role, refused by name without it
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
                                             CoreDevicePhones (screen, touch, accessibility, pasteboard) ·
-                                            AndroidEmulators (later)
+                                            AndroidDevices (listed through adb; no abilities yet)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
 └── Simulator  ◆                            ONE SIMULATOR — udid, name, state, runtime, device type;

@@ -1,6 +1,6 @@
 # Android: design
 
-> Status: **proposed**, 2026-11-19. Not built; three decisions are open ([Open decisions](#open-decisions)). The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
+> Status: **slice 1 built** (listing), 2026-11-19; screen and input wait on the transport decision ([Open decisions](#open-decisions)). The family plan it follows: [devices/solid.md §5](../devices/solid.md#5--adding-android-under-this-design).
 
 ## Question
 
@@ -69,7 +69,7 @@ Under A, the session is conversational I/O: one `@Mockable` collaborator named f
 
 One PR each, test-first:
 
-1. **List and power.** `AndroidDevices` in `DeviceKinds`; `baguette list` shows emulators and phones; emulators boot and shut down.
+1. **List** — built. `AndroidDevices` in `DeviceKinds`; `baguette list` shows emulators and phones from `adb devices -l` (`AdbListing`), adb found by `AdbLocation`. No abilities yet. Power (boot and shut down an emulator) moves to slice 2: booting needs the `emulator` binary, not installed here.
 2. **Screen and input.** The transport; `Navigation.back`; the page streams and touches an Android device.
 3. **The rest.** Accessibility, apps, orientation, location, pasteboard, logs.
 
@@ -77,7 +77,7 @@ One PR each, test-first:
 
 1. **Transport** — scrcpy's server (A) or adb only (B). Recommended: A.
 2. **Scope** — emulators and phones (the same adb path; power only for emulators), or emulators first. Recommended: both.
-3. **Tooling on the development Mac** — none is installed (no `adb`, emulator or AVD as of 2026-11-19). Until there is one, slices are built test-first against captured fixtures, with no end-to-end check.
+3. **Tooling on the development Mac** — `adb` 37.0.1 (Homebrew's `android-platform-tools`) since 2026-11-19; no emulator or AVD, and no device attached yet, so the listing is checked against `adb`'s output format, not a live device.
 
 ## Risks
 

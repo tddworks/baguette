@@ -14,6 +14,7 @@ For releases prior to this changelog, see the
 - A phone's live screen that can't start now says why (on the page, or from `stream`) instead of quietly showing screenshots; a Mac without CoreDevice still shows screenshots. → [docs](docs/features/real-devices/screen-routes.md)
 
 ### Added
+- `baguette list` and the serve page show Android emulators and phones `adb` is attached to, by their adb serial; nothing more can be done with them yet. → [docs](docs/features/android/design.md)
 - `BAGUETTE_PHONE_SCREEN=avconference` has AVConference receive and decode a phone's live screen (HEVC) in baguette's own process, at the same CPU as baguette's own receiver, still the default. → [docs](docs/features/real-devices/screen-routes.md)
 
 ### Fixed
