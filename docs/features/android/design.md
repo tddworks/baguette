@@ -80,7 +80,7 @@ A role is registered only when the family performs all of it ([solid.md §4, L](
 | Role | Through | Why |
 |---|---|---|
 | `Power` | `emulator -avd <name> -no-window -no-audio`, detached · `adb emu kill` | headless, like `baguette boot`; outlives baguette |
-| `Screen` | the control API's `streamScreenshot` (RGBA → BGRA surfaces) | pushed on each change |
+| `Screen` | the control API's `streamScreenshot` (RGBA → BGRA surfaces) | pushed on each change; 1080 × 2400 is 10 MB a picture, so the connection opens with a 16 MB window (the 64 KB default held it to 23 fps) and vImage swaps the channels (a Swift byte loop took 206 ms a picture in a debug build, 4 fps): ~45 fps measured |
 | `Touch` · `Scroll` | the control API's `sendTouch`; a scroll is a finger drag | real multi-touch; a phone-shaped AVD has no mouse, so `injectWheel` (it exists) reaches nothing |
 | `Press` · `Key` | `adb shell input keyevent` / `keycombination`, by Android key codes | an AVD booted with `hw.keyboard=no` (phone profiles' default) drops the control API's key events; adb reaches every device |
 | `Typing` | `adb shell input text`, the whole string (space as `%s`, the shell's characters escaped) | one command instead of a keystroke a character; an iOS simulator types by keystrokes (`KeystrokeTyping`) |

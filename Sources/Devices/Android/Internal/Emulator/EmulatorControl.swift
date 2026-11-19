@@ -1,3 +1,4 @@
+import Accelerate
 import Foundation
 import IOSurface
 
@@ -65,19 +66,14 @@ enum EmulatorControl {
             else { return nil }
             surface.lock(options: [], seed: nil)
             defer { surface.unlock(options: [], seed: nil) }
-            let rowStride = surface.bytesPerRow
-            let out = surface.baseAddress.assumingMemoryBound(to: UInt8.self)
+            // RGBA → BGRA in one vectorized pass, straight into the surface.
             pixels.withUnsafeBytes { raw in
-                let rgba = raw.bindMemory(to: UInt8.self)
-                for row in 0..<height {
-                    for column in 0..<width {
-                        let from = row * bytesPerRow + column * 4, to = row * rowStride + column * 4
-                        out[to] = rgba[from + 2]
-                        out[to + 1] = rgba[from + 1]
-                        out[to + 2] = rgba[from]
-                        out[to + 3] = rgba[from + 3]
-                    }
-                }
+                var from = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: raw.baseAddress!),
+                                         height: vImagePixelCount(height), width: vImagePixelCount(width),
+                                         rowBytes: bytesPerRow)
+                var to = vImage_Buffer(data: surface.baseAddress, height: vImagePixelCount(height),
+                                       width: vImagePixelCount(width), rowBytes: surface.bytesPerRow)
+                _ = vImagePermuteChannels_ARGB8888(&from, &to, [2, 1, 0, 3], vImage_Flags(kvImageNoFlags))
             }
             return surface
         }

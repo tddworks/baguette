@@ -12,8 +12,11 @@ struct GRPCCallTests {
         Data([0x00, UInt8(name.utf8.count)]) + Data(name.utf8) + Data([UInt8(value.utf8.count)]) + Data(value.utf8)
     }
 
-    @Test func `should open the connection with HTTP/2's preface and empty settings`() {
-        #expect(GRPCCall.opening == Data("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".utf8) + Data([0, 0, 0, 4, 0, 0, 0, 0, 0]))
+    @Test func `should let the emulator send a whole picture before it waits for a window update`() {
+        let settings = GRPCFrame.bytes(kind: 4, flags: 0, stream: 0, Data([0x00, 0x04, 0x01, 0x00, 0x00, 0x00]))
+        let connectionWindow = GRPCFrame.bytes(kind: 8, flags: 0, stream: 0, Data([0x00, 0xFF, 0x00, 0x00]))
+
+        #expect(GRPCCall.opening == Data("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".utf8) + settings + connectionWindow)
     }
 
     @Test func `should name the call, its content type and the token in its headers`() {

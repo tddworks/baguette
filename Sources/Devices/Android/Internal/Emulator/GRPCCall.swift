@@ -6,8 +6,12 @@ import Foundation
 /// DATA frame that ends the stream. Each call is a stream of its own (odd
 /// ids, rising) on one connection. Measured: docs/features/android/design.md.
 struct GRPCCall: Sendable {
-    /// HTTP/2's connection preface and an empty SETTINGS frame.
-    static let opening = Data("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".utf8) + GRPCFrame.bytes(kind: 4, flags: 0, stream: 0, Data())
+    /// HTTP/2's connection preface, then a 16 MB window — per stream in its
+    /// SETTINGS, for the connection in a WINDOW_UPDATE — so a whole picture
+    /// (10 MB of RGBA) arrives without waiting on 160 window updates.
+    static let opening = Data("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".utf8)
+        + GRPCFrame.bytes(kind: 4, flags: 0, stream: 0, Data([0x00, 0x04, 0x01, 0x00, 0x00, 0x00]))
+        + GRPCFrame.bytes(kind: 8, flags: 0, stream: 0, Data([0x00, 0xFF, 0x00, 0x00]))
 
     let bytes: Data
 
