@@ -108,26 +108,40 @@ struct CoreDeviceListingTests {
 struct CoreDeviceAnswerTests {
     private struct Refused: Error, Equatable {}
 
-    @Test func `should hand back CoreDevice's answer when it comes in time`() throws {
-        let answer = try CoreDeviceAnswer.wait(upTo: 60, for: "opening") { 42 }
+    @Test func `should hand back CoreDevice's answer when it comes in time`() async throws {
+        let answer = try await Self.offThePool { try CoreDeviceAnswer.wait(upTo: 60, for: "opening") { 42 } }
 
         #expect(answer == 42)
     }
 
-    @Test func `should pass on what CoreDevice failed with`() {
-        #expect(throws: Refused()) {
-            try CoreDeviceAnswer.wait(upTo: 60, for: "opening") { () async throws -> Int in throw Refused() }
+    @Test func `should pass on what CoreDevice failed with`() async {
+        await #expect(throws: Refused()) {
+            try await Self.offThePool {
+                try CoreDeviceAnswer.wait(upTo: 60, for: "opening") { () async throws -> Int in throw Refused() }
+            }
         }
     }
 
-    @Test func `should give up on CoreDevice when it doesn't answer in time`() {
-        #expect {
-            try CoreDeviceAnswer.wait(upTo: 0.05, for: "opening") { () async throws -> Int in
-                try await Task.sleep(for: .seconds(2))
-                return 1
+    @Test func `should give up on CoreDevice when it doesn't answer in time`() async {
+        await #expect {
+            try await Self.offThePool {
+                try CoreDeviceAnswer.wait(upTo: 0.05, for: "opening") { () async throws -> Int in
+                    try await Task.sleep(for: .seconds(2))
+                    return 1
+                }
             }
         } throws: { error in
             (error as? CoreDeviceError)?.description == CoreDeviceError.noAnswer("opening").description
+        }
+    }
+
+    /// `wait` blocks its thread on a semaphore until a detached task answers,
+    /// as its callers do from a plain thread. Blocking a cooperative-pool
+    /// thread instead starves the pool on a two-core CI runner: the task that
+    /// would answer never gets a thread, and every other async suite stalls.
+    private static func offThePool<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            Thread { continuation.resume(with: Result { try body() }) }.start()
         }
     }
 }
