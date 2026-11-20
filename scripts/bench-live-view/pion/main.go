@@ -336,8 +336,8 @@ func (v *viewer) readFeedback(sender *webrtc.RTPSender) {
 	}
 }
 
-// Pion's target, applied as baguette's viewer applies its own: at most once a
-// second, and only when it moves by more than 10 %.
+// The reference applies Pion's target at most once a second, on a change
+// of more than 10 %.
 func (v *viewer) followEstimate() {
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()

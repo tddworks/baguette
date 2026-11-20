@@ -203,7 +203,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a running device's input is made once and kept for every gesture posted to it, and made afresh once the device has been seen not running | `DeviceInputs` |
 | a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
 | with no congestion control, nothing retunes the encoder: it stays where it started or where `set_bitrate` put it | `FixedBitrate` |
-| a viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
+| a viewer retunes its encoder when the target moves by more than 10%. A decrease applies immediately. An increase waits at least a second after the last retune | `EncoderRetune` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |

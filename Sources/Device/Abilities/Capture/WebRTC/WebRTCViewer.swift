@@ -235,8 +235,13 @@ public final class WebRTCViewer: @unchecked Sendable {
             stream.requestKeyframe()
         }
         if let retuneTo {
-            log("[webrtc] retune \(stream.config.bitrateBps / 1_000) → \(retuneTo / 1_000) kbps")
-            try? stream.update(.bitrate(retuneTo))
+            let from = stream.config.bitrateBps
+            do {
+                try stream.update(.bitrate(retuneTo))
+                log("[webrtc] retune \(from / 1_000) → \(retuneTo / 1_000) kbps at +\(microsecondsNow() / 1_000) ms")
+            } catch {
+                log("[webrtc] retune to \(retuneTo / 1_000) kbps failed: \(error)")
+            }
         }
     }
 
@@ -292,7 +297,7 @@ public final class WebRTCViewer: @unchecked Sendable {
         // at then: what the bench needs to tell the pacer's delay from the link's.
         if pacer.lastWait > 50_000, lastHoldLog.map({ now - $0 >= 250_000 }) ?? true {
             lastHoldLog = now
-            log("[webrtc] pacer held a packet \(pacer.lastWait / 1_000) ms, pacing for \(pacer.bitrate / 1_000) kbps")
+            log("[webrtc] pacer held a packet \(pacer.lastWait / 1_000) ms, pacing for \(pacer.bitrate / 1_000) kbps at +\(now / 1_000) ms")
         }
         for packet in released {
             let stamped = RTPPacket(

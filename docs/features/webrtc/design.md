@@ -244,7 +244,7 @@ ontrack: receiver.jitterBufferTarget = 0, playoutDelayHint = 0 → <video autopl
 | 8 | A STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
 | 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
-| 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
+| 12 | A viewer retunes its encoder on a move of more than 10%. Drops apply immediately. Increases wait at least one second after the last retune | `EncoderRetune` |
 | 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
 | 17 | With pacing on, a viewer's packets leave at 2.5 × its target as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once. `?pacing=off` sends each as it comes | `Pacer` |
 | 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
@@ -297,8 +297,8 @@ pacer, one difference only; and **WebRTC (Pion)**, a reference: the same
 [Pion](https://github.com/pion/webrtc) with its Google Congestion Control and
 leaky-bucket pacer (`scripts/bench-live-view/pion/`, built by `start.sh` when
 Go is installed). Pion's target retunes the encoder through the stream's
-stdin with our viewer's rule (at most once a second, only on a change over
-10 %); a PLI or FIR asks for a keyframe. Same screen, encoder and page, but
+stdin at most once a second, on a change over 10 %. A PLI or FIR asks for a
+keyframe. Same screen, encoder and page, but
 Pion's whole send path differs (pacer, estimator, packetization), so a gap
 says *that* the senders differ, not which part — and close results don't
 show the encoder is the limit unless a run also shows neither estimate held
@@ -726,8 +726,12 @@ this doc.
       once, the half-second window reads it as >20 % over the cap, the cap
       lifts and the target jumps back.
 
-    Next: retune down at once (the once-a-second limit only for increases),
-    and lift the cap only on arrival sustained over a longer window.
+    The native sender now applies decreases without the cooldown (law 12).
+    Successful retunes and pacer waits carry elapsed times from the same
+    viewer clock. To measure this change, compare builds with the pacer on and
+    a single input path per run. The bench rejects a native tap run if its
+    input socket closes. A separate experiment can test lifting the cap only
+    after sustained arrivals.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative

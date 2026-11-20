@@ -54,7 +54,7 @@ socket carries what the stream socket carries from its page — gestures
 
 Each viewer has its own H.264 encoder, starting at the stream socket's defaults
 (60 fps, 8 Mbps, full scale). Its bitrate then follows the link, retuned between
-300 kbps and 8 Mbps at most once a second, by one of three methods:
+300 kbps and 8 Mbps by one of three methods:
 
 | `congestion=` | Who estimates the bandwidth |
 |---|---|
@@ -69,7 +69,7 @@ in desktop Chrome drops to 300 kbps until the screen moves (the browser's estima
 follows what arrives); `transport-cc` doesn't. The server log shows each change:
 
 ```
-[baguette] [webrtc] retune 8000 → 1700 kbps
+[baguette] [webrtc] retune 8000 → 1700 kbps at +6430 ms
 ```
 
 Reading a stall in the log: each cut of the bitrate says why, the queue it
@@ -87,8 +87,8 @@ Each viewer's packets are paced: a keyframe leaves over a few milliseconds at
 takes without stalling. `?pacing=off` on the `POST` sends every packet at once —
 only to measure what pacing buys (the bench's "no pacer" column).
 
-A `set_bitrate` on the control socket still applies at once; the estimate then
-retunes again within about a second if it disagrees.
+A `set_bitrate` on the control socket applies at once. Later feedback can retune
+the encoder again according to [the retuning rule](design.md#4--invariants-each-law-one-owner).
 
 ## Gotchas
 
