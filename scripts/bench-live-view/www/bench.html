@@ -11,7 +11,10 @@ pre{white-space:pre-wrap}</style></head>
 // ?transport=ws|webrtc&udid=&taps=100[&mode=bw&secs=30] — serve and WHEP are reached through this page's origin (proxy.mjs)
 const q = new URLSearchParams(location.search);
 const T = q.get('transport') || 'ws', UDID = q.get('udid'), TAPS = +(q.get('taps') || 100);
-const SERVE = q.get('serve') || location.origin + '/api', WHEP = q.get('whep') || location.origin + '/whep';
+// WebRTC runs use baguette's own WHEP route; `whep=/whep` measures the MediaMTX spike instead.
+const SERVE = q.get('serve') || location.origin + '/api';
+const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep';
+const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
 document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
 const logEl = document.getElementById('log'); const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log('[bench]', ...a); };
@@ -87,9 +90,11 @@ async function startWebRTC() {
   let sdp = (await res.text()).replace(/a=rtcp-fb:\d+ goog-remb\r?\n/g, '');
   if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
   await pc.setRemoteDescription({ type: 'answer', sdp });
+  const viewer = res.headers.get('Location');
   const onFrame = (now, meta) => { presented(now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
   vid.requestVideoFrameCallback(onFrame);
-  R.pc = pc; R.stop = () => pc.close();
+  // Hang the viewer up at the end, rather than leave it to the 30 s consent timeout.
+  R.pc = pc; R.stop = () => { pc.close(); if (viewer && !SPIKE) fetch('/api' + viewer, { method: 'DELETE' }); };
 }
 
 // --- the probe: tap the fixture's centre, time until the centre turns white
@@ -115,8 +120,8 @@ async function bw(secs) {
 }
 async function run() {
   // One encoder per run: the WHEP source runs only for WebRTC.
-  await fetch('bridge/' + (T === 'ws' ? 'off' : 'on'), { method: 'POST' });
-  if (T !== 'ws') { log('starting the WHEP source…'); await new Promise(r => setTimeout(r, 5000)); }
+  await fetch('bridge/' + (T === 'webrtc' && SPIKE ? 'on' : 'off'), { method: 'POST' });
+  if (T === 'webrtc' && SPIKE) { log('starting the spike\'s WHEP source…'); await new Promise(r => setTimeout(r, 5000)); }
   T === 'ws' ? startWS() : await startWebRTC();
   while (R.firstFrame === null) await new Promise(r => setTimeout(r, 50));
   if (q.get('mode') === 'bw') return bw(+(q.get('secs') || 30));

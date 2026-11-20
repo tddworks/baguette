@@ -1,11 +1,9 @@
 // One origin for the live-view bench, in front of baguette serve:
-//   /bench/*            the bench pages (www/), and POST /bench/bridge/on|off, which starts or stops the WHEP
-//                       source (baguette stream → ffmpeg → MediaMTX) so only one encoder runs per bench run
-//   /whep               → MediaMTX's WHEP endpoint
+//   /bench/*            the bench pages (www/), and POST /bench/bridge/on|off, which starts or stops the spike's
+//                       WHEP source (baguette stream → ffmpeg → MediaMTX), used only when a bench run asks for it
+//   /whep               → MediaMTX's WHEP endpoint (the spike; baguette's own is /devices/:udid/whep)
 //   /api/*              → baguette serve, prefix stripped (the bench pages' route)
-//   everything else     → baguette serve unchanged, WebSocket included: its own page, touch, scroll, toolbar.
-//                       Add ?transport=webrtc to a /devices/<udid> page and the proxy injects whep-overlay.js,
-//                       which shows the WHEP video over the stream canvas; input still rides the page's socket.
+//   everything else     → baguette serve unchanged, WebSocket included: its own page, with its WebRTC choice.
 //   node proxy.mjs --bridge <bridge.sh> [--listen <addr>]
 // Plain http on :8777, loopback only unless --listen. baguette serve stays on loopback; the proxy rewrites
 // Host/Origin to serve's own loopback address so serve's origin check passes.
@@ -20,7 +18,6 @@ const SERVE = { host: '127.0.0.1', port: 8421 };
 const WHEP = { host: '127.0.0.1', port: 8889, path: '/sim/whep' };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const LOOPBACK = `http://${SERVE.host}:${SERVE.port}`;
-const OVERLAY = '<script src="/bench/whep-overlay.js"></script>';
 
 // --- the WHEP source runs only while something needs it
 const BRIDGE = process.argv[process.argv.indexOf('--bridge') + 1];
@@ -44,20 +41,11 @@ function upstreamHeaders(req, target) {
   return headers;
 }
 
-function forward(req, res, target, targetPath, inject = false) {
+function forward(req, res, target, targetPath) {
   const headers = upstreamHeaders(req, target);
-  if (inject) delete headers['accept-encoding'];   // the page is rewritten, so take it uncompressed
   const up = http.request({ ...target, path: targetPath, method: req.method, headers }, r => {
-    const html = inject && /text\/html/.test(r.headers['content-type'] || '');
-    if (!html) { res.writeHead(r.statusCode, r.headers); return r.pipe(res); }
-    const chunks = [];
-    r.on('data', c => chunks.push(c));
-    r.on('end', () => {
-      const body = Buffer.concat(chunks).toString('utf8').replace(/<head[^>]*>/i, m => m + OVERLAY);
-      const h = { ...r.headers, 'content-length': Buffer.byteLength(body), 'cache-control': 'no-store' };
-      delete h['transfer-encoding'];
-      res.writeHead(r.statusCode, h); res.end(body);
-    });
+    res.writeHead(r.statusCode, r.headers);
+    r.pipe(res);
   });
   up.on('error', e => { res.writeHead(502); res.end('upstream: ' + e.message); });
   req.pipe(up);
@@ -84,12 +72,9 @@ function handle(req, res) {
   if (url.pathname === '/whep' || url.pathname.startsWith('/whep/'))
     return forward(req, res, WHEP, WHEP.path + url.pathname.slice(5) + url.search);
   if (url.pathname.startsWith('/api/')) return forward(req, res, SERVE, req.url.slice(4));
-  // baguette serve's own pages. A device page with ?transport=webrtc gets the WHEP overlay;
-  // one without it doesn't need the WHEP source, so it stops (one encoder per view).
-  const devicePage = /^\/(devices|simulators)\/[^/]+\/?$/.test(url.pathname);
-  const webrtc = devicePage && url.searchParams.get('transport') === 'webrtc';
-  if (devicePage && !webrtc) bridgeOff();
-  return forward(req, res, SERVE, req.url, webrtc);
+  // baguette serve's own pages; the spike's WHEP source has no part in them (one encoder per view).
+  if (/^\/(devices|simulators)\/[^/]+\/?$/.test(url.pathname)) bridgeOff();
+  return forward(req, res, SERVE, req.url);
 }
 
 // WebSocket upgrades are spliced byte for byte to baguette serve (/api/ prefix stripped).

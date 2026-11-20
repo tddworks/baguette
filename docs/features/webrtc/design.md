@@ -244,25 +244,21 @@ scripts/bench-live-view/start.sh --tailscale  # a phone on your tailnet: http://
 scripts/bench-live-view/stop.sh
 ```
 
-It prints three URLs:
+It prints two URLs:
 
 - **`/bench/?udid=…`**, the measured runs: latency 100 taps, bandwidth 30 s and
   a 10-tap quick check, once per transport. Plus buttons that put the probe page
-  or the animated list on the simulator.
-- **`/devices/<udid>`**, `baguette serve`'s own page, unchanged: today's
-  WebSocket view.
-- **`/devices/<udid>?transport=webrtc`**, the same page with the WHEP video
-  laid over the stream canvas (`whep-overlay.js`, injected by the proxy). The
-  video ignores pointer events, so touch, scroll and the toolbar still go through
-  the page's own input and socket. That socket is held at 2 fps so it doesn't
-  compete for bandwidth. A badge shows the WebRTC state and fps. Use this pair to
-  feel the difference by hand.
+  or the animated list on the simulator. WebRTC runs use baguette's own
+  `/devices/:udid/whep`; add `whep=/whep` to a bench URL to measure the MediaMTX
+  spike instead, which the proxy then starts.
+- **`/devices/<udid>`**, `baguette serve`'s own page: switch between H.264,
+  MJPEG and WebRTC in its format picker to feel the difference by hand.
 
 One process, `proxy.mjs`, serves it all on one origin:
 
 ```
-viewer ──http :8777──▶ proxy.mjs ─┬─ /bench/*          ▶ the bench pages; /bench/bridge/on|off ▶ the WHEP source
-                                  ├─ /whep             ▶ MediaMTX :8889 (media itself: UDP :8189, direct)
+viewer ──http :8777──▶ proxy.mjs ─┬─ /bench/*          ▶ the bench pages; /bench/bridge/on|off ▶ the spike's WHEP source
+                                  ├─ /whep             ▶ MediaMTX :8889, the spike (media: UDP :8189, direct)
                                   ├─ /api/*            ▶ baguette serve, prefix stripped
                                   └─ everything else   ▶ baguette serve 127.0.0.1:8421, as is (HTTP + WebSocket)
 ```

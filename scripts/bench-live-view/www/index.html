@@ -16,8 +16,8 @@ code{color:#fc8}
 <p>Same simulator, same H.264 encoder, two transports. Run one at a time; results appear on the page when the run ends.</p>
 
 <h2>Drive it yourself · baguette serve's own page</h2>
-<div class="row"><a class="b" id="pageWS">WebSocket (today)</a><a class="b rtc" id="pageRTC">WebRTC (WHEP)</a></div>
-<p>The real device page: touch, scroll, toolbar, handheld. The WebRTC one shows the WHEP video over the stream; your touches still go through the page as usual.</p>
+<a class="b" id="page">Open the device page</a>
+<p>Touch, scroll, toolbar, handheld. Switch between H.264, MJPEG and WebRTC in its format picker to compare.</p>
 
 <h2>Screen in the simulator</h2>
 <div class="row">
@@ -40,8 +40,7 @@ code{color:#fc8}
 const udid = new URLSearchParams(location.search).get('udid') || '';
 const msg = document.getElementById('msg');
 if (!udid) msg.innerHTML = 'Missing <code>?udid=</code>: open the URL <code>start.sh</code> printed.';
-document.getElementById('pageWS').href = '/devices/' + encodeURIComponent(udid);
-document.getElementById('pageRTC').href = '/devices/' + encodeURIComponent(udid) + '?transport=webrtc';
+document.getElementById('page').href = '/devices/' + encodeURIComponent(udid);
 for (const a of document.querySelectorAll('a[data-t]'))
   a.href = 'bench.html?transport=' + a.dataset.t + '&udid=' + encodeURIComponent(udid) + '&' + a.dataset.q;
 for (const b of document.querySelectorAll('button[data-page]'))

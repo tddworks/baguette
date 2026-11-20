@@ -78,8 +78,7 @@ echo "$UDID" > $RUN/udid
 cat <<EOF
 Live-view bench running for $UDID
   bench:               $BASE/bench/?udid=$UDID
-  serve page (WS):     $BASE/devices/$UDID
-  serve page (WebRTC): $BASE/devices/$UDID?transport=webrtc
+  serve page:          $BASE/devices/$UDID   (pick H.264, MJPEG or WebRTC in its format picker)
   logs:                $RUN/
   stop:                $KIT/stop.sh
 EOF
