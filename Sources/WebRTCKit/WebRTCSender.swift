@@ -69,6 +69,14 @@ public final class WebRTCSender: @unchecked Sendable {
     /// format with our H.264: its payload type, SSRC and next sequence number.
     private let rtx: (payloadType: UInt8, ssrc: UInt32)?
     private var rtxSequence: UInt16
+    /// Full ICE (RFC 8445): the browser's own addresses, from its offer. With
+    /// any, it checks them itself — which opens its NAT toward the browser —
+    /// instead of only answering (ICE-lite); the browser still picks the pair.
+    private let remote: (ice: ICECredentials, candidates: [DatagramAddress])
+    private let tieBreaker = UInt64.random(in: 1...UInt64.max)
+    private var pendingChecks: [[UInt8]: DatagramAddress] = [:]
+    /// Each round of checks, after the first, this long after the one before.
+    private static let checkBackoff: [TimeInterval] = [0.1, 0.2, 0.4, 0.8, 1.6]
     private let packetizer = H264Packetizer()
     private var pacer: Pacer<OutboundPacket>
     /// Whether the pacer's next slice is already scheduled.
@@ -111,6 +119,7 @@ public final class WebRTCSender: @unchecked Sendable {
         self.id = id
         self.sequence = firstSequence
         self.rtx = offer.rtxPayloadType.map { ($0, rtxSSRC) }
+        self.remote = (offer.browser, offer.candidates)
         self.rtxSequence = firstRetransmissionSequence
         self.started = clock()
         self.lastCheck = started
@@ -118,8 +127,9 @@ public final class WebRTCSender: @unchecked Sendable {
         self.answer = offer.answer(
             ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc,
             rtxSSRC: offer.rtxPayloadType == nil ? nil : rtxSSRC, candidates: datagrams.addresses, reflexive: reflexive,
-            congestion: congestion.answerLines())
+            congestion: congestion.answerLines(), lite: offer.candidates.isEmpty)
         datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
+        if !remote.candidates.isEmpty { checkRound(0) }
     }
 
     public var state: State { lock.withLock { current } }
@@ -168,8 +178,37 @@ public final class WebRTCSender: @unchecked Sendable {
         }
     }
 
+    /// One round of checks to every address the browser gave, while it isn't
+    /// secured yet; the next round later, backing off.
+    private func checkRound(_ round: Int) {
+        let sending = lock.withLock { () -> Bool in
+            guard current == .connecting || current == .securing else { return false }
+            for address in remote.candidates {
+                let id = (0..<12).map { _ in UInt8.random(in: 0...255) }
+                pendingChecks[id] = address
+                let check = STUNMessage.check(
+                    from: ice, to: remote.ice, priority: 110 << 24 | 65_535 << 8 | 255,   // peer-reflexive, RFC 8445 §5.1.2
+                    tieBreaker: tieBreaker, transactionID: id)
+                datagrams.send(check, to: address)
+            }
+            return true
+        }
+        guard sending, round < Self.checkBackoff.count else { return }
+        schedule(Self.checkBackoff[round]) { [weak self] in self?.checkRound(round + 1) }
+    }
+
     private func check(_ data: Data, from address: DatagramAddress) {
-        guard let answer = STUNMessage(data)?.answer(from: address, ice: ice) else { return }
+        guard let message = STUNMessage(data) else { return }
+        let answered = lock.withLock { () -> DatagramAddress? in
+            guard let id = pendingChecks.first(where: { message.isSuccess(of: $0.key, signedWith: remote.ice.password) })?.key
+            else { return nil }
+            return pendingChecks.removeValue(forKey: id)
+        }
+        if let answered {
+            record("ice check answered by \(answered)", at: microsecondsNow())
+            return
+        }
+        guard let answer = message.answer(from: address, ice: ice) else { return }
         lock.withLock {
             guard current != .hungUp else { return }
             browser = address

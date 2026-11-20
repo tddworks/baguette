@@ -15,6 +15,8 @@ public struct STUNMessage: Equatable, Sendable {
     private static let messageIntegrity: UInt16 = 0x0008
     private static let xorMappedAddress: UInt16 = 0x0020
     private static let fingerprint: UInt16 = 0x8028
+    private static let priorityType: UInt16 = 0x0024
+    private static let iceControlled: UInt16 = 0x8029
 
     public let type: UInt16
     public let transactionID: [UInt8]
@@ -29,6 +31,30 @@ public struct STUNMessage: Equatable, Sendable {
     public let mappedAddress: DatagramAddress?
 
     public var isBindingRequest: Bool { type == Self.bindingRequestType }
+
+    /// A full agent's own connectivity check (RFC 8445 §7.1.1): to the browser,
+    /// named "<its ufrag>:<ours>", carrying the pair's priority and our role —
+    /// the controlled agent, with a tie-breaker — and signed with its password.
+    public static func check(
+        from ours: ICECredentials, to theirs: ICECredentials, priority: UInt32, tieBreaker: UInt64, transactionID: [UInt8]
+    ) -> Data {
+        var body = attribute(username, [UInt8]("\(theirs.ufrag):\(ours.ufrag)".utf8))
+        body += attribute(priorityType, bigEndian(priority))
+        body += attribute(iceControlled, bigEndian(UInt32(tieBreaker >> 32)) + bigEndian(UInt32(tieBreaker & 0xFFFF_FFFF)))
+        let header = { (length: Int) in Self.header(bindingRequestType, length: length, transactionID: transactionID) }
+        body += attribute(messageIntegrity, hmac(header(body.count + 24) + body, key: theirs.password))
+        let crc = crc32(header(body.count + 8) + body) ^ 0x5354_554E
+        body += attribute(fingerprint, bigEndian(crc))
+        return Data(header(body.count) + body)
+    }
+
+    /// Whether this is the success to our check `transactionID`, signed with
+    /// the browser's `password`: the answer that the pair works.
+    public func isSuccess(of transactionID: [UInt8], signedWith password: String) -> Bool {
+        guard type == Self.bindingSuccessType, self.transactionID == transactionID, let at = integrityAt else { return false }
+        let signed = Self.withLength(at + 24 - 20, Array(bytes[0..<at]))
+        return Self.same(Self.hmac(signed, key: password), Array(bytes[at + 4..<at + 24]))
+    }
 
     /// A plain Binding request, as a STUN server expects: no attributes, so
     /// it answers with the address it saw it come from.

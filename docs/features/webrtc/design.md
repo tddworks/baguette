@@ -869,17 +869,24 @@ it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
    answer gains the Mac's public address.
    Alone it reaches only a NAT that lets anyone in — most don't; step 5
    makes it useful.
-5. **Full ICE.** The kit stops being ICE-lite: it pairs its candidates with
-   the browser's, sends its own checks (opening its NAT toward the browser),
-   and nominates a pair. The browser's candidates come with the offer (the
-   page waits for gathering) or by WHEP trickle (`PATCH`). Covers most home
-   and office NATs.
+5. ~~**Full ICE**~~ **DONE.** When the offer carries the browser's candidates,
+   the sender answers without `a=ice-lite` and checks each one itself
+   (USERNAME `theirs:ours`, PRIORITY, ICE-CONTROLLED, signed with the
+   browser's password) — at once, then at 100/200/400/800/1600 ms until it is
+   secured — which opens its NAT toward the browser; the browser, controlling,
+   still picks the pair. mDNS (`.local`) candidates are skipped; an offer with
+   none stays ICE-lite, as before. The page fetches its ICE servers, then waits
+   for gathering (at most 2 s) before posting. Checked in Chrome on this Mac:
+   the device page fetched its servers, posted its candidates, answered the
+   sender's check, and painted the phone's screen.
 6. **TURN client** (`--turn turn:host:3478 --turn-user … --turn-pass …`).
    Allocate, permissions, channels, refresh: a relay candidate that gets
    through symmetric NATs and strict firewalls, at the relay's latency.
    *Decide first: self-hosted coturn or a provider.*
-7. **WHEP `Link: rel="ice-server"`.** The answer names the STUN and TURN
-   servers, so the browser uses them too.
+7. ~~**WHEP `Link: rel="ice-server"`**~~ **DONE.** The answer names the ICE
+   servers (`Link: <stun:…>; rel="ice-server"`), and `GET /webrtc/ice-servers`
+   gives them to our page before its offer, so its browser gathers its own
+   public address.
 
 Until 3–6 land, Tailscale is the way to view from outside the network: it
 gives all of this, privately.

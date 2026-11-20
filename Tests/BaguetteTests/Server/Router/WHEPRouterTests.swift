@@ -19,13 +19,14 @@ private let offer = [
 
 /// Viewers whose sockets, handshakes and streams are mocks: no port, no DTLS,
 /// no encoder.
-private func mockViewers() -> WebRTCViewers {
+private func mockViewers(stun: STUNServer? = nil) -> WebRTCViewers {
     WebRTCViewers(
         ticking: nil,
         connect: { _ in
             let datagrams = MockDatagrams()
             given(datagrams).addresses.willReturn([DatagramAddress(ip: [127, 0, 0, 1], port: 5000)])
             given(datagrams).onReceive(.any).willReturn()
+            given(datagrams).send(.any, to: .any).willReturn()
             given(datagrams).close().willReturn()
             let handshake = MockHandshake()
             given(handshake).fingerprint.willReturn("sha-256 AA")
@@ -40,7 +41,8 @@ private func mockViewers() -> WebRTCViewers {
             given(stream).requestKeyframe().willReturn()
             given(stream).requestSnapshot().willReturn()
             return stream
-        })
+        },
+        stun: stun)
 }
 
 private func screen() -> MockScreen {
@@ -214,6 +216,29 @@ struct WHEPRouterTests {
             let unknown = try await client.send(.post, "/devices/U/whep?pacing=sometimes", body: offer, headers: sdp)
             #expect(unknown.status == .badRequest)
             #expect(unknown.text.contains("pacing is on or off"))
+        }
+    }
+
+    @Test func `should give the page the ICE servers its browser should use`() async throws {
+        let stun = STUNServer(url: "stun:stun.example.com:3478", resolve: { _ in [198, 51, 100, 4] })
+        try await whepServer(viewers: mockViewers(stun: stun)).test { client in
+            let response = try await client.send(.get, "/webrtc/ice-servers")
+
+            #expect(response.status == .ok)
+            #expect(response.text == #"{"iceServers":[{"urls":"stun:stun.example.com:3478"}]}"#)
+        }
+        try await whepServer().test { client in
+            let none = try await client.send(.get, "/webrtc/ice-servers")
+            #expect(none.text == #"{"iceServers":[]}"#)
+        }
+    }
+
+    @Test func `should name its ICE servers on the answer, as WHEP clients look for them`() async throws {
+        let stun = STUNServer(url: "stun:stun.example.com:3478", resolve: { _ in [198, 51, 100, 4] })
+        try await whepServer(viewers: mockViewers(stun: stun)).test { client in
+            let response = try await client.send(.post, "/devices/U/whep", body: offer, headers: sdp)
+
+            #expect(response.header("Link") == #"<stun:stun.example.com:3478>; rel="ice-server""#)
         }
     }
 

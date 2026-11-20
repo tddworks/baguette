@@ -105,9 +105,10 @@ the encoder again according to [the retuning rule](design.md#4--invariants-each-
   the next viewer).
 - **Its public address, when asked.** `baguette serve --stun stun:host:port`
   has each viewer learn the address the world sees it at and offer it too.
-  Most NATs still let nothing in that the Mac hasn't sent to first, so it
-  helps once baguette also sends its own checks (planned); until then, use
-  Tailscale from outside your network.
+  The page asks for the same servers and posts its own candidates, and
+  baguette checks them itself (full ICE), which opens its NAT toward the
+  browser. That reaches most networks; until `serve` has authentication,
+  don't expose it to the internet — use Tailscale from outside your network.
 - **A viewer goes when its browser does.** Switching format or leaving the page
   hangs it up; if that goodbye never arrives, it hangs up after 30 s without a
   connectivity check, and its encoder stops either way.

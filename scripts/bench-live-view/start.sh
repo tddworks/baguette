@@ -14,12 +14,13 @@
 # Stop everything with scripts/bench-live-view/stop.sh.
 set -eu
 KIT=${0:a:h}; ROOT=${KIT:h:h}; RUN=$KIT/.run; mkdir -p $RUN
-LAN=0; UDID=""; HOST=""
+LAN=0; UDID=""; HOST=""; STUN=""
 while (( $# )); do case $1 in
   --lan) LAN=1;;
   --tailscale) LAN=1; HOST=$(tailscale ip -4 2>/dev/null | head -1); [[ -n $HOST ]] || { echo "tailscale is not up" >&2; exit 1; };;
   --host) LAN=1; HOST=$2; shift;;
   --udid) UDID=$2; shift;;
+  --stun) STUN=$2; shift;;   # e.g. stun:stun.l.google.com:19302 — viewers check as full ICE agents
   *) echo "unknown option $1" >&2; exit 2;;
 esac; shift; done
 
@@ -40,7 +41,8 @@ fi
 
 # 1 · today's path: baguette serve (WebSocket stream + the input route both transports tap through)
 # WebRTC media on fixed ports so impair.sh can find it: MediaMTX 8189, baguette 8190-8194, Pion 8195-8199.
-nohup $BAGUETTE serve --host 127.0.0.1 --port 8421 --webrtc-ports 8190-8194 > $RUN/serve.log 2>&1 &
+STUNARGS=(); [[ -n $STUN ]] && STUNARGS=(--stun $STUN)
+nohup $BAGUETTE serve --host 127.0.0.1 --port 8421 --webrtc-ports 8190-8194 $STUNARGS > $RUN/serve.log 2>&1 &
 echo $! > $RUN/serve.pid
 
 # 2 · the WHEP server. Only RTSP in and WebRTC out; everything else off.

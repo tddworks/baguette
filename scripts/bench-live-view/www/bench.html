@@ -95,7 +95,10 @@ function startWS() {
 async function startWebRTC() {
   document.getElementById('cv').style.display = 'none';
   const vid = document.getElementById('vid');
-  const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle' });
+  // As the device page does: the server's STUN servers, then an offer that carries the gathered candidates.
+  let iceServers = [];
+  if (!SPIKE && !PION) try { iceServers = (await (await fetch(SERVE + '/webrtc/ice-servers')).json()).iceServers || []; } catch (_) {}
+  const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle', iceServers });
   let viewer;
   R.pc = pc;
   // Hang up on setup failure as well, without waiting for consent to expire.
@@ -106,7 +109,12 @@ async function startWebRTC() {
   pc.ontrack = e => { e.receiver.jitterBufferTarget = 0; if ('playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; vid.srcObject = e.streams[0]; };
   pc.onconnectionstatechange = () => log('pc', pc.connectionState);
   const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-  const res = await fetch(WHEP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
+  await new Promise(resolve => {
+    if (pc.iceGatheringState === 'complete') return resolve();
+    pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve(); };
+    setTimeout(resolve, 2000);
+  });
+  const res = await fetch(WHEP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp });
   if (!res.ok) { throw new Error('WHEP ' + res.status + ' ' + (await res.text()).slice(0, 200)); }
   viewer = res.headers.get('Location');
   if (viewer) R.viewerID = new URL(viewer, location.origin).pathname.split('/').filter(Boolean).at(-1);

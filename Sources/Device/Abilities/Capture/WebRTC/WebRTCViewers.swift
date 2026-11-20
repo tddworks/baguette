@@ -26,6 +26,10 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// Asked, per viewer and through its own socket, for the address the world
     /// sees it at — offered to the browser beside the Mac's own.
     private let stun: STUNServer?
+
+    /// The ICE servers a browser should use too (WHEP `Link: rel="ice-server"`,
+    /// and the page's own config), as their URLs.
+    public var iceServers: [String] { stun.map { [$0.url] } ?? [] }
     private var timer: DispatchSourceTimer?
 
     /// `ticking`: how often consent and DTLS retransmission are checked; nil

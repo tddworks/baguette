@@ -10,7 +10,8 @@ import WebRTCKit
 /// viewer of the device with a stream of its own; its touches and stream
 /// control ride the viewer's control socket; `DELETE` hangs it up.
 ///
-///   POST   /devices/:udid/whep[?congestion=transport-cc|remb|off]   offer → 201, Location, answer
+///   GET    /webrtc/ice-servers                 {"iceServers":[{"urls":"stun:…"}]}: for the page's RTCPeerConnection
+///   POST   /devices/:udid/whep[?congestion=transport-cc|remb|off]   offer → 201, Location, Link (ICE servers), answer
 ///   DELETE /devices/:udid/whep/:viewer          hang up → 204
 ///   WS     /devices/:udid/whep/:viewer/control  gestures, describe_ui, paste, retune
 ///
@@ -22,6 +23,14 @@ extension Server {
         trustedWebSocketUpgrade: @escaping @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade
     ) {
         let (devices, viewers) = (allDevices, viewers)
+
+        // The page asks before its offer: its browser gathers its own public
+        // address with them, and posts that among its candidates.
+        router.get("/webrtc/ice-servers") { request, _ in
+            if let rejected = rejectUntrustedBrowser(request) { return rejected }
+            let servers = viewers.iceServers.map { #"{"urls":"\#(jsonEscape($0))"}"# }.joined(separator: ",")
+            return Self.jsonResponse(#"{"iceServers":[\#(servers)]}"#)
+        }
 
         for path in Self.deviceRoutes("whep") {
             router.post(RouterPath(path)) { request, _ in
@@ -81,7 +90,7 @@ extension Server {
                 offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing)
             return Response(
                 status: .created,
-                headers: [.location: "/devices/\(udid)/whep/\(id)", .contentType: "application/sdp", .cacheControl: "no-cache"],
+                headers: Self.answerHeaders(location: "/devices/\(udid)/whep/\(id)", iceServers: viewers.iceServers),
                 body: .init(byteBuffer: ByteBuffer(string: answer)))
         } catch let refusal as DeviceError {
             return Self.refusal(refusal)
@@ -144,5 +153,15 @@ extension Server {
         } catch {
             // the page closed its control socket; the viewer lives on until it hangs up
         }
+    }
+
+    /// The answer's headers; its ICE servers as WHEP names them (`Link`, one
+    /// per server, comma-joined).
+    static func answerHeaders(location: String, iceServers: [String]) -> HTTPFields {
+        var headers: HTTPFields = [.location: location, .contentType: "application/sdp", .cacheControl: "no-cache"]
+        if !iceServers.isEmpty {
+            headers[HTTPField.Name("Link")!] = iceServers.map { "<\($0)>; rel=\"ice-server\"" }.joined(separator: ", ")
+        }
+        return headers
     }
 }
