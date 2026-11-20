@@ -153,6 +153,31 @@ extension SessionDescriptionTests {
     }
 }
 
+/// The same offer with what Chrome adds for congestion control: the transport-wide
+/// sequence extension (here id 3) and transport-cc feedback on the High profile.
+private let offerWithTransportCC = chromeOffer
+    .replacingOccurrences(
+        of: "a=rtcp-mux\r\n",
+        with: "a=rtcp-mux\r\na=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
+    .replacingOccurrences(of: "a=rtcp-fb:112 nack pli\r\n", with: "a=rtcp-fb:112 nack pli\r\na=rtcp-fb:112 transport-cc\r\n")
+
+extension SessionDescriptionTests {
+    @Test func `should read the offer's transport-wide sequence extension id`() throws {
+        #expect(try SessionDescription(offer: offerWithTransportCC).transportWideSequenceID == 3)
+        #expect(try SessionDescription(offer: chromeOffer).transportWideSequenceID == nil)
+    }
+
+    @Test func `should answer with transport-cc feedback and the extension when the offer has them`() throws {
+        let answer = try SessionDescription(offer: offerWithTransportCC)
+            .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [])
+
+        #expect(answer.contains(
+            "a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n"))
+        #expect(answer.contains("a=rtcp-fb:112 transport-cc\r\n"))
+        #expect(!answer.contains("goog-remb"))
+    }
+}
+
 @Suite("ICECredentials")
 struct ICECredentialsTests {
     @Test func `should make fresh ICE credentials long enough for the spec, from ICE characters`() {
