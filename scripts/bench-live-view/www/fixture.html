@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>html,body{margin:0;height:100%;background:#000;touch-action:none;overflow:hidden}</style></head>
+<body><script>
+const on=()=>document.body.style.background='#fff', off=()=>document.body.style.background='#000';
+addEventListener('touchstart',e=>{e.preventDefault();on()},{passive:false});
+addEventListener('touchend',off);addEventListener('touchcancel',off);
+</script></body></html>

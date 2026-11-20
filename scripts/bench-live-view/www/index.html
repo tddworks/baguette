@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live view bench</title>
+<style>
+body{font:15px -apple-system,system-ui,sans-serif;background:#111;color:#ddd;margin:0;padding:16px;max-width:560px}
+h1{font-size:20px;margin:0 0 4px}p{color:#999;margin:4px 0 16px;line-height:1.4}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#888;margin:24px 0 8px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+a.b,button{display:block;text-align:center;padding:14px 8px;border-radius:10px;background:#223;color:#cde;text-decoration:none;border:1px solid #334;font:inherit}
+a.b.rtc{background:#232;border-color:#343;color:#cec}
+button{width:100%;background:#222;color:#ddd;cursor:pointer}
+code{color:#fc8}
+</style></head>
+<body>
+<h1>Live view bench</h1>
+<p>Same simulator, same H.264 encoder, two transports. Run one at a time; results appear on the page when the run ends.</p>
+
+<h2>Drive it yourself · baguette serve's own page</h2>
+<a class="b" id="page">Open the device page</a>
+<p>Touch, scroll, toolbar, handheld. Switch between H.264, MJPEG and WebRTC in its format picker to compare.</p>
+
+<h2>Screen in the simulator</h2>
+<div class="row">
+  <button data-page="fixture.html">Black/white probe</button>
+  <button data-page="motion.html">Animated list</button>
+</div>
+<p>Latency runs need the probe. Bandwidth runs mean most on the animated list.</p>
+
+<h2>Latency · 100 taps</h2>
+<div class="row"><a class="b" data-t="ws" data-q="taps=100">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="taps=100">WebRTC (WHEP)</a></div>
+
+<h2>Bandwidth · 30 s</h2>
+<div class="row"><a class="b" data-t="ws" data-q="mode=bw&secs=30">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="mode=bw&secs=30">WebRTC (WHEP)</a></div>
+
+<h2>Quick check · 10 taps</h2>
+<div class="row"><a class="b" data-t="ws" data-q="taps=10">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="taps=10">WebRTC (WHEP)</a></div>
+
+<p id="msg"></p>
+<script>
+const udid = new URLSearchParams(location.search).get('udid') || '';
+const msg = document.getElementById('msg');
+if (!udid) msg.innerHTML = 'Missing <code>?udid=</code>: open the URL <code>start.sh</code> printed.';
+document.getElementById('page').href = '/devices/' + encodeURIComponent(udid);
+for (const a of document.querySelectorAll('a[data-t]'))
+  a.href = 'bench.html?transport=' + a.dataset.t + '&udid=' + encodeURIComponent(udid) + '&' + a.dataset.q;
+for (const b of document.querySelectorAll('button[data-page]'))
+  b.onclick = async () => {
+    // The simulator shares this Mac's network: it loads the page over the proxy's loopback listener.
+    const url = 'http://127.0.0.1:8777/bench/' + b.dataset.page;
+    try {
+      await fetch('/api/devices/' + encodeURIComponent(udid) + '/openurl?url=' + encodeURIComponent(url), { method: 'POST' });
+      msg.textContent = 'Opened ' + b.dataset.page + ' in the simulator.';
+    } catch (e) { msg.textContent = 'Could not reach baguette serve: ' + e.message; }
+  };
+</script>
+</body></html>

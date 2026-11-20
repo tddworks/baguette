@@ -1,0 +1,17 @@
+# MediaMTX for the live-view bench: RTSP in (from the bridge), WebRTC/WHEP out. Everything else off.
+logLevel: info
+# ≤ 1200 B of RTP payload: fits a 1280 MTU tunnel (Tailscale, WireGuard) without fragmenting.
+udpMaxPayloadSize: 1200
+api: no
+rtmp: no
+hls: no
+srt: no
+moq: no
+rtsp: yes
+rtspAddress: :8554
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']
+webrtcLocalUDPAddress: :8189
+paths:
+  sim:

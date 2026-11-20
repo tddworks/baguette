@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- The device page's format picker offers **WebRTC** beside H.264 and MJPEG: the phone's screen as H.264 over UDP (WHEP), for viewing from a phone or another machine; it plays on plain HTTP too. → [docs](docs/features/webrtc/README.md)
+
 ### Fixed
 - `baguette stream` no longer spins a full CPU core once its stdin closes (`< /dev/null`, `nohup`, a parent that closes the pipe); it stops reading commands and keeps streaming. → [docs](docs/features/stream/README.md)
 

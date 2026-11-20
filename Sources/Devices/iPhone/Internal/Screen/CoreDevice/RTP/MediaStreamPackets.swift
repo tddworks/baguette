@@ -3,42 +3,9 @@ import Foundation
 
 // A physical phone's live screen arrives as an RTP stream (RFC 3550) of
 // H.264 (RFC 6184), unencrypted, over the CoreDevice tunnel. These values
-// turn its packets back into frames; the socket and decoder are elsewhere.
+// turn its packets (`RTPPacket`, the Stream context's) back into frames; the
+// socket and decoder are elsewhere.
 // Research: docs/features/real-devices/design.md.
-
-/// One RTP packet: its header, and the payload past any contributing
-/// sources and header extension.
-struct RTPPacket: Equatable, Sendable {
-    let marker: Bool
-    let payloadType: UInt8
-    let sequence: UInt16
-    let timestamp: UInt32
-    let ssrc: UInt32
-    let payload: Data
-
-    /// Nil for bytes that are too short or aren't RTP version 2.
-    init?(_ data: Data) {
-        let bytes = [UInt8](data)
-        guard bytes.count >= 12, bytes[0] >> 6 == 2 else { return nil }
-        var offset = 12 + Int(bytes[0] & 0x0F) * 4
-        if bytes[0] & 0x10 != 0 {
-            guard bytes.count >= offset + 4 else { return nil }
-            offset += 4 + Int(bytes[offset + 2]) << 8 * 4 + Int(bytes[offset + 3]) * 4
-        }
-        guard bytes.count >= offset else { return nil }
-        marker = bytes[1] & 0x80 != 0
-        payloadType = bytes[1] & 0x7F
-        sequence = UInt16(bytes[2]) << 8 | UInt16(bytes[3])
-        timestamp = bytes[4..<8].reduce(0) { $0 << 8 | UInt32($1) }
-        ssrc = bytes[8..<12].reduce(0) { $0 << 8 | UInt32($1) }
-        payload = Data(bytes[offset...])
-    }
-
-    /// Whether `data` is RTCP sharing the port (packet types 200–206).
-    static func isRTCP(_ data: Data) -> Bool {
-        data.count >= 2 && (200...206).contains(data[data.startIndex + 1])
-    }
-}
 
 /// The NAL units of one H.264 picture, as the phone encoded it.
 struct AccessUnit: Equatable, Sendable {

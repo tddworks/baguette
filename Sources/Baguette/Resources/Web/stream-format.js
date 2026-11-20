@@ -9,11 +9,14 @@
 (function (root) {
   'use strict';
 
-  const IDS = ['avcc', 'mjpeg'];
-  const LABELS = { avcc: 'H.264', mjpeg: 'MJPEG' };
+  // `webrtc` is the phone plane over WHEP (`whep-session.js`); every surface
+  // that only has a socket (CarPlay, the watch, the 3D panel) streams its
+  // `forSockets` stand-in instead.
+  const IDS = ['avcc', 'mjpeg', 'webrtc'];
+  const LABELS = { avcc: 'H.264', mjpeg: 'MJPEG', webrtc: 'WebRTC' };
 
   class StreamFormat {
-    /** @param {'avcc'|'mjpeg'} id the wire spelling, as sent on the URL */
+    /** @param {'avcc'|'mjpeg'|'webrtc'} id the wire spelling, as sent on the URL */
     constructor(id) {
       this.id = id;
     }
@@ -63,8 +66,24 @@
 
     /** True when a browser with these capabilities could actually play it. */
     isPlayable(capabilities) {
+      if (this.id === 'webrtc') return !!(capabilities && capabilities.webrtc);
       if (!this.needsHardwareDecoder) return true;
       return !!(capabilities && capabilities.hardwareDecoder);
+    }
+
+    /** What a surface that only has a stream socket plays when this is the
+     *  page's format: itself, or for WebRTC the best socket format. */
+    forSockets(capabilities) {
+      return this.id === 'webrtc' ? StreamFormat.best(capabilities) : this;
+    }
+
+    /** The picker's tooltip on a format this browser can't play. */
+    get whyUnplayable() {
+      if (this.id === 'webrtc') return 'WebRTC is not available in this browser.';
+      // Desktop Chrome hides WebCodecs on a plain-http page that isn't
+      // localhost; iOS browsers (WebKit) don't, so this is per browser.
+      return this.label + ' needs WebCodecs, which this browser only exposes on a '
+        + 'secure origin. Open this page over HTTPS or on localhost, or pick WebRTC.';
     }
 
     /** The wire spelling, so a format drops straight into a URL. */

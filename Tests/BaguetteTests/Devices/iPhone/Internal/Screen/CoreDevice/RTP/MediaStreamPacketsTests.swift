@@ -24,39 +24,6 @@ private func rtp(
 /// A packet the test means to be valid.
 private func parsed(_ data: Data) -> RTPPacket { RTPPacket(data)! }
 
-@Suite("RTPPacket")
-struct RTPPacketTests {
-    @Test func `should read an RTP packet's sequence, timestamp, marker, source and payload`() throws {
-        let packet = parsed(rtp(marker: true, sequence: 0x6D4E, timestamp: 1234, payload: [0x65, 1, 2]))
-
-        #expect(packet.sequence == 0x6D4E)
-        #expect(packet.timestamp == 1234)
-        #expect(packet.marker)
-        #expect(packet.payloadType == 123)
-        #expect(packet.ssrc == 0xE95D_3647)
-        #expect(packet.payload == Data([0x65, 1, 2]))
-    }
-
-    @Test func `should skip a header extension and contributing sources to reach the payload`() throws {
-        let packet = parsed(rtp(csrcs: [7, 8], extensionWords: [0xAAAA_AAAA, 0xBBBB_BBBB], payload: [0x41, 9]))
-
-        #expect(packet.payload == Data([0x41, 9]))
-    }
-
-    @Test func `should read no packet from bytes that are too short or not RTP version 2`() {
-        #expect(RTPPacket(Data([0x80, 100, 0])) == nil)
-        #expect(RTPPacket(Data([0x40] + [UInt8](repeating: 0, count: 15))) == nil)
-        #expect(RTPPacket(rtp(extensionWords: [1], payload: []).prefix(14)) == nil)
-    }
-
-    @Test func `should tell an RTCP report apart from media`() {
-        // RTCP sender report: PT 200 lands in the RTP marker+type byte as 0xC8.
-        let report = Data([0x80, 0xC8, 0x00, 0x06] + [UInt8](repeating: 0, count: 24))
-        #expect(RTPPacket.isRTCP(report))
-        #expect(!RTPPacket.isRTCP(rtp(payload: [0x65])))
-    }
-}
-
 @Suite("VideoDepacketizer")
 struct VideoDepacketizerTests {
     private let sps: [UInt8] = [0x67, 0x64, 0x00, 0x33, 0xAC]

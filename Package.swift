@@ -53,6 +53,10 @@ let package = Package(
         // HTTP + WebSocket server for `baguette serve`.
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.22.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0"),
+        // BoringSSL, for a WebRTC viewer's DTLS-SRTP handshake: the only
+        // DTLS on macOS that exports SRTP keys. Already in the graph through
+        // Hummingbird; imported as its C module, CNIOBoringSSL.
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.0"),
     ],
     targets: [
         // The one CoreDevice call Swift can't spell: a typed-throws send
@@ -69,6 +73,7 @@ let package = Package(
             name: "BaguetteDevice",
             dependencies: [
                 .product(name: "Mockable", package: "Mockable"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
             ],
             path: "Sources/Device",
             swiftSettings: [
