@@ -109,6 +109,7 @@ async function startWebRTC() {
   const res = await fetch(WHEP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
   if (!res.ok) { throw new Error('WHEP ' + res.status + ' ' + (await res.text()).slice(0, 200)); }
   viewer = res.headers.get('Location');
+  if (viewer) R.viewerID = new URL(viewer, location.origin).pathname.split('/').filter(Boolean).at(-1);
   let sdp = (await res.text()).replace(/a=rtcp-fb:\d+ goog-remb\r?\n/g, '');
   if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
   await pc.setRemoteDescription({ type: 'answer', sdp });
@@ -144,25 +145,77 @@ function tap(side) {
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]; };
 async function rtcBytes() { let b = 0, p = 0; (await R.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') { b += r.bytesReceived + (r.headerBytesReceived || 0); p += r.packetsReceived; } }); return { b, p }; }
 async function counter() { return T === 'ws' ? { b: R.wsBytes || 0, p: R.wsMsgs || 0 } : rtcBytes(); }
+
+// The proxy and the native sender run on the same Mac. The shortest round
+// trip bounds the uncertainty when mapping browser frame times to that clock.
+async function calibrateClock() {
+  async function sample() {
+    const sentAt = performance.now();
+    const res = await fetch('clock', { cache: 'no-store', signal: AbortSignal.timeout(1500) });
+    const receivedAt = performance.now();
+    const stamp = res.headers.get('x-baguette-clock-ms');
+    if (!res.ok || !stamp || !Number.isFinite(Number(stamp))) return null;
+    return { originMs: Number(stamp) - (sentAt + receivedAt) / 2,
+      uncertaintyMs: Math.ceil((receivedAt - sentAt) / 2) + 1 };
+  }
+  const samples = await Promise.allSettled([sample(), sample(), sample()]);
+  return samples.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : [])
+    .sort((a, b) => a.uncertaintyMs - b.uncertaintyMs)[0];
+}
+
+function measureFreezes(frames, startedAt, endedAt, timeOrigin) {
+  const freezes = [];
+  let previous = startedAt;
+  let totalFreezeMs = 0;
+  function record(end, recovered) {
+    if (end - previous <= 200) return;
+    const durationMs = Math.round(end - previous);
+    freezes.push({ startedAtMs: Math.round(timeOrigin + previous),
+      recoveredAtMs: recovered ? Math.round(timeOrigin + end) : null, durationMs });
+    totalFreezeMs += durationMs;
+  }
+  for (const frame of frames) {
+    if (frame <= startedAt) continue;
+    if (frame > endedAt) break;
+    record(frame, true);
+    previous = frame;
+  }
+  record(endedAt, false);
+  const freezesPerMin = endedAt > startedAt ? +(freezes.length * 60_000 / (endedAt - startedAt)).toFixed(2) : 0;
+  return { freezes, totalFreezeMs, freezesPerMin };
+}
+
+function freezeSummary(startedAt, endedAt) {
+  return {
+    viewerID: R.viewerID ?? null,
+    freezeClock: R.clock ? 'server' : 'browser',
+    clockUncertaintyMs: R.clock?.uncertaintyMs ?? null,
+    ...measureFreezes(R.frames, startedAt, endedAt, R.clock?.originMs ?? performance.timeOrigin),
+  };
+}
+
 async function bw(secs) {
   await new Promise(r => setTimeout(r, 3000));
   const a = await counter(), f0 = R.frames.length, t0 = performance.now();
   await new Promise(r => setTimeout(r, secs * 1000));
-  const z = await counter(), dt = (performance.now() - t0) / 1000;
+  const z = await counter(), endedAt = performance.now(), dt = (endedAt - t0) / 1000;
   // per-packet overhead below the counted bytes: WS = TCP/IP + WS header per ~1448 B segment; WebRTC = UDP/IP + SRTP auth tag per packet
   const payload = z.b - a.b, packets = z.p - a.p;
   const wire = T === 'ws' ? payload + Math.ceil(payload / 1448) * 52 + packets * 4 : payload + packets * (28 + 10);
   R.summary = { transport: T, sender: R.sender, format: R.format || 'h264', secs: +dt.toFixed(1), payloadMbps: +(payload * 8 / dt / 1e6).toFixed(2), wireMbpsEst: +(wire * 8 / dt / 1e6).toFixed(2),
-    mbPerMin: +(wire / dt * 60 / 1e6).toFixed(1), messagesOrPackets: packets, fps: +((R.frames.length - f0) / dt).toFixed(1) };
+    mbPerMin: +(wire / dt * 60 / 1e6).toFixed(1), messagesOrPackets: packets, fps: +((R.frames.length - f0) / dt).toFixed(1),
+    ...freezeSummary(t0, endedAt) };
   log(JSON.stringify(R.summary)); R.done = true; R.stop();
 }
 async function run() {
   // One encoder per run: the WHEP source runs only for WebRTC.
   await fetch('bridge/' + (T === 'webrtc' && SPIKE ? 'on' : 'off'), { method: 'POST' });
+  const calibration = T === 'webrtc' && !PION && !SPIKE && WHEP.startsWith('/api/') ? calibrateClock() : undefined;
   if (T === 'webrtc' && SPIKE) { log('starting the spike\'s WHEP source…'); await new Promise(r => setTimeout(r, 5000)); }
   T === 'ws' ? startWS() : await startWebRTC();
   for (const until = performance.now() + 15000; R.firstFrame === null; await new Promise(r => setTimeout(r, 50)))
     if (performance.now() > until) throw new Error('no picture within 15 s');
+  R.clock = await calibration;
   if (BANDWIDTH_ONLY) return bw(+(q.get('secs') || 30));
   await new Promise(r => setTimeout(r, 2000));
   // The probe needs the tap probe page on screen: anything already lit at the centre would make every
@@ -171,6 +224,7 @@ async function run() {
     log('ABORTED: the screen centre is not black. Put the "Tap probe" page on the simulator first.');
     R.summary = { transport: T, aborted: 'probe page not on screen' }; R.done = true; R.stop(); return;
   }
+  const startedAt = performance.now();
   for (let i = 0; i < TAPS; i++) {
     if (!black(last)) await until(black, 5000);
     await new Promise(r => setTimeout(r, 250 + Math.random() * 200));  // de-phase taps from vsync
@@ -182,9 +236,10 @@ async function run() {
     R.samples.push(t1 === null ? null : t1 - t0);
     if (i % 10 === 9) log('tap', i + 1, t1 === null ? 'MISS' : (t1 - t0).toFixed(1) + ' ms');
   }
+  const freeze = freezeSummary(startedAt, performance.now());
   if (TAP_PATH === 'socket') inputSocket();
   const ok = R.samples.filter(x => x !== null);
-  if (!ok.length) return finish({ transport: T, sender: R.sender, taps: TAPS, misses: TAPS, failed: 'no tap was answered within 5 s' });
+  if (!ok.length) return finish({ transport: T, sender: R.sender, taps: TAPS, misses: TAPS, failed: 'no tap was answered within 5 s', ...freeze });
   const iv = R.frames.slice(1).map((t, i) => t - R.frames[i]);
   const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
   const durMin = (R.frames.at(-1) - R.frames[0]) / 60000;
@@ -193,7 +248,7 @@ async function run() {
     p50: +pct(ok, 50).toFixed(1), p95: +pct(ok, 95).toFixed(1), p99: +pct(ok, 99).toFixed(1), min: +Math.min(...ok).toFixed(1), max: +Math.max(...ok).toFixed(1),
     firstFrameMs: +R.firstFrame.toFixed(0), presentedFps: +(1000 / mean).toFixed(1),
     intervalStddevMs: +Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length).toFixed(2),
-    freezesPerMin: +(iv.filter(x => x > 200).length / durMin).toFixed(2),
+    ...freeze,
   };
   log(JSON.stringify(R.summary, null, 1)); R.done = true; R.stop();
 }

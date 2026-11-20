@@ -67,6 +67,10 @@ function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   if (!/\.(js|css|png|svg|json|woff2?)$/.test(url.pathname))
     console.log(new Date().toISOString(), req.socket.remoteAddress, req.method, req.url);
+  if (url.pathname === '/bench/clock' && req.method === 'GET') {
+    res.writeHead(204, { 'cache-control': 'no-store', 'x-baguette-clock-ms': Date.now() });
+    return res.end();
+  }
   if (url.pathname === '/bench/bridge/on' && req.method === 'POST') { bridgeOn(); res.writeHead(204); return res.end(); }
   if (url.pathname === '/bench/bridge/off' && req.method === 'POST') { bridgeOff(); res.writeHead(204); return res.end(); }
   if (url.pathname === '/bench') { res.writeHead(302, { location: '/bench/' + url.search }); return res.end(); }
