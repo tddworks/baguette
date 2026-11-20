@@ -113,8 +113,11 @@ Stream context (`Sources/Device/Abilities/Capture/WebRTC/`); everything that
 sends — `SessionDescription`, ICE-lite, DTLS-SRTP, RTP and RTCP, the pacer,
 congestion control — is **WebRTCKit** (`Sources/WebRTCKit/`: `Signaling/`,
 `Transport/`, `Media/`, `Congestion/`), a library that knows nothing of devices
-and is to become its own package. `RTPPacket` is the kit's, shared with a
-phone's screen. The laws are also in [CANONICAL_MODEL](../../CANONICAL_MODEL.md).
+and is to become its own package. The viewer is a `WebRTCSender` (the kit's
+session: `EncodedFrame` in, `SenderEvents` out) plus a stream of its own: it
+turns AVCC envelopes into frames, asks the stream for the keyframes the
+sender needs, and lets the encoder follow the sender's bitrate through
+`EncoderRetune`. `RTPPacket` is the kit's, shared with a phone's screen. The laws are also in [CANONICAL_MODEL](../../CANONICAL_MODEL.md).
 
 ```
 WebRTCViewers  ◆                      the live viewers by id — admit(offer, …) → answer · find(id) · hangUp(id)

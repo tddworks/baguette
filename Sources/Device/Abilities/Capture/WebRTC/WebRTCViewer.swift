@@ -1,73 +1,31 @@
 import Foundation
 import WebRTCKit
 
-/// One browser watching one device over WebRTC (WHEP), with a stream of its
-/// own. It answers the browser's offer as an ICE-lite, DTLS-passive sender,
-/// then lives through `connecting → securing → live → hungUp`:
+/// One browser watching one device over WebRTC (WHEP): a `WebRTCSender` — the
+/// session, from the offer to the packets on the wire — fed by a stream of
+/// its own. What the viewer adds is the device side:
 ///
-/// - **connecting**: until a connectivity check names its ufrag and is signed
-///   with its password; that check says where the browser is.
-/// - **securing**: DTLS from that address only, until the handshake exports
-///   the SRTP keys; then it asks its stream for a keyframe and goes live.
-/// - **live**: every picture leaves as SRTP, its packets spaced by a `Pacer`
-///   at the target bitrate; a lost picture brings a keyframe, lost packets are
-///   resent as they were sent. Its `CongestionControl` stamps
-///   every packet, reads the browser's feedback and sets the bitrate it wants;
-///   `EncoderRetune` decides when the encoder follows.
-/// - **hungUp**: by request, a failed handshake or stream, or 30 s without a
-///   check; its stream is stopped and it never sends again.
-///
-/// One UDP port carries it all, told apart by the first byte (RFC 7983).
+/// - each AVCC envelope its stream makes becomes an `EncodedFrame` (a
+///   keyframe carries the stream's latest parameter sets);
+/// - a keyframe the sender needs is asked of the stream;
+/// - the bitrate the link can take reaches the encoder when `EncoderRetune`
+///   says so;
+/// - when the session ends, for whatever reason, its stream is stopped.
 public final class WebRTCViewer: @unchecked Sendable {
-    public enum State: Equatable, Sendable { case connecting, securing, live, hungUp }
-
-    private struct OutboundPacket: Sendable {
-        let rtp: RTPPacket
-        let endsKeyframe: Bool
-    }
-
-    /// Consent freshness (RFC 7675): a browser that stops checking has gone.
-    public static let consentTimeout: TimeInterval = 30
-    /// Packets kept for a NACK: about a second of a busy screen.
-    private static let historySize = 1024
-
-    /// The SDP answer to the browser's offer.
-    public let answer: String
+    public typealias State = WebRTCSender.State
+    public typealias Schedule = WebRTCSender.Schedule
+    public static let consentTimeout = WebRTCSender.consentTimeout
+    public static let onAQueue = WebRTCSender.onAQueue
 
     private let lock = NSLock()
-    private var current = State.connecting
-    private let ice: ICECredentials
-    private let ssrc: UInt32
-    private let payloadType: UInt8
-    private let datagrams: any Datagrams
-    private let handshake: any Handshake
     private var stream: (any Stream)!
-    private let clock: @Sendable () -> Date
-    private let started: Date
-    private let id: String
+    private var sender: WebRTCSender!
+    private let events = Events()
     private let diagnose: @Sendable (String) -> Void
-    private var lastCheck: Date
-    private var browser: DatagramAddress?
-    private var srtp: SRTPContext?
-    private var sequence: UInt16
     private var parameterSets: [Data] = []
-    private var history: [UInt16: Data] = [:]
-    private var historyOrder: [UInt16] = []
-    private var hangUpHandlers: [@Sendable () -> Void] = []
-    private let packetizer = H264Packetizer()
-    private let congestion: any CongestionControl
     private var retune = EncoderRetune()
-    private var pacer: Pacer<OutboundPacket>
-    /// Whether the pacer's next slice is already scheduled.
-    private var sliceScheduled = false
-    private var lastHoldLog: Int64?
-    private let schedule: Schedule
-
-    /// Runs `work` after a delay: how the pacer comes back for its next slice.
-    public typealias Schedule = @Sendable (_ after: TimeInterval, _ work: @escaping @Sendable () -> Void) -> Void
-    public static let onAQueue: Schedule = { after, work in
-        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + after, execute: work)
-    }
+    private var hungUp = false
+    private var hangUpHandlers: [@Sendable () -> Void] = []
 
     public init(
         offer: SessionDescription,
@@ -84,35 +42,27 @@ public final class WebRTCViewer: @unchecked Sendable {
         id: String = UUID().uuidString.lowercased(),
         diagnose: @escaping @Sendable (String) -> Void = log
     ) {
-        self.schedule = schedule
-        self.ice = ice
-        self.ssrc = ssrc
-        self.payloadType = offer.payloadType
-        self.datagrams = datagrams
-        self.handshake = handshake
-        self.clock = clock
-        self.id = id
         self.diagnose = diagnose
-        self.sequence = firstSequence
-        self.started = clock()
-        self.lastCheck = started
         let sink = RTPFrameSink()
         let stream = makeStream(sink)
-        let congestion = makeControl(stream.config.bitrateBps)
         self.stream = stream
-        self.congestion = congestion
-        self.pacer = Pacer(bitrate: stream.config.bitrateBps, pacing: pacing)
-        self.answer = offer.answer(
-            ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc, candidates: datagrams.addresses,
-            congestion: congestion.answerLines())
+        sender = WebRTCSender(
+            offer: offer, ice: ice, ssrc: ssrc, firstSequence: firstSequence,
+            datagrams: datagrams, handshake: handshake,
+            congestion: makeControl(stream.config.bitrateBps),
+            encoderBitrate: { [unowned self] in self.stream.config.bitrateBps },
+            events: events, clock: clock, schedule: schedule, pacing: pacing, id: id)
+        events.viewer = self
         sink.attach(self)
-        datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
     }
 
-    public var state: State { lock.withLock { current } }
+    /// The SDP answer to the browser's offer.
+    public var answer: String { sender.answer }
 
-    /// Whether its pacer spaces its packets (off only for the bench's baseline, `?pacing=off`).
-    public var pacing: Bool { lock.withLock { pacer.pacing } }
+    public var state: State { sender.state }
+
+    /// Whether its sender paces its packets (off only for the bench's baseline, `?pacing=off`).
+    public var pacing: Bool { sender.pacing }
 
     /// Its own stream, which its page retunes (`set_bitrate`, `force_idr`, …)
     /// over its control socket as any stream socket's page does.
@@ -124,230 +74,75 @@ public final class WebRTCViewer: @unchecked Sendable {
     /// Called once, when it hangs up — at once if it already has.
     public func onHangUp(_ handler: @escaping @Sendable () -> Void) {
         let already = lock.withLock { () -> Bool in
-            if current == .hungUp { return true }
+            if hungUp { return true }
             hangUpHandlers.append(handler)
             return false
         }
         if already { handler() }
     }
 
-    public func hangUp() {
+    public func hangUp() { sender.hangUp() }
+
+    /// Time passing: the sender's consent and handshake timers.
+    public func tick(now: Date) { sender.tick(now: now) }
+
+    /// What the browser asked, decrypted (see `WebRTCSender.act(on:)`).
+    func act(on asks: [RTCPFeedback]) { sender.act(on: asks) }
+
+    // MARK: - its stream
+
+    /// One AVCC envelope from its stream: parameter sets are kept for the next
+    /// keyframe; a picture goes to the sender.
+    func show(_ envelope: Data) {
+        guard let (tag, payload) = AVCCEnvelope.unwrap(envelope) else { return }
+        if tag == AVCCEnvelope.descriptionTag, let sets = AVCCParameterSets.parse(avcC: payload) {
+            lock.withLock { parameterSets = sets.sps + sets.pps }
+            return
+        }
+        guard tag == AVCCEnvelope.keyframeTag || tag == AVCCEnvelope.deltaTag else { return }
+        let isKeyframe = tag == AVCCEnvelope.keyframeTag
+        let sets = isKeyframe ? lock.withLock { parameterSets } : []
+        sender.send(EncodedFrame(avcc: payload, isKeyframe: isKeyframe, parameterSets: sets))
+    }
+
+    // MARK: - what its sender tells it
+
+    fileprivate func keyframeNeeded() { stream.requestKeyframe() }
+
+    /// The link's bitrate: the encoder follows when `EncoderRetune` says so.
+    fileprivate func estimated(bitrate target: Int, at now: Int64) {
+        let from = stream.config.bitrateBps
+        guard let to = lock.withLock({ retune.bitrate(for: target, current: from, now: now) }) else { return }
+        do {
+            try stream.update(.bitrate(to))
+            sender.note("retune \(from / 1_000) → \(to / 1_000) kbps")
+        } catch {
+            sender.note("retune to \(to / 1_000) kbps failed: \(error)")
+        }
+    }
+
+    fileprivate func sessionEnded() {
         let handlers = lock.withLock { () -> [@Sendable () -> Void]? in
-            guard current != .hungUp else { return nil }
-            current = .hungUp
+            guard !hungUp else { return nil }
+            hungUp = true
             defer { hangUpHandlers = [] }
             return hangUpHandlers
         }
         guard let handlers else { return }
         stream.stop()
-        datagrams.close()
         handlers.forEach { $0() }
     }
 
-    /// Time passing: consent runs out after `consentTimeout` without a check;
-    /// while securing, DTLS's due records are resent.
-    public func tick(now: Date) {
-        let expired = lock.withLock { () -> Bool in
-            guard current != .hungUp else { return false }
-            if now.timeIntervalSince(lastCheck) > Self.consentTimeout { return true }
-            if current == .securing, let browser {
-                handshake.resend().forEach { datagrams.send($0, to: browser) }
-            }
-            return false
-        }
-        if expired { hangUp() }
-    }
+    fileprivate func note(_ line: String) { diagnose(line) }
+}
 
-    // MARK: - what arrives
+/// The viewer as its sender's owner — kept apart so these calls aren't the
+/// viewer's public face. The sender holds it weakly, the viewer strongly.
+private final class Events: SenderEvents, @unchecked Sendable {
+    weak var viewer: WebRTCViewer?
 
-    func receive(_ data: Data, from address: DatagramAddress) {
-        guard let first = data.first else { return }
-        switch first {
-        case 0...3: check(data, from: address)
-        case 20...63: secure(data, from: address)
-        case 128...191: feedback(data, from: address)
-        default: return
-        }
-    }
-
-    private func check(_ data: Data, from address: DatagramAddress) {
-        guard let answer = STUNMessage(data)?.answer(from: address, ice: ice) else { return }
-        lock.withLock {
-            guard current != .hungUp else { return }
-            browser = address
-            lastCheck = clock()
-            if current == .connecting { current = .securing }
-            datagrams.send(answer, to: address)
-        }
-    }
-
-    private func secure(_ record: Data, from address: DatagramAddress) {
-        let outcome = lock.withLock { () -> HandshakeProgress? in
-            guard current == .securing, address == browser else { return nil }
-            let progress = handshake.receive(record)
-            switch progress {
-            case .continuing(let replies):
-                replies.forEach { datagrams.send($0, to: address) }
-            case .complete(let replies, let export):
-                replies.forEach { datagrams.send($0, to: address) }
-                guard let keys = SRTPKeys.fromDTLS(export: export) else { return .failed }
-                srtp = SRTPContext(local: keys.local, remote: keys.remote)
-                current = .live
-            case .failed:
-                break
-            }
-            return progress
-        }
-        switch outcome {
-        case .complete?: stream.requestKeyframe()
-        case .failed?: hangUp()
-        default: break
-        }
-    }
-
-    private func feedback(_ data: Data, from address: DatagramAddress) {
-        // RFC 5761: RTCP packet types sit at 192–223 in the second byte.
-        guard data.count > 1, (192...223).contains(data[data.startIndex + 1]) else { return }
-        let asks = lock.withLock { () -> [RTCPFeedback] in
-            guard current == .live, address == browser, let plain = srtp?.unprotectRTCP(data) else { return [] }
-            return RTCPFeedback.parse(plain)
-        }
-        act(on: asks)
-    }
-
-    /// What the browser asked, decrypted: resend what it lost, hand the rest to
-    /// its congestion control, and tell the stream what follows — a keyframe, a
-    /// retune — outside the lock.
-    func act(on asks: [RTCPFeedback]) {
-        let result = lock.withLock { () -> (at: Int64, requested: Int, resent: Int, cuts: [BitrateCut], retune: Int?)? in
-            guard current == .live, let browser else { return nil }
-            let now = microsecondsNow()
-            var heard = false
-            var requested = 0, resent = 0
-            var cuts: [BitrateCut] = []
-            for ask in asks {
-                switch ask {
-                case .lost(let sequences):
-                    let packets = sequences.compactMap { history[$0] }
-                    packets.forEach { datagrams.send($0, to: browser) }
-                    requested += sequences.count
-                    resent += packets.count
-                case .keyframeRequest:
-                    continue
-                case .transportFeedback, .bandwidthEstimate:
-                    if let cut = congestion.heard(ask, at: now) { cuts.append(cut) }
-                    heard = true
-                }
-            }
-            let target = heard ? congestion.target : nil
-            let retuneTo = target.flatMap { retune.bitrate(for: $0, current: stream.config.bitrateBps, now: now) }
-            return (now, requested, resent, cuts, retuneTo)
-        }
-        guard let result else { return }
-        if result.requested > 0 {
-            record("nack requested=\(result.requested) resent=\(result.resent)", at: result.at)
-        }
-        result.cuts.forEach { record($0) }
-        if asks.contains(.keyframeRequest) {
-            record("keyframe requested", at: result.at)
-            stream.requestKeyframe()
-        }
-        if let retuneTo = result.retune {
-            let from = stream.config.bitrateBps
-            do {
-                try stream.update(.bitrate(retuneTo))
-                record("retune \(from / 1_000) → \(retuneTo / 1_000) kbps", at: microsecondsNow())
-            } catch {
-                record("retune to \(retuneTo / 1_000) kbps failed: \(error)", at: microsecondsNow())
-            }
-        }
-    }
-
-    private func record(_ cut: BitrateCut) {
-        let reason: String
-        switch cut.cause {
-        case .queue(let delay): reason = "queue +\(delay / 1_000) ms"
-        case .loss(let share): reason = "\(Int(share * 100)) % lost"
-        }
-        record("transport-cc cut to \(cut.to / 1_000) kbps: \(reason)", at: cut.at)
-    }
-
-    private func record(_ event: String, at now: Int64) {
-        let atMs = Int64((started.timeIntervalSince1970 * 1_000).rounded()) + now / 1_000
-        diagnose("[webrtc] \(event) viewer=\(id) atMs=\(atMs)")
-    }
-
-    private func microsecondsNow() -> Int64 { Int64(clock().timeIntervalSince(started) * 1_000_000) }
-
-    // MARK: - what leaves
-
-    /// One AVCC envelope from its stream: parameter sets are kept for the next
-    /// keyframe; a picture goes out only while live.
-    func show(_ envelope: Data) {
-        guard let (tag, payload) = AVCCEnvelope.unwrap(envelope) else { return }
-        lock.withLock {
-            if tag == AVCCEnvelope.descriptionTag, let sets = AVCCParameterSets.parse(avcC: payload) {
-                parameterSets = sets.sps + sets.pps
-                return
-            }
-            guard tag == AVCCEnvelope.keyframeTag || tag == AVCCEnvelope.deltaTag,
-                  current == .live, let browser, srtp != nil else { return }
-            let payloads = packetizer.payloads(
-                picture: payload, parameterSets: tag == AVCCEnvelope.keyframeTag ? parameterSets : [])
-            let timestamp = UInt32(truncatingIfNeeded: Int64(clock().timeIntervalSince(started) * 90_000))
-            let now = microsecondsNow()
-            for (index, body) in payloads.enumerated() {
-                let packet = RTPPacket(
-                    marker: index == payloads.count - 1, payloadType: payloadType,
-                    sequence: sequence, timestamp: timestamp, ssrc: ssrc, payload: body)
-                let outbound = OutboundPacket(rtp: packet, endsKeyframe: packet.marker && tag == AVCCEnvelope.keyframeTag)
-                pacer.enqueue(outbound, size: body.count + 12 + 10 + 8, at: now)   // + RTP header, SRTP tag, extension
-                sequence &+= 1
-            }
-            sendPaced(to: browser, at: now)
-        }
-    }
-
-    /// What the pacer lets out now, each stamped by its congestion control as
-    /// it leaves — the send time the estimate reads is the real one — then
-    /// another slice in 5 ms while packets wait. Called under the lock.
-    private func sendPaced(to browser: DatagramAddress, at now: Int64) {
-        pacer.bitrate = congestion.target ?? stream.config.bitrateBps
-        let released = pacer.release(at: now)
-        // How long what just left actually waited, and the rate it was paced
-        // at then: what the bench needs to tell the pacer's delay from the link's.
-        if pacer.lastWait > 50_000, lastHoldLog.map({ now - $0 >= 250_000 }) ?? true {
-            lastHoldLog = now
-            record("pacer held a packet \(pacer.lastWait / 1_000) ms, pacing for \(pacer.bitrate / 1_000) kbps", at: now)
-        }
-        for outbound in released {
-            let packet = outbound.rtp
-            let stamped = RTPPacket(
-                marker: packet.marker, payloadType: packet.payloadType, sequence: packet.sequence,
-                timestamp: packet.timestamp, ssrc: packet.ssrc, payload: packet.payload,
-                extensions: congestion.extensions(at: now))
-            let wire = srtp!.protect(stamped)
-            datagrams.send(wire, to: browser)
-            remember(wire, as: packet.sequence)
-            congestion.sent(size: wire.count, at: now)
-            if outbound.endsKeyframe { record("keyframe sent rtpTimestamp=\(packet.timestamp)", at: now) }
-        }
-        guard !pacer.isEmpty, !sliceScheduled else { return }
-        sliceScheduled = true
-        schedule(Double(Pacer<OutboundPacket>.burst) / 1_000_000) { [weak self] in self?.paceAgain() }
-    }
-
-    private func paceAgain() {
-        lock.withLock {
-            sliceScheduled = false
-            guard current == .live, let browser else { return }
-            sendPaced(to: browser, at: microsecondsNow())
-        }
-    }
-
-    private func remember(_ wire: Data, as sequence: UInt16) {
-        history[sequence] = wire
-        historyOrder.append(sequence)
-        if historyOrder.count > Self.historySize { history[historyOrder.removeFirst()] = nil }
-    }
+    func keyframeNeeded() { viewer?.keyframeNeeded() }
+    func estimated(bitrate: Int, at now: Int64) { viewer?.estimated(bitrate: bitrate, at: now) }
+    func hungUp() { viewer?.sessionEnded() }
+    func diagnostic(_ line: String) { viewer?.note(line) }
 }
