@@ -1,7 +1,8 @@
 import Foundation
 
-/// What spaces a viewer's packets on the wire: a leaky bucket that lets them
-/// out at `pacingFactor` × the target bitrate, as libwebrtc's paced sender
+/// What spaces a viewer's packets on the wire: a leaky bucket whose normal
+/// rate is `pacingFactor` × the target bitrate (faster when its queue couldn't
+/// otherwise empty in time, below), as libwebrtc's paced sender
 /// and Pion's leaky-bucket pacer do. A keyframe's 60-odd packets leave over
 /// ~30 ms instead of in one burst that overflows a phone link's queue; a
 /// small frame still leaves at once (a packet into an empty pacer brings

@@ -94,7 +94,7 @@ decide it.
 |---|---|---|
 | **Live view** | The moving picture of the device on the serve page | A *recording* (a file) or a *screenshot* (one image) |
 | **Transport** | How encoded frames cross the network to the live view: `websocket` or `webrtc` | The *format* (`mjpeg` / `avcc`). WebRTC carries H.264 only |
-| **WHEP** | WebRTC-HTTP Egress Protocol ([draft-ietf-wish-whep](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/); its publishing twin WHIP is RFC 9725). baguette implements the viewer side: POST an SDP offer, get an SDP answer and a `Location` to `DELETE` later | WHIP, the publishing side |
+| **WHEP** | WebRTC-HTTP Egress Protocol ([draft-ietf-wish-whep](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/); its publishing twin WHIP is RFC 9725). baguette serves the playback endpoint, the browser is the WHEP player: it POSTs an SDP offer, get an SDP answer and a `Location` to `DELETE` later | WHIP, the publishing side |
 | **Viewer** | One browser peer watching one device's live view | The *page*: a farm page holds many viewers |
 | **Keyframe request** | The viewer asking for an IDR (RTCP PLI/FIR, or `force_idr` on the WS) | A *snapshot* (a JPEG seed; WebRTC has none) |
 | **Tap-to-photon** | Time from sending a tap to that tap's pixel change showing in the live view | *Encode latency*, which is one part of it |
@@ -226,7 +226,8 @@ addTransceiver("video", { direction: "recvonly" }), H.264 first in setCodecPrefe
 POST offer → setRemoteDescription(answer), as the server wrote it
   (the bench page alone drops goog-remb and adds b=AS:15000, to pin Chrome to transport-cc)
 ontrack: receiver.jitterBufferTarget = 0, playoutDelayHint = 0 → <video autoplay playsinline muted>
-getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame for 3 s
+(designed, not built: getStats() every 500 ms, reconnecting when no first frame in
+ 10 s or no new frame for 3 s — WhepSession today shows a failure and stops)
 ```
 
 ## 4 · Invariants (each law, one owner)
@@ -245,7 +246,7 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
 | 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
-| 17 | A viewer's packets leave at no more than 2.5 × its target, except to catch up a queue whose oldest packet nears 500 ms; a small frame leaves at once | `Pacer` |
+| 17 | With pacing on, a viewer's packets leave at 2.5 × its target as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once. `?pacing=off` sends each as it comes | `Pacer` |
 | 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
 | 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
 | 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
@@ -289,19 +290,21 @@ between the two transports is the video path alone.
 | Host CPU and memory of `baguette serve` | `top -pid`, sampled 1 Hz |
 | Browser decode path, frames dropped | `getStats()` / `VideoDecoder` counters |
 
-**A reference sender.** To tell our WebRTC sender's part from the
-encoder's, the bench runs a third column, **WebRTC (Pion)**: the same
+**Senders to compare.** Beside baguette's own WebRTC, two more columns:
+**WebRTC (no pacer)**, the same sender with `?pacing=off` — the A/B for the
+pacer, one difference only; and **WebRTC (Pion)**, a reference: the same
 `baguette stream` encoder at serve's settings, sent through
 [Pion](https://github.com/pion/webrtc) with its Google Congestion Control and
 leaky-bucket pacer (`scripts/bench-live-view/pion/`, built by `start.sh` when
 Go is installed). Pion's target retunes the encoder through the stream's
 stdin with our viewer's rule (at most once a second, only on a change over
-10 %); a PLI or FIR asks for a keyframe. Same screen, encoder and page: only
-the sender differs. Where Pion beats ours on p95 or freezes on the same link,
-the gap is in our sender (no pacer, our estimator); where they match, the
-picture is the encoder's.
+10 %); a PLI or FIR asks for a keyframe. Same screen, encoder and page, but
+Pion's whole send path differs (pacer, estimator, packetization), so a gap
+says *that* the senders differ, not which part — and close results don't
+show the encoder is the limit unless a run also shows neither estimate held
+it back. What runs found, and what they support, is in §6 (slice 11).
 
-**The matrix:** {websocket, webrtc, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
+**The matrix:** {websocket, webrtc, webrtc without pacer, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
 1 % loss, 50 ms + 5 % loss, 5 Mbps cap} × {1, 4, 8 devices} for CPU. We apply
 impairments with `dnctl` + `pfctl` dummynet, scripted so every run can be
 reproduced — **on loopback only** (`impair.sh` shapes `lo0`: a browser on this
