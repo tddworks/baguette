@@ -14,8 +14,10 @@ private func offer(_ extensions: [String]) -> SessionDescription {
         "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
     ]).joined(separator: "\r\n"))
 }
-private let both = offer(["a=extmap:2 " + absSendTimeURI, "a=extmap:3 " + transportWideURI])
-private let rembOnly = offer(["a=extmap:2 " + absSendTimeURI])
+private let both = offer([
+    "a=extmap:2 " + absSendTimeURI, "a=extmap:3 " + transportWideURI, "a=rtcp-fb:112 goog-remb", "a=rtcp-fb:112 transport-cc",
+])
+private let rembOnly = offer(["a=extmap:2 " + absSendTimeURI, "a=rtcp-fb:112 goog-remb"])
 private let neither = offer([])
 
 @Suite("TransportWideControl")

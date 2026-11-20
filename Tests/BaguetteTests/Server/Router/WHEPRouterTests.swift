@@ -35,7 +35,7 @@ private func mockViewers() -> WebRTCViewers {
             given(stream).start(on: .any).willReturn()
             given(stream).stop().willReturn()
             given(stream).config.willReturn(.default)
-            given(stream).apply(.any).willReturn()
+            given(stream).update(.any).willReturn()
             given(stream).requestKeyframe().willReturn()
             given(stream).requestSnapshot().willReturn()
             return stream
@@ -60,11 +60,13 @@ private func whepServer(
 
 private let sdp: HTTPFields = [.contentType: "application/sdp"]
 
-/// The offer with both congestion-control extensions, as Chrome sends it.
+/// The offer with both congestion-control extensions and their feedback on
+/// its H.264, as Chrome sends it.
 private let offerWithBoth = offer.replacingOccurrences(
     of: "a=setup:actpass\r\n",
     with: "a=setup:actpass\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n"
-        + "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
+        + "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n"
+        + "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n")
 
 @Suite("Serve router: WHEP")
 struct WHEPRouterTests {

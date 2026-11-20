@@ -30,9 +30,11 @@ public struct SessionDescription: Equatable, Sendable {
     public let payloadType: UInt8
     public let profileLevelID: String
     /// The header-extension id the offer gives the transport-wide sequence
-    /// number, or nil when the browser offers no transport-cc congestion control.
+    /// number, or nil when the browser offers no transport-cc congestion control
+    /// (the extension, a one-byte id, and `transport-cc` feedback on our H.264).
     public let transportWideSequenceID: UInt8?
-    /// The header-extension id the offer gives abs-send-time, which REMB needs.
+    /// The header-extension id the offer gives abs-send-time, which REMB needs;
+    /// nil unless the browser also asks for `goog-remb` on our H.264.
     public let absSendTimeID: UInt8?
 
     public static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
@@ -55,15 +57,18 @@ public struct SessionDescription: Equatable, Sendable {
         mid = value("mid") ?? "0"
         self.payloadType = payloadType
         profileLevelID = profile
-        // a=extmap:<id>[/<direction>] <uri>
-        func extensionID(_ uri: String) -> UInt8? {
-            section.compactMap { line -> UInt8? in
+        // a=extmap:<id>[/<direction>] <uri>: only an id a one-byte header
+        // (RFC 8285 §4.2) carries — 1 to 14, all `RTPPacket` writes — and only
+        // with the feedback that makes it worth sending asked for on our H.264.
+        func extensionID(_ uri: String, feedback: String) -> UInt8? {
+            guard section.contains("a=rtcp-fb:\(payloadType) \(feedback)") else { return nil }
+            return section.compactMap { line -> UInt8? in
                 guard line.hasPrefix("a=extmap:"), line.hasSuffix(" " + uri) else { return nil }
                 return UInt8(line.dropFirst(9).prefix { $0.isNumber })
-            }.first
+            }.first { (1...14).contains($0) }
         }
-        transportWideSequenceID = extensionID(Self.transportWideSequenceURI)
-        absSendTimeID = extensionID(Self.absSendTimeURI)
+        transportWideSequenceID = extensionID(Self.transportWideSequenceURI, feedback: "transport-cc")
+        absSendTimeID = extensionID(Self.absSendTimeURI, feedback: "goog-remb")
     }
 
     /// The H.264 format the encoder can feed: High profile (profile_idc 0x64),

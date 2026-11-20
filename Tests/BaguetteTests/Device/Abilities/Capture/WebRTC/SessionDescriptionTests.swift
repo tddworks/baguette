@@ -160,7 +160,9 @@ private let offerWithTransportCC = chromeOffer
         of: "a=rtcp-mux\r\n",
         with: "a=rtcp-mux\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n"
             + "a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
-    .replacingOccurrences(of: "a=rtcp-fb:112 nack pli\r\n", with: "a=rtcp-fb:112 nack pli\r\na=rtcp-fb:112 transport-cc\r\n")
+    .replacingOccurrences(
+        of: "a=rtcp-fb:112 nack pli\r\n",
+        with: "a=rtcp-fb:112 nack pli\r\na=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n")
 
 extension SessionDescriptionTests {
     @Test func `should read the offer's transport-wide sequence and abs-send-time extension ids`() throws {
@@ -169,6 +171,23 @@ extension SessionDescriptionTests {
         #expect(offered.absSendTimeID == 2)
         let bare = try SessionDescription(offer: chromeOffer)
         #expect(bare.transportWideSequenceID == nil && bare.absSendTimeID == nil)
+    }
+
+    @Test func `should not take an extension the browser offers without asking for its feedback on our H.264`() throws {
+        let noFeedback = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n", with: ""))
+        #expect(noFeedback.transportWideSequenceID == nil && noFeedback.absSendTimeID == nil)
+
+        let feedbackOnAnotherFormat = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc", with: "a=rtcp-fb:96 goog-remb\r\na=rtcp-fb:96 transport-cc"))
+        #expect(feedbackOnAnotherFormat.transportWideSequenceID == nil && feedbackOnAnotherFormat.absSendTimeID == nil)
+    }
+
+    @Test func `should not take an extension numbered past what a one-byte header can carry`() throws {
+        let offered = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:16 ")
+            .replacingOccurrences(of: "a=extmap:2 ", with: "a=extmap:15 "))
+        #expect(offered.transportWideSequenceID == nil && offered.absSendTimeID == nil)
     }
 
     @Test func `should put its congestion control's lines in the answer, and none of its own`() throws {
