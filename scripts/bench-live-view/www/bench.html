@@ -19,11 +19,13 @@ const UNPACED = q.get('pacing') === 'off';
 const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (UNPACED ? '?pacing=off' : '');
 const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const PION = WHEP.startsWith('/pion/');
+const TAP_PATH = T === 'webrtc' && (PION || SPIKE) ? 'POST /input' : 'socket';
+const BANDWIDTH_ONLY = q.get('mode') === 'bw';
 const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
 document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
 const logEl = document.getElementById('log'); const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log('[bench]', ...a); };
 const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
-const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : UNPACED ? 'baguette, no pacer' : 'baguette', t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
+const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : UNPACED ? 'baguette, no pacer' : 'baguette', tapPath: TAP_PATH, t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
 
 // Every presented frame lands here with the time it reaches the screen and its centre-pixel luma.
 // Both paths stamp the moment the frame is expected on screen, never the start of the frame
@@ -94,6 +96,10 @@ async function startWebRTC() {
   document.getElementById('cv').style.display = 'none';
   const vid = document.getElementById('vid');
   const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle' });
+  let viewer;
+  R.pc = pc;
+  // Hang up on setup failure as well, without waiting for consent to expire.
+  R.stop = () => { pc.close(); R.taps?.close(); if (viewer && !SPIKE) fetch((PION ? '' : '/api') + viewer, { method: 'DELETE' }); };
   const tr = pc.addTransceiver('video', { direction: 'recvonly' });
   const caps = RTCRtpReceiver.getCapabilities('video').codecs;
   tr.setCodecPreferences([...caps.filter(c => c.mimeType.toLowerCase() === 'video/h264'), ...caps.filter(c => c.mimeType.toLowerCase() !== 'video/h264')]);
@@ -102,30 +108,38 @@ async function startWebRTC() {
   const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
   const res = await fetch(WHEP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
   if (!res.ok) { throw new Error('WHEP ' + res.status + ' ' + (await res.text()).slice(0, 200)); }
+  viewer = res.headers.get('Location');
   let sdp = (await res.text()).replace(/a=rtcp-fb:\d+ goog-remb\r?\n/g, '');
   if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
   await pc.setRemoteDescription({ type: 'answer', sdp });
-  const viewer = res.headers.get('Location');
   // baguette's viewer takes gestures on its control socket, as the device page sends them;
   // Pion and MediaMTX have none, so their taps are posted.
-  if (viewer && !SPIKE && !PION) {
+  if (TAP_PATH === 'socket' && !BANDWIDTH_ONLY) {
+    if (!viewer) throw new Error('missing viewer Location for input WebSocket');
     R.taps = new WebSocket(SERVE.replace('http', 'ws') + viewer + '/control');
-    await new Promise(r => { R.taps.onopen = r; R.taps.onerror = r; setTimeout(r, 3000); });
+    await new Promise(resolve => {
+      const timeout = setTimeout(resolve, 3000);
+      const settled = () => { clearTimeout(timeout); resolve(); };
+      R.taps.onopen = R.taps.onerror = R.taps.onclose = settled;
+    });
+    inputSocket();
   }
   const onFrame = (now, meta) => { presented(meta.expectedDisplayTime ?? now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
   vid.requestVideoFrameCallback(onFrame);
-  // Hang the viewer up at the end, rather than leave it to the 30 s consent timeout.
-  R.pc = pc; R.stop = () => { pc.close(); R.taps?.close(); if (viewer && !SPIKE) fetch((PION ? '' : '/api') + viewer, { method: 'DELETE' }); };
+}
+
+function inputSocket() {
+  if (R.taps?.readyState !== WebSocket.OPEN) throw new Error('input WebSocket is not open');
+  return R.taps;
 }
 
 // --- the probe: tap the fixture's centre, time until the centre turns white
-async function tap(side) {
+function tap(side) {
   const envelope = { type: 'tap', x: side === 'left' ? W / 4 : 3 * W / 4, y: H / 2, width: W, height: H, duration: 0.15 };
-  if (R.taps && R.taps.readyState === 1) { R.tapPath = 'socket'; return R.taps.send(JSON.stringify(envelope)); }
-  R.tapPath = 'POST /input';
+  if (TAP_PATH === 'socket') { inputSocket().send(JSON.stringify(envelope)); return; }
   // text/plain + no-cors: a simple request, so no preflight; we don't read the ack.
-  return fetch(SERVE + '/devices/' + UDID + '/input', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(envelope) });
+  fetch(SERVE + '/devices/' + UDID + '/input', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(envelope) }).catch(error => log('POST /input:', error.message));
 }
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]; };
 async function rtcBytes() { let b = 0, p = 0; (await R.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') { b += r.bytesReceived + (r.headerBytesReceived || 0); p += r.packetsReceived; } }); return { b, p }; }
@@ -149,7 +163,7 @@ async function run() {
   T === 'ws' ? startWS() : await startWebRTC();
   for (const until = performance.now() + 15000; R.firstFrame === null; await new Promise(r => setTimeout(r, 50)))
     if (performance.now() > until) throw new Error('no picture within 15 s');
-  if (q.get('mode') === 'bw') return bw(+(q.get('secs') || 30));
+  if (BANDWIDTH_ONLY) return bw(+(q.get('secs') || 30));
   await new Promise(r => setTimeout(r, 2000));
   // The probe needs the tap probe page on screen: anything already lit at the centre would make every
   // "tap" just the time to the next frame.
@@ -168,6 +182,7 @@ async function run() {
     R.samples.push(t1 === null ? null : t1 - t0);
     if (i % 10 === 9) log('tap', i + 1, t1 === null ? 'MISS' : (t1 - t0).toFixed(1) + ' ms');
   }
+  if (TAP_PATH === 'socket') inputSocket();
   const ok = R.samples.filter(x => x !== null);
   if (!ok.length) return finish({ transport: T, sender: R.sender, taps: TAPS, misses: TAPS, failed: 'no tap was answered within 5 s' });
   const iv = R.frames.slice(1).map((t, i) => t - R.frames[i]);
@@ -184,5 +199,5 @@ async function run() {
 }
 // Every run ends with a summary and its session closed, even one that fails.
 function finish(summary) { R.summary = summary; log(JSON.stringify(summary, null, 1)); R.done = true; R.stop?.(); }
-run().catch(e => finish({ transport: T, sender: R.sender, failed: e.message }));
+run().catch(e => finish({ transport: T, sender: R.sender, tapPath: R.tapPath, failed: e.message }));
 </script></body></html>
