@@ -28,6 +28,7 @@ extension Server {
     ) {
         let plugins = self.plugins
         let devices = allDevices
+        let inputs = inputs
         let grants = self.grants
         let origin = "http://\(self.host):\(self.port)"
 
@@ -92,7 +93,7 @@ extension Server {
                 let buffer = try? await r.body.collect(upTo: 64 * 1024)
                 let body = buffer.map { String(buffer: $0) } ?? ""
                 switch await Self.dispatchInput(
-                    udid: Self.udidParam(r), body: body, devices: devices
+                    udid: Self.udidParam(r), body: body, devices: devices, inputs: inputs
                 ) {
                 case .ok(let ack):
                     return Self.jsonResponse(ack)
@@ -240,11 +241,12 @@ extension Server {
     /// event-loop thread yields messages the simulator silently drops.
     /// `Server.streamWS` does the same before dispatching.
     static func dispatchInput(
-        udid: String, body: String, devices: any Devices
+        udid: String, body: String, devices: any Devices, inputs: DeviceInputs = DeviceInputs()
     ) async -> InputOutcome {
         let input: Abilities
         do {
-            input = try devices.device(DeviceID(udid)).input()
+            // The device's kept input: making one is a new HID connection, ~300 ms a request.
+            input = try inputs.input(of: devices.device(DeviceID(udid)))
         } catch DeviceError.unknown {
             return .unknownDevice
         } catch let refusal as DeviceError {
@@ -254,7 +256,13 @@ extension Server {
         }
         let dispatcher = GestureDispatcher(input: input)
         let ack = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: body) }
-        return .ok(ack)
+        // Not taken: the kept input may no longer reach the device (rebooted
+        // between two requests, which its state can't show) — once more, fresh.
+        guard ack == GestureDispatcher.notTaken, let device = try? devices.device(DeviceID(udid)) else { return .ok(ack) }
+        inputs.letGo(of: device.id)
+        guard let fresh = try? inputs.input(of: device) else { return .ok(ack) }
+        let retried = GestureDispatcher(input: fresh)
+        return .ok(await gestureQueues.run(on: udid) { retried.dispatch(line: body) })
     }
 
     // MARK: - running a contributed command

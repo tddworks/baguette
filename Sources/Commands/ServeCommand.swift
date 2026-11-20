@@ -4,6 +4,7 @@ import Foundation
 
 /// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
 /// `             [--allowed-hosts …] [--plugin-dir …] [--no-plugins]`
+/// `             [--webrtc-ports 8190-8194]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
 /// in a browser and the simulator picker loads — no SPA dependency,
@@ -34,6 +35,17 @@ struct ServeCommand: AsyncParsableCommand {
 
     @Flag(name: .customLong("no-plugins"), help: "Ignore every installed plugin, including bundled ones.")
     var noPlugins = false
+
+    @Option(
+        name: .customLong("webrtc-ports"),
+        help: "UDP ports WebRTC viewers' media may use, e.g. 8190-8194 (default: any free port).",
+        transform: { written in
+            guard let ports = MediaPorts(parsing: written) else {
+                throw ValidationError("--webrtc-ports takes a port or a range, like 8190-8194")
+            }
+            return ports
+        })
+    var mediaPorts: MediaPorts = .any
 
     func run() async throws {
         // Someone reads this log while driving a page, and no agent pays for it.

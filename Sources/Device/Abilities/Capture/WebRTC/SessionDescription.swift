@@ -29,13 +29,25 @@ public struct SessionDescription: Equatable, Sendable {
     public let mid: String
     public let payloadType: UInt8
     public let profileLevelID: String
+    /// The header-extension id the offer gives the transport-wide sequence
+    /// number, or nil when the browser offers no transport-cc congestion control
+    /// (the extension, a one-byte id, and `transport-cc` feedback on our H.264).
+    public let transportWideSequenceID: UInt8?
+    /// The header-extension id the offer gives abs-send-time, which REMB needs;
+    /// nil unless the browser also asks for `goog-remb` on our H.264.
+    public let absSendTimeID: UInt8?
+
+    public static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+    public static let absSendTimeURI = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
 
     public init(offer sdp: String) throws {
         let lines = sdp.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         guard let video = lines.firstIndex(where: { $0.hasPrefix("m=video ") }) else { throw Refusal.noVideo }
         let next = lines[(video + 1)...].firstIndex { $0.hasPrefix("m=") } ?? lines.endIndex
-        // Session-level lines apply unless the video section says otherwise.
-        let section = Array(lines[(video + 1)..<next]) + Array(lines[..<video])
+        // Session-level lines (before the first m= line) apply unless the video section says
+        // otherwise; another media section's lines — an audio `a=rtcp-fb:*` — never do.
+        let sessionLevel = lines.prefix { !$0.hasPrefix("m=") }
+        let section = Array(lines[(video + 1)..<next]) + Array(sessionLevel)
         func value(_ key: String) -> String? {
             section.first { $0.hasPrefix("a=\(key):") }.map { String($0.dropFirst(key.count + 3)) }
         }
@@ -47,6 +59,24 @@ public struct SessionDescription: Equatable, Sendable {
         mid = value("mid") ?? "0"
         self.payloadType = payloadType
         profileLevelID = profile
+        // a=extmap:<id>[/<direction>] <uri>: only an id a one-byte header
+        // (RFC 8285 §4.2) carries — 1 to 14, all `RTPPacket` writes — that the
+        // browser will receive (no `inactive` or `sendonly`, RFC 8285 §7), and
+        // only with the feedback that makes it worth sending asked for on our
+        // H.264, or on every format (`*`, RFC 4585 §4.2).
+        func extensionID(_ uri: String, feedback: String) -> UInt8? {
+            guard section.contains("a=rtcp-fb:\(payloadType) \(feedback)") || section.contains("a=rtcp-fb:* \(feedback)")
+            else { return nil }
+            return section.compactMap { line -> UInt8? in
+                guard line.hasPrefix("a=extmap:"), line.hasSuffix(" " + uri) else { return nil }
+                let mapping = line.dropFirst(9).prefix { $0 != " " }.split(separator: "/")
+                guard let id = mapping.first.flatMap({ UInt8($0) }), (1...14).contains(id) else { return nil }
+                let direction = mapping.count > 1 ? mapping[1] : "sendrecv"
+                return direction == "sendrecv" || direction == "recvonly" ? id : nil
+            }.first
+        }
+        transportWideSequenceID = extensionID(Self.transportWideSequenceURI, feedback: "transport-cc")
+        absSendTimeID = extensionID(Self.absSendTimeURI, feedback: "goog-remb")
     }
 
     /// The H.264 format the encoder can feed: High profile (profile_idc 0x64),
@@ -73,8 +103,11 @@ public struct SessionDescription: Equatable, Sendable {
 
     /// The answer: an ICE-lite agent at `candidates`, DTLS passive (the browser
     /// connects), sending this one H.264 format from `ssrc`, with the feedback
-    /// the viewer acts on (NACK, PLI, FIR).
-    public func answer(ice: ICECredentials, fingerprint: String, ssrc: UInt32, candidates: [DatagramAddress]) -> String {
+    /// the viewer acts on (NACK, PLI, FIR) and whatever lines its congestion
+    /// control needs (`CongestionControl.answerLines`).
+    public func answer(
+        ice: ICECredentials, fingerprint: String, ssrc: UInt32, candidates: [DatagramAddress], congestion: [String] = []
+    ) -> String {
         let pt = payloadType
         var lines = [
             "v=0", "o=- 0 0 IN IP4 127.0.0.1", "s=baguette", "t=0 0",
@@ -83,6 +116,8 @@ public struct SessionDescription: Equatable, Sendable {
             "a=mid:\(mid)", "a=sendonly", "a=rtcp-mux",
             "a=ice-ufrag:\(ice.ufrag)", "a=ice-pwd:\(ice.password)",
             "a=fingerprint:\(fingerprint)", "a=setup:passive",
+        ] + congestion
+        lines += [
             "a=rtpmap:\(pt) H264/90000",
             "a=rtcp-fb:\(pt) nack", "a=rtcp-fb:\(pt) nack pli", "a=rtcp-fb:\(pt) ccm fir",
             "a=fmtp:\(pt) level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=\(profileLevelID)",

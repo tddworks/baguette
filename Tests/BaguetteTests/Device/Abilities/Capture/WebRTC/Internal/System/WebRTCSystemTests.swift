@@ -34,6 +34,17 @@ struct UDPDatagramsTests {
         #expect(Set(socket.addresses.map(\.port)).count == 1)
         #expect(socket.addresses.allSatisfy { $0.ip.count == 4 && $0.port != 0 })
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func `should take the next port of a media range when the first is in use`() throws {
+        let ports = MediaPorts(48_190...48_199)
+        let first = try ports.bind { try UDPDatagrams(port: $0) }
+        let second = try ports.bind { try UDPDatagrams(port: $0) }
+        defer { first.close(); second.close() }
+
+        #expect(first.addresses.first?.port == 48_190)
+        #expect(second.addresses.first?.port == 48_191)
+    }
 }
 
 private final class ArrivedDatagram: @unchecked Sendable {

@@ -7,8 +7,9 @@ description: A proposal to carry the serve live view over WebRTC (WHEP) next to 
 **Status:** BUILT on `feat/whep-live-view`, slices 1–10 of [§6](#6--build-sequence-test-first-each-slice-green):
 the WHEP routes and the page's **WebRTC** choice play through baguette's own
 ICE-lite, DTLS-SRTP and RTP, checked end to end in Chrome on 2026-11-20 (the serve
-page at 38–40 fps, touches through the control socket). Not built: bitrate adaptation
-(slice 11), designed and built on its own branch, `feat/webrtc-congestion-control`. How to use it: [README](README.md).
+page at 38–40 fps, touches through the control socket). Congestion control (slice 11,
+transport-cc) is built and tested over a simulated link; not yet measured on a
+real throttled one. How to use it: [README](README.md).
 
 This doc owns **how encoded frames travel from `baguette serve` to the page,
 and how we compare two ways of doing it**. It doesn't change what gets encoded
@@ -93,7 +94,7 @@ decide it.
 |---|---|---|
 | **Live view** | The moving picture of the device on the serve page | A *recording* (a file) or a *screenshot* (one image) |
 | **Transport** | How encoded frames cross the network to the live view: `websocket` or `webrtc` | The *format* (`mjpeg` / `avcc`). WebRTC carries H.264 only |
-| **WHEP** | WebRTC-HTTP Egress Protocol (RFC 9725): POST an SDP offer, get an SDP answer and a `Location` to `DELETE` later | WHIP, the publishing side |
+| **WHEP** | WebRTC-HTTP Egress Protocol ([draft-ietf-wish-whep](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/); its publishing twin WHIP is RFC 9725). baguette serves the playback endpoint, the browser is the WHEP player: it POSTs an SDP offer, get an SDP answer and a `Location` to `DELETE` later | WHIP, the publishing side |
 | **Viewer** | One browser peer watching one device's live view | The *page*: a farm page holds many viewers |
 | **Keyframe request** | The viewer asking for an IDR (RTCP PLI/FIR, or `force_idr` on the WS) | A *snapshot* (a JPEG seed; WebRTC has none) |
 | **Tap-to-photon** | Time from sending a tap to that tap's pixel change showing in the live view | *Encode latency*, which is one part of it |
@@ -126,8 +127,57 @@ WebRTCViewers  ◆                      the live viewers by id — admit(offer, 
     │   └─ H264Packetizer ◇            RFC 6184: single NAL or FU-A, SPS/PPS as STAP-A; ≤ 1200 B payload
     ├─ RTPPacket ◇                     header + payload, both ways (shared with a phone's screen)
     ├─ SRTPContext ◇                   AES-CM-128 + HMAC-SHA1-80: protect RTP, unprotect RTCP
-    └─ RTCPFeedback ◇                  PLI · FIR → keyframe; NACK → resend from history; REMB → bitrate
+    ├─ RTCPFeedback ◇                  PLI · FIR → keyframe; NACK → resend from history;
+    │                                  transport-cc → arrivals (TransportFeedback ◇)
+    ├─ SendHistory ◇                   transport-wide sequence → send time and size, bounded;
+    │                                  each packet's outcome once; LOST ONLY AFTER 500 ms MISSING
+    └─ BandwidthEstimate ◇             GCC's shape (AIMD + a loss-based rate; THE TARGET IS THE LOWER
+        │                              OF THE TWO, between a floor and the starting bitrate), with
+        │                              recovery from its own bursts' measured capacity, and fast
+        │                              (50 %/s) back to the rate before a cut the queue never repeated
+        └─ QueueDelay ◇                the queue = the delay FLOOR of packets sent in the last 200 ms
+                                       minus the floor of the last 10 s; jitter can't lift a floor;
+                                       fewer than 10 packets is no evidence
 ```
+
+**How much the link takes is one role, `CongestionControl`, with three
+implementations the viewer can't tell apart** (decided 2026-11-20): it answers
+which SDP lines it needs, what each packet carries, what it makes of the
+browser's feedback, and the bitrate it wants (or none).
+
+| Implementation | Who estimates | Each packet carries | Feedback read |
+|---|---|---|---|
+| `TransportWideControl` (default) | baguette (GCC, below) | transport-wide sequence | transport-cc |
+| `ReceiverEstimateControl` | the browser | `abs-send-time` (24-bit, 6.18 s) | REMB |
+| `FixedBitrate` | nobody | nothing | nothing |
+
+`CongestionChoice` picks one per viewer: `?congestion=transport-cc|remb|off` on
+the WHEP `POST`, else transport-cc if offered, else REMB if offered, else none.
+
+**transport-cc is the default (decided 2026-11-20, after the jitter fix).** On
+the phone it then looked as sharp as REMB had, while REMB, unchanged, started
+soft: Chrome's estimate cut on connect (`8000 → 3276 kbps`) and ramped about 10 %
+a step. REMB was briefly the default before that fix, for the reason below.
+
+**Why REMB was the default for a while (2026-11-20), and what it costs.** On a phone
+over Tailscale (Chrome on iOS), REMB gave the best picture: the log showed no
+REMB retunes at all, so it most likely stayed at 8 Mbps, while transport-cc had
+cut to ~300 kbps and was climbing back at 8 %/s. Whether that cut was real
+congestion or a misread (late packets counted as lost; keyframe bursts without a
+pacer) is still open. The cost: REMB's estimate is the browser's, about 1.5× what
+arrives, so in desktop Chrome a still screen drops it to the 300 kbps floor, and
+where a browser sends no REMB nothing adapts. `?congestion=transport-cc` keeps
+the measuring method one parameter away.
+The viewer keeps `EncoderRetune` (law 12), shared by all three.
+
+**Congestion control is the sender's (transport-cc), as libwebrtc does it.**
+Every packet carries a transport-wide sequence number (an RTP header extension);
+the browser reports when each one arrived (RTCP transport-cc feedback, about every
+50–100 ms); the viewer estimates the bandwidth from those reports and retunes its
+own encoder. REMB, where the browser does the estimating and sends one number,
+was the simpler option and was turned down for the industry's current way
+(decided 2026-11-20). The same feedback comes from an SFU, so it carries over to
+publishing (open question 5).
 
 The demultiplexing of one UDP port (RFC 7983) is the viewer's: first byte 0–3
 is STUN, 20–63 is DTLS, 128–191 is RTP/RTCP.
@@ -156,8 +206,9 @@ POST /devices/:udid/whep  body: SDP offer
   → 201 Created, Location: /devices/:udid/whep/:id, body: SDP answer
 viewer.receive(STUN)      → a success response; the browser's address is learned
 viewer.receive(DTLS)      → handshake replies; when done: SRTP keys, state live, stream.requestKeyframe()
-stream → sink.write(env)  → viewer.send(env): packets, SRTP, datagrams
-viewer.receive(SRTCP)     → PLI/FIR: stream.requestKeyframe() · NACK: resend · REMB: stream.apply(bitrate)
+stream → sink.write(env)  → viewer.show(env): packets into its Pacer; each stamped, SRTP'd and sent as it leaves
+viewer.receive(SRTCP)     → PLI/FIR: stream.requestKeyframe() · NACK: resend · transport-cc / REMB: its
+                            CongestionControl's target → EncoderRetune → stream.update(.bitrate(target))
 WS  /devices/:udid/whep/:id/control   gestures and stream control for that viewer, through GestureDispatcher
 DELETE /devices/:udid/whep/:id        viewers.hangUp(id)
 ```
@@ -172,9 +223,11 @@ The page's side of WHEP, tuned for latency rather than smoothness:
 ```
 RTCPeerConnection({ bundlePolicy: "max-bundle" })
 addTransceiver("video", { direction: "recvonly" }), H.264 first in setCodecPreferences
-POST offer → answer; drop goog-remb lines; add b=AS:15000 if the answer has no bandwidth line
+POST offer → setRemoteDescription(answer), as the server wrote it
+  (the bench page alone drops goog-remb and adds b=AS:15000, to pin Chrome to transport-cc)
 ontrack: receiver.jitterBufferTarget = 0, playoutDelayHint = 0 → <video autoplay playsinline muted>
-getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame for 3 s
+(designed, not built: getStats() every 500 ms, reconnecting when no first frame in
+ 10 s or no new frame for 3 s — WhepSession today shows a failure and stops)
 ```
 
 ## 4 · Invariants (each law, one owner)
@@ -190,6 +243,13 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 7 | A viewer the browser stops answering (no STUN check for 30 s) hangs up | `WebRTCViewer` |
 | 8 | A STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
+| 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
+| 12 | A viewer retunes its encoder on a move of more than 10%. Drops apply immediately. Increases wait at least one second after the last retune | `EncoderRetune` |
+| 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
+| 17 | With pacing on, a viewer's packets leave at 2.5 × its target as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once. `?pacing=off` sends each as it comes | `Pacer` |
+| 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
+| 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
+| 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
 
 Law 1 is what makes the comparison fair. If WebRTC needs different tuning
@@ -201,15 +261,20 @@ on that tuning too.
 **One probe, both transports.** Tap-to-photon is what a user feels, and both
 transports can measure it the same way from inside the page:
 
-1. The simulator's Safari shows a probe page that turns the screen from black
-   to white on `touchstart` and back on `touchend`.
-2. The bench page taps the centre through `POST /devices/:udid/input` (the same
-   route for both transports) and records `t0 = performance.now()`.
-3. Every presented frame (`requestVideoFrameCallback` on the `<video>`, the
-   `requestAnimationFrame` paint on the canvas) samples the centre pixel. The
-   first white sample gives `t1`.
-4. **Tap-to-photon = t1 − t0.** One tap every 0.5–0.7 s (randomised so taps
-   don't line up with vsync), 100 per run. Results show on the page.
+1. The simulator's Safari shows the tap probe: black at rest, red while a touch
+   on its left half is down, green for its right half, black again on
+   `touchend`.
+2. The bench page taps through `POST /devices/:udid/input` (the same route for
+   every transport), alternating left and right, and records
+   `t0 = performance.now()`.
+3. Every presented frame samples the centre pixel, stamped when it reaches the
+   screen (`expectedDisplayTime` on the `<video>`; the next vsync after the
+   canvas paint). The first frame in this tap's colour gives `t1`; a late
+   answer to the last tap is the other colour, never counted.
+4. **Tap-to-photon = t1 − t0.** One tap every 0.25–0.45 s after the screen is
+   black again (randomised so taps don't line up with vsync), 100 per run,
+   each waiting up to 5 s; a tap with no answer is a miss, outside the
+   percentiles, and counted. Results show on the page.
 
 Both paths include input delivery, the render and the encode. The difference
 between the two transports is the video path alone.
@@ -225,11 +290,27 @@ between the two transports is the video path alone.
 | Host CPU and memory of `baguette serve` | `top -pid`, sampled 1 Hz |
 | Browser decode path, frames dropped | `getStats()` / `VideoDecoder` counters |
 
-**The matrix:** {websocket, webrtc} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
+**Senders to compare.** Beside baguette's own WebRTC, two more columns:
+**WebRTC (no pacer)**, the same sender with `?pacing=off` — the A/B for the
+pacer, one difference only; and **WebRTC (Pion)**, a reference: the same
+`baguette stream` encoder at serve's settings, sent through
+[Pion](https://github.com/pion/webrtc) with its Google Congestion Control and
+leaky-bucket pacer (`scripts/bench-live-view/pion/`, built by `start.sh` when
+Go is installed). Pion's target retunes the encoder through the stream's
+stdin at most once a second, on a change over 10 %. A PLI or FIR asks for a
+keyframe. Same screen, encoder and page, but
+Pion's whole send path differs (pacer, estimator, packetization), so a gap
+says *that* the senders differ, not which part — and close results don't
+show the encoder is the limit unless a run also shows neither estimate held
+it back. What runs found, and what they support, is in §6 (slice 11).
+
+**The matrix:** {websocket, webrtc, webrtc without pacer, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
 1 % loss, 50 ms + 5 % loss, 5 Mbps cap} × {1, 4, 8 devices} for CPU. We apply
-impairments with `dnctl` + `pfctl` dummynet on the loopback or LAN interface,
-scripted so every run can be reproduced. Network Link Conditioner is fine for
-spot checks.
+impairments with `dnctl` + `pfctl` dummynet, scripted so every run can be
+reproduced — **on loopback only** (`impair.sh` shapes `lo0`: a browser on this
+Mac). A phone over Wi-Fi or Tailscale crosses another interface the script
+doesn't touch: those runs are the real network, unimpaired, and are recorded
+apart. Network Link Conditioner is fine for spot checks.
 
 ### Run it
 
@@ -398,9 +479,345 @@ this doc.
    the control WebSocket, through `InProcessServer`.
 10. ~~**The page**~~ **DONE**: a WebRTC option beside H.264 and MJPEG, painting the `<video>`
     onto the stream canvas. *Pinned: `make test-web`.*
-11. **Bitrate adaptation**: on its own branch, `feat/webrtc-congestion-control` (transport-cc, as libwebrtc does it).
-12. **Docs**: a user README, `serve.md` rows, CHANGELOG; the bench kit pointed
-    at the native route, and the full matrix run on it.
+11. **Congestion control (transport-cc)**, replacing "REMB → bitrate":
+    1. ~~*Negotiate it*~~ **DONE**: the answer adds `a=rtcp-fb:<pt> transport-cc` and the
+       `transport-wide-cc` header extension at the offer's id. *Pinned: an offer
+       without the extension is still answered, without adaptation.*
+    2. ~~*Number every packet*~~ **DONE**: a one-byte header extension (RFC 8285) on
+       `RTPPacket` with a 16-bit transport-wide sequence.
+    3. ~~*`TransportFeedback`*~~ **DONE**: RTCP RTPFB FMT 15 — base sequence, reference time,
+       run-length and status-vector chunks, small and large deltas.
+    4. ~~*`SendHistory`*~~ **DONE**: feedback → sent/arrived pairs; wraparound; losses.
+    5. ~~*`BandwidthEstimate`*~~ **DONE**: delay-based and loss-based rates; each constant's
+       source (draft-ietf-rmcat-gcc, libwebrtc defaults) noted here.
+    6. ~~*`WebRTCViewer` retunes its encoder*~~ **DONE** (laws 11–12).
+    7. *Prove it* on a throttled link (Network Link Conditioner or `impair.sh`).
+    8. ~~*A pacer*~~ **DONE**: `Pacer` lets a viewer's packets out at 2.5 × the
+       target (libwebrtc's pacing factor) in 5 ms slices; a packet into an empty
+       pacer brings 5 ms of credit, so a small frame still leaves at once; idle
+       time isn't saved up; it aims to send every packet within 500 ms of its
+       arrival, speeding up as the queue ages (a target, not a hard bound: a
+       late timer can stretch it). Each packet is stamped
+       (transport-wide sequence, send time) as it leaves, so the estimate reads
+       real send times. Retransmissions skip it. Side effect: a slice leaves
+       with one send time, so below ~4 Mbps a slice holds fewer than the 10
+       packets a burst needs, and the jump to a burst-measured capacity no
+       longer fires there — the 8 %/s climb does, as in libwebrtc. *Pinned:
+       `PacerTests`, "should spread a keyframe's packets over time instead of
+       sending them all at once".* To measure on the phone: freezes and frame
+       jitter against p95 (see the table below).
+
+    **Rebuilt from first principles after the phone test (2026-11-20).** On the
+    phone, transport-cc blurred the picture where REMB didn't. A simulated link
+    with per-packet jitter reproduced it — on a 20 Mbps link with room to spare,
+    still / busy screen, the target after 30 s:
+
+    | Jitter | GCC as first ported | Now |
+    |---|---|---|
+    | 15 ms | 8,000 / 7,521 kbps | 8,000 / 8,000 kbps |
+    | 40 ms | 8,000 / 1,381 kbps | 8,000 / 8,000 kbps |
+    | 80 ms | 1,102 / 382 kbps | 8,000 / 8,000 kbps |
+    | 150 ms | 300 / 300 kbps | 8,000 / 8,000 kbps |
+
+    The causes, each a GCC assumption a screen over a mobile link breaks: a
+    packet reported "not received" was counted lost, though over a jittery link
+    it is usually just late (now: lost only after 500 ms missing, each packet
+    once); GCC's trendline over 5 ms groups read random jitter as a growing
+    queue (now: `QueueDelay`'s delay floor, by send time, and no judgement from
+    fewer than 10 packets — a still screen's handful); and after any cut it
+    crawled back at 8 %/s (now: up to its bursts' measured capacity at once, or
+    50 %/s back to the rate before a cut the queue never repeated). Real limits
+    still bite: on a 2 Mbps link it settles at ~1.9 Mbps; 20 % loss still cuts;
+    freed, it is past 7 Mbps within 6 s (`TransportWideControlLinkTests`).
+
+    **Review fixes (2026-11-20)**, each pinned by a test that failed first: the
+    offer's extension is taken only with its `rtcp-fb` on our payload type and
+    an id of 1–14 (Pion intersects the same way); `FeedbackClock` unwraps the
+    24-bit reference time, as libwebrtc's feedback adapter does; the measured
+    arrival rate spans the earliest to the latest arrival and a report is read
+    in sending order however listed, its window ending at the latest arrival
+    (libwebrtc keys by arrival time too) — the more honest rate makes recovery
+    ~0.5 s slower than before; a retune is a
+    `StreamConfig.Change` the stream applies on its own queue, so it can't undo
+    a `set_fps` that lands at the same moment.
+
+    **Against a production sender (2026-11-20).** Our estimator beside Pion's
+    GCC (`pion/interceptor` v0.1.51 `pkg/gcc`, a port of libwebrtc's goog_cc):
+
+    | | Pion / libwebrtc | Ours | Why |
+    |---|---|---|---|
+    | Cut on overuse | 0.85 × received rate | same | — |
+    | Climb | 8 %/s; additive near the last cut | same shape: 8 %/s; one packet per 200 ms within 20 % of capacity | Pion keys "near" to the cuts' mean ± 3σ |
+    | Response time | 100 ms + the measured RTT, in the additive step | a fixed 200 ms | simplification |
+    | Climb cap | 1.5 × received rate, never lowers the target | same | — |
+    | Received rate | 500 ms window, by arrival | same | — |
+    | Loss | < 2 % climb, > 10 % cut by half the loss | same thresholds; climb 8 %/s (Pion 5 % every 200 ms) | slower climb |
+    | Congestion signal | Kalman / trendline over 5 ms arrival groups, adaptive threshold 6–600 ms | `QueueDelay`: the delay floor by send time (LEDBAT / SCReAM style) | deliberate: GCC as first ported read mobile jitter as congestion |
+    | A missing packet | lost at once | lost after 500 ms | deliberate: on a mobile link it is usually late |
+    | After a cut | climbs back at the normal rate | jumps to 85 % of what its bursts measured, or 1.5×/s back to the rate before a cut the queue never repeated | ours alone, still under the 1.5 × cap |
+    | **Pacer** | **leaky bucket, a slice every 5 ms** | **none: a keyframe's 60+ packets leave at once** | **the gap** |
+
+    The bench's reference column runs that sender for real: the same encoder
+    through Pion (`scripts/bench-live-view/pion/`). Results, the colour probe:
+
+    Before baguette had a pacer (2026-11-20) — the baseline:
+
+    | Run | Sender | misses | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|---|
+    | Phone, Tailscale, 100 taps | baguette | 0 | 476 ms | 677 ms | 755 ms | 45.4 | 13.5 ms | 4.06 |
+    | Phone, Tailscale, 100 taps | Pion | 0 | 468 ms | 963 ms | 1,168 ms | 51.0 | 4.8 ms | 0 |
+    | Phone, Tailscale, 10 taps (old white probe) | baguette | — | — | — | — | 33.3 | 111.9 ms | 12.1 |
+    | Phone, Tailscale, 10 taps (old white probe) | Pion | — | — | — | — | 35.4 | 148.4 ms | 5.4 |
+
+    | 30 s, animated list, phone over Tailscale | Payload | Wire (est.) | Packets | fps |
+    |---|---|---|---|---|
+    | baguette | 6.19 Mbps | 6.39 Mbps | 19,684 | 43.2 |
+    | Pion | 6.21 Mbps | 6.41 Mbps | 20,042 | 48.1 |
+
+    (The 10-tap rows' latencies were the old probe's and meaningless; their
+    smoothness columns stand.)
+
+    Read: the median is the same, and so is the ~400 ms floor under both. That
+    floor is not the network (see "Where the floor comes from" below). Both
+    carried what the encoder made, so neither estimate held it back.
+
+    What the data supports, and no more: **in this run Pion played smoother**
+    (a third of the frame jitter, no freezes, more frames) **and had the worse
+    tail** (p95 963 against 677 ms, from one episode, taps 50–70). It does
+    *not* say why: Pion differs in its pacer, its estimator and its whole send
+    path at once, and one run on an unimpaired, uncontrolled link can't
+    separate them — nor rank transport-cc against REMB, or either under a cap
+    or loss (that needs `impair.sh`, on loopback). The pacer is the likeliest
+    cause of the smoothness, so it was built next; the test of that is our own
+    sender with and without it (`?pacing=off`), same link, same run — measured
+    on smoothness against p95.
+
+    **The pacer's own A/B (2026-11-20)**: the same sender with and without its
+    pacer (`?pacing=off`), one after the other, phone on mobile data over
+    Tailscale:
+
+    | Run | Pacer | misses | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|---|
+    | 100 taps | on | 0 | 386 ms | 709 ms | 898 ms | 51.9 | 3.3 ms | 0 |
+    | 100 taps | off | 0 | 379 ms | 409 ms | 438 ms | 50.2 | 7.1 ms | 0 |
+
+    | 30 s, animated list | Pacer | Payload | Packets | fps |
+    |---|---|---|---|---|
+    | | on | 7.37 Mbps | 23,456 | 52.1 |
+    | | off | 7.02 Mbps | 22,381 | 47.2 |
+
+    With the pacer: half the frame jitter and ~10 % more frames on a busy
+    screen; the median the same; a worse tail (p95 +300 ms), from episodes
+    (taps 20 and 50, ~600 ms) — the shape Pion showed too. The cause is not
+    known. The server logged no *retune*, but that says only that the
+    encoder's bitrate never moved over 10 %: the pacer reads the congestion
+    control's target afresh on every slice, so it may have paced well below
+    8 Mbps while the encoder kept sending 8 (a keyframe takes ~30 ms only at
+    the full 20 Mbps). One run each can't separate the pacer from the radio
+    either. The server now logs `[webrtc] pacer held a packet N ms, pacing for
+    T kbps` whenever packets it sends had waited over 50 ms — their real wait,
+    and the target then — so the next runs (alternated, several each), lined up
+    with the slow taps, show which.
+
+    **The same A/B on loopback** (this Mac's own headless Chrome, 3 runs each,
+    alternated, 100 taps): paced p50 384–387 / p95 406–412 / p99 417–424 ms,
+    interval σ 9.2–9.5 ms; unpaced p50 375–384 / p95 403–412 / p99 410–444 ms,
+    σ 9.3–9.7 ms; **no `pacer held` line** in any run. On a clean link the
+    pacer adds no delay and none of the tail; whatever it costs on the phone
+    happens only where that link queues or the target drops — the next phone
+    runs, with the log, say which. (Nor does it smooth anything here: loopback
+    has no queue for a burst to overflow.)
+
+    **Where the floor comes from.** The WebSocket transport on loopback reads
+    the same: p50 367 ms. Split with the probe page reporting its `touchstart`
+    (the simulator shares the Mac's clock): **~307 ms (292–329) pass between
+    the tap's `POST /input` and Safari's `touchstart`**; capture, encode, send
+    and paint take the other ~80 ms. The cost is the route, not the device:
+    each `POST /input` builds the device's input afresh — a new HID connection,
+    `[hid] symbols resolved` logged per request — and the request takes ~300 ms
+    even for a 10 ms tap. The device page doesn't pay it: its socket keeps one
+    input. **Fixed:** `DeviceInputs` keeps each running device's input
+    across requests (dropped once the device is seen not running), and
+    POST → `touchstart` fell to 206–245 ms (median ~222; the request itself
+    ~470 ms first, then ~235 ms through the tap's lift). That made up ~85 ms
+    of the 307, not all: the remaining ~220 ms is the touch's way through the
+    simulator — our HID message, backboardd, Safari's web process — which the
+    device page's socket pays too, so it is in what users feel. Where those
+    220 ms go was measured next, and wasn't the simulator: the tap itself
+    took 21 ms (its 20 ms hold; each HID message confirmed at once), and the
+    route spent ~220 ms *finding the device* — every per-device request asks
+    every source, and the phones source ran `devicectl list devices` (~195 ms)
+    to say "not mine". **Fixed:** `CoreDevicePhones` reads the list once,
+    answers from it for 2 s, then answers at once while a fresh one is read
+    behind. POST → `touchstart` is now ~50 ms (40–61), the request ~70 ms,
+    and on loopback tap-to-photon p50 ~110 / p95 ~134 ms unpaced, p50 ~118 /
+    p95 ~146 paced (one 50-tap run each, which now vary ±40 ms run to run —
+    the floor no longer hides the noise). The pacer's own wait, logged down
+    to 5 ms for one run: at most 6 ms, pacing at the full 8 Mbps.
+
+    **Phone on mobile data over Tailscale, after the input fix (2026-11-20)**,
+    one run each, back to back:
+
+    | Run | Pacer | misses | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|---|
+    | 100 taps | on | 0 | 219 ms | 353 ms | 384 ms | 44.0 | 21.3 ms | 8.37 |
+    | 100 taps | off | 2 | 246 ms | 404 ms | 472 ms | 43.5 | 22.0 ms | 10.13 |
+    | 30 s animated list | on | | 7.35 Mbps | | | 41.2 | | |
+    | 30 s animated list | off | | 7.12 Mbps | | | 41.6 | | |
+
+    The fixed input path took ~250 ms off the median (~470 → ~220 ms). This
+    time the pacer led on every latency column, where the run before it
+    trailed on the tail: on this link one run each doesn't separate them,
+    and nothing says the pacer hurts. The log says what the link did: in the
+    paced latency run the target was cut to 4.1 then 5.5 Mbps, and the pacer
+    held packets 50–53 ms at those rates (9 times); in the paced bandwidth run
+    the target saw-toothed between ~1.5 and ~3.6 Mbps. **Freezes, 8–10 a
+    minute with or without the pacer, are the link's**: the estimate keeps
+    cutting on this path, and that, not pacing, is the next thing to work on
+    (which losses or delays trigger the cuts; whether a NACK or a keyframe
+    request follows each freeze).
+
+    **What the cuts are (2026-11-20)**, with each cut's cause logged, taps
+    now over the viewer's control socket as the page sends them, mobile data
+    over Tailscale: 100 taps p50 161 / p95 320 / p99 899 ms, 2 misses, fps
+    43.7, interval σ 25.3 ms, 6.7 freezes/min; 30 s animated list 6.67 Mbps,
+    41.7 fps. Over the ~111 s of both runs:
+
+    - The sender logged 664 packet resend requests and 664 resends, with one
+      keyframe request. Those counts describe the sender's attempts.
+    - Nine of ten logged cuts named queue delay, +51 to +200 ms. One named
+      a 50 % loss sample.
+    - The rate returned to 8 Mbps within about a second of cuts to 4.6 and
+      5.6 Mbps. This speed points to the burst-based jump. Batching can make
+      a short burst's observed arrival rate exceed what the link carries over
+      a longer window. A simulated 5 Mbps link with batched arrivals also
+      reproduced this overshoot.
+
+    A second separate queue within 10 s now caps both fast recovery paths
+    at the observed arrival rate. Further increases use the normal climb.
+    The cap expires after 10 s, or clears when what arrives over the
+    half-second window exceeds it by more than 20 %. An isolated delay spike still
+    recovers toward the rate held before its first cut. A fresh phone run is
+    needed to measure the effect on visible freezes and the latency tail.
+
+    **The phone run after it (2026-11-20)**, mobile data over Tailscale, taps
+    over the control socket:
+
+    | 100 taps | p50 | p95 | p99 | misses | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|
+    | paced (new build) | 171 ms | 353 ms | 386 ms | 0 | 25.8 ms | 8.96 |
+    | paced | 150 ms | 254 ms | 318 ms | 1 | 34.9 ms | 12.28 |
+    | no pacer | 142 ms | 271 ms | 302 ms | 0 | 22.2 ms | 12.59 |
+
+    30 s animated list: paced 7.33, 2.85, 5.55, 6.15 Mbps (44.6, 23.2, 34.5,
+    43.9 fps); no pacer 6.81 Mbps (40.1 fps); Pion 4.42 Mbps (31.1 fps). The
+    link varied more between runs than any sender did: these runs neither
+    confirm nor refute the fix. The log says more:
+
+    - **Radio dropouts:** reports with 96–99 % lost, each followed by keyframe
+      requests and a cut — the worst run's cause, and no sender's to avoid.
+    - **Ours — the encoder lags the pacer after a cut.** `cut to 1707 kbps`,
+      then `pacer held a packet 162 ms`, `226 ms`, before `retune 8000 →
+      1707`: the pacer slows at once, the encoder (retuned at most once a
+      second) keeps making 8 Mbps, and the backlog is local. libwebrtc retunes
+      on every target change.
+    - **Ours — the cap lifts on a dropout's catch-up.** `retune 2098 → 8000`,
+      `1504 → 6528`: what was held in the network during a stall arrives at
+      once, the half-second window reads it as >20 % over the cap, the cap
+      lifts and the target jumps back.
+
+    The native sender now applies decreases without the cooldown (law 12).
+    Successful retunes and pacer waits carry timestamps from the same
+    viewer clock. To measure this change, compare builds with the pacer on and
+    a single input path per run. The bench rejects a native tap run if its
+    input socket closes. A separate experiment can test lifting the cap only
+    after sustained arrivals.
+
+    **After the encoder follows drops at once (2026-11-20)**, mobile data over
+    Tailscale, one viewer at a time (the run before it shared the uplink with
+    device-page viewers on `?congestion=remb`, which sit at 300 kbps on a
+    still screen — not a measurement of anything): 100 taps p50 147 / p95 257
+    / p99 339 ms, 1 miss, fps 43.4, interval σ 20.1 ms, 11.1 freezes/min;
+    30 s animated list 7.25 Mbps, 46.6 fps. The log over both: **no cut, no
+    retune, no pacer hold**; ~6 packets a second reported lost (639, under
+    1 %), all resent; two keyframe requests. So these freezes are not the
+    congestion control's nor the pacer's: the likeliest cause is loss
+    repair — a frame with a lost packet waits a NACK round trip (100–200 ms
+    over mobile and Tailscale), and the bench counts a gap over 200 ms as a
+    freeze. Sender and bench timestamps can now test this explanation. A
+    match with loss recovery would support comparing RED/ULPFEC or a lower
+    mobile ceiling.
+
+    **Its no-pacer counterpart, and the decision (2026-11-20)**, same link,
+    one viewer each: 100 taps p50 156 / p95 298 / p99 377 ms, 0 misses,
+    interval σ 27.0 ms, 8.9 freezes/min; 30 s animated list 3.4 Mbps,
+    37.5 fps. Against the paced run (147 / 257 / 339 ms, σ 20.1, 11.1/min,
+    7.25 Mbps, 46.6 fps) the pacer led on latency, smoothness and throughput,
+    trailing only on the freeze count. The logs differ most: the paced
+    bandwidth run made **no cut**; the unpaced one was cut 20 times, for
+    queues of +238, +152, +434 and once +1212 ms — what unpaced bursts do to
+    a mobile queue (that link was also rougher: twice the loss reports).
+    **The pacer stays on by default**; `?pacing=off` remains for A/Bs. The
+    same log still shows the cap lifting on a stall's catch-up
+    (`2050 → 8000` a second later): lifting it only on sustained arrival is
+    still to do, and so is a minimum pacing rate, so a keyframe drains in
+    ~50 ms even at a low target.
+
+    **Freezes against the sender's timeline (2026-11-20)**, mobile data over
+    Tailscale, each freeze's start on the Mac's clock (phone-to-Mac
+    uncertainty 18–31 ms), two rounds:
+
+    | Run | p50 | p95 | p99 | fps | freezes/min | frozen | sender log |
+    |---|---|---|---|---|---|---|---|
+    | R1, 100 taps | 198 ms | 317 ms | 438 ms | 42.0 | 9.9 | 3.2 s | 3 cuts |
+    | R1, 30 s busy | 4.67 Mbps | | | 38.7 | 16.0 | 3.3 s | 24 cuts, 31 retunes |
+    | R2, 100 taps | 162 ms | 261 ms | 404 ms | 44.4 | 5.1 | 2.1 s | 1 cut |
+    | R2, 30 s busy | 7.28 Mbps | | | 44.0 | 16.0 | 2.0 s | no cut |
+
+    Lined up with the resend requests before each of the 35 freezes, against
+    1,600 random moments in the same runs (packets asked for again in the
+    300 ms before): ≥3 — 69 % of freezes, 46 % at random; ≥6 — 37 % / 17 %;
+    ≥10 — 14 % / 4 %. "Any resend in the 500 ms before" (97 % / 92 %) tells
+    nothing: they come ~5–6 a second. So **freezes follow bursts of loss
+    2–3.5× more often than chance, not always**; a third had fewer than three
+    resends before them. Most are 205–280 ms, against the bench's 200 ms
+    threshold — a frame or few late, about one resend round trip. Next, not
+    in this PR: RED/ULPFEC (a lost packet rebuilt without the round trip;
+    bursts need more redundancy) or a lower ceiling on mobile.
+
+    **Correlating a stall.** Join the benchmark's `viewerID` with the sender's
+    [event log](README.md#http-and-websocket). The benchmark records
+    gaps over 200 ms within the measurement window, from the last displayed
+    frame (or the window start) through the first frame that follows. It sums
+    their full durations. `recoveredAtMs: null` means the measurement ended
+    while the picture was still stalled. When `freezeClock` is `server`, the
+    bench proxy supplied the Mac's time and `clockUncertaintyMs` gives the
+    estimate's uncertainty. If calibration is unavailable, durations remain
+    comparable and the timestamps use the browser clock.
+
+    Two bench fixes came first: a frame is stamped when it reaches the screen
+    (`expectedDisplayTime`), not when its interval began (that gave negative
+    samples); and each tap is answered in its own colour (left red, right green,
+    sides alternating), as on a phone link a late answer to the last tap was
+    counted for the next.
+
+    Over a simulated 2 Mbps bottleneck (`BandwidthEstimateTests`), the target
+    falls from 8 Mbps to 1.7 Mbps within 2 s and saw-tooths just under 2 Mbps
+    (additive increase near capacity, back to 85 % of what arrives on overuse);
+    when the link frees up at 20 s it climbs additively to 2.4 Mbps, then 8 % a
+    second, back to 8 Mbps by 44 s. 20 % loss halves it repeatedly; 1 % doesn't
+    move it.
+
+    In Chrome on 2026-11-20 (native route, localhost): the answer negotiates
+    transport-cc, Chrome's reports arrive and are read; a still screen left the
+    bitrate alone, and a forced `set_bitrate` of 2 Mbps was retuned back to
+    8 Mbps within a second. That run first found a bug the simulation missed:
+    capping the rate at 1.5× what arrives also pulled it *down* while a still
+    screen sent little, to the 300 kbps floor. libwebrtc's cap only stops an
+    increase; so does ours now, pinned by "should keep its bitrate while a still
+    screen sends far less than it allows".
+12. ~~**Docs**~~ **DONE**: a user README, `serve.md` rows, CHANGELOG; the bench
+    kit pointed at the native route. The full matrix on it is still to run.
 
 ## 7 · Open questions
 
@@ -426,7 +843,7 @@ this doc.
    watched from many machines), and reach viewers that can't reach the Mac, since
    the Mac connects out. Revyl's page uses Cloudflare's STUN server, which suggests
    they sit behind Cloudflare's SFU (an inference; the page doesn't show it).
-   What it takes — baguette publishes with **WHIP** (RFC 9725's publishing twin),
+   What it takes — baguette publishes with **WHIP** (RFC 9725, WHEP's publishing twin),
    so the roles flip:
 
    | | Today (WHEP, direct) | SFU (WHIP publish) |
@@ -437,8 +854,8 @@ this doc.
    | Reach | browsers reach the Mac | the Mac connects out |
    | Bandwidth feedback | transport-cc from the browser | the same, from the SFU |
 
-   RTP, packetizing, SRTP and RTCP feedback carry over unchanged, and so would
-   congestion control (built on its own branch). New: writing an offer, full-ICE checks, and a setting naming the
+   RTP, packetizing, SRTP, RTCP feedback and congestion control carry over
+   unchanged. New: writing an offer, full-ICE checks, and a setting naming the
    SFU's WHIP URL and token. An SFU forwards one bitrate to everyone: adapting per
    viewer would need simulcast (several encodings at once), a further step.
    Worth it once many viewers or a hosted device cloud matter; for one or a few

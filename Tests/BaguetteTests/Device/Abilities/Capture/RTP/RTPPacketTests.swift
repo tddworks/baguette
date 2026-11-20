@@ -58,6 +58,26 @@ struct RTPPacketTests {
         #expect(RTPPacket(packet.data) == packet)
     }
 
+    @Test func `should carry a one-byte header extension, padded to a whole word`() {
+        let packet = RTPPacket(
+            marker: false, payloadType: 112, sequence: 7, timestamp: 9000, ssrc: 1,
+            payload: Data([0x65]), extensions: [RTPHeaderExtension(id: 3, data: [0x12, 0x34])])
+
+        // X bit set; 0xBEDE, one word; element (id 3, length 2 → 0x31), the data, one byte of padding.
+        #expect(packet.data == Data([0x90, 112, 0, 7, 0, 0, 0x23, 0x28, 0, 0, 0, 1,
+                                     0xBE, 0xDE, 0, 1, 0x31, 0x12, 0x34, 0, 0x65]))
+        #expect(RTPPacket(packet.data) == packet)
+    }
+
+    @Test func `should read a browser's one-byte extensions and skip their padding`() throws {
+        let wire = Data([0x90, 112, 0, 7, 0, 0, 0x23, 0x28, 0, 0, 0, 1,
+                         0xBE, 0xDE, 0, 2, 0x10, 0xAA, 0, 0, 0x22, 1, 2, 3, 0x65])
+        let packet = try #require(RTPPacket(wire))
+
+        #expect(packet.extensions == [RTPHeaderExtension(id: 1, data: [0xAA]), RTPHeaderExtension(id: 2, data: [1, 2, 3])])
+        #expect(packet.payload == Data([0x65]))
+    }
+
     @Test func `should tell an RTCP report apart from media`() {
         // RTCP sender report: PT 200 lands in the RTP marker+type byte as 0xC8.
         let report = Data([0x80, 0xC8, 0x00, 0x06] + [UInt8](repeating: 0, count: 24))

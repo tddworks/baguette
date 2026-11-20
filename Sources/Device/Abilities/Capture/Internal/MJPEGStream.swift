@@ -41,6 +41,14 @@ public final class MJPEGStream: Stream, @unchecked Sendable {
         screen = nil
     }
 
+    public func update(_ change: StreamConfig.Change) {
+        queue.sync {
+            let next = change.applied(to: config)
+            configLock.withLock { currentConfig = next }
+            pump.apply(fps: next.fps)
+        }
+    }
+
     public func apply(_ newConfig: StreamConfig) {
         queue.sync {
             configLock.withLock { currentConfig = newConfig }

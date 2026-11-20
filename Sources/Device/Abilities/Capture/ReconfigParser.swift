@@ -5,24 +5,24 @@ import Foundation
 /// stream keeps running on whatever was previously in effect.
 public enum ReconfigParser {
     public static func apply(_ line: String, to current: StreamConfig) -> StreamConfig {
+        change(line)?.applied(to: current) ?? current
+    }
+
+    /// The knob a retune line turns, or nil for anything else (malformed,
+    /// missing its number, or not a retune). A running stream takes it with
+    /// `update`, against its config as it stands then.
+    public static func change(_ line: String) -> StreamConfig.Change? {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data),
               let dict = object as? [String: Any],
               let kind = dict["type"] as? String
-        else { return current }
+        else { return nil }
 
         switch kind {
-        case "set_bitrate":
-            guard let bps = number(dict["bps"]) else { return current }
-            return current.with(bitrateBps: Int(bps))
-        case "set_fps":
-            guard let fps = number(dict["fps"]) else { return current }
-            return current.with(fps: Int(fps))
-        case "set_scale":
-            guard let scale = number(dict["scale"]) else { return current }
-            return current.with(scale: Int(scale))
-        default:
-            return current
+        case "set_bitrate": return number(dict["bps"]).map { .bitrate(Int($0)) }
+        case "set_fps": return number(dict["fps"]).map { .fps(Int($0)) }
+        case "set_scale": return number(dict["scale"]).map { .scale(Int($0)) }
+        default: return nil
         }
     }
 

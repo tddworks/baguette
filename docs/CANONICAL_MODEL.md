@@ -118,7 +118,10 @@ WebRTCViewers  ◆      THE LIVE WEBRTC (WHEP) VIEWERS, by id — admit(offer) �
 └── WebRTCViewer  ◆   ONE BROWSER watching one device over WebRTC, with a Stream of its own:
                       new → connecting (STUN) → securing (DTLS) → live → hung up.
                       SessionDescription ◇ (offer in, answer out) · STUNMessage ◇ · RTPPacket ◇ ·
-                      H264Packetizer ◇ · SRTPContext ◇ · RTCPFeedback ◇; at the outside world,
+                      H264Packetizer ◇ · SRTPContext ◇ · RTCPFeedback ◇; how much the link takes is
+                      its CongestionControl ◆ — TransportWideControl (transport-cc: TransportFeedback ◇ ·
+                      SendHistory ◇ · FeedbackClock ◇ · BandwidthEstimate ◇ · Pacer ◇), ReceiverEstimateControl (REMB) or FixedBitrate,
+                      picked by CongestionChoice ◇; at the outside world,
                       Datagrams ◆ (its UDP socket) and Handshake ◆ (its DTLS handshake)
 CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇; the device's
                       Camera ◆ (a simulator's: VirtualCamera injected) is what it feeds
@@ -191,7 +194,16 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
-| a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |
+| a viewer is found by its id until it hangs up, and only through the device it watches; an unknown id, or one asked for through another device, is a refusal naming it | `WebRTCViewers` |
+| a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate. A reported cut means that target fell, and carries the signal that limited it | `BandwidthEstimate` |
+| an offer carries a congestion-control method only when it numbers its header extension 1–14 (what a one-byte header holds), will receive it (not `inactive` or `sendonly`), and asks for its feedback (`transport-cc`, `goog-remb`) on the H.264 the viewer sends or on every format (`*`) | `SessionDescription` |
+| with pacing on, a viewer's packets leave at 2.5 × its target bitrate as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once | `Pacer` |
+| a browser's transport-cc reports are read on one unbroken timeline, though their 24-bit reference time wraps | `FeedbackClock` |
+| a retune turns one knob of the config as it stands then (`StreamConfig.Change`), so two at once both land | each `Stream` |
+| a running device's input is made once and kept for every gesture posted to it, and made afresh once the device has been seen not running | `DeviceInputs` |
+| a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
+| with no congestion control, nothing retunes the encoder: it stays where it started or where `set_bitrate` put it | `FixedBitrate` |
+| a viewer retunes its encoder when the target moves by more than 10%. A decrease applies immediately. An increase waits at least a second after the last retune | `EncoderRetune` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |

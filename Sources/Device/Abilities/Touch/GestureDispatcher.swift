@@ -45,6 +45,10 @@ public final class GestureDispatcher: @unchecked Sendable {
         }
     }
 
+    /// The ack of a gesture that parsed but that its device didn't take — no
+    /// reason given, as a malformed or refused one has.
+    public static let notTaken = "{\"ok\":false}"
+
     private func ack(ok: Bool, error: String? = nil) -> String {
         if let error {
             return "{\"ok\":\(ok),\"error\":\"\(Self.jsonEscape(error))\"}"

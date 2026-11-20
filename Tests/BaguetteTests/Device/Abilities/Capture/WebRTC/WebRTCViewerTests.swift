@@ -55,13 +55,20 @@ private struct Rig {
     let datagrams = MockDatagrams()
     let handshake = MockHandshake()
     let stream = MockStream()
+    let congestion = MockCongestionControl()
     let sent = Box<[(Data, DatagramAddress)]>([])
     let received = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
     let now = Box(Date(timeIntervalSince1970: 1_000))
     let sink = Box<(any FrameSink)?>(nil)
+    let diagnostics = Box<[String]>([])
+    /// Work the viewer asked to run later (its pacer's next slice), run by `pass(_:)`.
+    let scheduled = Box<[@Sendable () -> Void]>([])
     let viewer: WebRTCViewer
 
-    init(progress: HandshakeProgress = .complete(replies: [], srtpExport: export)) {
+    init(
+        progress: HandshakeProgress = .complete(replies: [], srtpExport: export),
+        target: Int? = nil, stamp: [RTPHeaderExtension] = [], answerLines: [String] = [], pacing: Bool = true
+    ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
         given(datagrams).onReceive(.any).willProduce { [received] handler in received.value = handler }
@@ -71,12 +78,32 @@ private struct Rig {
         given(handshake).resend().willReturn([Data([0x16, 0xFE, 0xFD, 9])])
         given(stream).requestKeyframe().willReturn()
         given(stream).stop().willReturn()
-        let (stream, sink, now) = (stream, sink, now)
+        given(stream).config.willReturn(.default)
+        given(stream).update(.any).willReturn()
+        given(congestion).answerLines().willReturn(answerLines)
+        given(congestion).extensions(at: .any).willReturn(stamp)
+        given(congestion).sent(size: .any, at: .any).willReturn()
+        given(congestion).heard(.any, at: .any).willReturn(nil)
+        given(congestion).target.willReturn(target)
+        let (stream, sink, now, congestion, scheduled, diagnostics) = (stream, sink, now, congestion, scheduled, diagnostics)
         viewer = WebRTCViewer(
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             datagrams: datagrams, handshake: handshake,
             stream: { frames in sink.value = frames; return stream },
-            clock: { now.value })
+            congestion: { _ in congestion },
+            clock: { now.value },
+            schedule: { _, work in scheduled.value.append(work) },
+            pacing: pacing, id: "test-viewer", diagnose: { diagnostics.value.append($0) })
+    }
+
+    /// Time passing: the clock moves on and what was due runs, in 5 ms steps.
+    func pass(_ seconds: TimeInterval) {
+        for _ in 0..<Int((seconds / 0.005).rounded()) {
+            now.value += 0.005
+            let due = scheduled.value
+            scheduled.value = []
+            due.forEach { $0() }
+        }
     }
 
     func deliver(_ data: Data, from address: DatagramAddress = browser) { received.value?(data, address) }
@@ -207,6 +234,20 @@ struct WebRTCViewerTests {
         #expect(rig.sent.value.last?.0 == first)
     }
 
+    @Test func `should put a keyframe and its loss repair on the same viewer timeline`() {
+        let rig = Rig()
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
+        rig.now.value += 0.25
+
+        rig.viewer.act(on: [.lost([1001, 1002]), .keyframeRequest])
+
+        #expect(rig.diagnostics.value.contains { $0.contains("keyframe sent") && $0.contains("viewer=test-viewer atMs=1000000") })
+        #expect(rig.diagnostics.value.contains { $0.contains("nack requested=2 resent=1") && $0.contains("viewer=test-viewer atMs=1000250") })
+        #expect(rig.diagnostics.value.contains { $0.contains("keyframe requested") && $0.contains("viewer=test-viewer atMs=1000250") })
+    }
+
     @Test func `should hang up when the browser stops checking for 30 seconds`() {
         let rig = Rig()
         rig.goLive()
@@ -304,6 +345,85 @@ struct WebRTCViewerTests {
 
         #expect(told.value == 1)
     }
+
+    @Test func `should answer with the lines its congestion control needs`() {
+        let rig = Rig(answerLines: ["a=extmap:9 http://example/ext"])
+
+        #expect(rig.viewer.answer.contains("a=extmap:9 http://example/ext\r\n"))
+    }
+
+    @Test func `should spread a keyframe's packets over time instead of sending them all at once`() {
+        let rig = Rig()
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+
+        // ~72 kB: some 60 packets, paced at 2.5 × 8 Mbps.
+        let slice = Data([0x65]) + Data(repeating: 7, count: 71_999)
+        rig.show(AVCCEnvelope.keyframe(avcc: withUnsafeBytes(of: UInt32(slice.count).bigEndian) { Data($0) } + slice))
+        let atOnce = rig.packets.count
+
+        rig.pass(0.04)
+
+        #expect(atOnce > 0 && atOnce < 20)
+        #expect(rig.packets.count > 55)
+        #expect(rig.packets.map(\.sequence) == (0..<UInt16(rig.packets.count)).map { 1000 + $0 })
+        #expect(rig.packets.last?.marker == true)
+    }
+
+    @Test func `should keep sending while its pacer holds packets a long time`() {
+        let rig = Rig(target: 300_000)   // paced at 750 kbps: a 72 kB keyframe takes ~0.5 s
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+        let slice = Data([0x65]) + Data(repeating: 7, count: 71_999)
+        rig.show(AVCCEnvelope.keyframe(avcc: withUnsafeBytes(of: UInt32(slice.count).bigEndian) { Data($0) } + slice))
+
+        rig.pass(0.6)
+
+        #expect(rig.packets.count > 55)
+        #expect(rig.viewer.state == .live)
+    }
+
+    @Test func `should send a keyframe's packets all at once when told not to pace`() {
+        let rig = Rig(pacing: false)
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+
+        let slice = Data([0x65]) + Data(repeating: 7, count: 71_999)
+        rig.show(AVCCEnvelope.keyframe(avcc: withUnsafeBytes(of: UInt32(slice.count).bigEndian) { Data($0) } + slice))
+
+        #expect(rig.packets.count > 55)
+        #expect(rig.viewer.pacing == false)
+    }
+
+    @Test func `should stamp every packet with what its congestion control asks, and report it sent`() {
+        let rig = Rig(stamp: [RTPHeaderExtension(id: 9, data: [7])])
+        rig.goLive()
+
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
+
+        #expect(rig.packets.map(\.extensions) == [[RTPHeaderExtension(id: 9, data: [7])], [RTPHeaderExtension(id: 9, data: [7])]])
+        verify(rig.congestion).sent(size: .any, at: .any).called(2)
+    }
+
+    @Test func `should hand the browser's feedback to its congestion control and retune to its target`() {
+        let rig = Rig(target: 4_000_000)
+        rig.goLive()
+
+        rig.viewer.act(on: [.bandwidthEstimate(bitsPerSecond: 4_000_000)])
+
+        verify(rig.congestion).heard(.any, at: .any).called(1)
+        verify(rig.stream).update(.value(.bitrate(4_000_000))).called(1)
+    }
+
+    @Test func `should leave its encoder alone while its congestion control wants no bitrate`() {
+        let rig = Rig(target: nil)
+        rig.goLive()
+
+        rig.viewer.act(on: [.bandwidthEstimate(bitsPerSecond: 1_000_000)])
+
+        verify(rig.stream).update(.any).called(0)
+    }
 }
 
 /// A stream that, like AVCCStream, fails from its own serial queue and stops
@@ -340,6 +460,7 @@ private final class SerialStream: Stream, @unchecked Sendable {
         lock.withLock { _stopped = true }
     }
     func apply(_ config: StreamConfig) throws {}
+    func update(_ change: StreamConfig.Change) throws {}
     func requestKeyframe() {}
     func requestSnapshot() {}
 }
@@ -356,7 +477,8 @@ struct WebRTCViewerStreamFailureTests {
         let made = Box<SerialStream?>(nil)
         let viewer = WebRTCViewer(
             offer: offer, ice: ours, datagrams: datagrams, handshake: handshake,
-            stream: { sink in let stream = SerialStream(sink: sink); made.value = stream; return stream })
+            stream: { sink in let stream = SerialStream(sink: sink); made.value = stream; return stream },
+            congestion: { _ in FixedBitrate() })
 
         made.value?.failFromItsQueue()
 

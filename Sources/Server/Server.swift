@@ -83,6 +83,8 @@ struct Server: Sendable {
     /// outlives the request that admitted it, and its control socket and
     /// `DELETE` find it by id.
     let viewers: WebRTCViewers
+    /// Each device's input, kept across `POST …/input` requests.
+    let inputs = DeviceInputs()
 
     init(
         simulators: any Simulators,
@@ -2242,8 +2244,9 @@ struct Server: Sendable {
 
     /// Triage one upstream text line: stream config first (cheapest
     /// to detect), then format-level verbs, then gesture dispatch as
-    /// the catch-all. ReconfigParser returns the same config when
-    /// the line wasn't a `set_*` — that's our discriminator.
+    /// the catch-all. A `set_*` line is a `StreamConfig.Change`, which the
+    /// stream takes against its config as it stands — so a viewer's own
+    /// retune landing at the same moment isn't undone.
     ///
     /// The gesture leg hops to `MainActor` because
     /// `IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent
@@ -2263,9 +2266,8 @@ struct Server: Sendable {
         dispatcher: GestureDispatcher,
         udid: String
     ) async throws {
-        let next = ReconfigParser.apply(line, to: stream.config)
-        if next != stream.config {
-            try stream.apply(next)
+        if let change = ReconfigParser.change(line) {
+            try stream.update(change)
             return
         }
         if let data = line.data(using: .utf8),

@@ -83,19 +83,19 @@ public final class ControlChannel: @unchecked Sendable {
                     log("control: set_bitrate missing/invalid bps in \(raw)")
                     return
                 }
-                try stream.apply(stream.config.with(bitrateBps: Int(bps)))
+                try stream.update(.bitrate(Int(bps)))
             case "set_fps":
                 guard let fps = Self.numeric(dict["fps"]) else {
                     log("control: set_fps missing/invalid fps in \(raw)")
                     return
                 }
-                try stream.apply(stream.config.with(fps: Int(fps)))
+                try stream.update(.fps(Int(fps)))
             case "set_scale":
                 guard let scale = Self.numeric(dict["scale"]) else {
                     log("control: set_scale missing/invalid scale in \(raw)")
                     return
                 }
-                try stream.apply(stream.config.with(scale: Int(scale)))
+                try stream.update(.scale(Int(scale)))
             case "force_idr":
                 stream.requestKeyframe()
                 log("control: force_idr")

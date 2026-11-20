@@ -33,7 +33,7 @@ What changes and what doesn't:
 
 ## HTTP and WebSocket
 
-WHEP (RFC 9725), on both trees:
+WHEP ([draft-ietf-wish-whep](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/); WHIP, its publishing twin, is RFC 9725), on both trees:
 
 ```
 POST   /devices/<UDID>/whep               body: SDP offer (Content-Type: application/sdp)
@@ -52,8 +52,43 @@ socket carries what the stream socket carries from its page — gestures
 {"type":"tap","x":201,"y":437,"width":402,"height":874}
 ```
 
-Each viewer has its own H.264 encoder, at the stream socket's defaults (60 fps,
-8 Mbps, full scale).
+Each viewer has its own H.264 encoder, starting at the stream socket's defaults
+(60 fps, 8 Mbps, full scale). Its bitrate then follows the link, retuned between
+300 kbps and 8 Mbps by one of three methods:
+
+| `congestion=` | Who estimates the bandwidth |
+|---|---|
+| `transport-cc` (the default when offered) | baguette, from the browser's per-packet arrival reports, the way Google's WebRTC does |
+| `remb` | the browser, which sends its estimate (the older way) |
+| `off` | nobody: the bitrate stays where it started or where `set_bitrate` put it |
+
+Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the
+device page with it (`/devices/<UDID>?congestion=remb`) to compare them by hand.
+A method the browser didn't offer falls back to `off`. With REMB, a still screen
+in desktop Chrome drops to 300 kbps until the screen moves (the browser's estimate
+follows what arrives); `transport-cc` doesn't. The server log shows each change:
+
+```
+[baguette] [webrtc] retune 8000 → 1700 kbps viewer=<id> atMs=1795170906430
+```
+
+The sender logs transport-cc target cuts, NACK requests with their resend
+counts, and keyframe requests and sends. The viewer ID matches the WHEP
+`Location`. The `atMs` field is the Mac's Unix time in milliseconds.
+
+```
+[baguette] [webrtc] transport-cc cut to 4071 kbps: queue +62 ms viewer=<id> atMs=1795170906100
+[baguette] [webrtc] nack requested=14 resent=14 viewer=<id> atMs=1795170906120
+[baguette] [webrtc] keyframe requested viewer=<id> atMs=1795170906150
+```
+
+Each viewer's packets are paced: a keyframe leaves over a few milliseconds at
+2.5 × the target bitrate instead of in one burst, which a phone link's queue
+takes without stalling. `?pacing=off` on the `POST` sends every packet at once —
+only to measure what pacing buys (the bench's "no pacer" column).
+
+A `set_bitrate` on the control socket applies at once. Later feedback can retune
+the encoder again according to [the retuning rule](design.md#4--invariants-each-law-one-owner).
 
 ## Gotchas
 
@@ -64,6 +99,10 @@ Each viewer has its own H.264 encoder, at the stream socket's defaults (60 fps,
 - **Host addresses only.** baguette answers with this Mac's own IPv4 addresses
   (LAN, Tailscale, loopback); there is no STUN or TURN, so a viewer behind a
   NAT that can't reach one of them gets no picture.
+- **Media on any free UDP port, unless told.** Each viewer takes its own port;
+  to open a firewall for them, give `baguette serve --webrtc-ports 8190-8194`
+  and each viewer takes the first free one in the range (a full range refuses
+  the next viewer).
 - **A viewer goes when its browser does.** Switching format or leaving the page
   hangs it up; if that goodbye never arrives, it hangs up after 30 s without a
   connectivity check, and its encoder stops either way.

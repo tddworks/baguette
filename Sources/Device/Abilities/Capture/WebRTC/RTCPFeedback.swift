@@ -10,9 +10,11 @@ public enum RTCPFeedback: Equatable, Sendable {
     case lost([UInt16])
     /// REMB: what the browser estimates it can receive.
     case bandwidthEstimate(bitsPerSecond: UInt64)
+    /// transport-cc: when each transport-wide sequence number arrived.
+    case transportFeedback(TransportFeedback)
 
-    private static let transportFeedback: UInt8 = 205   // RTPFB
-    private static let payloadFeedback: UInt8 = 206     // PSFB
+    private static let rtpfb: UInt8 = 205   // transport-layer feedback
+    private static let psfb: UInt8 = 206    // payload-specific feedback
 
     /// Every feedback in a compound RTCP packet, in order; a packet whose
     /// length runs past the end stops the read.
@@ -37,16 +39,18 @@ public enum RTCPFeedback: Equatable, Sendable {
         guard body.count >= 8 else { return nil }
         let fci = Array(body[8...])
         switch (type, format) {
-        case (payloadFeedback, 1), (payloadFeedback, 4):
+        case (psfb, 1), (psfb, 4):
             return .keyframeRequest
-        case (transportFeedback, 1):
+        case (rtpfb, 15):
+            return TransportFeedback(fci: fci).map(RTCPFeedback.transportFeedback)
+        case (rtpfb, 1):
             let lost = stride(from: 0, to: fci.count - fci.count % 4, by: 4).flatMap { i -> [UInt16] in
                 let pid = UInt16(fci[i]) << 8 | UInt16(fci[i + 1])
                 let mask = UInt16(fci[i + 2]) << 8 | UInt16(fci[i + 3])
                 return [pid] + (0..<16).filter { mask & (1 << $0) != 0 }.map { pid &+ UInt16($0) &+ 1 }
             }
             return lost.isEmpty ? nil : .lost(lost)
-        case (payloadFeedback, 15):
+        case (psfb, 15):
             guard fci.count >= 8, fci[0..<4].elementsEqual("REMB".utf8) else { return nil }
             let exponent = UInt64(fci[5] >> 2)
             let mantissa = UInt64(fci[5] & 0x03) << 16 | UInt64(fci[6]) << 8 | UInt64(fci[7])

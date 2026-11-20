@@ -42,6 +42,7 @@ private final class RejectedStream: Stream {
     func start(on screen: any Screen) throws {}
     func stop() { stopped = true }
     func apply(_ config: StreamConfig) throws { throw Rejection.codecProperty }
+    func update(_ change: StreamConfig.Change) throws { throw Rejection.codecProperty }
     func requestKeyframe() { keyframes += 1 }
     func requestSnapshot() {}
     private enum Rejection: Error { case codecProperty }

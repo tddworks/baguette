@@ -35,7 +35,8 @@ extension ServeCommand {
             cameraSessions: cameraSessions,
             devices: companions,
             twinScreens: twinScreens,
-            allDevices: kinds.devices
+            allDevices: kinds.devices,
+            viewers: WebRTCViewers(connect: WebRTCViewers.onThisMac(ports: mediaPorts))
         )
         Self.announce(plugins)
         try await server.run()

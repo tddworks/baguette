@@ -150,6 +150,15 @@ test('should ask for the display it was given', async () => {
   assert.equal(browser.seen.requests[0].url, '/devices/U/whep?display=phone');
 });
 
+test('should ask for the congestion control it was given, beside the display', async () => {
+  const browser = fakeBrowser();
+  const whep = session(browser, { display: 'phone', congestion: 'remb' });
+
+  await whep.start();
+
+  assert.equal(browser.seen.requests[0].url, '/devices/U/whep?display=phone&congestion=remb');
+});
+
 test('should hang up when stopped, closing its socket, peer and video', async () => {
   const browser = fakeBrowser();
   const closed = [];

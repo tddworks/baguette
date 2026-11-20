@@ -38,6 +38,7 @@ private struct Rig {
         given(datagrams).close().willReturn()
         given(handshake).fingerprint.willReturn("sha-256 AA")
         given(stream).stop().willReturn()
+        given(stream).config.willReturn(.default)
         if streamStarts {
             given(stream).start(on: .any).willReturn()
         } else {
@@ -121,6 +122,17 @@ struct WebRTCViewersTests {
         rig.viewers.tick(now: Date().addingTimeInterval(WebRTCViewer.consentTimeout + 1))
 
         #expect(rig.viewers.count == 0)
+    }
+
+    @Test func `should know a viewer only by the device it watches`() throws {
+        let rig = Rig()
+
+        let (id, _) = try rig.viewers.admit(offer: offer, on: rig.screen, of: "U")
+
+        #expect((try? rig.viewers.find(id, of: "U")) != nil)
+        #expect(throws: WebRTCViewers.Refusal.unknownViewer(id)) { try rig.viewers.find(id, of: "OTHER") }
+        #expect(throws: WebRTCViewers.Refusal.unknownViewer(id)) { try rig.viewers.hangUp(id, of: "OTHER") }
+        #expect(rig.viewers.count == 1)
     }
 
     @Test func `should keep the input bound with a viewer's picture, for its touches`() throws {

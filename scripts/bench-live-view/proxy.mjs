@@ -2,6 +2,7 @@
 //   /bench/*            the bench pages (www/), and POST /bench/bridge/on|off, which starts or stops the spike's
 //                       WHEP source (baguette stream → ffmpeg → MediaMTX), used only when a bench run asks for it
 //   /whep               → MediaMTX's WHEP endpoint (the spike; baguette's own is /devices/:udid/whep)
+//   /pion/*             → pion-whep, the reference WebRTC sender (pion/), prefix stripped
 //   /api/*              → baguette serve, prefix stripped (the bench pages' route)
 //   everything else     → baguette serve unchanged, WebSocket included: its own page, with its WebRTC choice.
 //   node proxy.mjs --bridge <bridge.sh> [--listen <addr>]
@@ -16,6 +17,7 @@ import { spawn, execFileSync } from 'node:child_process';
 const WWW = path.join(path.dirname(new URL(import.meta.url).pathname), 'www');
 const SERVE = { host: '127.0.0.1', port: 8421 };
 const WHEP = { host: '127.0.0.1', port: 8889, path: '/sim/whep' };
+const PION = { host: '127.0.0.1', port: 8890 };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const LOOPBACK = `http://${SERVE.host}:${SERVE.port}`;
 
@@ -65,12 +67,17 @@ function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   if (!/\.(js|css|png|svg|json|woff2?)$/.test(url.pathname))
     console.log(new Date().toISOString(), req.socket.remoteAddress, req.method, req.url);
+  if (url.pathname === '/bench/clock' && req.method === 'GET') {
+    res.writeHead(204, { 'cache-control': 'no-store', 'x-baguette-clock-ms': Date.now() });
+    return res.end();
+  }
   if (url.pathname === '/bench/bridge/on' && req.method === 'POST') { bridgeOn(); res.writeHead(204); return res.end(); }
   if (url.pathname === '/bench/bridge/off' && req.method === 'POST') { bridgeOff(); res.writeHead(204); return res.end(); }
   if (url.pathname === '/bench') { res.writeHead(302, { location: '/bench/' + url.search }); return res.end(); }
   if (url.pathname.startsWith('/bench/')) return staticFile(res, url.pathname.slice(6));
   if (url.pathname === '/whep' || url.pathname.startsWith('/whep/'))
     return forward(req, res, WHEP, WHEP.path + url.pathname.slice(5) + url.search);
+  if (url.pathname.startsWith('/pion/')) return forward(req, res, PION, req.url.slice(5));
   if (url.pathname.startsWith('/api/')) return forward(req, res, SERVE, req.url.slice(4));
   // baguette serve's own pages; the spike's WHEP source has no part in them (one encoder per view).
   if (/^\/(devices|simulators)\/[^/]+\/?$/.test(url.pathname)) bridgeOff();

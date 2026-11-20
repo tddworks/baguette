@@ -5,11 +5,11 @@ import Hummingbird
 import HummingbirdWebSocket
 import NIOCore
 
-/// The WebRTC (WHEP, RFC 9725) live view: a page posts an SDP offer and gets a
+/// The WebRTC (WHEP, draft-ietf-wish-whep) live view: a page posts an SDP offer and gets a
 /// viewer of the device with a stream of its own; its touches and stream
 /// control ride the viewer's control socket; `DELETE` hangs it up.
 ///
-///   POST   /devices/:udid/whep                  offer → 201, Location, answer
+///   POST   /devices/:udid/whep[?congestion=transport-cc|remb|off]   offer → 201, Location, answer
 ///   DELETE /devices/:udid/whep/:viewer          hang up → 204
 ///   WS     /devices/:udid/whep/:viewer/control  gestures, describe_ui, paste, retune
 ///
@@ -33,7 +33,8 @@ extension Server {
             router.delete(RouterPath(path)) { request, context in
                 if let rejected = rejectUntrustedBrowser(request) { return rejected }
                 let id = context.parameters.get("viewer") ?? ""
-                guard (try? viewers.hangUp(id)) != nil else {
+                let udid = request.uri.path.split(separator: "/").dropFirst().first.map(String.init) ?? ""
+                guard (try? viewers.hangUp(id, of: DeviceID(udid.removingPercentEncoding ?? udid))) != nil else {
                     return Self.pluginError("unknown viewer: \(id)", status: .notFound)
                 }
                 return Response(status: .noContent)
@@ -48,8 +49,23 @@ extension Server {
     }
 
     /// A viewer for the device the path names, on the display plane the query
-    /// asks for.
+    /// asks for, with the congestion control it asks for (`CongestionChoice`).
     static func admit(offer: String, request: Request, devices: any Devices, viewers: WebRTCViewers) -> Response {
+        var congestion: CongestionChoice?
+        if let asked = request.uri.queryParameters.get("congestion").map({ String($0) }) {
+            guard let choice = CongestionChoice(rawValue: asked) else {
+                return pluginError("unknown congestion control: \(asked) (transport-cc, remb or off)", status: .badRequest)
+            }
+            congestion = choice
+        }
+        // `?pacing=off`: the bench's baseline, the same sender without its pacer.
+        var pacing = true
+        if let asked = request.uri.queryParameters.get("pacing").map({ String($0) }) {
+            guard asked == "on" || asked == "off" else {
+                return pluginError("pacing is on or off, not \(asked)", status: .badRequest)
+            }
+            pacing = asked == "on"
+        }
         let udid = udidParam(request)
         guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             return pluginError("unknown udid: \(udid)", status: .notFound)
@@ -60,7 +76,8 @@ extension Server {
             requireExistingDisplay: false)
         do {
             let bound = try plan.bind(to: device)
-            let (id, answer) = try viewers.admit(offer: offer, on: bound.screen, input: bound.input)
+            let (id, answer) = try viewers.admit(
+                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing)
             return Response(
                 status: .created,
                 headers: [.location: "/devices/\(udid)/whep/\(id)", .contentType: "application/sdp", .cacheControl: "no-cache"],
@@ -85,7 +102,8 @@ extension Server {
         let parts = request.uri.path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
         let udid = parts.count > 1 ? parts[1] : ""
         let id = parts.count > 3 ? parts[3] : ""
-        guard let viewer = try? viewers.find(id) else {
+        // The viewer only through the device it watches: one id, one device.
+        guard let viewer = try? viewers.find(id, of: DeviceID(udid)) else {
             try? await outbound.write(.text(#"{"ok":false,"error":"unknown viewer: \#(jsonEscape(id))"}"#))
             return
         }

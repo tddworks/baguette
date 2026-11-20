@@ -39,7 +39,8 @@ if (( LAN )); then
 fi
 
 # 1 · today's path: baguette serve (WebSocket stream + the input route both transports tap through)
-nohup $BAGUETTE serve --host 127.0.0.1 --port 8421 > $RUN/serve.log 2>&1 &
+# WebRTC media on fixed ports so impair.sh can find it: MediaMTX 8189, baguette 8190-8194, Pion 8195-8199.
+nohup $BAGUETTE serve --host 127.0.0.1 --port 8421 --webrtc-ports 8190-8194 > $RUN/serve.log 2>&1 &
 echo $! > $RUN/serve.pid
 
 # 2 · the WHEP server. Only RTSP in and WebRTC out; everything else off.
@@ -58,6 +59,17 @@ tail -f /dev/null | $BAGUETTE stream --udid $UDID --format avcc --fps 60 --bitra
      -use_wallclock_as_timestamps 1 -f h264 -i - -c copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/sim
 EOF
 chmod +x $RUN/bridge.sh
+
+# 3b · the reference WebRTC sender: the same encoder through Pion's WebRTC and its congestion control.
+# Built when Go is installed; each WebRTC (Pion) run starts its own `baguette stream`.
+if command -v go >/dev/null; then
+  (cd $KIT/pion && go build -o $RUN/pion-whep .) && {
+    nohup $RUN/pion-whep -baguette $BAGUETTE -udid $UDID > $RUN/pion.log 2>&1 &
+    echo $! > $RUN/pion.pid
+  }
+else
+  echo "no Go: skipping the Pion reference sender (brew install go)" >&2
+fi
 
 # 4 · one origin for pages, /api → serve, /whep → MediaMTX, /bridge/on|off.
 # The proxy starts the bridge only for WebRTC runs: one encoder per run.

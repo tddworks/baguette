@@ -153,6 +153,83 @@ extension SessionDescriptionTests {
     }
 }
 
+/// The same offer with what Chrome adds for congestion control: the transport-wide
+/// sequence extension (here id 3) and transport-cc feedback on the High profile.
+private let offerWithTransportCC = chromeOffer
+    .replacingOccurrences(
+        of: "a=rtcp-mux\r\n",
+        with: "a=rtcp-mux\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n"
+            + "a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
+    .replacingOccurrences(
+        of: "a=rtcp-fb:112 nack pli\r\n",
+        with: "a=rtcp-fb:112 nack pli\r\na=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n")
+
+extension SessionDescriptionTests {
+    @Test func `should read the offer's transport-wide sequence and abs-send-time extension ids`() throws {
+        let offered = try SessionDescription(offer: offerWithTransportCC)
+        #expect(offered.transportWideSequenceID == 3)
+        #expect(offered.absSendTimeID == 2)
+        let bare = try SessionDescription(offer: chromeOffer)
+        #expect(bare.transportWideSequenceID == nil && bare.absSendTimeID == nil)
+    }
+
+    @Test func `should not take an extension the browser offers without asking for its feedback on our H.264`() throws {
+        let noFeedback = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n", with: ""))
+        #expect(noFeedback.transportWideSequenceID == nil && noFeedback.absSendTimeID == nil)
+
+        let feedbackOnAnotherFormat = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc", with: "a=rtcp-fb:96 goog-remb\r\na=rtcp-fb:96 transport-cc"))
+        #expect(feedbackOnAnotherFormat.transportWideSequenceID == nil && feedbackOnAnotherFormat.absSendTimeID == nil)
+    }
+
+    @Test func `should not take another media section's feedback for its video`() throws {
+        // An audio section first, asking transport-cc on all its formats; the video asks for none.
+        let audioFirst = offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n", with: "")
+            .replacingOccurrences(
+                of: "a=msid-semantic: WMS\r\n",
+                with: "a=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n"
+                    + "a=rtcp-fb:* transport-cc\r\na=rtcp-fb:* goog-remb\r\n")
+        let offered = try SessionDescription(offer: audioFirst)
+        #expect(offered.transportWideSequenceID == nil && offered.absSendTimeID == nil)
+    }
+
+    @Test func `should take feedback the browser asks for on every format`() throws {
+        let offered = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc", with: "a=rtcp-fb:* goog-remb\r\na=rtcp-fb:* transport-cc"))
+        #expect(offered.transportWideSequenceID == 3 && offered.absSendTimeID == 2)
+    }
+
+    @Test func `should not take an extension the browser won't receive`() throws {
+        for direction in ["inactive", "sendonly"] {
+            let offered = try SessionDescription(offer: offerWithTransportCC
+                .replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:3/\(direction) ")
+                .replacingOccurrences(of: "a=extmap:2 ", with: "a=extmap:2/\(direction) "))
+            #expect(offered.transportWideSequenceID == nil && offered.absSendTimeID == nil, "\(direction)")
+        }
+        let receiving = try SessionDescription(offer: offerWithTransportCC.replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:3/recvonly "))
+        #expect(receiving.transportWideSequenceID == 3)
+    }
+
+    @Test func `should not take an extension numbered past what a one-byte header can carry`() throws {
+        let offered = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:16 ")
+            .replacingOccurrences(of: "a=extmap:2 ", with: "a=extmap:15 "))
+        #expect(offered.transportWideSequenceID == nil && offered.absSendTimeID == nil)
+    }
+
+    @Test func `should put its congestion control's lines in the answer, and none of its own`() throws {
+        let description = try SessionDescription(offer: offerWithTransportCC)
+        let lines = ["a=extmap:3 http://example/ext", "a=rtcp-fb:112 transport-cc"]
+
+        let answer = description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [], congestion: lines)
+
+        #expect(answer.contains("a=setup:passive\r\na=extmap:3 http://example/ext\r\na=rtcp-fb:112 transport-cc\r\n"))
+        #expect(!description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: []).contains("extmap"))
+    }
+}
+
 @Suite("ICECredentials")
 struct ICECredentialsTests {
     @Test func `should make fresh ICE credentials long enough for the spec, from ICE characters`() {

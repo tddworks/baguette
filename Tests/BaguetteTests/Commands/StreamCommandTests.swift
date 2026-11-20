@@ -67,6 +67,7 @@ private final class CaptureProbe: Stream {
     }
 
     func apply(_ config: StreamConfig) {}
+    func update(_ change: StreamConfig.Change) {}
     func requestKeyframe() {}
     func requestSnapshot() {}
 }

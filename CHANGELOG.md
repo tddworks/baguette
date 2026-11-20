@@ -13,7 +13,11 @@ For releases prior to this changelog, see the
 ### Added
 - The device page's format picker offers **WebRTC** beside H.264 and MJPEG: the phone's screen as H.264 over UDP (WHEP), for viewing from a phone or another machine; it plays on plain HTTP too. → [docs](docs/features/webrtc/README.md)
 
+- A WebRTC viewer adapts to its link: the browser's transport-cc reports set the encoder's bitrate (REMB, or none, with `?congestion=remb|off`), and its packets are paced so a keyframe doesn't overflow a phone link's queue. → [docs](docs/features/webrtc/README.md)
+- `baguette serve --webrtc-ports 8190-8194` keeps WebRTC media to a UDP port range, for a firewall. → [docs](docs/features/webrtc/README.md)
+
 ### Fixed
+- A tap posted to `POST /devices/:udid/input` reaches a simulator in ~50 ms instead of ~300 ms: the device's input is kept between requests, and finding a device no longer runs `devicectl` each time — every per-device route is faster.
 - `baguette stream` no longer spins a full CPU core once its stdin closes (`< /dev/null`, `nohup`, a parent that closes the pipe); it stops reading commands and keeps streaming. → [docs](docs/features/stream/README.md)
 
 ---

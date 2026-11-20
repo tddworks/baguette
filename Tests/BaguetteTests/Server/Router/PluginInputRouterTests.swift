@@ -73,6 +73,57 @@ struct PluginInputRouterTests {
         }
     }
 
+    @Test func `should keep a device's input across posted taps, not connect afresh for each`() async throws {
+        let made = TouchesMade()
+        let devices = routeDevices {
+            $0.register(.touch) {
+                made.increment()
+                let touch = MockTouch()
+                given(touch).tap(at: .any, size: .any, duration: .any, edge: .any).willReturn(true)
+                return touch
+            }
+        }
+
+        try await InProcessServer(devices: devices).test { client in
+            for _ in 0..<3 {
+                let response = try await client.send(
+                    .post, "/devices/U/input", body: #"{"type":"tap","x":1,"y":2,"width":10,"height":20}"#)
+                #expect(response.json["ok"] as? Bool == true)
+            }
+        }
+
+        #expect(made.value == 1)
+    }
+
+    @Test func `should retry a posted tap on a fresh input when the kept one no longer reaches the device`() async throws {
+        let made = TouchesMade(), rebooted = Rebooted()
+        let devices = routeDevices {
+            $0.register(.touch) {
+                made.increment()
+                let generation = made.value
+                let touch = MockTouch()
+                // A touch made before the reboot no longer reaches the device.
+                given(touch).tap(at: .any, size: .any, duration: .any, edge: .any)
+                    .willProduce { _, _, _, _ in !rebooted.value || generation > 1 }
+                return touch
+            }
+        }
+        let tap = #"{"type":"tap","x":1,"y":2,"width":10,"height":20}"#
+
+        try await InProcessServer(devices: devices).test { client in
+            let before = try await client.send(.post, "/devices/U/input", body: tap)
+            rebooted.value = true
+            let after = try await client.send(.post, "/devices/U/input", body: tap)
+            let nonsense = try await client.send(.post, "/devices/U/input", body: #"{"type":"nonsense"}"#)
+
+            #expect(before.json["ok"] as? Bool == true)
+            #expect(after.json["ok"] as? Bool == true)
+            #expect(nonsense.json["ok"] as? Bool == false)
+        }
+
+        #expect(made.value == 2)
+    }
+
     @Test func `should refuse input to a device that isn't running or doesn't exist`() async throws {
         let devices = routeDevices(state: .off) { $0.register(.touch) { MockTouch() } }
 
@@ -131,4 +182,20 @@ struct PluginInputRouterTests {
             #expect(await client.status(.get, "/devices/ghost/describe-ui.json") == .notFound)
         }
     }
+}
+
+private final class Rebooted: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    var value: Bool {
+        get { lock.withLock { flag } }
+        set { lock.withLock { flag = newValue } }
+    }
+}
+
+private final class TouchesMade: @unchecked Sendable {
+    private let lock = NSLock()
+    private var made = 0
+    var value: Int { lock.withLock { made } }
+    func increment() { lock.withLock { made += 1 } }
 }

@@ -23,6 +23,10 @@ public protocol Stream: AnyObject {
     /// scale for the next encode). A rejected codec property ends the stream.
     func apply(_ config: StreamConfig) throws
 
+    /// Turn one knob of the config as it stands, read and written in one
+    /// step, so a change made at the same time from elsewhere isn't undone.
+    func update(_ change: StreamConfig.Change) throws
+
     /// Force the next encoded frame to be a keyframe (IDR). No-op for
     /// stateless formats like MJPEG.
     func requestKeyframe()

@@ -35,7 +35,7 @@ private func mockViewers() -> WebRTCViewers {
             given(stream).start(on: .any).willReturn()
             given(stream).stop().willReturn()
             given(stream).config.willReturn(.default)
-            given(stream).apply(.any).willReturn()
+            given(stream).update(.any).willReturn()
             given(stream).requestKeyframe().willReturn()
             given(stream).requestSnapshot().willReturn()
             return stream
@@ -59,6 +59,14 @@ private func whepServer(
 }
 
 private let sdp: HTTPFields = [.contentType: "application/sdp"]
+
+/// The offer with both congestion-control extensions and their feedback on
+/// its H.264, as Chrome sends it.
+private let offerWithBoth = offer.replacingOccurrences(
+    of: "a=setup:actpass\r\n",
+    with: "a=setup:actpass\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n"
+        + "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n"
+        + "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n")
 
 @Suite("Serve router: WHEP")
 struct WHEPRouterTests {
@@ -151,9 +159,69 @@ struct WHEPRouterTests {
         verify(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(1)
     }
 
+    @Test func `should not reach a viewer through another device's address`() async throws {
+        let viewers = mockViewers()
+        let server = whepServer(viewers: viewers)
+        let location = try await server.test { client in
+            try #require(try await client.send(.post, "/devices/U/whep", body: offer, headers: sdp).header("Location"))
+        }
+        let id = String(location.split(separator: "/").last!)
+
+        let messages = try await socketConversation("/devices/OTHER/whep/\(id)/control", server: server)
+        let hungUp = try await server.test { client in await client.status(.delete, "/devices/OTHER/whep/\(id)") }
+
+        #expect(messages == [#"{"ok":false,"error":"unknown viewer: \#(id)"}"#])
+        #expect(hungUp == .notFound)
+        #expect(viewers.count == 1)
+    }
+
     @Test func `should say so on the control socket when no viewer has the id`() async throws {
         let messages = try await socketConversation("/devices/U/whep/ghost/control", server: whepServer())
 
         #expect(messages == [#"{"ok":false,"error":"unknown viewer: ghost"}"#])
+    }
+
+    @Test func `should give a viewer the congestion control asked for, and transport-cc when nothing is`() async throws {
+        try await whepServer().test { client in
+            let remb = try await client.send(.post, "/devices/U/whep?congestion=remb", body: offerWithBoth, headers: sdp)
+            #expect(remb.status == .created)
+            #expect(remb.text.contains("a=rtcp-fb:112 goog-remb\r\n"))
+            #expect(!remb.text.contains("transport-cc"))
+
+            let cc = try await client.send(.post, "/devices/U/whep?congestion=transport-cc", body: offerWithBoth, headers: sdp)
+            #expect(cc.text.contains("a=rtcp-fb:112 transport-cc\r\n"))
+
+            let plain = try await client.send(.post, "/devices/U/whep", body: offerWithBoth, headers: sdp)
+            #expect(plain.text.contains("a=rtcp-fb:112 transport-cc\r\n"))
+            #expect(!plain.text.contains("goog-remb"))
+
+            let off = try await client.send(.post, "/devices/U/whep?congestion=off", body: offerWithBoth, headers: sdp)
+            #expect(!off.text.contains("extmap"))
+        }
+    }
+
+    @Test func `should leave a viewer unpaced when asked, for the bench, and paced otherwise`() async throws {
+        let viewers = mockViewers()
+        try await whepServer(viewers: viewers).test { client in
+            let off = try #require(try await client.send(.post, "/devices/U/whep?pacing=off", body: offer, headers: sdp)
+                .header("Location"))
+            let on = try #require(try await client.send(.post, "/devices/U/whep", body: offer, headers: sdp)
+                .header("Location"))
+
+            #expect(try viewers.find(String(off.split(separator: "/").last!)).pacing == false)
+            #expect(try viewers.find(String(on.split(separator: "/").last!)).pacing == true)
+            let unknown = try await client.send(.post, "/devices/U/whep?pacing=sometimes", body: offer, headers: sdp)
+            #expect(unknown.status == .badRequest)
+            #expect(unknown.text.contains("pacing is on or off"))
+        }
+    }
+
+    @Test func `should refuse a congestion control it doesn't know, naming the ones it does`() async throws {
+        try await whepServer().test { client in
+            let response = try await client.send(.post, "/devices/U/whep?congestion=gcc", body: offerWithBoth, headers: sdp)
+
+            #expect(response.status == .badRequest)
+            #expect(response.text.contains("unknown congestion control: gcc (transport-cc, remb or off)"))
+        }
     }
 }
