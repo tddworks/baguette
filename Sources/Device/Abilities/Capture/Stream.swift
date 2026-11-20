@@ -1,10 +1,12 @@
 import Foundation
+import Mockable
 
 /// A live frame stream of a particular wire format. Owns its lifecycle,
 /// runtime config, and any format-specific state (envelope assembly,
 /// encoder pipeline, AVCC seed bookkeeping). The orchestrator only sees
 /// the verbs below — adding a new format means adding a new `Stream`
 /// type, not editing the caller.
+@Mockable
 public protocol Stream: AnyObject {
     /// Read-only view of the current runtime config.
     var config: StreamConfig { get }
