@@ -13,5 +13,4 @@ public struct DatagramAddress: Hashable, Sendable {
     }
 
     public var isIPv6: Bool { ip.count == 16 }
-
 }

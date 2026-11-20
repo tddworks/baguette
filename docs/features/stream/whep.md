@@ -188,7 +188,7 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 6 | One viewer, one encoder; hanging up stops it | `WebRTCViewer` |
 | 7 | A viewer the browser stops answering (no STUN check for 30 s) hangs up | `WebRTCViewer` |
 | 8 | A STUN check is answered only when its integrity matches the viewer's ICE password | `STUNMessage` |
-| 9 | An offer with no H.264 in packetization mode 1 is refused | `SessionDescription` |
+| 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
 
 Law 1 is what makes the comparison fair. If WebRTC needs different tuning

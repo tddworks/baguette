@@ -189,7 +189,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | one viewer, one encoder: each viewer owns its stream, and hanging up stops it | `WebRTCViewer` |
 | a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCViewer` |
 | a STUN check is answered only when its integrity matches the viewer's ICE password | `STUNMessage` |
-| an offer with no H.264 the encoder can send (packetization mode 1) is refused, never answered with another codec | `SessionDescription` |
+| an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
 | a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
