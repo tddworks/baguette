@@ -733,6 +733,21 @@ this doc.
     input socket closes. A separate experiment can test lifting the cap only
     after sustained arrivals.
 
+    **After the encoder follows drops at once (2026-11-20)**, mobile data over
+    Tailscale, one viewer at a time (the run before it shared the uplink with
+    device-page viewers on `?congestion=remb`, which sit at 300 kbps on a
+    still screen — not a measurement of anything): 100 taps p50 147 / p95 257
+    / p99 339 ms, 1 miss, fps 43.4, interval σ 20.1 ms, 11.1 freezes/min;
+    30 s animated list 7.25 Mbps, 46.6 fps. The log over both: **no cut, no
+    retune, no pacer hold**; ~6 packets a second reported lost (639, under
+    1 %), all resent; two keyframe requests. So these freezes are not the
+    congestion control's nor the pacer's: the likeliest cause is loss
+    repair — a frame with a lost packet waits a NACK round trip (100–200 ms
+    over mobile and Tailscale), and the bench counts a gap over 200 ms as a
+    freeze. Next: time-stamp losses and freezes to line them up; if they
+    match, RED/ULPFEC (rebuild a lost packet without the round trip) or a
+    lower ceiling on mobile (fewer packets, fewer losses per frame).
+
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
     samples); and each tap is answered in its own colour (left red, right green,
