@@ -404,7 +404,8 @@ struct WebRTCViewerStreamFailureTests {
         let made = Box<SerialStream?>(nil)
         let viewer = WebRTCViewer(
             offer: offer, ice: ours, datagrams: datagrams, handshake: handshake,
-            stream: { sink in let stream = SerialStream(sink: sink); made.value = stream; return stream })
+            stream: { sink in let stream = SerialStream(sink: sink); made.value = stream; return stream },
+            congestion: { _ in FixedBitrate() })
 
         made.value?.failFromItsQueue()
 
