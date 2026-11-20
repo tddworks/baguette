@@ -70,6 +70,7 @@ function startWS() {
     else if ((tag === 2 || tag === 3) && dec.state === 'configured') { dec.decode(new EncodedVideoChunk({ type: tag === 2 ? 'key' : 'delta', timestamp: ts, data: p.buffer })); ts += 16667; }
   };
   ws.onclose = e => log('ws closed', e.code, e.reason);
+  R.taps = ws;   // the page sends its gestures down its stream socket
   let vsync = 1000 / 60, lastRaf = null;
   const paint = t => {
     if (lastRaf !== null && t - lastRaf < 50) vsync = 0.9 * vsync + 0.1 * (t - lastRaf);
@@ -105,17 +106,26 @@ async function startWebRTC() {
   if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
   await pc.setRemoteDescription({ type: 'answer', sdp });
   const viewer = res.headers.get('Location');
+  // baguette's viewer takes gestures on its control socket, as the device page sends them;
+  // Pion and MediaMTX have none, so their taps are posted.
+  if (viewer && !SPIKE && !PION) {
+    R.taps = new WebSocket(SERVE.replace('http', 'ws') + viewer + '/control');
+    await new Promise(r => { R.taps.onopen = r; R.taps.onerror = r; setTimeout(r, 3000); });
+  }
   const onFrame = (now, meta) => { presented(meta.expectedDisplayTime ?? now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
   vid.requestVideoFrameCallback(onFrame);
   // Hang the viewer up at the end, rather than leave it to the 30 s consent timeout.
-  R.pc = pc; R.stop = () => { pc.close(); if (viewer && !SPIKE) fetch((PION ? '' : '/api') + viewer, { method: 'DELETE' }); };
+  R.pc = pc; R.stop = () => { pc.close(); R.taps?.close(); if (viewer && !SPIKE) fetch((PION ? '' : '/api') + viewer, { method: 'DELETE' }); };
 }
 
 // --- the probe: tap the fixture's centre, time until the centre turns white
 async function tap(side) {
+  const envelope = { type: 'tap', x: side === 'left' ? W / 4 : 3 * W / 4, y: H / 2, width: W, height: H, duration: 0.15 };
+  if (R.taps && R.taps.readyState === 1) { R.tapPath = 'socket'; return R.taps.send(JSON.stringify(envelope)); }
+  R.tapPath = 'POST /input';
   // text/plain + no-cors: a simple request, so no preflight; we don't read the ack.
   return fetch(SERVE + '/devices/' + UDID + '/input', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ type: 'tap', x: side === 'left' ? W / 4 : 3 * W / 4, y: H / 2, width: W, height: H, duration: 0.15 }) });
+    body: JSON.stringify(envelope) });
 }
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]; };
 async function rtcBytes() { let b = 0, p = 0; (await R.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') { b += r.bytesReceived + (r.headerBytesReceived || 0); p += r.packetsReceived; } }); return { b, p }; }
@@ -164,7 +174,7 @@ async function run() {
   const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
   const durMin = (R.frames.at(-1) - R.frames[0]) / 60000;
   R.summary = {
-    transport: T, sender: R.sender, format: R.format || 'h264', taps: TAPS, misses: TAPS - ok.length,
+    transport: T, sender: R.sender, tapPath: R.tapPath, format: R.format || 'h264', taps: TAPS, misses: TAPS - ok.length,
     p50: +pct(ok, 50).toFixed(1), p95: +pct(ok, 95).toFixed(1), p99: +pct(ok, 99).toFixed(1), min: +Math.min(...ok).toFixed(1), max: +Math.max(...ok).toFixed(1),
     firstFrameMs: +R.firstFrame.toFixed(0), presentedFps: +(1000 / mean).toFixed(1),
     intervalStddevMs: +Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length).toFixed(2),
