@@ -3,8 +3,9 @@ import Foundation
 
 /// A STUN message (RFC 5389) as ICE uses it: the browser's connectivity check,
 /// and the answer a WebRTC viewer — an ICE-lite agent — sends back. Only a
-/// Binding request signed with the viewer's ICE password is answered (RFC 8445
-/// §7.3); anything else is ignored, never answered with an error.
+/// Binding request addressed to the viewer's username fragment and signed with
+/// its ICE password is answered (RFC 8445 §7.3); anything else is ignored,
+/// never answered with an error.
 public struct STUNMessage: Equatable, Sendable {
     static let magicCookie: UInt32 = 0x2112_A442
     private static let bindingRequest: UInt16 = 0x0001
@@ -56,9 +57,12 @@ public struct STUNMessage: Equatable, Sendable {
     }
 
     /// The Binding success for this check, telling the browser the address it
-    /// came `from` — or nil when this isn't a check signed with `password`.
-    public func answer(from address: DatagramAddress, password: String) -> Data? {
-        guard isBindingRequest, let at = integrityAt else { return nil }
+    /// came `from` — or nil when this isn't a check for `ice`: its username
+    /// "<our ufrag>:<theirs>", its integrity our password.
+    public func answer(from address: DatagramAddress, ice: ICECredentials) -> Data? {
+        guard isBindingRequest, let at = integrityAt,
+              username?.split(separator: ":").first.map(String.init) == ice.ufrag else { return nil }
+        let password = ice.password
         // The integrity covers the header and attributes before it, with the
         // length counting through MESSAGE-INTEGRITY itself (RFC 5389 §15.4).
         let signed = Self.withLength(at + 24 - 20, Array(bytes[0..<at]))

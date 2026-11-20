@@ -19,7 +19,7 @@ private let sampleCheck = hex(
     + "000600096576746a3a68367659202020"
     + "000800149aeaa70cbfd8cb56781ef2b5b2d3f249c1b571a2"
     + "80280004e57a3bcf")
-private let samplePassword = "VOkJxbRl1RmTxUk/WvJxBt"
+private let ours = ICECredentials(ufrag: "evtj", password: "VOkJxbRl1RmTxUk/WvJxBt")
 private let browser = DatagramAddress(ip: [192, 0, 2, 1], port: 32853)
 
 @Suite("STUNMessage")
@@ -31,12 +31,12 @@ struct STUNMessageTests {
         #expect(check.username == "evtj:h6vY")
     }
 
-    @Test func `should answer a check whose integrity matches the ICE password`() throws {
+    @Test func `should answer a check addressed to our username fragment and signed with our ICE password`() throws {
         let check = try #require(STUNMessage(sampleCheck))
 
         // Success, the check's transaction id, XOR-MAPPED-ADDRESS 192.0.2.1:32853,
         // MESSAGE-INTEGRITY and FINGERPRINT (computed independently, with Python's hmac and zlib).
-        #expect(check.answer(from: browser, password: samplePassword) == hex(
+        #expect(check.answer(from: browser, ice: ours) == hex(
             "0101002c2112a442b7e7a701bc34d686fa87dfae"
             + "002000080001a147e112a643"
             + "0008001474c9371ebf3148548518699c3e3174c20dd9e68a"
@@ -46,7 +46,13 @@ struct STUNMessageTests {
     @Test func `should refuse a check whose integrity doesn't match the ICE password`() throws {
         let check = try #require(STUNMessage(sampleCheck))
 
-        #expect(check.answer(from: browser, password: "not-the-password") == nil)
+        #expect(check.answer(from: browser, ice: ICECredentials(ufrag: "evtj", password: "not-the-password")) == nil)
+    }
+
+    @Test func `should refuse a check addressed to another username fragment`() throws {
+        let check = try #require(STUNMessage(sampleCheck))
+
+        #expect(check.answer(from: browser, ice: ICECredentials(ufrag: "h6vY", password: ours.password)) == nil)
     }
 
     @Test func `should refuse a check that carries no integrity at all`() throws {
@@ -54,7 +60,7 @@ struct STUNMessageTests {
         let unsigned = hex("000100102112a442b7e7a701bc34d686fa87dfae" + "000600096576746a3a68367659202020")
         let check = try #require(STUNMessage(unsigned))
 
-        #expect(check.answer(from: browser, password: samplePassword) == nil)
+        #expect(check.answer(from: browser, ice: ours) == nil)
     }
 
     @Test func `should not answer a message that isn't a check`() throws {
@@ -65,7 +71,7 @@ struct STUNMessageTests {
             + "80280004fae4043a")))
 
         #expect(!success.isBindingRequest)
-        #expect(success.answer(from: browser, password: samplePassword) == nil)
+        #expect(success.answer(from: browser, ice: ours) == nil)
     }
 
     @Test func `should map an IPv6 browser's address with the transaction id too`() throws {
@@ -73,7 +79,7 @@ struct STUNMessageTests {
         let v6 = DatagramAddress(ip: [0x20, 0x01, 0x0d, 0xb8, 0x12, 0x34, 0x56, 0x78,
                                       0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77], port: 32853)
 
-        let answer = try #require(check.answer(from: v6, password: samplePassword))
+        let answer = try #require(check.answer(from: v6, ice: ours))
 
         // RFC 5769 §2.3's mapped address: family 2, the port and address XORed
         // with the magic cookie and transaction id.

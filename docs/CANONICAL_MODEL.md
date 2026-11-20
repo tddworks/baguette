@@ -188,7 +188,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a viewer sends nothing before its DTLS handshake completes, and every packet after it through SRTP | `WebRTCViewer` |
 | one viewer, one encoder: each viewer owns its stream, and hanging up stops it | `WebRTCViewer` |
 | a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCViewer` |
-| a STUN check is answered only when its integrity matches the viewer's ICE password | `STUNMessage` |
+| a STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
 | a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |

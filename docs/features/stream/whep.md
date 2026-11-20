@@ -187,7 +187,7 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 5 | A viewer sends nothing before its handshake completes, and every packet after it through SRTP | `WebRTCViewer` |
 | 6 | One viewer, one encoder; hanging up stops it | `WebRTCViewer` |
 | 7 | A viewer the browser stops answering (no STUN check for 30 s) hangs up | `WebRTCViewer` |
-| 8 | A STUN check is answered only when its integrity matches the viewer's ICE password | `STUNMessage` |
+| 8 | A STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
 
