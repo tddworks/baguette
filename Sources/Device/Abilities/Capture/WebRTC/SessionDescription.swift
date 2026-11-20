@@ -44,8 +44,10 @@ public struct SessionDescription: Equatable, Sendable {
         let lines = sdp.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         guard let video = lines.firstIndex(where: { $0.hasPrefix("m=video ") }) else { throw Refusal.noVideo }
         let next = lines[(video + 1)...].firstIndex { $0.hasPrefix("m=") } ?? lines.endIndex
-        // Session-level lines apply unless the video section says otherwise.
-        let section = Array(lines[(video + 1)..<next]) + Array(lines[..<video])
+        // Session-level lines (before the first m= line) apply unless the video section says
+        // otherwise; another media section's lines — an audio `a=rtcp-fb:*` — never do.
+        let sessionLevel = lines.prefix { !$0.hasPrefix("m=") }
+        let section = Array(lines[(video + 1)..<next]) + Array(sessionLevel)
         func value(_ key: String) -> String? {
             section.first { $0.hasPrefix("a=\(key):") }.map { String($0.dropFirst(key.count + 3)) }
         }

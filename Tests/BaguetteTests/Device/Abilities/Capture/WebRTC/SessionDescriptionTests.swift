@@ -183,6 +183,18 @@ extension SessionDescriptionTests {
         #expect(feedbackOnAnotherFormat.transportWideSequenceID == nil && feedbackOnAnotherFormat.absSendTimeID == nil)
     }
 
+    @Test func `should not take another media section's feedback for its video`() throws {
+        // An audio section first, asking transport-cc on all its formats; the video asks for none.
+        let audioFirst = offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc\r\n", with: "")
+            .replacingOccurrences(
+                of: "a=msid-semantic: WMS\r\n",
+                with: "a=msid-semantic: WMS\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n"
+                    + "a=rtcp-fb:* transport-cc\r\na=rtcp-fb:* goog-remb\r\n")
+        let offered = try SessionDescription(offer: audioFirst)
+        #expect(offered.transportWideSequenceID == nil && offered.absSendTimeID == nil)
+    }
+
     @Test func `should take feedback the browser asks for on every format`() throws {
         let offered = try SessionDescription(offer: offerWithTransportCC
             .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc", with: "a=rtcp-fb:* goog-remb\r\na=rtcp-fb:* transport-cc"))
