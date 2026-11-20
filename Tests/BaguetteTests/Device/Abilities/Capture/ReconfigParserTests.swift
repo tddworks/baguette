@@ -4,6 +4,18 @@ import Testing
 
 @Suite("ReconfigParser")
 struct ReconfigParserTests {
+    @Test func `should read a retune line as the one knob it turns`() {
+        #expect(ReconfigParser.change(#"{"type":"set_bitrate","bps":4000000}"#) == .bitrate(4_000_000))
+        #expect(ReconfigParser.change(#"{"type":"set_fps","fps":30}"#) == .fps(30))
+        #expect(ReconfigParser.change(#"{"type":"set_scale","scale":2}"#) == .scale(2))
+    }
+
+    @Test func `should read no change from a line that isn't a well-formed retune`() {
+        #expect(ReconfigParser.change("not json") == nil)
+        #expect(ReconfigParser.change(#"{"type":"set_fps"}"#) == nil)
+        #expect(ReconfigParser.change(#"{"type":"force_idr"}"#) == nil)
+    }
+
 
     @Test func `should change only the bitrate on set_bitrate`() {
         let next = ReconfigParser.apply(

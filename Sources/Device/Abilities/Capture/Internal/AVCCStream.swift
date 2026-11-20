@@ -59,19 +59,28 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         queue.sync { stopEncoding() }
     }
 
+    /// Read and written on the encode queue, so a change made at the same
+    /// time from elsewhere lands on top of this one, not under it.
+    public func update(_ change: StreamConfig.Change) throws {
+        try queue.sync { try retune(to: change.applied(to: config)) }
+    }
+
     public func apply(_ newConfig: StreamConfig) throws {
-        try queue.sync {
-            let old = config
-            if old.scale != newConfig.scale {
-                generation += 1
-                pendingForceKeyframe = true
-                pendingSeedSnapshot = true
-            }
-            if old.fps != newConfig.fps { try h264.setFrameRate(newConfig.fps) }
-            if old.bitrateBps != newConfig.bitrateBps { try h264.setBitrate(newConfig.bitrateBps) }
-            configLock.withLock { currentConfig = newConfig }
-            pump.apply(fps: newConfig.fps)
+        try queue.sync { try retune(to: newConfig) }
+    }
+
+    /// Runs on `queue`.
+    private func retune(to newConfig: StreamConfig) throws {
+        let old = config
+        if old.scale != newConfig.scale {
+            generation += 1
+            pendingForceKeyframe = true
+            pendingSeedSnapshot = true
         }
+        if old.fps != newConfig.fps { try h264.setFrameRate(newConfig.fps) }
+        if old.bitrateBps != newConfig.bitrateBps { try h264.setBitrate(newConfig.bitrateBps) }
+        configLock.withLock { currentConfig = newConfig }
+        pump.apply(fps: newConfig.fps)
     }
 
     public func requestKeyframe() { queue.sync { pendingForceKeyframe = true } }

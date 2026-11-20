@@ -51,6 +51,7 @@ private final class KeyframeStream: Stream, @unchecked Sendable {
     func start(on screen: any Screen) throws {}
     func stop() {}
     func apply(_ config: StreamConfig) throws {}
+    func update(_ change: StreamConfig.Change) throws {}
     func requestKeyframe() { lock.withLock { count += 1 } }
     func requestSnapshot() {}
 }

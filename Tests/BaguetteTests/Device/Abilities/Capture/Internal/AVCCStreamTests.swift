@@ -174,6 +174,23 @@ struct AVCCStreamTests {
         stream.stop()
     }
 
+    @Test func `should keep every change when its frame rate and bitrate are changed at once`() throws {
+        let session = session([keyframe])
+        // Retuning the encoder takes a moment, as VideoToolbox does.
+        given(session).set(.any).willProduce { _ in usleep(200); return 0 }
+        let stream = stream(session, sink: RecordingSink())
+        try stream.start(on: screen())
+        send(Surfaces.filled(0x10), to: stream)
+
+        // One caller walks the frame rate up, the other the bitrate, together.
+        DispatchQueue.concurrentPerform(iterations: 2) { caller in
+            for step in 1...200 { try! stream.update(caller == 0 ? .fps(step) : .bitrate(step * 10_000)) }
+        }
+
+        #expect(stream.config.fps == 200 && stream.config.bitrateBps == 2_000_000)
+        stream.stop()
+    }
+
     @Test func `should send nothing once stopped`() throws {
         let sink = RecordingSink()
         let screen = screen()

@@ -209,7 +209,7 @@ public final class WebRTCViewer: @unchecked Sendable {
         if asks.contains(.keyframeRequest) { stream.requestKeyframe() }
         if let retuneTo {
             log("[webrtc] retune \(stream.config.bitrateBps / 1_000) → \(retuneTo / 1_000) kbps")
-            try? stream.apply(stream.config.with(bitrateBps: retuneTo))
+            try? stream.update(.bitrate(retuneTo))
         }
     }
 

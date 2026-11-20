@@ -357,7 +357,7 @@ extension Server {
                 for try await frame in inbound {
                     guard frame.opcode == .text else { continue }
                     let line = String(buffer: frame.data)
-                    if ReconfigParser.apply(line, to: .default) != .default { continue }
+                    if ReconfigParser.change(line) != nil { continue }
                     if let data = line.data(using: .utf8),
                        let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let kind = dict["type"] as? String,
@@ -423,9 +423,8 @@ extension Server {
     /// (gestures included) so the caller can reject it loudly instead
     /// of silently dropping input on a surface that cannot act on it.
     private static func handleTwinInbound(line: String, stream: any BaguetteDevice.Stream) throws -> Bool {
-        let next = ReconfigParser.apply(line, to: stream.config)
-        if next != stream.config {
-            try stream.apply(next)
+        if let change = ReconfigParser.change(line) {
+            try stream.update(change)
             return true
         }
         guard let data = line.data(using: .utf8),

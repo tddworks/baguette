@@ -24,6 +24,23 @@ public struct StreamConfig: Equatable, Sendable {
         )
     }
 
+    /// One knob turned: what a page's `set_bitrate` / `set_fps` / `set_scale`
+    /// or a viewer's retune asks of a running stream. A stream applies it to
+    /// its config as it stands then, so two at once both land.
+    public enum Change: Equatable, Sendable {
+        case bitrate(Int)
+        case fps(Int)
+        case scale(Int)
+
+        public func applied(to config: StreamConfig) -> StreamConfig {
+            switch self {
+            case .bitrate(let bps): config.with(bitrateBps: bps)
+            case .fps(let fps): config.with(fps: fps)
+            case .scale(let scale): config.with(scale: scale)
+            }
+        }
+    }
+
     public init(fps: Int, bitrateBps: Int, scale: Int) {
         self.fps = fps
         self.bitrateBps = bitrateBps

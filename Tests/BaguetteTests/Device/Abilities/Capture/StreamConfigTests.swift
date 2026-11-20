@@ -39,4 +39,12 @@ struct StreamConfigTests {
         #expect(c.bitrateBps == 1_000_000)
         #expect(c.scale == 1)
     }
+
+    @Test func `should change only the setting a change names`() {
+        let config = StreamConfig(fps: 30, bitrateBps: 2_000_000, scale: 1)
+
+        #expect(StreamConfig.Change.bitrate(4_000_000).applied(to: config) == config.with(bitrateBps: 4_000_000))
+        #expect(StreamConfig.Change.fps(60).applied(to: config) == config.with(fps: 60))
+        #expect(StreamConfig.Change.scale(2).applied(to: config) == config.with(scale: 2))
+    }
 }

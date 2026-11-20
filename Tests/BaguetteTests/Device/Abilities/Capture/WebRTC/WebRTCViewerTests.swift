@@ -76,7 +76,7 @@ private struct Rig {
         given(stream).requestKeyframe().willReturn()
         given(stream).stop().willReturn()
         given(stream).config.willReturn(.default)
-        given(stream).apply(.any).willReturn()
+        given(stream).update(.any).willReturn()
         given(congestion).answerLines().willReturn(answerLines)
         given(congestion).extensions(at: .any).willReturn(stamp)
         given(congestion).sent(size: .any, at: .any).willReturn()
@@ -341,7 +341,7 @@ struct WebRTCViewerTests {
         rig.viewer.act(on: [.bandwidthEstimate(bitsPerSecond: 4_000_000)])
 
         verify(rig.congestion).heard(.any, at: .any).called(1)
-        verify(rig.stream).apply(.value(StreamConfig.default.with(bitrateBps: 4_000_000))).called(1)
+        verify(rig.stream).update(.value(.bitrate(4_000_000))).called(1)
     }
 
     @Test func `should leave its encoder alone while its congestion control wants no bitrate`() {
@@ -350,7 +350,7 @@ struct WebRTCViewerTests {
 
         rig.viewer.act(on: [.bandwidthEstimate(bitsPerSecond: 1_000_000)])
 
-        verify(rig.stream).apply(.any).called(0)
+        verify(rig.stream).update(.any).called(0)
     }
 }
 
@@ -388,6 +388,7 @@ private final class SerialStream: Stream, @unchecked Sendable {
         lock.withLock { _stopped = true }
     }
     func apply(_ config: StreamConfig) throws {}
+    func update(_ change: StreamConfig.Change) throws {}
     func requestKeyframe() {}
     func requestSnapshot() {}
 }
