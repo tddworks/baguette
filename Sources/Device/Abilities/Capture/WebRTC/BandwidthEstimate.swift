@@ -68,7 +68,8 @@ public struct BandwidthEstimate: Sendable {
                 lossCounted.lost += 1
             }
         }
-        if let latest = received.last?.arrival { received.removeAll { $0.arrival < latest - Self.ackWindow } }
+        // The window ends at the latest arrival, whichever packet it was.
+        if let latest = received.map(\.arrival).max() { received.removeAll { $0.arrival < latest - Self.ackWindow } }
         updateDelayRate(now: now)
         updateLossRate(now: now)
         let rate = min(delayRate, lossRate)

@@ -145,6 +145,29 @@ struct BandwidthEstimateTests {
         #expect(shuffled.target == inOrder.target)
     }
 
+    @Test func `should reach the same target whatever order a report lists a burst sent at one moment`() {
+        var link = Link(capacity: 2_000_000)
+        var reports: [(outcomes: [PacketOutcome], now: Int64)] = []
+        var sequence: UInt16 = 0
+        for report in 1...100 {
+            // Each 100 ms, a keyframe's 40 packets leave together: more than the link carries.
+            let now = Int64(report) * 100_000, sentAt = now - 100_000
+            reports.append(((0..<40).map { _ in
+                defer { sequence &+= 1 }
+                return PacketOutcome(sequence: sequence, sentAt: sentAt, size: 1_200, arrivedAt: link.carry(sentAt: sentAt, size: 1_200))
+            }, now))
+        }
+        var listed = BandwidthEstimate(ceiling: 8_000_000)
+        var reversed = BandwidthEstimate(ceiling: 8_000_000)
+
+        for report in reports {
+            listed.update(with: report.outcomes, now: report.now)
+            reversed.update(with: report.outcomes.reversed(), now: report.now)
+        }
+
+        #expect(reversed.target == listed.target)
+    }
+
     @Test func `should never ask for less than its floor`() {
         var estimate = BandwidthEstimate(floor: 300_000, ceiling: 8_000_000)
         var link = Link(capacity: 100_000)
