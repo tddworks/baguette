@@ -577,9 +577,8 @@ this doc.
     (The 10-tap rows' latencies were the old probe's and meaningless; their
     smoothness columns stand.)
 
-    Read: the median is the same, and so is the ~400 ms floor under both — the
-    phone's path (the tap's POST over Tailscale, render, encode, its browser's
-    playout), not the sender; on this Mac the same probe reads ~40 ms. Both
+    Read: the median is the same, and so is the ~400 ms floor under both. That
+    floor is not the network (see "Where the floor comes from" below). Both
     carried what the encoder made, so neither estimate held it back.
 
     What the data supports, and no more: **in this run Pion played smoother**
@@ -619,6 +618,28 @@ this doc.
     T kbps` whenever packets it sends had waited over 50 ms — their real wait,
     and the target then — so the next runs (alternated, several each), lined up
     with the slow taps, show which.
+
+    **The same A/B on loopback** (this Mac's own headless Chrome, 3 runs each,
+    alternated, 100 taps): paced p50 384–387 / p95 406–412 / p99 417–424 ms,
+    interval σ 9.2–9.5 ms; unpaced p50 375–384 / p95 403–412 / p99 410–444 ms,
+    σ 9.3–9.7 ms; **no `pacer held` line** in any run. On a clean link the
+    pacer adds no delay and none of the tail; whatever it costs on the phone
+    happens only where that link queues or the target drops — the next phone
+    runs, with the log, say which. (Nor does it smooth anything here: loopback
+    has no queue for a burst to overflow.)
+
+    **Where the floor comes from.** The WebSocket transport on loopback reads
+    the same: p50 367 ms. Split with the probe page reporting its `touchstart`
+    (the simulator shares the Mac's clock): **~307 ms (292–329) pass between
+    the tap's `POST /input` and Safari's `touchstart`**; capture, encode, send
+    and paint take the other ~80 ms. The cost is the route, not the device:
+    each `POST /input` builds the device's input afresh — a new HID connection,
+    `[hid] symbols resolved` logged per request — and the request takes ~300 ms
+    even for a 10 ms tap. The device page doesn't pay it: its socket keeps one
+    input. So every tap-to-photon above carries ~300 ms a user doesn't feel;
+    what they feel is about 80 ms plus a long-lived socket's dispatch. Two
+    fixes, either one: the route keeps each device's input (plugins tapping
+    over HTTP pay the same 300 ms today), or the bench taps over a socket.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
