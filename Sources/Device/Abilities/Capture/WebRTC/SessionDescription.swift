@@ -58,14 +58,20 @@ public struct SessionDescription: Equatable, Sendable {
         self.payloadType = payloadType
         profileLevelID = profile
         // a=extmap:<id>[/<direction>] <uri>: only an id a one-byte header
-        // (RFC 8285 §4.2) carries — 1 to 14, all `RTPPacket` writes — and only
-        // with the feedback that makes it worth sending asked for on our H.264.
+        // (RFC 8285 §4.2) carries — 1 to 14, all `RTPPacket` writes — that the
+        // browser will receive (no `inactive` or `sendonly`, RFC 8285 §7), and
+        // only with the feedback that makes it worth sending asked for on our
+        // H.264, or on every format (`*`, RFC 4585 §4.2).
         func extensionID(_ uri: String, feedback: String) -> UInt8? {
-            guard section.contains("a=rtcp-fb:\(payloadType) \(feedback)") else { return nil }
+            guard section.contains("a=rtcp-fb:\(payloadType) \(feedback)") || section.contains("a=rtcp-fb:* \(feedback)")
+            else { return nil }
             return section.compactMap { line -> UInt8? in
                 guard line.hasPrefix("a=extmap:"), line.hasSuffix(" " + uri) else { return nil }
-                return UInt8(line.dropFirst(9).prefix { $0.isNumber })
-            }.first { (1...14).contains($0) }
+                let mapping = line.dropFirst(9).prefix { $0 != " " }.split(separator: "/")
+                guard let id = mapping.first.flatMap({ UInt8($0) }), (1...14).contains(id) else { return nil }
+                let direction = mapping.count > 1 ? mapping[1] : "sendrecv"
+                return direction == "sendrecv" || direction == "recvonly" ? id : nil
+            }.first
         }
         transportWideSequenceID = extensionID(Self.transportWideSequenceURI, feedback: "transport-cc")
         absSendTimeID = extensionID(Self.absSendTimeURI, feedback: "goog-remb")

@@ -183,6 +183,23 @@ extension SessionDescriptionTests {
         #expect(feedbackOnAnotherFormat.transportWideSequenceID == nil && feedbackOnAnotherFormat.absSendTimeID == nil)
     }
 
+    @Test func `should take feedback the browser asks for on every format`() throws {
+        let offered = try SessionDescription(offer: offerWithTransportCC
+            .replacingOccurrences(of: "a=rtcp-fb:112 goog-remb\r\na=rtcp-fb:112 transport-cc", with: "a=rtcp-fb:* goog-remb\r\na=rtcp-fb:* transport-cc"))
+        #expect(offered.transportWideSequenceID == 3 && offered.absSendTimeID == 2)
+    }
+
+    @Test func `should not take an extension the browser won't receive`() throws {
+        for direction in ["inactive", "sendonly"] {
+            let offered = try SessionDescription(offer: offerWithTransportCC
+                .replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:3/\(direction) ")
+                .replacingOccurrences(of: "a=extmap:2 ", with: "a=extmap:2/\(direction) "))
+            #expect(offered.transportWideSequenceID == nil && offered.absSendTimeID == nil, "\(direction)")
+        }
+        let receiving = try SessionDescription(offer: offerWithTransportCC.replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:3/recvonly "))
+        #expect(receiving.transportWideSequenceID == 3)
+    }
+
     @Test func `should not take an extension numbered past what a one-byte header can carry`() throws {
         let offered = try SessionDescription(offer: offerWithTransportCC
             .replacingOccurrences(of: "a=extmap:3 ", with: "a=extmap:16 ")
