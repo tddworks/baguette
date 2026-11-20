@@ -33,7 +33,7 @@ What changes and what doesn't:
 
 ## HTTP and WebSocket
 
-WHEP (RFC 9725), on both trees:
+WHEP ([draft-ietf-wish-whep](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/); WHIP, its publishing twin, is RFC 9725), on both trees:
 
 ```
 POST   /devices/<UDID>/whep               body: SDP offer (Content-Type: application/sdp)
@@ -71,6 +71,11 @@ follows what arrives); `transport-cc` doesn't. The server log shows each change:
 ```
 [baguette] [webrtc] retune 8000 → 1700 kbps
 ```
+
+Each viewer's packets are paced: a keyframe leaves over a few milliseconds at
+2.5 × the target bitrate instead of in one burst, which a phone link's queue
+takes without stalling. `?pacing=off` on the `POST` sends every packet at once —
+only to measure what pacing buys (the bench's "no pacer" column).
 
 A `set_bitrate` on the control socket still applies at once; the estimate then
 retunes again within about a second if it disagrees.

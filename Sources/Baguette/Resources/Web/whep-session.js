@@ -1,4 +1,4 @@
-// WhepSession — the phone plane over WebRTC (WHEP, RFC 9725), with the same
+// WhepSession — the phone plane over WebRTC (WHEP, draft-ietf-wish-whep), with the same
 // face as StreamSession (start / stop / send), so the page swaps one for the
 // other by format. The picture arrives as H.264 in a hidden <video> and is
 // painted onto the session's canvas frame by frame, so everything that reads

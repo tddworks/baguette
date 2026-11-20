@@ -94,7 +94,7 @@ decide it.
 |---|---|---|
 | **Live view** | The moving picture of the device on the serve page | A *recording* (a file) or a *screenshot* (one image) |
 | **Transport** | How encoded frames cross the network to the live view: `websocket` or `webrtc` | The *format* (`mjpeg` / `avcc`). WebRTC carries H.264 only |
-| **WHEP** | WebRTC-HTTP Egress Protocol (RFC 9725): POST an SDP offer, get an SDP answer and a `Location` to `DELETE` later | WHIP, the publishing side |
+| **WHEP** | WebRTC-HTTP Egress Protocol ([draft-ietf-wish-whep](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/); its publishing twin WHIP is RFC 9725). baguette implements the viewer side: POST an SDP offer, get an SDP answer and a `Location` to `DELETE` later | WHIP, the publishing side |
 | **Viewer** | One browser peer watching one device's live view | The *page*: a farm page holds many viewers |
 | **Keyframe request** | The viewer asking for an IDR (RTCP PLI/FIR, or `force_idr` on the WS) | A *snapshot* (a JPEG seed; WebRTC has none) |
 | **Tap-to-photon** | Time from sending a tap to that tap's pixel change showing in the live view | *Encode latency*, which is one part of it |
@@ -206,8 +206,9 @@ POST /devices/:udid/whep  body: SDP offer
   → 201 Created, Location: /devices/:udid/whep/:id, body: SDP answer
 viewer.receive(STUN)      → a success response; the browser's address is learned
 viewer.receive(DTLS)      → handshake replies; when done: SRTP keys, state live, stream.requestKeyframe()
-stream → sink.write(env)  → viewer.send(env): packets, SRTP, datagrams
-viewer.receive(SRTCP)     → PLI/FIR: stream.requestKeyframe() · NACK: resend · REMB: stream.apply(bitrate)
+stream → sink.write(env)  → viewer.show(env): packets into its Pacer; each stamped, SRTP'd and sent as it leaves
+viewer.receive(SRTCP)     → PLI/FIR: stream.requestKeyframe() · NACK: resend · transport-cc / REMB: its
+                            CongestionControl's target → EncoderRetune → stream.update(.bitrate(target))
 WS  /devices/:udid/whep/:id/control   gestures and stream control for that viewer, through GestureDispatcher
 DELETE /devices/:udid/whep/:id        viewers.hangUp(id)
 ```
@@ -222,7 +223,8 @@ The page's side of WHEP, tuned for latency rather than smoothness:
 ```
 RTCPeerConnection({ bundlePolicy: "max-bundle" })
 addTransceiver("video", { direction: "recvonly" }), H.264 first in setCodecPreferences
-POST offer → answer; drop goog-remb lines; add b=AS:15000 if the answer has no bandwidth line
+POST offer → setRemoteDescription(answer), as the server wrote it
+  (the bench page alone drops goog-remb and adds b=AS:15000, to pin Chrome to transport-cc)
 ontrack: receiver.jitterBufferTarget = 0, playoutDelayHint = 0 → <video autoplay playsinline muted>
 getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame for 3 s
 ```
@@ -243,7 +245,7 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
 | 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
-| 17 | A viewer's packets leave at no more than 2.5 × its target, except to keep any packet from waiting over 500 ms; a small frame leaves at once | `Pacer` |
+| 17 | A viewer's packets leave at no more than 2.5 × its target, except to catch up a queue whose oldest packet nears 500 ms; a small frame leaves at once | `Pacer` |
 | 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
 | 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
 | 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
@@ -258,15 +260,20 @@ on that tuning too.
 **One probe, both transports.** Tap-to-photon is what a user feels, and both
 transports can measure it the same way from inside the page:
 
-1. The simulator's Safari shows a probe page that turns the screen from black
-   to white on `touchstart` and back on `touchend`.
-2. The bench page taps the centre through `POST /devices/:udid/input` (the same
-   route for both transports) and records `t0 = performance.now()`.
-3. Every presented frame (`requestVideoFrameCallback` on the `<video>`, the
-   `requestAnimationFrame` paint on the canvas) samples the centre pixel. The
-   first white sample gives `t1`.
-4. **Tap-to-photon = t1 − t0.** One tap every 0.5–0.7 s (randomised so taps
-   don't line up with vsync), 100 per run. Results show on the page.
+1. The simulator's Safari shows the tap probe: black at rest, red while a touch
+   on its left half is down, green for its right half, black again on
+   `touchend`.
+2. The bench page taps through `POST /devices/:udid/input` (the same route for
+   every transport), alternating left and right, and records
+   `t0 = performance.now()`.
+3. Every presented frame samples the centre pixel, stamped when it reaches the
+   screen (`expectedDisplayTime` on the `<video>`; the next vsync after the
+   canvas paint). The first frame in this tap's colour gives `t1`; a late
+   answer to the last tap is the other colour, never counted.
+4. **Tap-to-photon = t1 − t0.** One tap every 0.25–0.45 s after the screen is
+   black again (randomised so taps don't line up with vsync), 100 per run,
+   each waiting up to 5 s; a tap with no answer is a miss, outside the
+   percentiles, and counted. Results show on the page.
 
 Both paths include input delivery, the render and the encode. The difference
 between the two transports is the video path alone.
@@ -296,9 +303,11 @@ picture is the encoder's.
 
 **The matrix:** {websocket, webrtc, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
 1 % loss, 50 ms + 5 % loss, 5 Mbps cap} × {1, 4, 8 devices} for CPU. We apply
-impairments with `dnctl` + `pfctl` dummynet on the loopback or LAN interface,
-scripted so every run can be reproduced. Network Link Conditioner is fine for
-spot checks.
+impairments with `dnctl` + `pfctl` dummynet, scripted so every run can be
+reproduced — **on loopback only** (`impair.sh` shapes `lo0`: a browser on this
+Mac). A phone over Wi-Fi or Tailscale crosses another interface the script
+doesn't touch: those runs are the real network, unimpaired, and are recorded
+apart. Network Link Conditioner is fine for spot checks.
 
 ### Run it
 
@@ -483,7 +492,9 @@ this doc.
     8. ~~*A pacer*~~ **DONE**: `Pacer` lets a viewer's packets out at 2.5 × the
        target (libwebrtc's pacing factor) in 5 ms slices; a packet into an empty
        pacer brings 5 ms of credit, so a small frame still leaves at once; idle
-       time isn't saved up; no packet waits over 500 ms. Each packet is stamped
+       time isn't saved up; it aims to send every packet within 500 ms of its
+       arrival, speeding up as the queue ages (a target, not a hard bound: a
+       late timer can stretch it). Each packet is stamped
        (transport-wide sequence, send time) as it leaves, so the estimate reads
        real send times. Retransmissions skip it. Side effect: a slice leaves
        with one send time, so below ~4 Mbps a slice holds fewer than the 10
@@ -546,12 +557,14 @@ this doc.
     The bench's reference column runs that sender for real: the same encoder
     through Pion (`scripts/bench-live-view/pion/`). Results, the colour probe:
 
-    | Run | Sender | p50 | p95 | p99 | fps | interval σ | freezes/min |
-    |---|---|---|---|---|---|---|---|
-    | Phone, Tailscale, 100 taps | baguette | 476 ms | 677 ms | 755 ms | 45.4 | 13.5 ms | 4.06 |
-    | Phone, Tailscale, 100 taps | Pion | 468 ms | 963 ms | 1,168 ms | 51.0 | 4.8 ms | 0 |
-    | Phone, Tailscale, 10 taps (old white probe) | baguette | — | — | — | 33.3 | 111.9 ms | 12.1 |
-    | Phone, Tailscale, 10 taps (old white probe) | Pion | — | — | — | 35.4 | 148.4 ms | 5.4 |
+    Before baguette had a pacer (2026-11-20) — the baseline:
+
+    | Run | Sender | misses | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|---|
+    | Phone, Tailscale, 100 taps | baguette | 0 | 476 ms | 677 ms | 755 ms | 45.4 | 13.5 ms | 4.06 |
+    | Phone, Tailscale, 100 taps | Pion | 0 | 468 ms | 963 ms | 1,168 ms | 51.0 | 4.8 ms | 0 |
+    | Phone, Tailscale, 10 taps (old white probe) | baguette | — | — | — | — | 33.3 | 111.9 ms | 12.1 |
+    | Phone, Tailscale, 10 taps (old white probe) | Pion | — | — | — | — | 35.4 | 148.4 ms | 5.4 |
 
     | 30 s, animated list, phone over Tailscale | Payload | Wire (est.) | Packets | fps |
     |---|---|---|---|---|
@@ -564,12 +577,18 @@ this doc.
     Read: the median is the same, and so is the ~400 ms floor under both — the
     phone's path (the tap's POST over Tailscale, render, encode, its browser's
     playout), not the sender; on this Mac the same probe reads ~40 ms. Both
-    carried what the encoder made, so neither estimate held it back. Pion
-    plays far smoother — a third of the frame jitter, no freezes, more frames —
-    which is what a pacer buys: a keyframe spread out doesn't overflow the
-    phone link's queue. Its worse tail is one episode (taps 50–70); a pacer
-    holding packets when the target drops would also add delay there, so our
-    pacer is to be measured on that trade: smoothness against p95.
+    carried what the encoder made, so neither estimate held it back.
+
+    What the data supports, and no more: **in this run Pion played smoother**
+    (a third of the frame jitter, no freezes, more frames) **and had the worse
+    tail** (p95 963 against 677 ms, from one episode, taps 50–70). It does
+    *not* say why: Pion differs in its pacer, its estimator and its whole send
+    path at once, and one run on an unimpaired, uncontrolled link can't
+    separate them — nor rank transport-cc against REMB, or either under a cap
+    or loss (that needs `impair.sh`, on loopback). The pacer is the likeliest
+    cause of the smoothness, so it was built next; the test of that is our own
+    sender with and without it (`?pacing=off`), same link, same run — measured
+    on smoothness against p95.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
@@ -619,7 +638,7 @@ this doc.
    watched from many machines), and reach viewers that can't reach the Mac, since
    the Mac connects out. Revyl's page uses Cloudflare's STUN server, which suggests
    they sit behind Cloudflare's SFU (an inference; the page doesn't show it).
-   What it takes — baguette publishes with **WHIP** (RFC 9725's publishing twin),
+   What it takes — baguette publishes with **WHIP** (RFC 9725, WHEP's publishing twin),
    so the roles flip:
 
    | | Today (WHEP, direct) | SFU (WHIP publish) |

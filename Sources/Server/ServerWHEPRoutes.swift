@@ -5,7 +5,7 @@ import Hummingbird
 import HummingbirdWebSocket
 import NIOCore
 
-/// The WebRTC (WHEP, RFC 9725) live view: a page posts an SDP offer and gets a
+/// The WebRTC (WHEP, draft-ietf-wish-whep) live view: a page posts an SDP offer and gets a
 /// viewer of the device with a stream of its own; its touches and stream
 /// control ride the viewer's control socket; `DELETE` hangs it up.
 ///
@@ -58,6 +58,14 @@ extension Server {
             }
             congestion = choice
         }
+        // `?pacing=off`: the bench's baseline, the same sender without its pacer.
+        var pacing = true
+        if let asked = request.uri.queryParameters.get("pacing").map({ String($0) }) {
+            guard asked == "on" || asked == "off" else {
+                return pluginError("pacing is on or off, not \(asked)", status: .badRequest)
+            }
+            pacing = asked == "on"
+        }
         let udid = udidParam(request)
         guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             return pluginError("unknown udid: \(udid)", status: .notFound)
@@ -69,7 +77,7 @@ extension Server {
         do {
             let bound = try plan.bind(to: device)
             let (id, answer) = try viewers.admit(
-                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion)
+                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing)
             return Response(
                 status: .created,
                 headers: [.location: "/devices/\(udid)/whep/\(id)", .contentType: "application/sdp", .cacheControl: "no-cache"],
