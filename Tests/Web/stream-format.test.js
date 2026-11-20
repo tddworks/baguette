@@ -12,9 +12,10 @@ function load() {
 }
 
 test('StreamFormat', async (t) => {
-  await t.test('names the two formats the wire speaks', () => {
+  await t.test('should name the three formats the picker offers', () => {
     const StreamFormat = load();
-    assert.deepEqual(StreamFormat.ids, ['avcc', 'mjpeg']);
+    assert.deepEqual(StreamFormat.ids, ['avcc', 'mjpeg', 'webrtc']);
+    assert.equal(StreamFormat.named('webrtc').id, 'webrtc');
     assert.equal(StreamFormat.named('avcc').id, 'avcc');
     assert.equal(StreamFormat.named('mjpeg').id, 'mjpeg');
   });
@@ -79,6 +80,42 @@ test('StreamFormat', async (t) => {
     const StreamFormat = load();
     assert.equal(StreamFormat.named('avcc').label, 'H.264');
     assert.equal(StreamFormat.named('mjpeg').label, 'MJPEG');
+  });
+
+  await t.test('should honour a stored WebRTC choice when the browser has WebRTC', () => {
+    const StreamFormat = load();
+    assert.equal(StreamFormat.pick('webrtc', { hardwareDecoder: true, webrtc: true }).id, 'webrtc');
+    assert.equal(StreamFormat.pick('webrtc', { hardwareDecoder: false, webrtc: true }).id, 'webrtc');
+  });
+
+  await t.test('should fall back to the best socket format when the browser has no WebRTC', () => {
+    const StreamFormat = load();
+    assert.equal(StreamFormat.pick('webrtc', { hardwareDecoder: true, webrtc: false }).id, 'avcc');
+    assert.equal(StreamFormat.pick('webrtc', {}).id, 'mjpeg');
+  });
+
+  await t.test('should never pick WebRTC when it was not chosen', () => {
+    const StreamFormat = load();
+    assert.equal(StreamFormat.pick(null, { hardwareDecoder: true, webrtc: true }).id, 'avcc');
+    assert.equal(StreamFormat.pick(null, { hardwareDecoder: false, webrtc: true }).id, 'mjpeg');
+  });
+
+  await t.test('should give a socket-only surface the best socket format when WebRTC is chosen', () => {
+    const StreamFormat = load();
+    assert.equal(StreamFormat.named('webrtc').forSockets({ hardwareDecoder: true, webrtc: true }).id, 'avcc');
+    assert.equal(StreamFormat.named('webrtc').forSockets({ hardwareDecoder: false, webrtc: true }).id, 'mjpeg');
+    assert.equal(StreamFormat.named('mjpeg').forSockets({ hardwareDecoder: true }).id, 'mjpeg');
+    assert.equal(StreamFormat.named('avcc').forSockets({ hardwareDecoder: true }).id, 'avcc');
+  });
+
+  await t.test('should say why a browser can\'t play it', () => {
+    const StreamFormat = load();
+    assert.equal(StreamFormat.named('avcc').whyUnplayable,
+      'H.264 needs WebCodecs, which browsers only expose on a secure origin. '
+      + 'Open this page over HTTPS or on localhost.');
+    assert.equal(StreamFormat.named('webrtc').whyUnplayable, 'WebRTC is not available in this browser.');
+    assert.equal(StreamFormat.named('webrtc').label, 'WebRTC');
+    assert.equal(StreamFormat.named('webrtc').needsHardwareDecoder, false);
   });
 
   await t.test('stringifies to the wire spelling', () => {

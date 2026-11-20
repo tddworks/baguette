@@ -950,10 +950,17 @@
     // for however long the new socket takes to land its first frame.
     if (session) cancelRecording('stream restarted');
     if (session) { try { session.stop(); } catch (_) {} session = null; }
-    session = new window.StreamSession(Object.assign({
+    // WebRTC is the phone plane only; a refused offer falls back to the
+    // best socket format, as an undecodable one does below.
+    const Session = format === 'webrtc' && window.WhepSession ? window.WhepSession : window.StreamSession;
+    session = new Session(Object.assign({
       udid, format, version: 'v2',
       display: 'phone',
       canvas: sim.canvas,
+      onError: format === 'webrtc' ? () => {
+        localStorage.removeItem(FORMAT_KEY);
+        startSession(currentFormat());
+      } : undefined,
     }, sessionCallbacks()));
     // `boot()` runs this before wiring the toolbar and unload handler,
     // so a throw here killed the whole page, not just the canvas (#71).
@@ -973,7 +980,7 @@
     // Companion panes are the user's standing choice, not this
     // session's — but their sockets don't survive a phone-session
     // restart's teardown, so reopen whichever are showing.
-    if (openCompanions.has('external')) void startCarPlaySession(format);
+    if (openCompanions.has('external')) void startCarPlaySession(socketFormat());
     if (openCompanions.has('watch')) void startWatchSession();
     reflectFormat(format);
     // Restore the cached orientation across format-swap remounts,
@@ -1109,7 +1116,7 @@
     }
   }
 
-  async function startCarPlaySession(format = currentFormat()) {
+  async function startCarPlaySession(format = socketFormat()) {
     const generation = ++carplayGeneration;
     if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
     if (!window.StreamSession) return;
@@ -1257,7 +1264,7 @@
     ensureWatchInput(screenArea, canvas);
     clearCompanionFault('nativeWatchColumn');
     watchSession = new window.StreamSession({
-      udid: watchUdid, format: currentFormat(), version: 'v2',
+      udid: watchUdid, format: socketFormat(), version: 'v2',
       display: 'phone',
       canvas,
       onSize: (w, h) => {
@@ -1625,9 +1632,7 @@
         b.dataset.titleDefault = b.getAttribute('title') || '';
       }
       b.disabled = !playable;
-      b.title = playable ? b.dataset.titleDefault
-        : fmt.label + ' needs WebCodecs, which browsers only expose on a '
-          + 'secure origin. Open this page over HTTPS or on localhost.';
+      b.title = playable ? b.dataset.titleDefault : fmt.whyUnplayable;
     });
   }
 
@@ -1715,11 +1720,22 @@
         .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities()).id;
   }
 
+  /** What a surface that only has a stream socket — CarPlay, the watch,
+   *  the 3D panel — streams at: the page's format, or for WebRTC the best
+   *  socket format. */
+  function socketFormat() {
+    if (!window.StreamFormat) return 'mjpeg';
+    return window.StreamFormat
+        .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities())
+        .forSockets(decodeCapabilities()).id;
+  }
+
   /** What this browser can play, as `StreamFormat` wants to be told it. */
   function decodeCapabilities() {
     return {
       hardwareDecoder: !!(window.FrameDecoder
           && window.FrameDecoder.isHardwareAvailable()),
+      webrtc: typeof window.RTCPeerConnection === 'function' && !!window.WhepSession,
     };
   }
 
@@ -2313,7 +2329,7 @@
       localStorage.setItem(FORMAT_KEY, wanted.id);
       reflectFormat(wanted.id);
       if (view && view.getAttribute('data-render3d') === 'open') {
-        if (render3DPanel) render3DPanel.setFormat(wanted.id);
+        if (render3DPanel) render3DPanel.setFormat(wanted.forSockets(decodeCapabilities()).id);
       } else {
         startSession(wanted.id);
       }
@@ -2725,7 +2741,7 @@
         render3DPanel.setCaptureSettings(captureSettings());
         render3DPanel.attach(host, stage, udid, {
           deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
-          format: currentFormat(),
+          format: socketFormat(),
           background: live3DBackground(),
           fixed,
           onFps: (fps) => {
