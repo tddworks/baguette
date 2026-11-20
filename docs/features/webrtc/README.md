@@ -52,8 +52,18 @@ socket carries what the stream socket carries from its page — gestures
 {"type":"tap","x":201,"y":437,"width":402,"height":874}
 ```
 
-Each viewer has its own H.264 encoder, at the stream socket's defaults (60 fps,
-8 Mbps, full scale).
+Each viewer has its own H.264 encoder, starting at the stream socket's defaults
+(60 fps, 8 Mbps, full scale). Its bitrate then follows the link: the browser
+reports when each packet arrived (transport-cc), baguette estimates the bandwidth
+the way Google's WebRTC does, and retunes the encoder between 300 kbps and 8 Mbps,
+at most once a second. The server log shows each change:
+
+```
+[baguette] [webrtc] retune 8000 → 1700 kbps
+```
+
+A `set_bitrate` on the control socket still applies at once; the estimate then
+retunes again within about a second if it disagrees.
 
 ## Gotchas
 

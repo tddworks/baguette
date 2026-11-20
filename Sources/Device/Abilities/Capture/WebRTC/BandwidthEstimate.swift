@@ -81,14 +81,20 @@ public struct BandwidthEstimate: Sendable {
         case .hold:
             break
         case .increase:
+            var increased = delayRate
             if let capacity = linkCapacity, abs(delayRate - capacity) <= Self.nearCapacity * capacity {
-                delayRate += Self.additiveIncrease * elapsed
+                increased += Self.additiveIncrease * elapsed
             } else {
                 if let capacity = linkCapacity, delayRate > capacity * (1 + Self.nearCapacity) { linkCapacity = nil }
-                delayRate *= pow(Self.multiplicativeIncrease, elapsed)
+                increased *= pow(Self.multiplicativeIncrease, elapsed)
             }
-            // Never run far ahead of what is getting through.
-            if let acknowledged { delayRate = min(delayRate, 1.5 * acknowledged + 10_000) }
+            // Don't climb far ahead of what is getting through — but a sender
+            // that sends less than it may (a still screen) is no reason to
+            // come down: the cap only stops an increase (libwebrtc's AIMD).
+            if let acknowledged, increased > 1.5 * acknowledged + 10_000 {
+                increased = max(delayRate, 1.5 * acknowledged + 10_000)
+            }
+            delayRate = increased
         case .decrease:
             if let acknowledged {
                 delayRate = min(delayRate, Self.backoff * acknowledged)

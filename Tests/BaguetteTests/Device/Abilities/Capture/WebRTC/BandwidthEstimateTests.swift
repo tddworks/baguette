@@ -101,6 +101,26 @@ struct BandwidthEstimateTests {
         #expect(estimate.target == 8_000_000)
     }
 
+    @Test func `should keep its bitrate while a still screen sends far less than it allows`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        var link = Link(capacity: 50_000_000)
+        var now: Int64 = 0
+        var sequence: UInt16 = 0
+        // A still screen: one 1,200-byte packet every 50 ms, about 200 kbps.
+        while now < 10_000_000 {
+            var batch: [PacketOutcome] = []
+            for step in 0..<2 {
+                let sentAt = now + Int64(step) * 50_000
+                batch.append(PacketOutcome(sequence: sequence, sentAt: sentAt, size: 1_200, arrivedAt: link.carry(sentAt: sentAt, size: 1_200)))
+                sequence &+= 1
+            }
+            now += 100_000
+            estimate.update(with: batch, now: now)
+        }
+
+        #expect(estimate.target == 8_000_000)
+    }
+
     @Test func `should never ask for less than its floor`() {
         var estimate = BandwidthEstimate(floor: 300_000, ceiling: 8_000_000)
         var link = Link(capacity: 100_000)

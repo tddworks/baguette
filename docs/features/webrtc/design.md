@@ -7,8 +7,9 @@ description: A proposal to carry the serve live view over WebRTC (WHEP) next to 
 **Status:** BUILT on `feat/whep-live-view`, slices 1–10 of [§6](#6--build-sequence-test-first-each-slice-green):
 the WHEP routes and the page's **WebRTC** choice play through baguette's own
 ICE-lite, DTLS-SRTP and RTP, checked end to end in Chrome on 2026-11-20 (the serve
-page at 38–40 fps, touches through the control socket). Not built: congestion control
-(slice 11, transport-cc). How to use it: [README](README.md).
+page at 38–40 fps, touches through the control socket). Congestion control (slice 11,
+transport-cc) is built and tested over a simulated link; not yet measured on a
+real throttled one. How to use it: [README](README.md).
 
 This doc owns **how encoded frames travel from `baguette serve` to the page,
 and how we compare two ways of doing it**. It doesn't change what gets encoded
@@ -417,19 +418,35 @@ this doc.
 10. ~~**The page**~~ **DONE**: a WebRTC option beside H.264 and MJPEG, painting the `<video>`
     onto the stream canvas. *Pinned: `make test-web`.*
 11. **Congestion control (transport-cc)**, replacing "REMB → bitrate":
-    1. *Negotiate it*: the answer adds `a=rtcp-fb:<pt> transport-cc` and the
+    1. ~~*Negotiate it*~~ **DONE**: the answer adds `a=rtcp-fb:<pt> transport-cc` and the
        `transport-wide-cc` header extension at the offer's id. *Pinned: an offer
        without the extension is still answered, without adaptation.*
-    2. *Number every packet*: a one-byte header extension (RFC 8285) on
+    2. ~~*Number every packet*~~ **DONE**: a one-byte header extension (RFC 8285) on
        `RTPPacket` with a 16-bit transport-wide sequence.
-    3. *`TransportFeedback`*: RTCP RTPFB FMT 15 — base sequence, reference time,
+    3. ~~*`TransportFeedback`*~~ **DONE**: RTCP RTPFB FMT 15 — base sequence, reference time,
        run-length and status-vector chunks, small and large deltas.
-    4. *`SendHistory`*: feedback → sent/arrived pairs; wraparound; losses.
-    5. *`BandwidthEstimate`*: delay-based and loss-based rates; each constant's
+    4. ~~*`SendHistory`*~~ **DONE**: feedback → sent/arrived pairs; wraparound; losses.
+    5. ~~*`BandwidthEstimate`*~~ **DONE**: delay-based and loss-based rates; each constant's
        source (draft-ietf-rmcat-gcc, libwebrtc defaults) noted here.
-    6. *`WebRTCViewer` retunes its encoder* (laws 11–12).
+    6. ~~*`WebRTCViewer` retunes its encoder*~~ **DONE** (laws 11–12).
     7. *Prove it* on a throttled link (Network Link Conditioner or `impair.sh`).
     A pacer (spacing a keyframe's burst) is a later slice if the bench needs it.
+
+    Over a simulated 2 Mbps bottleneck (`BandwidthEstimateTests`), the target
+    falls from 8 Mbps to 1.7 Mbps within 2 s and saw-tooths just under 2 Mbps
+    (additive increase near capacity, back to 85 % of what arrives on overuse);
+    when the link frees up at 20 s it climbs additively to 2.4 Mbps, then 8 % a
+    second, back to 8 Mbps by 44 s. 20 % loss halves it repeatedly; 1 % doesn't
+    move it.
+
+    In Chrome on 2026-11-20 (native route, localhost): the answer negotiates
+    transport-cc, Chrome's reports arrive and are read; a still screen left the
+    bitrate alone, and a forced `set_bitrate` of 2 Mbps was retuned back to
+    8 Mbps within a second. That run first found a bug the simulation missed:
+    capping the rate at 1.5× what arrives also pulled it *down* while a still
+    screen sent little, to the 300 kbps floor. libwebrtc's cap only stops an
+    increase; so does ours now, pinned by "should keep its bitrate while a still
+    screen sends far less than it allows".
 12. ~~**Docs**~~ **DONE**: a user README, `serve.md` rows, CHANGELOG; the bench
     kit pointed at the native route. The full matrix on it is still to run.
 
