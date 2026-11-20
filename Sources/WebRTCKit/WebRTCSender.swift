@@ -27,6 +27,13 @@ public final class WebRTCSender: @unchecked Sendable {
         let endsKeyframe: Bool
     }
 
+    /// A packet as it left: the packet, to wrap for the resend stream, and
+    /// the bytes, to send again as they were when there is none.
+    private struct SentPacket: Sendable {
+        let rtp: RTPPacket
+        let wire: Data
+    }
+
     /// Consent freshness (RFC 7675): a browser that stops checking has gone.
     public static let consentTimeout: TimeInterval = 30
 
@@ -57,7 +64,11 @@ public final class WebRTCSender: @unchecked Sendable {
     private var srtp: SRTPContext?
     private var sequence: UInt16
     /// What it sent, for the browser's NACKs: which to resend is its call.
-    private var history = PacketHistory()
+    private var history = PacketHistory<SentPacket>()
+    /// The resend stream (RTX, RFC 4588) — when the browser's offer pairs a
+    /// format with our H.264: its payload type, SSRC and next sequence number.
+    private let rtx: (payloadType: UInt8, ssrc: UInt32)?
+    private var rtxSequence: UInt16
     private let packetizer = H264Packetizer()
     private var pacer: Pacer<OutboundPacket>
     /// Whether the pacer's next slice is already scheduled.
@@ -73,6 +84,8 @@ public final class WebRTCSender: @unchecked Sendable {
         ice: ICECredentials = .fresh(),
         ssrc: UInt32 = .random(in: 1...UInt32.max),
         firstSequence: UInt16 = .random(in: 0...UInt16.max),
+        rtxSSRC: UInt32 = .random(in: 1...UInt32.max),
+        firstRetransmissionSequence: UInt16 = .random(in: 0...UInt16.max),
         datagrams: any Datagrams,
         handshake: any Handshake,
         congestion: any CongestionControl,
@@ -95,11 +108,14 @@ public final class WebRTCSender: @unchecked Sendable {
         self.schedule = schedule
         self.id = id
         self.sequence = firstSequence
+        self.rtx = offer.rtxPayloadType.map { ($0, rtxSSRC) }
+        self.rtxSequence = firstRetransmissionSequence
         self.started = clock()
         self.lastCheck = started
         self.pacer = Pacer(bitrate: encoderBitrate(), pacing: pacing)
         self.answer = offer.answer(
-            ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc, candidates: datagrams.addresses,
+            ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc,
+            rtxSSRC: offer.rtxPayloadType == nil ? nil : rtxSSRC, candidates: datagrams.addresses,
             congestion: congestion.answerLines())
         datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
     }
@@ -209,7 +225,7 @@ public final class WebRTCSender: @unchecked Sendable {
                 switch ask {
                 case .lost(let sequences):
                     let packets = history.resend(sequences, at: now, target: congestion.target ?? encoderBitrate())
-                    packets.forEach { datagrams.send($0, to: browser) }
+                    packets.forEach { resend($0, to: browser, at: now) }
                     requested += sequences.count
                     resent += packets.count
                 case .keyframeRequest:
@@ -290,13 +306,32 @@ public final class WebRTCSender: @unchecked Sendable {
                 extensions: congestion.extensions(at: now))
             let wire = srtp!.protect(stamped)
             datagrams.send(wire, to: browser)
-            history.sent(wire, sequence: packet.sequence, at: now)
+            history.sent(SentPacket(rtp: stamped, wire: wire), size: wire.count, sequence: packet.sequence, at: now)
             congestion.sent(size: wire.count, at: now)
             if outbound.endsKeyframe { record("keyframe sent rtpTimestamp=\(packet.timestamp)", at: now) }
         }
         guard !pacer.isEmpty, !sliceScheduled else { return }
         sliceScheduled = true
         schedule(Double(Pacer<OutboundPacket>.burst) / 1_000_000) { [weak self] in self?.paceAgain() }
+    }
+
+    /// A lost packet sent again: on the resend stream when there is one —
+    /// stamped anew, so the original reads as lost and the resend as what it
+    /// is — else as it was sent. Called under the lock.
+    private func resend(_ sent: SentPacket, to browser: DatagramAddress, at now: Int64) {
+        guard let rtx else {
+            datagrams.send(sent.wire, to: browser)
+            return
+        }
+        let wrapped = sent.rtp.retransmission(payloadType: rtx.payloadType, sequence: rtxSequence, ssrc: rtx.ssrc)
+        rtxSequence &+= 1
+        let stamped = RTPPacket(
+            marker: wrapped.marker, payloadType: wrapped.payloadType, sequence: wrapped.sequence,
+            timestamp: wrapped.timestamp, ssrc: wrapped.ssrc, payload: wrapped.payload,
+            extensions: congestion.extensions(at: now))
+        let wire = srtp!.protect(stamped)
+        datagrams.send(wire, to: browser)
+        congestion.sent(size: wire.count, at: now)
     }
 
     private func paceAgain() {

@@ -838,17 +838,23 @@ it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
    a loss burst can't add congestion of its own (libwebrtc caps them too).
    *Pinned: `PacketHistoryTests`, "should resend a lost packet once for
    reports that repeat a moment apart".*
-2. **RTX** (RFC 4588; `Signaling/`, `Media/`, `Congestion/`). Today a resend
-   is the stored packet again — same transport-wide sequence number — so
-   `SendHistory` counts a loss repaired within its 500 ms grace as a packet
-   that *arrived late*: the loss estimate never sees it, and the delay
-   estimate gets a fake queue sample of one resend round trip. With RTX, the
-   answer takes the offer's `rtx` format (`apt=` our H.264) and an
+2. ~~**RTX**~~ **DONE** (RFC 4588; `Signaling/`, `Media/`, `Transport/`). A resend
+   now leaves on its own stream when the offer pairs a format with our H.264
+   (Chrome's does: `a=fmtp:113 apt=112`); else as it was sent. SRTP keeps each
+   stream's rollover apart. Chrome takes the answer and plays (loopback,
+   2026-11-20); the phone on mobile data is where resends happen. Before it,
+   a resend was the stored packet again — same transport-wide sequence
+   number — so `SendHistory` counted a loss repaired within its 500 ms grace
+   as a packet that *arrived late*: the loss estimate never saw it, and the
+   delay estimate got a fake queue sample of one resend round trip. With RTX,
+   the answer takes the offer's `rtx` format (`apt=` our H.264) and an
    `ssrc-group:FID`; a resend leaves on its own stream with the original
    sequence number in front, a new transport-wide number and its real send
-   time. *Pinned: "should count a loss its resend repaired as a loss, not a
-   delay", "should answer the offer's rtx format for our H.264".* Measure:
-   freezes and cuts on the phone, before and after.
+   time. *Pinned: "should resend a lost packet on its own stream, stamped
+   anew, when the browser takes resends there", "should answer with its
+   resend format and stream when it resends on one", "should keep each
+   stream's rollover apart".* Measure: freezes and cuts on the phone, before
+   and after.
 3. **Authentication** (serve). A browser reachable from the internet can
    reach `serve`, which drives the device: WHEP and the control socket need
    a credential first (a token per session at least). The prerequisite for

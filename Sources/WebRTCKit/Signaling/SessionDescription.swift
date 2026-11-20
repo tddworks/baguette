@@ -36,6 +36,9 @@ public struct SessionDescription: Equatable, Sendable {
     /// The header-extension id the offer gives abs-send-time, which REMB needs;
     /// nil unless the browser also asks for `goog-remb` on our H.264.
     public let absSendTimeID: UInt8?
+    /// The resend format (RTX, RFC 4588) the offer pairs with our H.264
+    /// (`a=fmtp:<rtx> apt=<ours>`), or nil when it pairs none.
+    public let rtxPayloadType: UInt8?
 
     public static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
     public static let absSendTimeURI = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
@@ -77,6 +80,16 @@ public struct SessionDescription: Equatable, Sendable {
         }
         transportWideSequenceID = extensionID(Self.transportWideSequenceURI, feedback: "transport-cc")
         absSendTimeID = extensionID(Self.absSendTimeURI, feedback: "goog-remb")
+        let rtxFormats = Set(section.compactMap { line -> UInt8? in
+            guard line.hasPrefix("a=rtpmap:"), line.lowercased().hasSuffix(" rtx/90000") else { return nil }
+            return UInt8(line.dropFirst(9).prefix { $0 != " " })
+        })
+        rtxPayloadType = section.compactMap { line -> UInt8? in
+            guard line.hasPrefix("a=fmtp:"), line.hasSuffix(" apt=\(payloadType)"),
+                  let format = UInt8(line.dropFirst(7).prefix { $0 != " " }), rtxFormats.contains(format)
+            else { return nil }
+            return format
+        }.first
     }
 
     /// The H.264 format the encoder can feed: High profile (profile_idc 0x64),
@@ -106,13 +119,16 @@ public struct SessionDescription: Equatable, Sendable {
     /// the viewer acts on (NACK, PLI, FIR) and whatever lines its congestion
     /// control needs (`CongestionControl.answerLines`).
     public func answer(
-        ice: ICECredentials, fingerprint: String, ssrc: UInt32, candidates: [DatagramAddress], congestion: [String] = []
+        ice: ICECredentials, fingerprint: String, ssrc: UInt32, rtxSSRC: UInt32? = nil,
+        candidates: [DatagramAddress], congestion: [String] = []
     ) -> String {
         let pt = payloadType
+        // Resends on their own stream only when the offer has a format for them.
+        let rtx = rtxSSRC.flatMap { stream in rtxPayloadType.map { (format: $0, ssrc: stream) } }
         var lines = [
             "v=0", "o=- 0 0 IN IP4 127.0.0.1", "s=baguette", "t=0 0",
             "a=group:BUNDLE \(mid)", "a=ice-lite",
-            "m=video 9 UDP/TLS/RTP/SAVPF \(pt)", "c=IN IP4 0.0.0.0",
+            "m=video 9 UDP/TLS/RTP/SAVPF \(pt)" + (rtx.map { " \($0.format)" } ?? ""), "c=IN IP4 0.0.0.0",
             "a=mid:\(mid)", "a=sendonly", "a=rtcp-mux",
             "a=ice-ufrag:\(ice.ufrag)", "a=ice-pwd:\(ice.password)",
             "a=fingerprint:\(fingerprint)", "a=setup:passive",
@@ -121,8 +137,14 @@ public struct SessionDescription: Equatable, Sendable {
             "a=rtpmap:\(pt) H264/90000",
             "a=rtcp-fb:\(pt) nack", "a=rtcp-fb:\(pt) nack pli", "a=rtcp-fb:\(pt) ccm fir",
             "a=fmtp:\(pt) level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=\(profileLevelID)",
-            "a=msid:baguette screen", "a=ssrc:\(ssrc) cname:baguette",
         ]
+        if let rtx {
+            lines += ["a=rtpmap:\(rtx.format) rtx/90000", "a=fmtp:\(rtx.format) apt=\(pt)"]
+        }
+        lines += ["a=msid:baguette screen", "a=ssrc:\(ssrc) cname:baguette"]
+        if let rtx {
+            lines += ["a=ssrc-group:FID \(ssrc) \(rtx.ssrc)", "a=ssrc:\(rtx.ssrc) cname:baguette"]
+        }
         // Host candidates only (ICE-lite): type preference 126, in the given order.
         for (index, address) in candidates.enumerated() {
             lines.append("a=candidate:\(index + 1) 1 udp \(2_130_706_431 - index) \(Self.text(address.ip)) \(address.port) typ host")

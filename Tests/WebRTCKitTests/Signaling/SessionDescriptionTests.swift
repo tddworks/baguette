@@ -241,3 +241,24 @@ struct ICECredentialsTests {
         #expect(one != two)
     }
 }
+
+extension SessionDescriptionTests {
+    @Test func `should read the resend format the offer pairs with our H.264`() throws {
+        #expect(try SessionDescription(offer: chromeOffer).rtxPayloadType == 113)
+    }
+
+    @Test func `should take no resend format when the offer pairs none with our H.264`() throws {
+        let none = chromeOffer.replacingOccurrences(of: "a=rtpmap:113 rtx/90000\r\na=fmtp:113 apt=112\r\n", with: "")
+        #expect(try SessionDescription(offer: none).rtxPayloadType == nil)
+    }
+
+    @Test func `should answer with its resend format and stream when it resends on one`() throws {
+        let answer = try SessionDescription(offer: chromeOffer)
+            .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, rtxSSRC: 2, candidates: [])
+
+        #expect(answer.contains("m=video 9 UDP/TLS/RTP/SAVPF 112 113\r\n"))
+        #expect(answer.contains("a=rtpmap:113 rtx/90000\r\na=fmtp:113 apt=112\r\n"))
+        #expect(answer.contains("a=ssrc-group:FID 1 2\r\n"))
+        #expect(answer.contains("a=ssrc:2 cname:baguette\r\n"))
+    }
+}

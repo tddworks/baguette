@@ -59,14 +59,15 @@ struct SRTPSessionKeys: Equatable, Sendable {
     }
 }
 
-/// A viewer's SRTP (RFC 3711, AES_CM_128_HMAC_SHA1_80): it encrypts and signs
+/// A sender's SRTP (RFC 3711, AES_CM_128_HMAC_SHA1_80): it encrypts and signs
 /// every RTP packet it sends, and reads only the browser's RTCP whose signature
-/// checks out. A value: the rollover counter is its one piece of state.
+/// checks out. A value: each stream's rollover counter is its one state.
 public struct SRTPContext: Sendable {
     private let outgoing: SRTPSessionKeys
     private let incoming: SRTPSessionKeys
-    private var rollover: UInt32 = 0
-    private var lastSequence: UInt16?
+    /// Each stream's last sequence number and rollover counter: a picture
+    /// stream and its resend stream count apart (RFC 3711 §3.3.1).
+    private var streams: [UInt32: (last: UInt16, rollover: UInt32)] = [:]
 
     public init(local: SRTPKeys, remote: SRTPKeys) {
         outgoing = SRTPSessionKeys(local, labels: .rtp)
@@ -76,8 +77,9 @@ public struct SRTPContext: Sendable {
     /// The packet as it goes on the wire: header in the clear, payload
     /// encrypted, then the 10-byte tag over both and the rollover counter.
     public mutating func protect(_ packet: RTPPacket) -> Data {
-        if let last = lastSequence, packet.sequence < last, last - packet.sequence > 0x8000 { rollover &+= 1 }
-        lastSequence = packet.sequence
+        var rollover = streams[packet.ssrc]?.rollover ?? 0
+        if let last = streams[packet.ssrc]?.last, packet.sequence < last, last - packet.sequence > 0x8000 { rollover &+= 1 }
+        streams[packet.ssrc] = (packet.sequence, rollover)
         let index = UInt64(rollover) << 16 | UInt64(packet.sequence)
         let wire = [UInt8](packet.data)
         let header = Array(wire.prefix(wire.count - packet.payload.count))
