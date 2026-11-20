@@ -884,6 +884,42 @@ it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
 Until 3–6 land, Tailscale is the way to view from outside the network: it
 gives all of this, privately.
 
+## 6c · Future work — what's left, what each is for, and when it's needed
+
+Recorded 2026-11-20, after steps 1, 2 and 4 of §6b. Each item says what it
+is for; none is needed for viewing over a LAN or Tailscale, which works today.
+
+### Reaching viewers outside the network (the rest of §6b)
+
+Only worth building to let a browser reach `serve` over the internet — through
+an HTTPS tunnel (Cloudflare Tunnel, ngrok) or a public host — with media
+crossing a NAT. Today's answer to that is Tailscale: private, direct, done.
+
+| Item | What it is for | Why / when it's needed |
+|---|---|---|
+| **3 · Authentication** | A credential (a token in the link, at least) on every `serve` route, the WHEP endpoint and the control socket | `serve` drives the device — taps, typing, the clipboard. Exposed without it, anyone with the URL could. **The prerequisite for 5–7**; skipped for now |
+| **5 · Full ICE** | baguette sends its own connectivity checks to the browser's candidates instead of only answering (drop `a=ice-lite`); the page waits for its own candidates (or trickles them by WHEP `PATCH`) | A NAT lets nothing in that the Mac hasn't sent to first. Sending checks opens it toward the browser, so the `srflx` address from step 4 becomes reachable — most home and office networks |
+| **7 · Tell the browser its STUN/TURN servers** | WHEP `Link: rel="ice-server"` on the answer, and a way for the page to know them before its offer | The browser needs its own public address too, or our checks go to a phone's private one. Comes with 5 |
+| **6 · TURN client** | Allocate, permissions, channels and refreshes on a TURN server: a relay candidate | Gets through what 5 can't: symmetric NATs, strict corporate firewalls, UDP blocked. Needs a TURN server (coturn, or a provider) and adds the relay's latency — last resort |
+
+### Freezes and picture quality
+
+| Item | What it is for | Why / when it's needed |
+|---|---|---|
+| **Measure RTX on a phone** | A run on mobile data with step 2 built, before and after | Resends happen only on a lossy link; loopback can't show whether RTX reduces freezes and the cuts that follow losses. The next measurement to take |
+| **FEC (RED/ULPFEC)** | Redundancy sent with the video, so the browser rebuilds a lost packet without asking | Freezes on mobile follow bursts of loss 2–3.5× more than chance (§6, slice 11): each costs a resend round trip (100–300 ms). FEC removes the round trip for single losses, at ~10–25 % more bandwidth; bursts need more |
+| **A lower ceiling on mobile** | Cap the bitrate (e.g. 4 Mbps) when the link is a phone's | Fewer packets per frame, so a loss burst hits fewer frames. A cheap experiment before FEC |
+| **Lift the cap only on sustained arrival** | The confirmed-capacity cap (§6, slice 11) released only when a longer window shows more getting through | After a radio dropout, held packets arrive at once; the half-second window reads that as spare capacity, lifts the cap, and the target jumps back to 8 Mbps — refilling the queue |
+| **A minimum pacing rate** | The pacer never slower than what drains a keyframe in ~50 ms | At a low target — REMB's 300 kbps floor on a still screen — a keyframe waits ~300 ms in the pacer before it leaves: the first tap after idle feels slow |
+
+### The kit itself
+
+| Item | What it is for | Why / when it's needed |
+|---|---|---|
+| **A standalone session test** | A WebRTCKit test that runs a whole session over loopback — check, DTLS, an SRTP frame arriving — with no baguette code | Proof the kit stands alone, before it moves to its own SwiftPM package |
+| **Its own package** | WebRTCKit in its own repository, baguette depending on it | Other tools could send WebRTC from Swift; baguette's build gets smaller. After the standalone test |
+| **Receiving** | The kit's v1 only sends | Only if something needs to receive WebRTC (a phone's screen arrives over CoreDevice's RTP today, not WebRTC) |
+
 ## 7 · Open questions
 
 1. ~~**Which WebRTC stack?**~~ **ANSWERED: our own, in Swift.** The BoringSSL
