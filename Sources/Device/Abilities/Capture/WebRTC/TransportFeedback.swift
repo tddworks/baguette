@@ -21,6 +21,11 @@ public struct TransportFeedback: Equatable, Sendable {
     public let feedbackCount: UInt8
     public let arrivals: [Arrival]
 
+    public init(feedbackCount: UInt8, arrivals: [Arrival]) {
+        self.feedbackCount = feedbackCount
+        self.arrivals = arrivals
+    }
+
     private enum Status { case missing, small, large }
 
     /// Nil for a report whose chunks or deltas run past its end.
