@@ -763,6 +763,28 @@ this doc.
     still to do, and so is a minimum pacing rate, so a keyframe drains in
     ~50 ms even at a low target.
 
+    **Freezes against the sender's timeline (2026-11-20)**, mobile data over
+    Tailscale, each freeze's start on the Mac's clock (phone-to-Mac
+    uncertainty 18–31 ms), two rounds:
+
+    | Run | p50 | p95 | p99 | fps | freezes/min | frozen | sender log |
+    |---|---|---|---|---|---|---|---|
+    | R1, 100 taps | 198 ms | 317 ms | 438 ms | 42.0 | 9.9 | 3.2 s | 3 cuts |
+    | R1, 30 s busy | 4.67 Mbps | | | 38.7 | 16.0 | 3.3 s | 24 cuts, 31 retunes |
+    | R2, 100 taps | 162 ms | 261 ms | 404 ms | 44.4 | 5.1 | 2.1 s | 1 cut |
+    | R2, 30 s busy | 7.28 Mbps | | | 44.0 | 16.0 | 2.0 s | no cut |
+
+    Lined up with the resend requests before each of the 35 freezes, against
+    1,600 random moments in the same runs (packets asked for again in the
+    300 ms before): ≥3 — 69 % of freezes, 46 % at random; ≥6 — 37 % / 17 %;
+    ≥10 — 14 % / 4 %. "Any resend in the 500 ms before" (97 % / 92 %) tells
+    nothing: they come ~5–6 a second. So **freezes follow bursts of loss
+    2–3.5× more often than chance, not always**; a third had fewer than three
+    resends before them. Most are 205–280 ms, against the bench's 200 ms
+    threshold — a frame or few late, about one resend round trip. Next, not
+    in this PR: RED/ULPFEC (a lost packet rebuilt without the round trip;
+    bursts need more redundancy) or a lower ceiling on mobile.
+
     **Correlating a stall.** Join the benchmark's `viewerID` with the sender's
     [event log](README.md#http-and-websocket). The benchmark records
     gaps over 200 ms within the measurement window, from the last displayed
