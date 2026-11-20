@@ -168,6 +168,23 @@ struct BandwidthEstimateTests {
         #expect(reversed.target == listed.target)
     }
 
+    @Test func `should measure the same capacity from a burst of mixed sizes, however listed`() {
+        // A keyframe's packets leave together; its last is short, so sizes differ.
+        var link = Link(capacity: 4_000_000)
+        let burst = (0..<12).map { i -> PacketOutcome in
+            let size = i == 11 ? 200 : 1_200
+            return PacketOutcome(sequence: UInt16(i), sentAt: 0, size: size, arrivedAt: link.carry(sentAt: 0, size: size))
+        }
+        var listed = BandwidthEstimate(ceiling: 8_000_000)
+        var shortFirst = BandwidthEstimate(ceiling: 8_000_000)
+
+        listed.update(with: burst, now: 100_000)
+        shortFirst.update(with: [burst[11]] + burst[..<11], now: 100_000)
+
+        #expect(listed.measuredCapacity != nil)
+        #expect(shortFirst.measuredCapacity == listed.measuredCapacity)
+    }
+
     @Test func `should never ask for less than its floor`() {
         var estimate = BandwidthEstimate(floor: 300_000, ceiling: 8_000_000)
         var link = Link(capacity: 100_000)

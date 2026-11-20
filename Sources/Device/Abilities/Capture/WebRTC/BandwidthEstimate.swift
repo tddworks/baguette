@@ -76,6 +76,9 @@ public struct BandwidthEstimate: Sendable {
         target = Int(min(max(rate, Double(floor)), Double(ceiling)))
     }
 
+    /// The link's capacity as its latest burst measured it, in bits per second.
+    var measuredCapacity: Double? { burstCapacity?.bitsPerSecond }
+
     /// What is actually arriving: the bits of the last half second over its span.
     private var acknowledged: Double? {
         // Jitter reorders arrivals: the span is earliest to latest, not first to last.
@@ -100,7 +103,10 @@ public struct BandwidthEstimate: Sendable {
         for burst in bursts where burst.count >= Self.burstPackets {
             let arrivals = burst.compactMap(\.arrivedAt)
             let spread = Double(arrivals.max()! - arrivals.min()!) / 1_000_000
-            let bits = Double(burst.dropFirst().map(\.size).reduce(0, +) * 8)
+            // The spread starts when the first packet arrived: the bits that crossed in it are
+            // every other packet's, whichever order the report lists them in.
+            let first = burst.min { ($0.arrivedAt!, $0.size) < ($1.arrivedAt!, $1.size) }!
+            let bits = Double((burst.map(\.size).reduce(0, +) - first.size) * 8)
             burstCapacity = (now, spread > 0 ? bits / spread : Double(ceiling) * 10)
         }
     }
