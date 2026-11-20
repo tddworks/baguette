@@ -242,6 +242,9 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
 | 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
+| 13 | An offer carries a congestion-control method only when it numbers its extension 1–14 and asks for its feedback on our H.264 | `SessionDescription` |
+| 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
+| 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
 
 Law 1 is what makes the comparison fair. If WebRTC needs different tuning
@@ -486,7 +489,17 @@ this doc.
     crawled back at 8 %/s (now: up to its bursts' measured capacity at once, or
     50 %/s back to the rate before a cut the queue never repeated). Real limits
     still bite: on a 2 Mbps link it settles at ~1.9 Mbps; 20 % loss still cuts;
-    freed, it is back at 8 Mbps about 5 s later (`TransportWideControlLinkTests`).
+    freed, it is past 7 Mbps within 6 s (`TransportWideControlLinkTests`).
+
+    **Review fixes (2026-11-20)**, each pinned by a test that failed first: the
+    offer's extension is taken only with its `rtcp-fb` on our payload type and
+    an id of 1–14 (Pion intersects the same way); `FeedbackClock` unwraps the
+    24-bit reference time, as libwebrtc's feedback adapter does; the measured
+    arrival rate spans the earliest to the latest arrival and a report is read
+    in sending order however listed (libwebrtc keys by arrival time too), and
+    that more honest rate makes recovery ~0.5 s slower than before; a retune is a
+    `StreamConfig.Change` the stream applies on its own queue, so it can't undo
+    a `set_fps` that lands at the same moment.
 
     Over a simulated 2 Mbps bottleneck (`BandwidthEstimateTests`), the target
     falls from 8 Mbps to 1.7 Mbps within 2 s and saw-tooths just under 2 Mbps
