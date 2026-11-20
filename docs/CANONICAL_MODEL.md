@@ -120,7 +120,7 @@ WebRTCViewers  ◆      THE LIVE WEBRTC (WHEP) VIEWERS, by id — admit(offer) �
                       SessionDescription ◇ (offer in, answer out) · STUNMessage ◇ · RTPPacket ◇ ·
                       H264Packetizer ◇ · SRTPContext ◇ · RTCPFeedback ◇; how much the link takes is
                       its CongestionControl ◆ — TransportWideControl (transport-cc: TransportFeedback ◇ ·
-                      SendHistory ◇ · FeedbackClock ◇ · BandwidthEstimate ◇), ReceiverEstimateControl (REMB) or FixedBitrate,
+                      SendHistory ◇ · FeedbackClock ◇ · BandwidthEstimate ◇ · Pacer ◇), ReceiverEstimateControl (REMB) or FixedBitrate,
                       picked by CongestionChoice ◇; at the outside world,
                       Datagrams ◆ (its UDP socket) and Handshake ◆ (its DTLS handshake)
 CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇; the device's
@@ -197,6 +197,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a viewer is found by its id until it hangs up, and only through the device it watches; an unknown id, or one asked for through another device, is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | an offer carries a congestion-control method only when it numbers its header extension 1–14 (what a one-byte header holds), will receive it (not `inactive` or `sendonly`), and asks for its feedback (`transport-cc`, `goog-remb`) on the H.264 the viewer sends or on every format (`*`) | `SessionDescription` |
+| a viewer's packets leave at no more than 2.5 × its target bitrate, except to keep any packet from waiting over 500 ms; a small frame leaves at once | `Pacer` |
 | a browser's transport-cc reports are read on one unbroken timeline, though their 24-bit reference time wraps | `FeedbackClock` |
 | a retune turns one knob of the config as it stands then (`StreamConfig.Change`), so two at once both land | each `Stream` |
 | a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |

@@ -243,6 +243,7 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
 | 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
+| 17 | A viewer's packets leave at no more than 2.5 × its target, except to keep any packet from waiting over 500 ms; a small frame leaves at once | `Pacer` |
 | 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
 | 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
 | 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
@@ -479,8 +480,18 @@ this doc.
        source (draft-ietf-rmcat-gcc, libwebrtc defaults) noted here.
     6. ~~*`WebRTCViewer` retunes its encoder*~~ **DONE** (laws 11–12).
     7. *Prove it* on a throttled link (Network Link Conditioner or `impair.sh`).
-    8. *A pacer* (spacing each frame's packets at the target rate): the bench
-       now asks for it — see "Against a production sender" below.
+    8. ~~*A pacer*~~ **DONE**: `Pacer` lets a viewer's packets out at 2.5 × the
+       target (libwebrtc's pacing factor) in 5 ms slices; a packet into an empty
+       pacer brings 5 ms of credit, so a small frame still leaves at once; idle
+       time isn't saved up; no packet waits over 500 ms. Each packet is stamped
+       (transport-wide sequence, send time) as it leaves, so the estimate reads
+       real send times. Retransmissions skip it. Side effect: a slice leaves
+       with one send time, so below ~4 Mbps a slice holds fewer than the 10
+       packets a burst needs, and the jump to a burst-measured capacity no
+       longer fires there — the 8 %/s climb does, as in libwebrtc. *Pinned:
+       `PacerTests`, "should spread a keyframe's packets over time instead of
+       sending them all at once".* To measure on the phone: freezes and frame
+       jitter against p95 (see the table below).
 
     **Rebuilt from first principles after the phone test (2026-11-20).** On the
     phone, transport-cc blurred the picture where REMB didn't. A simulated link
@@ -522,7 +533,8 @@ this doc.
     | | Pion / libwebrtc | Ours | Why |
     |---|---|---|---|
     | Cut on overuse | 0.85 × received rate | same | — |
-    | Climb | 8 %/s; additive near the last cut | same shape: 8 %/s; one packet per 200 ms within 20 % of capacity | Pion keys "near" to the cuts' mean ± 3σ and uses the RTT; ours a fixed 200 ms |
+    | Climb | 8 %/s; additive near the last cut | same shape: 8 %/s; one packet per 200 ms within 20 % of capacity | Pion keys "near" to the cuts' mean ± 3σ |
+    | Response time | 100 ms + the measured RTT, in the additive step | a fixed 200 ms | simplification |
     | Climb cap | 1.5 × received rate, never lowers the target | same | — |
     | Received rate | 500 ms window, by arrival | same | — |
     | Loss | < 2 % climb, > 10 % cut by half the loss | same thresholds; climb 8 %/s (Pion 5 % every 200 ms) | slower climb |
@@ -538,8 +550,16 @@ this doc.
     |---|---|---|---|---|---|---|---|
     | Phone, Tailscale, 100 taps | baguette | 476 ms | 677 ms | 755 ms | 45.4 | 13.5 ms | 4.06 |
     | Phone, Tailscale, 100 taps | Pion | 468 ms | 963 ms | 1,168 ms | 51.0 | 4.8 ms | 0 |
-    | Phone, Tailscale, 30 s animated list | baguette | 6.19 Mbps | | | 43.2 | | |
-    | Phone, Tailscale, 30 s animated list | Pion | 6.21 Mbps | | | 48.1 | | |
+    | Phone, Tailscale, 10 taps (old white probe) | baguette | — | — | — | 33.3 | 111.9 ms | 12.1 |
+    | Phone, Tailscale, 10 taps (old white probe) | Pion | — | — | — | 35.4 | 148.4 ms | 5.4 |
+
+    | 30 s, animated list, phone over Tailscale | Payload | Wire (est.) | Packets | fps |
+    |---|---|---|---|---|
+    | baguette | 6.19 Mbps | 6.39 Mbps | 19,684 | 43.2 |
+    | Pion | 6.21 Mbps | 6.41 Mbps | 20,042 | 48.1 |
+
+    (The 10-tap rows' latencies were the old probe's and meaningless; their
+    smoothness columns stand.)
 
     Read: the median is the same, and so is the ~400 ms floor under both — the
     phone's path (the tap's POST over Tailscale, render, encode, its browser's

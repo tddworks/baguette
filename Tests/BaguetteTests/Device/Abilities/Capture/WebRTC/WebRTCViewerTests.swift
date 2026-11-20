@@ -60,6 +60,8 @@ private struct Rig {
     let received = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
     let now = Box(Date(timeIntervalSince1970: 1_000))
     let sink = Box<(any FrameSink)?>(nil)
+    /// Work the viewer asked to run later (its pacer's next slice), run by `pass(_:)`.
+    let scheduled = Box<[@Sendable () -> Void]>([])
     let viewer: WebRTCViewer
 
     init(
@@ -82,13 +84,24 @@ private struct Rig {
         given(congestion).sent(size: .any, at: .any).willReturn()
         given(congestion).heard(.any, at: .any).willReturn()
         given(congestion).target.willReturn(target)
-        let (stream, sink, now, congestion) = (stream, sink, now, congestion)
+        let (stream, sink, now, congestion, scheduled) = (stream, sink, now, congestion, scheduled)
         viewer = WebRTCViewer(
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             datagrams: datagrams, handshake: handshake,
             stream: { frames in sink.value = frames; return stream },
             congestion: { _ in congestion },
-            clock: { now.value })
+            clock: { now.value },
+            schedule: { _, work in scheduled.value.append(work) })
+    }
+
+    /// Time passing: the clock moves on and what was due runs, in 5 ms steps.
+    func pass(_ seconds: TimeInterval) {
+        for _ in 0..<Int((seconds / 0.005).rounded()) {
+            now.value += 0.005
+            let due = scheduled.value
+            scheduled.value = []
+            due.forEach { $0() }
+        }
     }
 
     func deliver(_ data: Data, from address: DatagramAddress = browser) { received.value?(data, address) }
@@ -321,6 +334,24 @@ struct WebRTCViewerTests {
         let rig = Rig(answerLines: ["a=extmap:9 http://example/ext"])
 
         #expect(rig.viewer.answer.contains("a=extmap:9 http://example/ext\r\n"))
+    }
+
+    @Test func `should spread a keyframe's packets over time instead of sending them all at once`() {
+        let rig = Rig()
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+
+        // ~72 kB: some 60 packets, paced at 2.5 × 8 Mbps.
+        let slice = Data([0x65]) + Data(repeating: 7, count: 71_999)
+        rig.show(AVCCEnvelope.keyframe(avcc: withUnsafeBytes(of: UInt32(slice.count).bigEndian) { Data($0) } + slice))
+        let atOnce = rig.packets.count
+
+        rig.pass(0.04)
+
+        #expect(atOnce > 0 && atOnce < 20)
+        #expect(rig.packets.count > 55)
+        #expect(rig.packets.map(\.sequence) == (0..<UInt16(rig.packets.count)).map { 1000 + $0 })
+        #expect(rig.packets.last?.marker == true)
     }
 
     @Test func `should stamp every packet with what its congestion control asks, and report it sent`() {
