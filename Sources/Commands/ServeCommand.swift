@@ -5,7 +5,7 @@ import WebRTCKit
 
 /// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
 /// `             [--allowed-hosts …] [--plugin-dir …] [--no-plugins]`
-/// `             [--webrtc-ports 8190-8194]`
+/// `             [--webrtc-ports 8190-8194] [--stun stun:host:port]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
 /// in a browser and the simulator picker loads — no SPA dependency,
@@ -47,6 +47,17 @@ struct ServeCommand: AsyncParsableCommand {
             return ports
         })
     var mediaPorts: MediaPorts = .any
+
+    @Option(
+        name: .customLong("stun"),
+        help: "A STUN server to learn each WebRTC viewer's public address from, e.g. stun:stun.l.google.com:19302.",
+        transform: { written in
+            guard let server = STUNServer(url: written, resolve: HostResolver.ipv4) else {
+                throw ValidationError("--stun takes stun:host[:port], a host that resolves to IPv4")
+            }
+            return server
+        })
+    var stun: STUNServer?
 
     func run() async throws {
         // Someone reads this log while driving a page, and no agent pays for it.

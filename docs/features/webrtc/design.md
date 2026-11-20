@@ -855,13 +855,18 @@ it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
    resend format and stream when it resends on one", "should keep each
    stream's rollover apart".* Measure: freezes and cuts on the phone, before
    and after.
-3. **Authentication** (serve). A browser reachable from the internet can
+3. **Authentication** (serve) — *skipped for now (2026-11-20): Tailscale
+   stays the way to view from outside the network.* A browser reachable from the internet can
    reach `serve`, which drives the device: WHEP and the control socket need
    a credential first (a token per session at least). The prerequisite for
    4–7. *Decide first: a token in the URL, or per-viewer sign-in.*
-4. **Server-reflexive candidate** (`--stun stun:host:port`). The kit asks a
-   STUN server for its public address and offers it beside the host ones
-   (a STUN binding request; `STUNMessage` already reads the reply's shape).
+4. ~~**Server-reflexive candidate**~~ **DONE** (`serve --stun stun:host:port`,
+   `Transport/STUNServer`). Each viewer asks the STUN server, through its own
+   socket (a plain Binding request, sent again halfway through 0.5 s), for
+   the address the world sees it at, and offers it as `typ srflx` below its
+   host candidates (`raddr 0.0.0.0`: the private base isn't named). A silent
+   server leaves the host ones. Checked against stun.l.google.com: the
+   answer gains the Mac's public address.
    Alone it reaches only a NAT that lets anyone in — most don't; step 5
    makes it useful.
 5. **Full ICE.** The kit stops being ICE-lite: it pairs its candidates with

@@ -77,7 +77,8 @@ public final class WebRTCSender: @unchecked Sendable {
     private let schedule: Schedule
 
     /// `encoderBitrate`: what its owner's encoder makes now — the pacer's rate
-    /// while the congestion control has no target of its own. `events` is held
+    /// while the congestion control has no target of its own. `reflexive`: the
+    /// address a STUN server sees its socket at, offered beside its own. `events` is held
     /// weakly: the owner holds the sender.
     public init(
         offer: SessionDescription,
@@ -93,6 +94,7 @@ public final class WebRTCSender: @unchecked Sendable {
         events: any SenderEvents,
         clock: @escaping @Sendable () -> Date = Date.init,
         schedule: @escaping Schedule = WebRTCSender.onAQueue,
+        reflexive: DatagramAddress? = nil,
         pacing: Bool = true,
         id: String = UUID().uuidString.lowercased()
     ) {
@@ -115,7 +117,7 @@ public final class WebRTCSender: @unchecked Sendable {
         self.pacer = Pacer(bitrate: encoderBitrate(), pacing: pacing)
         self.answer = offer.answer(
             ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc,
-            rtxSSRC: offer.rtxPayloadType == nil ? nil : rtxSSRC, candidates: datagrams.addresses,
+            rtxSSRC: offer.rtxPayloadType == nil ? nil : rtxSSRC, candidates: datagrams.addresses, reflexive: reflexive,
             congestion: congestion.answerLines())
         datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
     }

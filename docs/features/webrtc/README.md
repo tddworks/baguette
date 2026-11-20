@@ -103,6 +103,11 @@ the encoder again according to [the retuning rule](design.md#4--invariants-each-
   to open a firewall for them, give `baguette serve --webrtc-ports 8190-8194`
   and each viewer takes the first free one in the range (a full range refuses
   the next viewer).
+- **Its public address, when asked.** `baguette serve --stun stun:host:port`
+  has each viewer learn the address the world sees it at and offer it too.
+  Most NATs still let nothing in that the Mac hasn't sent to first, so it
+  helps once baguette also sends its own checks (planned); until then, use
+  Tailscale from outside your network.
 - **A viewer goes when its browser does.** Switching format or leaving the page
   hangs it up; if that goodbye never arrives, it hangs up after 30 s without a
   connectivity check, and its encoder stops either way.

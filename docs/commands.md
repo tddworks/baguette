@@ -451,7 +451,7 @@ baguette logs --udid <udid> [--level <level>] [--style <style>] [--predicate <pr
 Start the standalone simulator UI server
 
 ```
-baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> …] [--plugin-dir <plugin-dir> …] [--no-plugins] [--webrtc-ports <webrtc-ports>]
+baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> …] [--plugin-dir <plugin-dir> …] [--no-plugins] [--webrtc-ports <webrtc-ports>] [--stun <stun>]
 ```
 
 | Flag | Required | Default | Description |
@@ -462,6 +462,7 @@ baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> 
 | `--plugin-dir` |  |  | Extra directory of plugins; repeatable. Shadows installed plugins of the same name. |
 | `--no-plugins` |  |  | Ignore every installed plugin, including bundled ones. |
 | `--webrtc-ports` |  |  | UDP ports WebRTC viewers' media may use, e.g. 8190-8194 (default: any free port). |
+| `--stun` |  |  | A STUN server to learn each WebRTC viewer's public address from, e.g. stun:stun.l.google.com:19302. |
 
 ## baguette orientation
 

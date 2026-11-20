@@ -262,3 +262,18 @@ extension SessionDescriptionTests {
         #expect(answer.contains("a=ssrc:2 cname:baguette\r\n"))
     }
 }
+
+extension SessionDescriptionTests {
+    @Test func `should offer its public address after its own, ranked below them`() throws {
+        let hosts = [DatagramAddress(ip: [192, 168, 1, 5], port: 50000)]
+        let outside = DatagramAddress(ip: [203, 0, 113, 7], port: 61000)
+
+        let answer = try SessionDescription(offer: chromeOffer)
+            .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: hosts, reflexive: outside)
+
+        #expect(answer.contains(
+            "a=candidate:1 1 udp 2130706431 192.168.1.5 50000 typ host\r\n"
+            + "a=candidate:2 1 udp 1694498815 203.0.113.7 61000 typ srflx raddr 0.0.0.0 rport 0\r\n"
+            + "a=end-of-candidates\r\n"))
+    }
+}

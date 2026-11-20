@@ -120,7 +120,7 @@ public struct SessionDescription: Equatable, Sendable {
     /// control needs (`CongestionControl.answerLines`).
     public func answer(
         ice: ICECredentials, fingerprint: String, ssrc: UInt32, rtxSSRC: UInt32? = nil,
-        candidates: [DatagramAddress], congestion: [String] = []
+        candidates: [DatagramAddress], reflexive: DatagramAddress? = nil, congestion: [String] = []
     ) -> String {
         let pt = payloadType
         // Resends on their own stream only when the offer has a format for them.
@@ -145,9 +145,15 @@ public struct SessionDescription: Equatable, Sendable {
         if let rtx {
             lines += ["a=ssrc-group:FID \(ssrc) \(rtx.ssrc)", "a=ssrc:\(rtx.ssrc) cname:baguette"]
         }
-        // Host candidates only (ICE-lite): type preference 126, in the given order.
+        // Host candidates (type preference 126), in the given order; then the
+        // address a STUN server saw (server-reflexive, 100), its base left out
+        // (`raddr 0.0.0.0`) so the answer doesn't name the Mac's private one.
         for (index, address) in candidates.enumerated() {
             lines.append("a=candidate:\(index + 1) 1 udp \(2_130_706_431 - index) \(Self.text(address.ip)) \(address.port) typ host")
+        }
+        if let reflexive {
+            lines.append("a=candidate:\(candidates.count + 1) 1 udp \(100 << 24 | 65_535 << 8 | 255) "
+                + "\(Self.text(reflexive.ip)) \(reflexive.port) typ srflx raddr 0.0.0.0 rport 0")
         }
         lines += ["a=end-of-candidates", ""]
         return lines.joined(separator: "\r\n")

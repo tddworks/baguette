@@ -23,6 +23,9 @@ public final class WebRTCViewers: @unchecked Sendable {
     private var admitted: [String: Admitted] = [:]
     private let connect: Connect
     private let makeStream: (any FrameSink) -> any Stream
+    /// Asked, per viewer and through its own socket, for the address the world
+    /// sees it at — offered to the browser beside the Mac's own.
+    private let stun: STUNServer?
     private var timer: DispatchSourceTimer?
 
     /// `ticking`: how often consent and DTLS retransmission are checked; nil
@@ -33,10 +36,12 @@ public final class WebRTCViewers: @unchecked Sendable {
         connect: @escaping Connect = WebRTCViewers.onThisMac(),
         stream: @escaping (any FrameSink) -> any Stream = { sink in
             StreamFormat.avcc.makeStream(config: .default, sink: sink, quality: 0.5)
-        }
+        },
+        stun: STUNServer? = nil
     ) {
         self.connect = connect
         self.makeStream = stream
+        self.stun = stun
         guard let interval else { return }
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "baguette.webrtc.viewers"))
         timer.schedule(deadline: .now() + interval, repeating: interval)
@@ -74,10 +79,11 @@ public final class WebRTCViewers: @unchecked Sendable {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
         let id = UUID().uuidString.lowercased()
+        let reflexive = stun?.publicAddress(through: datagrams)
         let viewer = WebRTCViewer(
             offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream,
             congestion: { CongestionChoice.control(asked: congestion, offer: description, ceiling: $0) },
-            pacing: pacing, id: id)
+            reflexive: reflexive, pacing: pacing, id: id)
         do {
             try viewer.start(on: screen)
         } catch {

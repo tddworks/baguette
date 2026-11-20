@@ -2,14 +2,15 @@ import CommonCrypto
 import Foundation
 
 /// A STUN message (RFC 5389) as ICE uses it: the browser's connectivity check,
-/// and the answer a WebRTC viewer — an ICE-lite agent — sends back. Only a
-/// Binding request addressed to the viewer's username fragment and signed with
-/// its ICE password is answered (RFC 8445 §7.3); anything else is ignored,
-/// never answered with an error.
+/// and the answer a WebRTC sender sends back — only to a Binding request
+/// addressed to its username fragment and signed with its ICE password
+/// (RFC 8445 §7.3); anything else is ignored, never answered with an error.
+/// And the plain Binding request that asks a STUN server how this socket looks
+/// from outside, with the address the server's success reports.
 public struct STUNMessage: Equatable, Sendable {
     static let magicCookie: UInt32 = 0x2112_A442
-    private static let bindingRequest: UInt16 = 0x0001
-    private static let bindingSuccess: UInt16 = 0x0101
+    private static let bindingRequestType: UInt16 = 0x0001
+    private static let bindingSuccessType: UInt16 = 0x0101
     private static let username: UInt16 = 0x0006
     private static let messageIntegrity: UInt16 = 0x0008
     private static let xorMappedAddress: UInt16 = 0x0020
@@ -24,7 +25,16 @@ public struct STUNMessage: Equatable, Sendable {
     /// Where MESSAGE-INTEGRITY starts, when there is one.
     private let integrityAt: Int?
 
-    public var isBindingRequest: Bool { type == Self.bindingRequest }
+    /// The address a Binding success reports (XOR-MAPPED-ADDRESS), or nil.
+    public let mappedAddress: DatagramAddress?
+
+    public var isBindingRequest: Bool { type == Self.bindingRequestType }
+
+    /// A plain Binding request, as a STUN server expects: no attributes, so
+    /// it answers with the address it saw it come from.
+    public static func bindingRequest(transactionID: [UInt8]) -> Data {
+        Data(header(bindingRequestType, length: 0, transactionID: transactionID))
+    }
 
     /// RFC 7983: on a port shared with DTLS and RTP, STUN's first byte is 0–3.
     public static func isSTUN(_ data: Data) -> Bool {
@@ -41,12 +51,16 @@ public struct STUNMessage: Equatable, Sendable {
         guard length % 4 == 0, bytes.count == 20 + length else { return nil }
         var username: String?
         var integrityAt: Int?
+        var mapped: DatagramAddress?
         var at = 20
         while at + 4 <= bytes.count {
             let type = Self.half(bytes, at: at), size = Int(Self.half(bytes, at: at + 2))
             guard at + 4 + size <= bytes.count else { return nil }
             if type == Self.username { username = String(decoding: bytes[at + 4..<at + 4 + size], as: UTF8.self) }
             if type == Self.messageIntegrity, size == 20, integrityAt == nil { integrityAt = at }
+            if type == Self.xorMappedAddress, mapped == nil {
+                mapped = Self.unmapped(Array(bytes[at + 4..<at + 4 + size]), transactionID: Array(bytes[8..<20]))
+            }
             at += 4 + (size + 3) / 4 * 4
         }
         self.type = Self.half(bytes, at: 0)
@@ -54,6 +68,7 @@ public struct STUNMessage: Equatable, Sendable {
         self.username = username
         self.bytes = bytes
         self.integrityAt = integrityAt
+        self.mappedAddress = mapped
     }
 
     /// The Binding success for this check, telling the browser the address it
@@ -69,7 +84,7 @@ public struct STUNMessage: Equatable, Sendable {
         guard Self.same(Self.hmac(signed, key: password), Array(bytes[at + 4..<at + 24])) else { return nil }
 
         var body = Self.mapped(address, transactionID: transactionID)
-        let header = { (length: Int) in Self.header(Self.bindingSuccess, length: length, transactionID: self.transactionID) }
+        let header = { (length: Int) in Self.header(Self.bindingSuccessType, length: length, transactionID: self.transactionID) }
         let integrity = Self.hmac(header(body.count + 24) + body, key: password)
         body += Self.attribute(Self.messageIntegrity, integrity)
         let crc = Self.crc32(header(body.count + 8) + body) ^ 0x5354_554E
@@ -84,6 +99,17 @@ public struct STUNMessage: Equatable, Sendable {
         let port = address.port ^ UInt16(magicCookie >> 16)
         let ip = zip(address.ip, key).map { $0 ^ $1 }
         return attribute(xorMappedAddress, [0, address.isIPv6 ? 2 : 1, UInt8(port >> 8), UInt8(port & 0xFF)] + ip)
+    }
+
+    /// XOR-MAPPED-ADDRESS read back: family 1 (IPv4) or 2 (IPv6), port and
+    /// address XORed with the magic cookie (and, for IPv6, the transaction id).
+    private static func unmapped(_ value: [UInt8], transactionID: [UInt8]) -> DatagramAddress? {
+        guard value.count >= 8 else { return nil }
+        let length = value[1] == 1 ? 4 : value[1] == 2 ? 16 : 0
+        guard length > 0, value.count >= 4 + length else { return nil }
+        let key = bigEndian(magicCookie) + transactionID
+        let port = half(value, at: 2) ^ UInt16(magicCookie >> 16)
+        return DatagramAddress(ip: zip(value[4..<4 + length], key).map { $0 ^ $1 }, port: port)
     }
 
     private static func header(_ type: UInt16, length: Int, transactionID: [UInt8]) -> [UInt8] {

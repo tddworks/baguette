@@ -64,7 +64,7 @@ private struct Rig {
 
     init(
         progress: HandshakeProgress = .complete(replies: [], srtpExport: export), target: Int? = nil,
-        offer: SessionDescription = offer
+        offer: SessionDescription = offer, reflexive: DatagramAddress? = nil
     ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
@@ -85,7 +85,7 @@ private struct Rig {
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             rtxSSRC: 0xFEED_F00D, firstRetransmissionSequence: 500,
             datagrams: datagrams, handshake: handshake, congestion: congestion,
-            encoderBitrate: { 8_000_000 }, events: events, schedule: { _, _ in })
+            encoderBitrate: { 8_000_000 }, events: events, schedule: { _, _ in }, reflexive: reflexive)
     }
 
     func deliver(_ data: Data, from address: DatagramAddress = browser) { received.value?(data, address) }
@@ -143,6 +143,13 @@ struct WebRTCSenderTests {
         // original's loss reads as a loss and the resend as what it is.
         verify(rig.congestion).extensions(at: .any).called(3)
         verify(rig.congestion).sent(size: .any, at: .any).called(3)
+    }
+
+    @Test func `should offer its public address beside its own when it has one`() {
+        let rig = Rig(reflexive: DatagramAddress(ip: [203, 0, 113, 7], port: 61000))
+
+        #expect(rig.sender.answer.contains("203.0.113.7 61000 typ srflx raddr 0.0.0.0 rport 0"))
+        #expect(!Rig().sender.answer.contains("srflx"))
     }
 
     @Test func `should tell its owner what the link can take after the browser's feedback`() {

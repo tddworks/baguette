@@ -113,3 +113,13 @@ private extension HandshakeProgress {
         }
     }
 }
+
+/// The system resolver behind `stun:<name>`.
+@Suite("HostResolver", .tags(.system), .enabled(if: SystemTests.available))
+struct HostResolverTests {
+    @Test(.timeLimit(.minutes(1)))
+    func `should resolve a host name to its IPv4 address`() {
+        #expect(HostResolver.ipv4("localhost") == [127, 0, 0, 1])
+        #expect(HostResolver.ipv4("nowhere.invalid") == nil)
+    }
+}

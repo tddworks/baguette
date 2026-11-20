@@ -104,3 +104,36 @@ struct STUNMessageTests {
         #expect(!STUNMessage.isSTUN(Data([0x80, 0x60, 0x00])))   // RTP
     }
 }
+
+/// Asking a STUN server what this socket looks like from outside (RFC 5389 §7):
+/// a plain Binding request, and the address its success reports.
+@Suite("STUNMessage: a public address")
+struct STUNPublicAddressTests {
+    private let id: [UInt8] = Array(1...12)
+
+    @Test func `should ask a STUN server with a plain Binding request`() throws {
+        let request = STUNMessage.bindingRequest(transactionID: id)
+
+        #expect(request == Data([0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42] + id))
+        #expect(try #require(STUNMessage(request)).isBindingRequest)
+    }
+
+    @Test func `should read the address a Binding success reports`() throws {
+        // A success like any server's: here, ours answering a check from `browser`.
+        let check = try #require(STUNMessage(sampleCheck))
+        let success = try #require(check.answer(from: browser, ice: ours))
+
+        #expect(STUNMessage(success)?.mappedAddress == browser)
+    }
+
+    @Test func `should read an IPv6 address a Binding success reports`() throws {
+        let v6 = DatagramAddress(ip: [0x20, 0x01, 0x0d, 0xb8] + [UInt8](repeating: 0, count: 11) + [1], port: 443)
+        let success = try #require(STUNMessage(sampleCheck)?.answer(from: v6, ice: ours))
+
+        #expect(STUNMessage(success)?.mappedAddress == v6)
+    }
+
+    @Test func `should read no address from a message that reports none`() throws {
+        #expect(STUNMessage(STUNMessage.bindingRequest(transactionID: id))?.mappedAddress == nil)
+    }
+}
