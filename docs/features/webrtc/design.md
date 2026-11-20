@@ -281,7 +281,19 @@ between the two transports is the video path alone.
 | Host CPU and memory of `baguette serve` | `top -pid`, sampled 1 Hz |
 | Browser decode path, frames dropped | `getStats()` / `VideoDecoder` counters |
 
-**The matrix:** {websocket, webrtc} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
+**A reference sender.** To tell our WebRTC sender's part from the
+encoder's, the bench runs a third column, **WebRTC (Pion)**: the same
+`baguette stream` encoder at serve's settings, sent through
+[Pion](https://github.com/pion/webrtc) with its Google Congestion Control and
+leaky-bucket pacer (`scripts/bench-live-view/pion/`, built by `start.sh` when
+Go is installed). Pion's target retunes the encoder through the stream's
+stdin with our viewer's rule (at most once a second, only on a change over
+10 %); a PLI or FIR asks for a keyframe. Same screen, encoder and page: only
+the sender differs. Where Pion beats ours on p95 or freezes on the same link,
+the gap is in our sender (no pacer, our estimator); where they match, the
+picture is the encoder's.
+
+**The matrix:** {websocket, webrtc, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
 1 % loss, 50 ms + 5 % loss, 5 Mbps cap} × {1, 4, 8 devices} for CPU. We apply
 impairments with `dnctl` + `pfctl` dummynet on the loopback or LAN interface,
 scripted so every run can be reproduced. Network Link Conditioner is fine for

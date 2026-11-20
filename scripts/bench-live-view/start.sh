@@ -59,6 +59,17 @@ tail -f /dev/null | $BAGUETTE stream --udid $UDID --format avcc --fps 60 --bitra
 EOF
 chmod +x $RUN/bridge.sh
 
+# 3b · the reference WebRTC sender: the same encoder through Pion's WebRTC and its congestion control.
+# Built when Go is installed; each WebRTC (Pion) run starts its own `baguette stream`.
+if command -v go >/dev/null; then
+  (cd $KIT/pion && go build -o $RUN/pion-whep .) && {
+    nohup $RUN/pion-whep -baguette $BAGUETTE -udid $UDID > $RUN/pion.log 2>&1 &
+    echo $! > $RUN/pion.pid
+  }
+else
+  echo "no Go: skipping the Pion reference sender (brew install go)" >&2
+fi
+
 # 4 · one origin for pages, /api → serve, /whep → MediaMTX, /bridge/on|off.
 # The proxy starts the bridge only for WebRTC runs: one encoder per run.
 if (( LAN )); then
