@@ -7,8 +7,8 @@ description: A proposal to carry the serve live view over WebRTC (WHEP) next to 
 **Status:** BUILT on `feat/whep-live-view`, slices 1–10 of [§6](#6--build-sequence-test-first-each-slice-green):
 the WHEP routes and the page's **WebRTC** choice play through baguette's own
 ICE-lite, DTLS-SRTP and RTP, checked end to end in Chrome on 2026-11-20 (the serve
-page at 38–40 fps, touches through the control socket). Not built: bitrate adaptation
-(slice 11), designed and built on its own branch, `feat/webrtc-congestion-control`. How to use it: [README](README.md).
+page at 38–40 fps, touches through the control socket). Not built: congestion control
+(slice 11, transport-cc). How to use it: [README](README.md).
 
 This doc owns **how encoded frames travel from `baguette serve` to the page,
 and how we compare two ways of doing it**. It doesn't change what gets encoded
@@ -126,8 +126,24 @@ WebRTCViewers  ◆                      the live viewers by id — admit(offer, 
     │   └─ H264Packetizer ◇            RFC 6184: single NAL or FU-A, SPS/PPS as STAP-A; ≤ 1200 B payload
     ├─ RTPPacket ◇                     header + payload, both ways (shared with a phone's screen)
     ├─ SRTPContext ◇                   AES-CM-128 + HMAC-SHA1-80: protect RTP, unprotect RTCP
-    └─ RTCPFeedback ◇                  PLI · FIR → keyframe; NACK → resend from history; REMB → bitrate
+    ├─ RTCPFeedback ◇                  PLI · FIR → keyframe; NACK → resend from history;
+    │                                  transport-cc → arrivals (TransportFeedback ◇)
+    ├─ SendHistory ◇                   transport-wide sequence → send time and size, bounded;
+    │                                  feedback in, "sent at / arrived at" pairs out
+    └─ BandwidthEstimate ◇             Google Congestion Control (GCC): a delay-based rate (trendline
+                                       over the arrival-minus-send delay, overuse detector with an
+                                       adaptive threshold, AIMD) and a loss-based rate; THE TARGET IS
+                                       THE LOWER OF THE TWO, between a floor and the starting bitrate
 ```
+
+**Congestion control is the sender's (transport-cc), as libwebrtc does it.**
+Every packet carries a transport-wide sequence number (an RTP header extension);
+the browser reports when each one arrived (RTCP transport-cc feedback, about every
+50–100 ms); the viewer estimates the bandwidth from those reports and retunes its
+own encoder. REMB, where the browser does the estimating and sends one number,
+was the simpler option and was turned down for the industry's current way
+(decided 2026-11-20). The same feedback comes from an SFU, so it carries over to
+publishing (open question 5).
 
 The demultiplexing of one UDP port (RFC 7983) is the viewer's: first byte 0–3
 is STUN, 20–63 is DTLS, 128–191 is RTP/RTCP.
@@ -190,6 +206,8 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 7 | A viewer the browser stops answering (no STUN check for 30 s) hangs up | `WebRTCViewer` |
 | 8 | A STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
+| 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
+| 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
 
 Law 1 is what makes the comparison fair. If WebRTC needs different tuning
@@ -398,9 +416,22 @@ this doc.
    the control WebSocket, through `InProcessServer`.
 10. ~~**The page**~~ **DONE**: a WebRTC option beside H.264 and MJPEG, painting the `<video>`
     onto the stream canvas. *Pinned: `make test-web`.*
-11. **Bitrate adaptation**: on its own branch, `feat/webrtc-congestion-control` (transport-cc, as libwebrtc does it).
-12. **Docs**: a user README, `serve.md` rows, CHANGELOG; the bench kit pointed
-    at the native route, and the full matrix run on it.
+11. **Congestion control (transport-cc)**, replacing "REMB → bitrate":
+    1. *Negotiate it*: the answer adds `a=rtcp-fb:<pt> transport-cc` and the
+       `transport-wide-cc` header extension at the offer's id. *Pinned: an offer
+       without the extension is still answered, without adaptation.*
+    2. *Number every packet*: a one-byte header extension (RFC 8285) on
+       `RTPPacket` with a 16-bit transport-wide sequence.
+    3. *`TransportFeedback`*: RTCP RTPFB FMT 15 — base sequence, reference time,
+       run-length and status-vector chunks, small and large deltas.
+    4. *`SendHistory`*: feedback → sent/arrived pairs; wraparound; losses.
+    5. *`BandwidthEstimate`*: delay-based and loss-based rates; each constant's
+       source (draft-ietf-rmcat-gcc, libwebrtc defaults) noted here.
+    6. *`WebRTCViewer` retunes its encoder* (laws 11–12).
+    7. *Prove it* on a throttled link (Network Link Conditioner or `impair.sh`).
+    A pacer (spacing a keyframe's burst) is a later slice if the bench needs it.
+12. ~~**Docs**~~ **DONE**: a user README, `serve.md` rows, CHANGELOG; the bench
+    kit pointed at the native route. The full matrix on it is still to run.
 
 ## 7 · Open questions
 
@@ -437,8 +468,8 @@ this doc.
    | Reach | browsers reach the Mac | the Mac connects out |
    | Bandwidth feedback | transport-cc from the browser | the same, from the SFU |
 
-   RTP, packetizing, SRTP and RTCP feedback carry over unchanged, and so would
-   congestion control (built on its own branch). New: writing an offer, full-ICE checks, and a setting naming the
+   RTP, packetizing, SRTP, RTCP feedback and congestion control carry over
+   unchanged. New: writing an offer, full-ICE checks, and a setting naming the
    SFU's WHIP URL and token. An SFU forwards one bitrate to everyone: adapting per
    viewer would need simulcast (several encodings at once), a further step.
    Worth it once many viewers or a hosted device cloud matter; for one or a few
