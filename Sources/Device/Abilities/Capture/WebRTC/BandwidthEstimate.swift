@@ -54,8 +54,10 @@ public struct BandwidthEstimate: Sendable {
         lossRate = Double(ceiling)
     }
 
-    /// One report's outcomes, in sending order, read at `now` on the viewer's clock.
-    public mutating func update(with outcomes: [PacketOutcome], now: Int64) {
+    /// One report's outcomes, read at `now` on the viewer's clock; in whatever
+    /// order they come, they are read in sending order.
+    public mutating func update(with listed: [PacketOutcome], now: Int64) {
+        let outcomes = listed.sorted { $0.sentAt < $1.sentAt }
         queue.read(outcomes)
         measureBursts(in: outcomes, now: now)
         for outcome in outcomes {
@@ -75,7 +77,9 @@ public struct BandwidthEstimate: Sendable {
 
     /// What is actually arriving: the bits of the last half second over its span.
     private var acknowledged: Double? {
-        guard let first = received.first?.arrival, let last = received.last?.arrival, last - first >= 100_000 else { return nil }
+        // Jitter reorders arrivals: the span is earliest to latest, not first to last.
+        let arrivals = received.map(\.arrival)
+        guard let first = arrivals.min(), let last = arrivals.max(), last - first >= 100_000 else { return nil }
         return Double(received.map(\.bits).reduce(0, +)) / (Double(last - first) / 1_000_000)
     }
 

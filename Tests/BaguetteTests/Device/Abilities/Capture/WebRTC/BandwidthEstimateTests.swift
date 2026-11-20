@@ -121,6 +121,30 @@ struct BandwidthEstimateTests {
         #expect(estimate.target == 8_000_000)
     }
 
+    @Test func `should reach the same target whatever order a report lists its arrivals in`() {
+        var link = Link(capacity: 2_000_000)
+        var reports: [(outcomes: [PacketOutcome], now: Int64)] = []
+        var sequence: UInt16 = 0
+        for report in 1...100 {
+            let now = Int64(report) * 100_000
+            reports.append((stride(from: now - 100_000, to: now, by: 2_500).map { sentAt in
+                defer { sequence &+= 1 }
+                let jitter = Int64(sequence % 4) * 6_000
+                return PacketOutcome(sequence: sequence, sentAt: sentAt, size: 1_200, arrivedAt: link.carry(sentAt: sentAt, size: 1_200).map { $0 + jitter })
+            }, now))
+        }
+        var inOrder = BandwidthEstimate(ceiling: 8_000_000)
+        var shuffled = BandwidthEstimate(ceiling: 8_000_000)
+
+        for report in reports {
+            inOrder.update(with: report.outcomes, now: report.now)
+            // Late arrivals listed first, as a reordered network delivers them.
+            shuffled.update(with: report.outcomes.sorted { ($0.arrivedAt ?? 0) > ($1.arrivedAt ?? 0) }, now: report.now)
+        }
+
+        #expect(shuffled.target == inOrder.target)
+    }
+
     @Test func `should never ask for less than its floor`() {
         var estimate = BandwidthEstimate(floor: 300_000, ceiling: 8_000_000)
         var link = Link(capacity: 100_000)
