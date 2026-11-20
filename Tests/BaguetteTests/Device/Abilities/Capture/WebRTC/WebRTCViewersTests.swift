@@ -43,17 +43,18 @@ private struct Rig {
         } else {
             given(stream).start(on: .any).willThrow(CancellationError())
         }
-        given(screen).stop().willReturn()
-        let (datagrams, handshake, trusted) = (datagrams, handshake, trusted)
-        viewers = WebRTCViewers(ticking: nil, connect: { fingerprint in
-            trusted.value.append(fingerprint)
-            return (datagrams, handshake)
-        })
+        let (datagrams, handshake, trusted, stream) = (datagrams, handshake, trusted, stream)
+        viewers = WebRTCViewers(
+            ticking: nil,
+            connect: { fingerprint in
+                trusted.value.append(fingerprint)
+                return (datagrams, handshake)
+            },
+            stream: { _ in stream })
     }
 
     func admit(_ sdp: String = offer) throws -> (id: String, answer: String) {
-        let stream = stream
-        return try viewers.admit(offer: sdp, on: screen, stream: { _ in stream })
+        try viewers.admit(offer: sdp, on: screen)
     }
 }
 
@@ -92,10 +93,10 @@ struct WebRTCViewersTests {
 
         #expect(throws: (any Error).self) { try rig.admit() }
         #expect(rig.viewers.count == 0)
-        verify(rig.screen).stop().called(1)
+        verify(rig.stream).stop().called(1)
     }
 
-    @Test func `should let a viewer go, and stop its screen, once it hangs up`() throws {
+    @Test func `should let a viewer go, and stop its stream, once it hangs up`() throws {
         let rig = Rig()
         let (id, _) = try rig.admit()
 
@@ -103,7 +104,6 @@ struct WebRTCViewersTests {
 
         #expect(throws: WebRTCViewers.Refusal.unknownViewer(id)) { try rig.viewers.find(id) }
         #expect(rig.viewers.count == 0)
-        verify(rig.screen).stop().called(1)
         verify(rig.stream).stop().called(1)
     }
 

@@ -79,6 +79,10 @@ struct Server: Sendable {
     /// Every device of every kind — what `/devices/:udid/…` resolves. Listed
     /// by `DeviceKinds`, outside the server.
     let allDevices: any Devices
+    /// The live WebRTC (WHEP) viewers: a reference type because a viewer
+    /// outlives the request that admitted it, and its control socket and
+    /// `DELETE` find it by id.
+    let viewers: WebRTCViewers
 
     init(
         simulators: any Simulators,
@@ -95,8 +99,10 @@ struct Server: Sendable {
         devices: LiveCompanionPhones = LiveCompanionPhones(),
         twinScreens: TwinScreens = TwinScreens(),
         twinPoses: TwinPoses = TwinPoses(),
-        allDevices: any Devices
+        allDevices: any Devices,
+        viewers: WebRTCViewers = WebRTCViewers()
     ) {
+        self.viewers = viewers
         self.simulators = simulators
         self.motionSessions = motionSessions
         self.cameraSessions = cameraSessions
@@ -185,6 +191,9 @@ struct Server: Sendable {
         registerDeepLinkRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerNotifyRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerDefaultsRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerWHEPRoutes(
+            on: router, rejectUntrustedBrowser: rejectUntrustedBrowser,
+            trustedWebSocketUpgrade: trustedWebSocketUpgrade)
         registerDeviceTwinRoutes(
             on: router,
             rejectUntrustedBrowser: rejectUntrustedBrowser,
@@ -2248,7 +2257,7 @@ struct Server: Sendable {
     /// Throws when the stream rejects a retune; the route then reports
     /// the error on the socket and closes it, because a codec that
     /// refused its configuration cannot keep delivering valid frames.
-    private static func handleInbound(
+    static func handleInbound(
         line: String,
         stream: any BaguetteDevice.Stream,
         dispatcher: GestureDispatcher,

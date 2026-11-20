@@ -27,14 +27,15 @@ struct InProcessServer {
         allowedHosts: [String] = [],
         grants: PluginGrants = PluginGrants(),
         motionSessions: MotionSessions = MotionSessions(),
-        cameraSessions: CameraSessions = CameraSessions(guestTerminated: { _ in false })
+        cameraSessions: CameraSessions = CameraSessions(guestTerminated: { _ in false }),
+        viewers: WebRTCViewers = WebRTCViewers(ticking: nil, connect: { _ in throw CancellationError() })
     ) {
         server = Server(
             simulators: simulators, chromes: chromes, models: models,
             deviceRenderer: deviceRenderer, plugins: plugins,
             allowedHosts: allowedHosts, grants: grants,
             motionSessions: motionSessions, cameraSessions: cameraSessions,
-            allDevices: devices
+            allDevices: devices, viewers: viewers
         )
     }
 

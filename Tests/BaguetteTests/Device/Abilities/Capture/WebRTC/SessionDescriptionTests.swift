@@ -143,6 +143,16 @@ extension SessionDescriptionTests {
     }
 }
 
+extension SessionDescriptionTests {
+    @Test func `should say why it refused an offer, in words a page can show`() {
+        #expect(SessionDescription.Refusal.noVideo.description == "the offer has no video")
+        #expect(SessionDescription.Refusal.noH264.description
+            == "the offer has no High-profile H.264 in packetization mode 1, the only video baguette sends")
+        #expect(SessionDescription.Refusal.noICECredentials.description == "the offer has no ICE username or password")
+        #expect(SessionDescription.Refusal.noFingerprint.description == "the offer names no DTLS certificate fingerprint")
+    }
+}
+
 @Suite("ICECredentials")
 struct ICECredentialsTests {
     @Test func `should make fresh ICE credentials long enough for the spec, from ICE characters`() {

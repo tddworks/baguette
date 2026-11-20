@@ -74,6 +74,10 @@ public final class WebRTCViewer: @unchecked Sendable {
 
     public var state: State { lock.withLock { current } }
 
+    /// Its own stream, which its page retunes (`set_bitrate`, `force_idr`, …)
+    /// over its control socket as any stream socket's page does.
+    public var ownStream: any Stream { stream }
+
     /// Starts its own stream on `screen`.
     public func start(on screen: any Screen) throws { try stream.start(on: screen) }
 

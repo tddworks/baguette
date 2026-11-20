@@ -5,11 +5,20 @@ import Foundation
 /// mode 1 — what the encoder makes and `H264Packetizer` cuts — or it is
 /// refused; a viewer never answers with another codec.
 public struct SessionDescription: Equatable, Sendable {
-    public enum Refusal: Error, Equatable {
+    public enum Refusal: Error, Equatable, CustomStringConvertible {
         case noVideo
         case noH264
         case noICECredentials
         case noFingerprint
+
+        public var description: String {
+            switch self {
+            case .noVideo: "the offer has no video"
+            case .noH264: "the offer has no High-profile H.264 in packetization mode 1, the only video baguette sends"
+            case .noICECredentials: "the offer has no ICE username or password"
+            case .noFingerprint: "the offer names no DTLS certificate fingerprint"
+            }
+        }
     }
 
     /// The browser's ICE credentials: it expects ours in the answer.
