@@ -700,6 +700,35 @@ this doc.
     recovers toward the rate held before its first cut. A fresh phone run is
     needed to measure the effect on visible freezes and the latency tail.
 
+    **The phone run after it (2026-11-20)**, mobile data over Tailscale, taps
+    over the control socket:
+
+    | 100 taps | p50 | p95 | p99 | misses | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|
+    | paced (new build) | 171 ms | 353 ms | 386 ms | 0 | 25.8 ms | 8.96 |
+    | paced | 150 ms | 254 ms | 318 ms | 1 | 34.9 ms | 12.28 |
+    | no pacer | 142 ms | 271 ms | 302 ms | 0 | 22.2 ms | 12.59 |
+
+    30 s animated list: paced 7.33, 2.85, 5.55, 6.15 Mbps (44.6, 23.2, 34.5,
+    43.9 fps); no pacer 6.81 Mbps (40.1 fps); Pion 4.42 Mbps (31.1 fps). The
+    link varied more between runs than any sender did: these runs neither
+    confirm nor refute the fix. The log says more:
+
+    - **Radio dropouts:** reports with 96–99 % lost, each followed by keyframe
+      requests and a cut — the worst run's cause, and no sender's to avoid.
+    - **Ours — the encoder lags the pacer after a cut.** `cut to 1707 kbps`,
+      then `pacer held a packet 162 ms`, `226 ms`, before `retune 8000 →
+      1707`: the pacer slows at once, the encoder (retuned at most once a
+      second) keeps making 8 Mbps, and the backlog is local. libwebrtc retunes
+      on every target change.
+    - **Ours — the cap lifts on a dropout's catch-up.** `retune 2098 → 8000`,
+      `1504 → 6528`: what was held in the network during a stall arrives at
+      once, the half-second window reads it as >20 % over the cap, the cap
+      lifts and the target jumps back.
+
+    Next: retune down at once (the once-a-second limit only for increases),
+    and lift the cap only on arrival sustained over a longer window.
+
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
     samples); and each tap is answered in its own colour (left red, right green,
