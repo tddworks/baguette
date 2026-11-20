@@ -243,12 +243,14 @@ struct WebRTCViewerTests {
         verify(rig.datagrams).close().called(1)
     }
 
-    @Test func `should hang up when its stream fails`() {
+    @Test func `should hang up when its stream fails`() async throws {
         let rig = Rig()
         rig.goLive()
 
         rig.sink.value?.fail(CancellationError())
 
+        // Off the stream's queue, so a moment later.
+        for _ in 0..<100 where rig.viewer.state != .hungUp { try await Task.sleep(for: .milliseconds(10)) }
         #expect(rig.viewer.state == .hungUp)
     }
 
@@ -301,5 +303,66 @@ struct WebRTCViewerTests {
         rig.viewer.hangUp()
 
         #expect(told.value == 1)
+    }
+}
+
+/// A stream that, like AVCCStream, fails from its own serial queue and stops
+/// with `queue.sync` — and says whether it was asked to stop from inside it,
+/// which would deadlock (libdispatch traps on it).
+private final class SerialStream: Stream, @unchecked Sendable {
+    private let queue = DispatchQueue(label: "test.serial-stream")
+    private let key = DispatchSpecificKey<Bool>()
+    private let lock = NSLock()
+    private var sink: (any FrameSink)?
+    private var _stoppedFromOwnQueue = false
+    private var _stopped = false
+    let config = StreamConfig.default
+
+    init(sink: any FrameSink) {
+        self.sink = sink
+        queue.setSpecific(key: key, value: true)
+    }
+
+    var stoppedFromOwnQueue: Bool { lock.withLock { _stoppedFromOwnQueue } }
+    var stopped: Bool { lock.withLock { _stopped } }
+
+    func failFromItsQueue() {
+        queue.sync { sink?.fail(CancellationError()) }
+    }
+
+    func start(on screen: any Screen) throws {}
+    func stop() {
+        if DispatchQueue.getSpecific(key: key) == true {
+            lock.withLock { _stoppedFromOwnQueue = true }
+            return
+        }
+        queue.sync {}
+        lock.withLock { _stopped = true }
+    }
+    func apply(_ config: StreamConfig) throws {}
+    func requestKeyframe() {}
+    func requestSnapshot() {}
+}
+
+@Suite("WebRTCViewer when its stream fails")
+struct WebRTCViewerStreamFailureTests {
+    @Test func `should hang up when its stream fails, without stopping the stream from inside its own queue`() async throws {
+        let datagrams = MockDatagrams()
+        given(datagrams).addresses.willReturn(here)
+        given(datagrams).onReceive(.any).willReturn()
+        given(datagrams).close().willReturn()
+        let handshake = MockHandshake()
+        given(handshake).fingerprint.willReturn("sha-256 AA:BB")
+        let made = Box<SerialStream?>(nil)
+        let viewer = WebRTCViewer(
+            offer: offer, ice: ours, datagrams: datagrams, handshake: handshake,
+            stream: { sink in let stream = SerialStream(sink: sink); made.value = stream; return stream })
+
+        made.value?.failFromItsQueue()
+
+        for _ in 0..<100 where viewer.state != .hungUp { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(viewer.state == .hungUp)
+        #expect(made.value?.stoppedFromOwnQueue == false)
+        #expect(made.value?.stopped == true)
     }
 }

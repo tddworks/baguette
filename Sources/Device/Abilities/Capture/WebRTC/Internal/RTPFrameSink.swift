@@ -1,7 +1,7 @@
 import Foundation
 
 /// The `FrameSink` a viewer's own stream writes to: each AVCC envelope goes
-/// to the viewer, a failed stream hangs it up. Held weakly, so a hung-up
+/// to the viewer, a failed stream hangs it up (off the stream's queue). Held weakly, so a hung-up
 /// viewer isn't kept alive by its stream.
 final class RTPFrameSink: FrameSink, @unchecked Sendable {
     private let lock = NSLock()
@@ -13,5 +13,11 @@ final class RTPFrameSink: FrameSink, @unchecked Sendable {
 
     func write(_ data: Data) { viewer?.show(data) }
 
-    func fail(_ error: any Error) { viewer?.hangUp() }
+    /// A stream fails from its own encoding queue, and stopping it waits on that
+    /// queue (`AVCCStream.stop` does `queue.sync`): hanging up right here would
+    /// deadlock, which libdispatch traps. So the hang-up happens off that queue.
+    func fail(_ error: any Error) {
+        guard let viewer else { return }
+        DispatchQueue.global().async { viewer.hangUp() }
+    }
 }
