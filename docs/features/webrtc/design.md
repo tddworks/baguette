@@ -831,12 +831,13 @@ Each step stands alone: test-first, its own PR, measured on the phone where
 it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
 `Congestion/`; 3 is the serve routes; 4–7 are WebRTCKit's `Transport/`.
 
-1. **Resend guard** (`Media/`, pure logic). A resend is skipped when its
-   packet is too old to help (older than the browser can still use), and
-   resends stay under a share of the target bitrate, so a loss burst can't
-   add congestion of its own (libwebrtc does both). *Pinned: "should not
-   resend a packet too old to arrive in time", "should keep resends under
-   their share of the target".*
+1. ~~**Resend guard**~~ **DONE** (`Media/PacketHistory`). A resend is
+   skipped when its packet was first sent over 1 s ago, when it was resent
+   less than 100 ms ago (a repeated NACK), or when resends would take more
+   than half the target bitrate (a token bucket holding a second's worth), so
+   a loss burst can't add congestion of its own (libwebrtc caps them too).
+   *Pinned: `PacketHistoryTests`, "should resend a lost packet once for
+   reports that repeat a moment apart".*
 2. **RTX** (RFC 4588; `Signaling/`, `Media/`, `Congestion/`). Today a resend
    is the stored packet again — same transport-wide sequence number — so
    `SendHistory` counts a loss repaired within its 500 ms grace as a packet

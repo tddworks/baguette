@@ -103,6 +103,19 @@ struct WebRTCSenderTests {
         #expect(rig.packets.map(\.marker) == [false, true])
     }
 
+    @Test func `should resend a lost packet once for reports that repeat a moment apart`() {
+        let rig = Rig()
+        rig.goLive()
+        rig.sender.send(EncodedFrame(avcc: picture(Data([0x65, 1, 2, 3])), isKeyframe: true, parameterSets: [sps, pps]))
+        let before = rig.packets.count
+
+        rig.sender.act(on: [.lost([1000])])
+        rig.sender.act(on: [.lost([1000])])
+
+        #expect(rig.packets.count == before + 1)
+        #expect(rig.packets.last?.sequence == 1000)
+    }
+
     @Test func `should tell its owner what the link can take after the browser's feedback`() {
         let rig = Rig(target: 4_000_000)
         rig.goLive()

@@ -29,8 +29,6 @@ public final class WebRTCSender: @unchecked Sendable {
 
     /// Consent freshness (RFC 7675): a browser that stops checking has gone.
     public static let consentTimeout: TimeInterval = 30
-    /// Packets kept for a NACK: about a second of a busy screen.
-    private static let historySize = 1024
 
     /// Runs `work` after a delay: how the pacer comes back for its next slice.
     public typealias Schedule = @Sendable (_ after: TimeInterval, _ work: @escaping @Sendable () -> Void) -> Void
@@ -58,8 +56,8 @@ public final class WebRTCSender: @unchecked Sendable {
     private var browser: DatagramAddress?
     private var srtp: SRTPContext?
     private var sequence: UInt16
-    private var history: [UInt16: Data] = [:]
-    private var historyOrder: [UInt16] = []
+    /// What it sent, for the browser's NACKs: which to resend is its call.
+    private var history = PacketHistory()
     private let packetizer = H264Packetizer()
     private var pacer: Pacer<OutboundPacket>
     /// Whether the pacer's next slice is already scheduled.
@@ -210,7 +208,7 @@ public final class WebRTCSender: @unchecked Sendable {
             for ask in asks {
                 switch ask {
                 case .lost(let sequences):
-                    let packets = sequences.compactMap { history[$0] }
+                    let packets = history.resend(sequences, at: now, target: congestion.target ?? encoderBitrate())
                     packets.forEach { datagrams.send($0, to: browser) }
                     requested += sequences.count
                     resent += packets.count
@@ -292,7 +290,7 @@ public final class WebRTCSender: @unchecked Sendable {
                 extensions: congestion.extensions(at: now))
             let wire = srtp!.protect(stamped)
             datagrams.send(wire, to: browser)
-            remember(wire, as: packet.sequence)
+            history.sent(wire, sequence: packet.sequence, at: now)
             congestion.sent(size: wire.count, at: now)
             if outbound.endsKeyframe { record("keyframe sent rtpTimestamp=\(packet.timestamp)", at: now) }
         }
@@ -307,11 +305,5 @@ public final class WebRTCSender: @unchecked Sendable {
             guard current == .live, let browser else { return }
             sendPaced(to: browser, at: microsecondsNow())
         }
-    }
-
-    private func remember(_ wire: Data, as sequence: UInt16) {
-        history[sequence] = wire
-        historyOrder.append(sequence)
-        if historyOrder.count > Self.historySize { history[historyOrder.removeFirst()] = nil }
     }
 }
