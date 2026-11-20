@@ -825,6 +825,53 @@ this doc.
 12. ~~**Docs**~~ **DONE**: a user README, `serve.md` rows, CHANGELOG; the bench
     kit pointed at the native route. The full matrix on it is still to run.
 
+## 6b · Next: resends, then connectivity (simplest first)
+
+Each step stands alone: test-first, its own PR, measured on the phone where
+it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
+`Congestion/`; 3 is the serve routes; 4–7 are WebRTCKit's `Transport/`.
+
+1. **Resend guard** (`Media/`, pure logic). A resend is skipped when its
+   packet is too old to help (older than the browser can still use), and
+   resends stay under a share of the target bitrate, so a loss burst can't
+   add congestion of its own (libwebrtc does both). *Pinned: "should not
+   resend a packet too old to arrive in time", "should keep resends under
+   their share of the target".*
+2. **RTX** (RFC 4588; `Signaling/`, `Media/`, `Congestion/`). Today a resend
+   is the stored packet again — same transport-wide sequence number — so
+   `SendHistory` counts a loss repaired within its 500 ms grace as a packet
+   that *arrived late*: the loss estimate never sees it, and the delay
+   estimate gets a fake queue sample of one resend round trip. With RTX, the
+   answer takes the offer's `rtx` format (`apt=` our H.264) and an
+   `ssrc-group:FID`; a resend leaves on its own stream with the original
+   sequence number in front, a new transport-wide number and its real send
+   time. *Pinned: "should count a loss its resend repaired as a loss, not a
+   delay", "should answer the offer's rtx format for our H.264".* Measure:
+   freezes and cuts on the phone, before and after.
+3. **Authentication** (serve). A browser reachable from the internet can
+   reach `serve`, which drives the device: WHEP and the control socket need
+   a credential first (a token per session at least). The prerequisite for
+   4–7. *Decide first: a token in the URL, or per-viewer sign-in.*
+4. **Server-reflexive candidate** (`--stun stun:host:port`). The kit asks a
+   STUN server for its public address and offers it beside the host ones
+   (a STUN binding request; `STUNMessage` already reads the reply's shape).
+   Alone it reaches only a NAT that lets anyone in — most don't; step 5
+   makes it useful.
+5. **Full ICE.** The kit stops being ICE-lite: it pairs its candidates with
+   the browser's, sends its own checks (opening its NAT toward the browser),
+   and nominates a pair. The browser's candidates come with the offer (the
+   page waits for gathering) or by WHEP trickle (`PATCH`). Covers most home
+   and office NATs.
+6. **TURN client** (`--turn turn:host:3478 --turn-user … --turn-pass …`).
+   Allocate, permissions, channels, refresh: a relay candidate that gets
+   through symmetric NATs and strict firewalls, at the relay's latency.
+   *Decide first: self-hosted coturn or a provider.*
+7. **WHEP `Link: rel="ice-server"`.** The answer names the STUN and TURN
+   servers, so the browser uses them too.
+
+Until 3–6 land, Tailscale is the way to view from outside the network: it
+gives all of this, privately.
+
 ## 7 · Open questions
 
 1. ~~**Which WebRTC stack?**~~ **ANSWERED: our own, in Swift.** The BoringSSL
