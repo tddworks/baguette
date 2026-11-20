@@ -643,8 +643,17 @@ this doc.
     of the 307, not all: the remaining ~220 ms is the touch's way through the
     simulator — our HID message, backboardd, Safari's web process — which the
     device page's socket pays too, so it is in what users feel. Where those
-    220 ms go is its own investigation (`IndigoHIDInput`'s main-thread hop
-    first). Tap-to-photon on loopback is then ~220 ms input + ~80 ms video.
+    220 ms go was measured next, and wasn't the simulator: the tap itself
+    took 21 ms (its 20 ms hold; each HID message confirmed at once), and the
+    route spent ~220 ms *finding the device* — every per-device request asks
+    every source, and the phones source ran `devicectl list devices` (~195 ms)
+    to say "not mine". **Fixed:** `CoreDevicePhones` reads the list once,
+    answers from it for 2 s, then answers at once while a fresh one is read
+    behind. POST → `touchstart` is now ~50 ms (40–61), the request ~70 ms,
+    and on loopback tap-to-photon p50 ~110 / p95 ~134 ms unpaced, p50 ~118 /
+    p95 ~146 paced (one 50-tap run each, which now vary ±40 ms run to run —
+    the floor no longer hides the noise). The pacer's own wait, logged down
+    to 5 ms for one run: at most 6 ms, pacing at the full 8 Mbps.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
