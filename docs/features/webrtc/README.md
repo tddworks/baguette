@@ -84,6 +84,10 @@ retunes again within about a second if it disagrees.
 - **Host addresses only.** baguette answers with this Mac's own IPv4 addresses
   (LAN, Tailscale, loopback); there is no STUN or TURN, so a viewer behind a
   NAT that can't reach one of them gets no picture.
+- **Media on any free UDP port, unless told.** Each viewer takes its own port;
+  to open a firewall for them, give `baguette serve --webrtc-ports 8190-8194`
+  and each viewer takes the first free one in the range (a full range refuses
+  the next viewer).
 - **A viewer goes when its browser does.** Switching format or leaving the page
   hangs it up; if that goodbye never arrives, it hangs up after 30 s without a
   connectivity check, and its encoder stops either way.

@@ -29,7 +29,7 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// shown — H.264 at the stream socket's defaults.
     public init(
         ticking interval: TimeInterval? = 1,
-        connect: @escaping Connect = WebRTCViewers.onThisMac,
+        connect: @escaping Connect = WebRTCViewers.onThisMac(),
         stream: @escaping (any FrameSink) -> any Stream = { sink in
             StreamFormat.avcc.makeStream(config: .default, sink: sink, quality: 0.5)
         }
@@ -46,11 +46,14 @@ public final class WebRTCViewers: @unchecked Sendable {
 
     deinit { timer?.cancel() }
 
-    /// A UDP socket on this Mac and a BoringSSL DTLS server.
-    public static let onThisMac: Connect = { fingerprint in
-        let handshake = try BoringSSLHandshake()
-        handshake.expect(fingerprint)
-        return (try UDPDatagrams(), handshake)
+    /// A UDP socket on this Mac, on the first free port of `ports`, and a
+    /// BoringSSL DTLS server.
+    public static func onThisMac(ports: MediaPorts = .any) -> Connect {
+        { fingerprint in
+            let handshake = try BoringSSLHandshake()
+            handshake.expect(fingerprint)
+            return (try ports.bind { try UDPDatagrams(port: $0) }, handshake)
+        }
     }
 
     public var count: Int { lock.withLock { admitted.count } }

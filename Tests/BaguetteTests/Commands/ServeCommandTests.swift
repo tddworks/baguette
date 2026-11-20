@@ -19,6 +19,12 @@ struct ServeCommandTests {
         return root
     }
 
+    @Test func `should keep WebRTC media to the ports it is given`() throws {
+        #expect(try ServeCommand.parse(["--webrtc-ports", "8190-8194"]).mediaPorts == MediaPorts(8190...8194))
+        #expect(try ServeCommand.parse([]).mediaPorts == .any)
+        #expect(throws: (any Error).self) { try ServeCommand.parse(["--webrtc-ports", "lots"]) }
+    }
+
     @Test func `should offer no plugin at all when told to ignore them`() throws {
         let dir = try authoring()
         defer { try? FileManager.default.removeItem(at: dir) }

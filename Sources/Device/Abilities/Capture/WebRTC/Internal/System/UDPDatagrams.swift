@@ -1,8 +1,8 @@
 import Darwin
 import Foundation
 
-/// The `Datagrams` a viewer runs: one IPv4 UDP socket on an ephemeral port,
-/// bound on every interface, read on its own queue.
+/// The `Datagrams` a viewer runs: one IPv4 UDP socket on `port` (0: an
+/// ephemeral one), bound on every interface, read on its own queue.
 public final class UDPDatagrams: Datagrams, @unchecked Sendable {
     private let descriptor: Int32
     private let port: UInt16
@@ -13,12 +13,13 @@ public final class UDPDatagrams: Datagrams, @unchecked Sendable {
 
     struct Failure: Error { let step: String; let code: Int32 }
 
-    public init() throws {
+    public init(port wanted: UInt16 = 0) throws {
         let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard fd >= 0 else { throw Failure(step: "socket", code: errno) }
         var any = sockaddr_in()
         any.sin_family = sa_family_t(AF_INET)
         any.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        any.sin_port = wanted.bigEndian
         var length = socklen_t(MemoryLayout<sockaddr_in>.size)
         let bound = withUnsafeMutablePointer(to: &any) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
