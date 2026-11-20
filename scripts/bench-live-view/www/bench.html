@@ -98,7 +98,8 @@ async function startWebRTC() {
   // As the device page does: the server's STUN servers, then an offer that carries the gathered candidates.
   let iceServers = [];
   if (!SPIKE && !PION) try { iceServers = (await (await fetch(SERVE + '/webrtc/ice-servers')).json()).iceServers || []; } catch (_) {}
-  const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle', iceServers });
+  // `relay=1`: the browser may only use relayed candidates — proves the TURN path.
+  const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle', iceServers, iceTransportPolicy: q.get('relay') === '1' ? 'relay' : 'all' });
   let viewer;
   R.pc = pc;
   // Hang up on setup failure as well, without waiting for consent to expire.

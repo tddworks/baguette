@@ -77,7 +77,7 @@ private struct Rig {
 
     init(
         progress: HandshakeProgress = .complete(replies: [], srtpExport: export), target: Int? = nil,
-        offer: SessionDescription = offer, reflexive: DatagramAddress? = nil
+        offer: SessionDescription = offer, reflexive: DatagramAddress? = nil, relay: DatagramAddress? = nil
     ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
@@ -99,7 +99,7 @@ private struct Rig {
             rtxSSRC: 0xFEED_F00D, firstRetransmissionSequence: 500,
             datagrams: datagrams, handshake: handshake, congestion: congestion,
             encoderBitrate: { 8_000_000 }, events: events,
-            schedule: { [scheduled] _, work in scheduled.value.append(work) }, reflexive: reflexive)
+            schedule: { [scheduled] _, work in scheduled.value.append(work) }, reflexive: reflexive, relay: relay)
     }
 
     func deliver(_ data: Data, from address: DatagramAddress = browser) { received.value?(data, address) }
@@ -169,6 +169,12 @@ struct WebRTCSenderTests {
         verify(rig.congestion).sent(size: .any, at: .any).called(3)
     }
 
+    @Test func `should offer its relayed address when it has one`() {
+        let rig = Rig(relay: DatagramAddress(ip: [198, 51, 100, 4], port: 50001))
+
+        #expect(rig.sender.answer.contains("198.51.100.4 50001 typ relay raddr 0.0.0.0 rport 0"))
+    }
+
     @Test func `should offer its public address beside its own when it has one`() {
         let rig = Rig(reflexive: DatagramAddress(ip: [203, 0, 113, 7], port: 61000))
 
@@ -193,6 +199,22 @@ struct WebRTCSenderTests {
         rig.pass()
 
         #expect(rig.checks.count == 3)
+    }
+
+    @Test func `should keep sending where the browser nominated, whatever path checks it later`() throws {
+        let rig = Rig()
+        let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+        let other = DatagramAddress(ip: [198, 51, 100, 4], port: 50001)
+        func check(nominating: Bool) -> Data {
+            STUNMessage.check(from: browserICE, to: ours, priority: 1, tieBreaker: 1,
+                              transactionID: (0..<12).map { _ in UInt8.random(in: 0...255) }, nominating: nominating)
+        }
+
+        rig.deliver(check(nominating: true), from: browser)
+        rig.deliver(check(nominating: false), from: other)
+        rig.deliver(dtlsHello, from: browser)
+
+        #expect(rig.sender.state == .live)
     }
 
     @Test func `should stay ICE-lite and check no one when the offer gives no addresses`() {

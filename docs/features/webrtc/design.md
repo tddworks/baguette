@@ -879,10 +879,23 @@ it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
    for gathering (at most 2 s) before posting. Checked in Chrome on this Mac:
    the device page fetched its servers, posted its candidates, answered the
    sender's check, and painted the phone's screen.
-6. **TURN client** (`--turn turn:host:3478 --turn-user … --turn-pass …`).
-   Allocate, permissions, channels, refresh: a relay candidate that gets
-   through symmetric NATs and strict firewalls, at the relay's latency.
-   *Decide first: self-hosted coturn or a provider.*
+6. ~~**TURN client**~~ **DONE** (`serve --turn turn:host:3478 --turn-user …
+   --turn-pass …`; `Transport/TURNMessage`, `TURNAllocation`,
+   `RelayedDatagrams`). Each viewer allocates on the server (an unsigned
+   Allocate, the 401's realm and nonce, then signed with MD5(user:realm:pass)),
+   lets the browser's candidates through (CreatePermission), offers the
+   relayed address as `typ relay` (lowest), and keeps both alive until it
+   hangs up, then releases it. `RelayedDatagrams` unwraps a peer's Data
+   indications as if the peer sent them and answers that peer back through
+   the relay (Send indications), so the sender never knows the path. The page
+   gets the server and its credentials too. The sender now stays on the pair
+   the browser nominates (USE-CANDIDATE): with several working paths, its DTLS
+   comes from there. Verified against Pion's TURN server: a system test
+   carries datagrams both ways through a real relay
+   (`BAGUETTE_TURN_SERVER=turn:127.0.0.1:3478`), and Chrome restricted to
+   relayed candidates played (20 taps, 0 misses, p50 87 ms) with both sides
+   allocating on the server — which pair carried the media isn't logged.
+   Any TURN server works: coturn, or a provider's.
 7. ~~**WHEP `Link: rel="ice-server"`**~~ **DONE.** The answer names the ICE
    servers (`Link: <stun:…>; rel="ice-server"`), and `GET /webrtc/ice-servers`
    gives them to our page before its offer, so its browser gathers its own
