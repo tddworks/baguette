@@ -53,6 +53,9 @@ public final class WebRTCViewer: @unchecked Sendable {
     /// Whether the pacer's next slice is already scheduled.
     private var sliceScheduled = false
     private var lastHoldLog: Int64?
+    /// Packets the browser reported lost, and those resent, since `lostSince`.
+    private var lostCount = (asked: 0, resent: 0)
+    private var lostSince: Int64?
     private let schedule: Schedule
 
     /// Runs `work` after a delay: how the pacer comes back for its next slice.
@@ -214,7 +217,9 @@ public final class WebRTCViewer: @unchecked Sendable {
             for ask in asks {
                 switch ask {
                 case .lost(let sequences):
-                    sequences.compactMap { history[$0] }.forEach { datagrams.send($0, to: browser) }
+                    let resent = sequences.compactMap { history[$0] }
+                    resent.forEach { datagrams.send($0, to: browser) }
+                    noteLost(asked: sequences.count, resent: resent.count, at: now)
                 case .keyframeRequest:
                     continue
                 case .transportFeedback, .bandwidthEstimate:
@@ -225,11 +230,26 @@ public final class WebRTCViewer: @unchecked Sendable {
             guard heard, let target = congestion.target else { return nil }
             return retune.bitrate(for: target, current: stream.config.bitrateBps, now: now)
         }
-        if asks.contains(.keyframeRequest) { stream.requestKeyframe() }
+        if asks.contains(.keyframeRequest) {
+            log("[webrtc] browser lost a picture: keyframe asked for")
+            stream.requestKeyframe()
+        }
         if let retuneTo {
             log("[webrtc] retune \(stream.config.bitrateBps / 1_000) → \(retuneTo / 1_000) kbps")
             try? stream.update(.bitrate(retuneTo))
         }
+    }
+
+    /// Losses add up and are logged at most once a second: a lossy link
+    /// reports them in every feedback. Called under the lock.
+    private func noteLost(asked: Int, resent: Int, at now: Int64) {
+        lostCount.asked += asked
+        lostCount.resent += resent
+        if let since = lostSince, now - since < 1_000_000 { return }
+        let window = lostSince.map { " in \((now - $0) / 1_000) ms" } ?? ""
+        log("[webrtc] browser lost \(lostCount.asked) packets\(window), \(lostCount.resent) resent")
+        lostCount = (0, 0)
+        lostSince = now
     }
 
     private func microsecondsNow() -> Int64 { Int64(clock().timeIntervalSince(started) * 1_000_000) }

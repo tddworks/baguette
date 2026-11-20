@@ -72,6 +72,16 @@ follows what arrives); `transport-cc` doesn't. The server log shows each change:
 [baguette] [webrtc] retune 8000 → 1700 kbps
 ```
 
+Reading a stall in the log: each cut of the bitrate says why, the queue it
+measured or the share lost; a picture the browser lost asks for a keyframe;
+packets it reported lost add up once a second:
+
+```
+[baguette] [webrtc] transport-cc cut to 4071 kbps: queue +62 ms
+[baguette] [webrtc] browser lost 14 packets in 1003 ms, 14 resent
+[baguette] [webrtc] browser lost a picture: keyframe asked for
+```
+
 Each viewer's packets are paced: a keyframe leaves over a few milliseconds at
 2.5 × the target bitrate instead of in one burst, which a phone link's queue
 takes without stalling. `?pacing=off` on the `POST` sends every packet at once —

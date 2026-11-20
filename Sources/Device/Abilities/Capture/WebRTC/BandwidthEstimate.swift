@@ -20,6 +20,23 @@ public struct BandwidthEstimate: Sendable {
     public let ceiling: Int
     public private(set) var target: Int
 
+    /// Why the estimate came down: the queue it measured (microseconds of
+    /// delay over the link's floor), or the share of packets lost.
+    public enum CutCause: Equatable, Sendable {
+        case queue(delay: Int64)
+        case loss(Double)
+    }
+
+    /// Its latest cut: when (the viewer's clock), why, and the rate it cut to.
+    public struct Cut: Equatable, Sendable {
+        public let at: Int64
+        public let cause: CutCause
+        public let to: Int
+    }
+
+    /// The last cut it made, or nil while it has made none.
+    public private(set) var lastCut: Cut?
+
     private enum RateState { case hold, increase, decrease }
 
     private var queue = QueueDelay()
@@ -149,7 +166,11 @@ public struct BandwidthEstimate: Sendable {
         case .decrease:
             beforeCut = delayRate
             if let acknowledged {
-                delayRate = min(delayRate, Self.backoff * acknowledged)
+                let cut = Self.backoff * acknowledged
+                if cut < delayRate {
+                    lastCut = Cut(at: now, cause: .queue(delay: queue.queue), to: Int(max(cut, Double(floor))))
+                }
+                delayRate = min(delayRate, cut)
                 linkCapacity = linkCapacity.map { 0.95 * $0 + 0.05 * acknowledged } ?? acknowledged
             }
             state = .hold
@@ -167,6 +188,7 @@ public struct BandwidthEstimate: Sendable {
         } else if loss > 0.10, lastLossDecrease.map({ now - $0 >= 300_000 }) ?? true {
             lossRate *= 1 - 0.5 * loss
             lastLossDecrease = now
+            lastCut = Cut(at: now, cause: .loss(loss), to: Int(max(lossRate, Double(floor))))
         }
         lossRate = min(max(lossRate, Double(floor)), Double(ceiling))
     }

@@ -92,6 +92,41 @@ struct BandwidthEstimateTests {
         #expect(estimate.target <= 4_000_000)
     }
 
+    @Test func `should say a cut came from the queue growing, and by how much`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        var link = Link(capacity: 2_000_000)
+
+        _ = run(&estimate, over: &link, seconds: 5)
+
+        guard case .queue(let delay)? = estimate.lastCut?.cause else {
+            Issue.record("no queue cut: \(String(describing: estimate.lastCut))")
+            return
+        }
+        #expect(delay >= 40_000)
+    }
+
+    @Test func `should say a cut came from loss, and how much was lost`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        var link = Link(capacity: 50_000_000, lossEvery: 5)   // 20% loss
+
+        _ = run(&estimate, over: &link, seconds: 10)
+
+        guard case .loss(let fraction)? = estimate.lastCut?.cause else {
+            Issue.record("no loss cut: \(String(describing: estimate.lastCut))")
+            return
+        }
+        #expect(abs(fraction - 0.2) < 0.05)
+    }
+
+    @Test func `should have made no cut on a link with room to spare`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        var link = Link(capacity: 50_000_000)
+
+        _ = run(&estimate, over: &link, seconds: 10)
+
+        #expect(estimate.lastCut == nil)
+    }
+
     @Test func `should shrug off a little loss`() {
         var estimate = BandwidthEstimate(ceiling: 8_000_000)
         var link = Link(capacity: 50_000_000, lossEvery: 100)   // 1% loss
