@@ -2,13 +2,34 @@ import BaguetteDevice
 import Foundation
 
 /// The CoreDevice family as a source of `Devices`: the real phones
-/// `devicectl list devices` knows. Read fresh on every call (~0.2 s).
-/// A host where devicectl can't list (no Xcode 15+) has no phones.
+/// `devicectl list devices` knows. Listing runs devicectl (~0.2 s), and every
+/// per-device request asks every source, so a simulator's tap paid it too:
+/// the first listing is waited for; for `freshness` after it, the last one
+/// answers; after that it still answers at once while a fresh one is read
+/// behind (`refresh`), so a phone plugged in shows within a couple of seconds
+/// and no request waits on devicectl again. A host where devicectl can't list
+/// (no Xcode 15+) has no phones.
 final class CoreDevicePhones: Devices, @unchecked Sendable {
-    private let devicectl: Devicectl
+    /// Runs work off the caller's thread.
+    typealias Refresh = @Sendable (_ work: @escaping @Sendable () -> Void) -> Void
 
-    init(devicectl: Devicectl = Devicectl()) {
+    static let freshness: TimeInterval = 2
+
+    private let devicectl: Devicectl
+    private let clock: @Sendable () -> Date
+    private let refresh: Refresh
+    private let lock = NSLock()
+    private var listed: (at: Date, phones: [PhysicalPhone])?
+    private var refreshing = false
+
+    init(
+        devicectl: Devicectl = Devicectl(),
+        clock: @escaping @Sendable () -> Date = Date.init,
+        refresh: @escaping Refresh = { work in DispatchQueue.global(qos: .utility).async(execute: work) }
+    ) {
         self.devicectl = devicectl
+        self.clock = clock
+        self.refresh = refresh
     }
 
     var all: [any Device] {
@@ -20,6 +41,31 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
     }
 
     private func phones() -> [PhysicalPhone] {
+        let now = clock()
+        let (last, stale) = lock.withLock { () -> ([PhysicalPhone]?, Bool) in
+            guard let listed else { return (nil, false) }
+            let stale = now.timeIntervalSince(listed.at) >= Self.freshness && !refreshing
+            if stale { refreshing = true }
+            return (listed.phones, stale)
+        }
+        guard let last else {
+            let phones = list()
+            lock.withLock { listed = (clock(), phones) }
+            return phones
+        }
+        if stale {
+            refresh { [self] in
+                let phones = list()
+                lock.withLock {
+                    listed = (clock(), phones)
+                    refreshing = false
+                }
+            }
+        }
+        return last
+    }
+
+    private func list() -> [PhysicalPhone] {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("baguette-devicectl-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: file) }

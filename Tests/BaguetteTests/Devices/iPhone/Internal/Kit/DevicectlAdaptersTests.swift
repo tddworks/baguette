@@ -220,6 +220,39 @@ struct CoreDevicePhonesTests {
         #expect(Array(fake.arguments[0].prefix(4)) == ["devicectl", "list", "devices", "--quiet"])
     }
 
+    @Test func `should answer from its last listing while it is fresh, without asking devicectl again`() throws {
+        let fake = FakeDevicectl(), now = Clock()
+        fake.writeFile = { path, _ in FileManager.default.createFile(atPath: path, contents: listing("first")) }
+        let phones = CoreDevicePhones(
+            devicectl: Devicectl(makeSubprocess: fake.make), clock: { now.value }, refresh: { _ in })
+
+        _ = try phones.find(id: DeviceID(phoneUDID))
+        now.value += 1
+        let again = try phones.find(id: DeviceID("SOME-SIMULATOR"))
+
+        #expect(again == nil)
+        #expect(fake.arguments.count == 1)
+    }
+
+    @Test func `should answer at once from a stale listing, and refresh it behind`() throws {
+        let fake = FakeDevicectl(), now = Clock(), behind = Deferred()
+        fake.writeFile = { path, _ in FileManager.default.createFile(atPath: path, contents: listing("first")) }
+        let phones = CoreDevicePhones(
+            devicectl: Devicectl(makeSubprocess: fake.make), clock: { now.value }, refresh: { behind.work.append($0) })
+        _ = phones.all
+
+        now.value += 3
+        fake.writeFile = { path, _ in FileManager.default.createFile(atPath: path, contents: listing("second")) }
+        let stale = try #require(try phones.find(id: DeviceID(phoneUDID)))
+        #expect(stale.name == "first")
+        #expect(fake.arguments.count == 1)
+
+        behind.work.forEach { $0() }
+
+        #expect(fake.arguments.count == 2)
+        #expect(try phones.find(id: DeviceID(phoneUDID))?.name == "second")
+    }
+
     @Test func `should list no phones when devicectl can't list them`() {
         let fake = FakeDevicectl()
         fake.status = 1
@@ -292,5 +325,34 @@ private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async throws
     while !condition() {
         guard Date() < deadline else { Issue.record("timed out"); return }
         try await Task.sleep(for: .milliseconds(5))
+    }
+}
+
+/// devicectl's list of one phone, named `name`.
+private func listing(_ name: String) -> Data {
+    Data(#"""
+    {"result":{"devices":[{"connectionProperties":{"pairingState":"paired","tunnelState":"disconnected"},
+     "deviceProperties":{"name":"\#(name)","bootState":"booted","developerModeStatus":"enabled","osVersionNumber":"27.0.1"},
+     "hardwareProperties":{"udid":"\#(phoneUDID)","reality":"physical","productType":"iPhone19,7",
+       "marketingName":"iPhone 18 Pro Max","platform":"iOS"}}]}}
+    """#.utf8)
+}
+
+private final class Clock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var now = Date(timeIntervalSince1970: 1_000)
+    var value: Date {
+        get { lock.withLock { now } }
+        set { lock.withLock { now = newValue } }
+    }
+}
+
+/// Work handed to run in the background, run when the test says.
+private final class Deferred: @unchecked Sendable {
+    private let lock = NSLock()
+    private var queued: [@Sendable () -> Void] = []
+    var work: [@Sendable () -> Void] {
+        get { lock.withLock { queued } }
+        set { lock.withLock { queued = newValue } }
     }
 }
