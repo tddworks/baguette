@@ -479,7 +479,8 @@ this doc.
        source (draft-ietf-rmcat-gcc, libwebrtc defaults) noted here.
     6. ~~*`WebRTCViewer` retunes its encoder*~~ **DONE** (laws 11–12).
     7. *Prove it* on a throttled link (Network Link Conditioner or `impair.sh`).
-    A pacer (spacing a keyframe's burst) is a later slice if the bench needs it.
+    8. *A pacer* (spacing each frame's packets at the target rate): the bench
+       now asks for it — see "Against a production sender" below.
 
     **Rebuilt from first principles after the phone test (2026-11-20).** On the
     phone, transport-cc blurred the picture where REMB didn't. A simulated link
@@ -514,6 +515,47 @@ this doc.
     ~0.5 s slower than before; a retune is a
     `StreamConfig.Change` the stream applies on its own queue, so it can't undo
     a `set_fps` that lands at the same moment.
+
+    **Against a production sender (2026-11-20).** Our estimator beside Pion's
+    GCC (`pion/interceptor` v0.1.51 `pkg/gcc`, a port of libwebrtc's goog_cc):
+
+    | | Pion / libwebrtc | Ours | Why |
+    |---|---|---|---|
+    | Cut on overuse | 0.85 × received rate | same | — |
+    | Climb | 8 %/s; additive near the last cut | same shape: 8 %/s; one packet per 200 ms within 20 % of capacity | Pion keys "near" to the cuts' mean ± 3σ and uses the RTT; ours a fixed 200 ms |
+    | Climb cap | 1.5 × received rate, never lowers the target | same | — |
+    | Received rate | 500 ms window, by arrival | same | — |
+    | Loss | < 2 % climb, > 10 % cut by half the loss | same thresholds; climb 8 %/s (Pion 5 % every 200 ms) | slower climb |
+    | Congestion signal | Kalman / trendline over 5 ms arrival groups, adaptive threshold 6–600 ms | `QueueDelay`: the delay floor by send time (LEDBAT / SCReAM style) | deliberate: GCC as first ported read mobile jitter as congestion |
+    | A missing packet | lost at once | lost after 500 ms | deliberate: on a mobile link it is usually late |
+    | After a cut | climbs back at the normal rate | jumps to 85 % of what its bursts measured, or 1.5×/s back to the rate before a cut the queue never repeated | ours alone, still under the 1.5 × cap |
+    | **Pacer** | **leaky bucket, a slice every 5 ms** | **none: a keyframe's 60+ packets leave at once** | **the gap** |
+
+    The bench's reference column runs that sender for real: the same encoder
+    through Pion (`scripts/bench-live-view/pion/`). Results, the colour probe:
+
+    | Run | Sender | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|
+    | Phone, Tailscale, 100 taps | baguette | 476 ms | 677 ms | 755 ms | 45.4 | 13.5 ms | 4.06 |
+    | Phone, Tailscale, 100 taps | Pion | 468 ms | 963 ms | 1,168 ms | 51.0 | 4.8 ms | 0 |
+    | Phone, Tailscale, 30 s animated list | baguette | 6.19 Mbps | | | 43.2 | | |
+    | Phone, Tailscale, 30 s animated list | Pion | 6.21 Mbps | | | 48.1 | | |
+
+    Read: the median is the same, and so is the ~400 ms floor under both — the
+    phone's path (the tap's POST over Tailscale, render, encode, its browser's
+    playout), not the sender; on this Mac the same probe reads ~40 ms. Both
+    carried what the encoder made, so neither estimate held it back. Pion
+    plays far smoother — a third of the frame jitter, no freezes, more frames —
+    which is what a pacer buys: a keyframe spread out doesn't overflow the
+    phone link's queue. Its worse tail is one episode (taps 50–70); a pacer
+    holding packets when the target drops would also add delay there, so our
+    pacer is to be measured on that trade: smoothness against p95.
+
+    Two bench fixes came first: a frame is stamped when it reaches the screen
+    (`expectedDisplayTime`), not when its interval began (that gave negative
+    samples); and each tap is answered in its own colour (left red, right green,
+    sides alternating), as on a phone link a late answer to the last tap was
+    counted for the next.
 
     Over a simulated 2 Mbps bottleneck (`BandwidthEstimateTests`), the target
     falls from 8 Mbps to 1.7 Mbps within 2 s and saw-tooths just under 2 Mbps
