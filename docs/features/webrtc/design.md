@@ -677,6 +677,29 @@ this doc.
     (which losses or delays trigger the cuts; whether a NACK or a keyframe
     request follows each freeze).
 
+    **What the cuts are (2026-11-20)**, with each cut's cause logged, taps
+    now over the viewer's control socket as the page sends them, mobile data
+    over Tailscale: 100 taps p50 161 / p95 320 / p99 899 ms, 2 misses, fps
+    43.7, interval σ 25.3 ms, 6.7 freezes/min; 30 s animated list 6.67 Mbps,
+    41.7 fps. Over the ~111 s of both runs:
+
+    - The sender logged 664 packet resend requests and 664 resends, with one
+      keyframe request. Those counts describe the sender's attempts.
+    - Nine of ten logged cuts named queue delay, +51 to +200 ms. One named
+      a 50 % loss sample.
+    - The rate returned to 8 Mbps within about a second of cuts to 4.6 and
+      5.6 Mbps. This speed points to the burst-based jump. Batching can make
+      a short burst's observed arrival rate exceed what the link carries over
+      a longer window. A simulated 5 Mbps link with batched arrivals also
+      reproduced this overshoot.
+
+    A second separate queue within 10 s now caps both fast recovery paths
+    at the observed arrival rate. Further increases use the normal climb.
+    The cap expires after 10 s, or clears when what arrives over the
+    half-second window exceeds it by more than 20 %. An isolated delay spike still
+    recovers toward the rate held before its first cut. A fresh phone run is
+    needed to measure the effect on visible freezes and the latency tail.
+
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
     samples); and each tap is answered in its own colour (left red, right green,

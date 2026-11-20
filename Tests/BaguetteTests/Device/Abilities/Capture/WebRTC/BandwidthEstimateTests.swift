@@ -8,6 +8,7 @@ private struct Link {
     var capacity: Double
     var latency: Int64 = 20_000
     var lossEvery: Int? = nil
+    var peakQueueDelay: Int64 = 0
     private var freeAt: Int64 = 0
     private var count = 0
 
@@ -20,6 +21,7 @@ private struct Link {
         count += 1
         if let every = lossEvery, count % every == 0 { return nil }
         let start = max(sentAt + latency, freeAt)
+        peakQueueDelay = max(peakQueueDelay, start - sentAt - latency)
         freeAt = start + Int64(Double(size * 8) / capacity * 1_000_000)
         return freeAt
     }
@@ -70,6 +72,33 @@ struct BandwidthEstimateTests {
 
         #expect(estimate.target <= 2_200_000)
         #expect(estimate.target >= 1_000_000)
+    }
+
+    @Test func `should settle near a 5 Mbps bottleneck without rebuilding a 100 ms queue`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        var link = Link(capacity: 5_000_000)
+        let warmed = run(&estimate, over: &link, seconds: 4)
+
+        link.peakQueueDelay = 0
+        _ = run(&estimate, over: &link, seconds: 25, from: warmed)
+
+        #expect((4_000_000...5_500_000).contains(estimate.target))
+        #expect(link.peakQueueDelay < 100_000)
+    }
+
+    @Test func `should quickly regain bitrate after an isolated delay spike`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        var link = Link(capacity: 50_000_000)
+        let steady = run(&estimate, over: &link, seconds: 2)
+
+        link.latency += 80_000
+        let delayed = run(&estimate, over: &link, seconds: 0.4, from: steady)
+        #expect(estimate.target < 7_500_000)
+
+        link.latency -= 80_000
+        _ = run(&estimate, over: &link, seconds: 2, from: delayed)
+
+        #expect(estimate.target >= 7_500_000)
     }
 
     @Test func `should climb back once the link frees up`() {

@@ -11,14 +11,18 @@ private struct Network {
     var jitter: Int64 = 15_000
     var latency: Int64 = 20_000
     var lossEvery: Int? = nil
+    /// A mobile link's radio frames: what crossed is handed over only at the
+    /// next frame boundary, so packets that left spread out arrive bunched.
+    var batching: Int64? = nil
     private var freeAt: Int64 = 0
     private var count = 0
     private var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
 
-    init(capacity: Double, jitter: Int64 = 15_000, lossEvery: Int? = nil) {
+    init(capacity: Double, jitter: Int64 = 15_000, lossEvery: Int? = nil, batching: Int64? = nil) {
         self.capacity = capacity
         self.jitter = jitter
         self.lossEvery = lossEvery
+        self.batching = batching
     }
 
     private mutating func random() -> Double {
@@ -31,7 +35,9 @@ private struct Network {
         if let every = lossEvery, count % every == 0 { return nil }
         let start = max(sentAt + latency, freeAt)
         freeAt = start + Int64(Double(size * 8) / capacity * 1_000_000)
-        return freeAt + Int64(random() * Double(jitter))
+        let arrival = freeAt + Int64(random() * Double(jitter))
+        guard let frame = batching else { return arrival }
+        return (arrival / frame + 1) * frame
     }
 }
 
@@ -45,7 +51,8 @@ private struct Network {
 /// carry a 24-bit reference time in 64 ms steps, which wraps every ~12.4 days.
 private func stream(
     _ control: TransportWideControl, over network: inout Network, screen: Double,
-    seconds: Double, from start: Int64 = 0, browserClock: Int64 = 0
+    seconds: Double, from start: Int64 = 0, browserClock: Int64 = 0,
+    afterEachReport: (Int) -> Void = { _ in }
 ) -> Int64 {
     var now = start
     var owed = 0.0
@@ -74,6 +81,7 @@ private func stream(
             control.heard(.transportFeedback(TransportFeedback(feedbackCount: 0, reference: wrapped * 64_000, arrivals: run.map {
                 .init(sequence: $0.sequence, microseconds: ($0.arrival ?? .max) <= now ? $0.arrival! + browserClock - shift : nil)
             })), at: now)
+            afterEachReport(control.target!)
             // What arrived is reported once; a gap is reported again until it fills.
             inFlight = run.filter { ($0.arrival ?? .max) > now } + inFlight[(newest + 1)...]
         }
@@ -132,6 +140,18 @@ struct TransportWideControlLinkTests {
 
         #expect(control.target! <= 2_200_000)
         #expect(control.target! >= 1_000_000)
+    }
+
+    @Test func `should hold near a mobile link's capacity instead of climbing back over it every second`() {
+        let control = TransportWideControl(extensionID: 3, payloadType: 112, ceiling: 8_000_000)
+        var network = Network(capacity: 5_000_000, batching: 20_000)
+        let settled = stream(control, over: &network, screen: .infinity, seconds: 10)
+
+        var targets: [Int] = []
+        _ = stream(control, over: &network, screen: .infinity, seconds: 20, from: settled) { targets.append($0) }
+
+        #expect(targets.max()! <= 6_500_000, "climbed to \(targets.max()! / 1_000) kbps on a 5,000 kbps link")
+        #expect(targets.min()! >= 2_500_000, "fell to \(targets.min()! / 1_000) kbps")
     }
 
     @Test func `should be back near its ceiling within six seconds of the link freeing up`() {

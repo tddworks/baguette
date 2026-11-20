@@ -43,6 +43,7 @@ public struct BandwidthEstimate: Sendable {
     private var burstCapacity: (at: Int64, bitsPerSecond: Double)?
     /// The rate held when the last cut came: where to climb back to, fast.
     private var beforeCut: Double?
+    private var cutInCurrentQueue = false
     private var delayRate: Double
     private var lossRate: Double
     private var state = RateState.increase
@@ -52,6 +53,11 @@ public struct BandwidthEstimate: Sendable {
     private var lossCounted = (lost: 0, total: 0)
     private var lastLossIncrease: Int64?
     private var lastLossDecrease: Int64?
+    /// When a queue first cut the rate, once per episode.
+    private var lastQueueCutAt: Int64?
+    /// A capacity the queue confirmed — it built again soon after a cut — and
+    /// when: while it holds, no fast climb goes past it.
+    private var confirmedCapacity: (at: Int64, bitsPerSecond: Double)?
 
     // draft-ietf-rmcat-gcc §5.5, libwebrtc aimd_rate_control.cc / send_side_bandwidth_estimation.cc.
     private static let backoff = 0.85
@@ -62,6 +68,7 @@ public struct BandwidthEstimate: Sendable {
     private static let burstPackets = 10                    // a burst this big measures the link
     private static let burstFreshness: Int64 = 5_000_000    // trusted for 5 s
     private static let recovery = 1.5                       // per second, back toward the rate before a cut
+    private static let confirmWindow: Int64 = 10_000_000    // a second queue cut this soon confirms the first
 
     public init(floor: Int = 300_000, ceiling: Int) {
         self.floor = floor
@@ -132,7 +139,9 @@ public struct BandwidthEstimate: Sendable {
         let elapsed = lastRateUpdate.map { min(Double(now - $0) / 1_000_000, 1) } ?? 0
         lastRateUpdate = now
         switch queue.signal {
-        case .normal: if state == .hold { state = .increase }
+        case .normal:
+            cutInCurrentQueue = false
+            if state == .hold { state = .increase }
         case .underusing: state = .hold
         case .overusing: state = .decrease
         }
@@ -141,14 +150,23 @@ public struct BandwidthEstimate: Sendable {
             break
         case .increase:
             var increased = delayRate
+            let arriving = acknowledged
+            // A short burst can overstate mobile capacity; what arrives over the
+            // half-second window releases the cap once the link really improves.
+            if let confirmedCapacity,
+               now - confirmedCapacity.at > Self.confirmWindow
+                || (arriving ?? 0) > confirmedCapacity.bitsPerSecond * (1 + Self.nearCapacity) {
+                self.confirmedCapacity = nil
+            }
+            let fastCap = confirmedCapacity?.bitsPerSecond ?? .infinity
             // The link just showed what it carries: go there at once, not 8 % a second.
             if let measured = burstCapacity, now - measured.at <= Self.burstFreshness {
-                increased = max(increased, Self.backoff * measured.bitsPerSecond)
+                increased = max(increased, min(Self.backoff * measured.bitsPerSecond, fastCap))
             }
             // A cut the queue never repeated was likely wrong (a jitter spike):
             // climb back fast; on a full link the queue builds again and stops it.
             if let before = beforeCut, delayRate < before {
-                increased = max(increased, min(before, delayRate * pow(Self.recovery, elapsed)))
+                increased = max(increased, min(before, delayRate * pow(Self.recovery, elapsed), fastCap))
             }
             if let capacity = linkCapacity, abs(delayRate - capacity) <= Self.nearCapacity * capacity {
                 increased += Self.additiveIncrease * elapsed
@@ -159,16 +177,25 @@ public struct BandwidthEstimate: Sendable {
             // Don't climb far ahead of what is getting through — but a sender
             // that sends less than it may (a still screen) is no reason to
             // come down: the cap only stops an increase (libwebrtc's AIMD).
-            if let acknowledged, increased > 1.5 * acknowledged + 10_000 {
-                increased = max(delayRate, 1.5 * acknowledged + 10_000)
+            if let arriving, increased > 1.5 * arriving + 10_000 {
+                increased = max(delayRate, 1.5 * arriving + 10_000)
             }
             delayRate = increased
         case .decrease:
-            beforeCut = delayRate
             if let acknowledged {
-                let cut = Self.backoff * acknowledged
+                let cut = max(Double(floor), Self.backoff * acknowledged)
                 if cut < delayRate {
-                    lastCut = Cut(at: now, cause: .queue(delay: queue.queue), to: Int(max(cut, Double(floor))))
+                    lastCut = Cut(at: now, cause: .queue(delay: queue.queue), to: Int(cut))
+                    // Several feedback reports can describe the same queue.
+                    // Keep the rate before its first cut until the queue drains.
+                    if !cutInCurrentQueue {
+                        beforeCut = delayRate
+                        cutInCurrentQueue = true
+                        if let lastQueueCutAt, now - lastQueueCutAt <= Self.confirmWindow {
+                            confirmedCapacity = (now, acknowledged)
+                        }
+                        lastQueueCutAt = now
+                    }
                 }
                 delayRate = min(delayRate, cut)
                 linkCapacity = linkCapacity.map { 0.95 * $0 + 0.05 * acknowledged } ?? acknowledged
