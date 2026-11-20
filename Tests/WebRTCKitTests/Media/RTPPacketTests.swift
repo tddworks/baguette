@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// RTP header: V=2, P=0, X, CC; M, PT; sequence; timestamp; SSRC.
 private func rtp(

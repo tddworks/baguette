@@ -7,6 +7,7 @@ import Testing
 import WSClient
 @testable import Baguette
 @testable import BaguetteDevice
+@testable import WebRTCKit
 
 private let offer = [
     "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 112", "a=mid:0",

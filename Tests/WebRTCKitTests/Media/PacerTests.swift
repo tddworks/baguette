@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// 1,200-byte packets, as a frame is cut; times in microseconds.
 private func frame(_ packets: Int, into pacer: inout Pacer<Int>, at now: Int64, from first: Int = 0) {

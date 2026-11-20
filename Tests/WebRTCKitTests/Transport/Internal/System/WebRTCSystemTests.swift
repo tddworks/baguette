@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// The real socket under a WebRTC viewer: bytes from one to another over loopback.
 @Suite("UDPDatagrams", .tags(.system), .enabled(if: SystemTests.available))

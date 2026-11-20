@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// A real-shaped link: a bottleneck of `capacity` bits per second after
 /// `latency`, then up to `jitter` of extra delay per packet — so packets

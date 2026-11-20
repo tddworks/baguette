@@ -3,6 +3,7 @@ import Mockable
 import Testing
 @testable import BaguetteDevice
 @testable import protocol BaguetteDevice.Stream
+@testable import WebRTCKit
 
 private func hex(_ string: String) -> Data {
     Data(stride(from: 0, to: string.count, by: 2).map {

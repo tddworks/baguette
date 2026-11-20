@@ -1,4 +1,5 @@
 import Foundation
+import WebRTCKit
 
 /// The live WebRTC (WHEP) viewers of one server, by id. It admits a browser's
 /// offer with a viewer of its own, streaming the screen it is given, and lets

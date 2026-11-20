@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 private let transportWideURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 private let absSendTimeURI = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
