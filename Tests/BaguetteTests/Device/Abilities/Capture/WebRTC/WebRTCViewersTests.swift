@@ -38,6 +38,7 @@ private struct Rig {
         given(datagrams).close().willReturn()
         given(handshake).fingerprint.willReturn("sha-256 AA")
         given(stream).stop().willReturn()
+        given(stream).config.willReturn(.default)
         if streamStarts {
             given(stream).start(on: .any).willReturn()
         } else {

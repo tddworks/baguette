@@ -53,11 +53,16 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// started on `screen`: its id, and the SDP answer. Throws the offer's
     /// refusal, or why the viewer couldn't be connected or started.
     /// `input`: the input bound with `screen` (the same display plane and
-    /// panel), kept for the viewer's control socket.
-    public func admit(offer: String, on screen: any Screen, input: Abilities? = nil) throws -> (id: String, answer: String) {
+    /// panel), kept for the viewer's control socket. `congestion`: the method
+    /// asked for (`?congestion=`), or nil for the default.
+    public func admit(
+        offer: String, on screen: any Screen, input: Abilities? = nil, congestion: CongestionChoice? = nil
+    ) throws -> (id: String, answer: String) {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
-        let viewer = WebRTCViewer(offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream)
+        let viewer = WebRTCViewer(
+            offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream,
+            congestion: { CongestionChoice.control(asked: congestion, offer: description, ceiling: $0) })
         do {
             try viewer.start(on: screen)
         } catch {

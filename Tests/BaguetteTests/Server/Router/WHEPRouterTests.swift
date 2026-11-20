@@ -60,6 +60,12 @@ private func whepServer(
 
 private let sdp: HTTPFields = [.contentType: "application/sdp"]
 
+/// The offer with both congestion-control extensions, as Chrome sends it.
+private let offerWithBoth = offer.replacingOccurrences(
+    of: "a=setup:actpass\r\n",
+    with: "a=setup:actpass\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n"
+        + "a=extmap:4 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
+
 @Suite("Serve router: WHEP")
 struct WHEPRouterTests {
     @Test func `should answer a browser's offer with a viewer of the device, on both trees`() async throws {
@@ -155,5 +161,29 @@ struct WHEPRouterTests {
         let messages = try await socketConversation("/devices/U/whep/ghost/control", server: whepServer())
 
         #expect(messages == [#"{"ok":false,"error":"unknown viewer: ghost"}"#])
+    }
+
+    @Test func `should give a viewer the congestion control asked for, and transport-cc when nothing is`() async throws {
+        try await whepServer().test { client in
+            let remb = try await client.send(.post, "/devices/U/whep?congestion=remb", body: offerWithBoth, headers: sdp)
+            #expect(remb.status == .created)
+            #expect(remb.text.contains("a=rtcp-fb:112 goog-remb\r\n"))
+            #expect(!remb.text.contains("transport-cc"))
+
+            let plain = try await client.send(.post, "/devices/U/whep", body: offerWithBoth, headers: sdp)
+            #expect(plain.text.contains("a=rtcp-fb:112 transport-cc\r\n"))
+
+            let off = try await client.send(.post, "/devices/U/whep?congestion=off", body: offerWithBoth, headers: sdp)
+            #expect(!off.text.contains("extmap"))
+        }
+    }
+
+    @Test func `should refuse a congestion control it doesn't know, naming the ones it does`() async throws {
+        try await whepServer().test { client in
+            let response = try await client.send(.post, "/devices/U/whep?congestion=gcc", body: offerWithBoth, headers: sdp)
+
+            #expect(response.status == .badRequest)
+            #expect(response.text.contains("unknown congestion control: gcc (transport-cc, remb or off)"))
+        }
     }
 }

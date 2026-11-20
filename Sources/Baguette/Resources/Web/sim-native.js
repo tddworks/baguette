@@ -957,6 +957,9 @@
       udid, format, version: 'v2',
       display: 'phone',
       canvas: sim.canvas,
+      // `?congestion=remb|transport-cc|off` on the page picks how a WebRTC
+      // viewer's bitrate follows the link (default: the server's choice).
+      congestion: new URLSearchParams(location.search).get('congestion') || undefined,
       onError: format === 'webrtc' ? () => {
         localStorage.removeItem(FORMAT_KEY);
         startSession(currentFormat());

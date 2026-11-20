@@ -32,8 +32,11 @@ public struct SessionDescription: Equatable, Sendable {
     /// The header-extension id the offer gives the transport-wide sequence
     /// number, or nil when the browser offers no transport-cc congestion control.
     public let transportWideSequenceID: UInt8?
+    /// The header-extension id the offer gives abs-send-time, which REMB needs.
+    public let absSendTimeID: UInt8?
 
-    static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+    public static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+    public static let absSendTimeURI = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
 
     public init(offer sdp: String) throws {
         let lines = sdp.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
@@ -52,11 +55,15 @@ public struct SessionDescription: Equatable, Sendable {
         mid = value("mid") ?? "0"
         self.payloadType = payloadType
         profileLevelID = profile
-        transportWideSequenceID = section.compactMap { line -> UInt8? in
-            // a=extmap:<id>[/<direction>] <uri>
-            guard line.hasPrefix("a=extmap:"), line.hasSuffix(" " + Self.transportWideSequenceURI) else { return nil }
-            return UInt8(line.dropFirst(9).prefix { $0.isNumber })
-        }.first
+        // a=extmap:<id>[/<direction>] <uri>
+        func extensionID(_ uri: String) -> UInt8? {
+            section.compactMap { line -> UInt8? in
+                guard line.hasPrefix("a=extmap:"), line.hasSuffix(" " + uri) else { return nil }
+                return UInt8(line.dropFirst(9).prefix { $0.isNumber })
+            }.first
+        }
+        transportWideSequenceID = extensionID(Self.transportWideSequenceURI)
+        absSendTimeID = extensionID(Self.absSendTimeURI)
     }
 
     /// The H.264 format the encoder can feed: High profile (profile_idc 0x64),
@@ -83,8 +90,11 @@ public struct SessionDescription: Equatable, Sendable {
 
     /// The answer: an ICE-lite agent at `candidates`, DTLS passive (the browser
     /// connects), sending this one H.264 format from `ssrc`, with the feedback
-    /// the viewer acts on (NACK, PLI, FIR, and transport-cc when offered).
-    public func answer(ice: ICECredentials, fingerprint: String, ssrc: UInt32, candidates: [DatagramAddress]) -> String {
+    /// the viewer acts on (NACK, PLI, FIR) and whatever lines its congestion
+    /// control needs (`CongestionControl.answerLines`).
+    public func answer(
+        ice: ICECredentials, fingerprint: String, ssrc: UInt32, candidates: [DatagramAddress], congestion: [String] = []
+    ) -> String {
         let pt = payloadType
         var lines = [
             "v=0", "o=- 0 0 IN IP4 127.0.0.1", "s=baguette", "t=0 0",
@@ -93,14 +103,10 @@ public struct SessionDescription: Equatable, Sendable {
             "a=mid:\(mid)", "a=sendonly", "a=rtcp-mux",
             "a=ice-ufrag:\(ice.ufrag)", "a=ice-pwd:\(ice.password)",
             "a=fingerprint:\(fingerprint)", "a=setup:passive",
-        ]
-        if let id = transportWideSequenceID { lines.append("a=extmap:\(id) \(Self.transportWideSequenceURI)") }
+        ] + congestion
         lines += [
             "a=rtpmap:\(pt) H264/90000",
             "a=rtcp-fb:\(pt) nack", "a=rtcp-fb:\(pt) nack pli", "a=rtcp-fb:\(pt) ccm fir",
-        ]
-        if transportWideSequenceID != nil { lines.append("a=rtcp-fb:\(pt) transport-cc") }
-        lines += [
             "a=fmtp:\(pt) level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=\(profileLevelID)",
             "a=msid:baguette screen", "a=ssrc:\(ssrc) cname:baguette",
         ]

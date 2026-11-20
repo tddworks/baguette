@@ -27,11 +27,14 @@
     this.fpsTimer = null;
   }
 
-  /** The device's WHEP route, as the page's tree spells it. */
-  WhepSession.whepPath = function (udid, display) {
+  /** The device's WHEP route, as the page's tree spells it, with the display
+   *  plane and the congestion control (`transport-cc`, `remb`, `off`) asked for. */
+  WhepSession.whepPath = function (udid, display, congestion) {
     const base = (window.BaguetteTarget && window.BaguetteTarget.base) || 'simulators';
-    const query = display === 'phone' || display === 'carplay' ? '?display=' + encodeURIComponent(display) : '';
-    return '/' + base + '/' + encodeURIComponent(udid) + '/whep' + query;
+    const params = [];
+    if (display === 'phone' || display === 'carplay') params.push('display=' + encodeURIComponent(display));
+    if (congestion) params.push('congestion=' + encodeURIComponent(congestion));
+    return '/' + base + '/' + encodeURIComponent(udid) + '/whep' + (params.length ? '?' + params.join('&') : '');
   };
 
   /** The viewer's control socket, next to the resource the server named. */
@@ -43,7 +46,7 @@
   WhepSession.prototype.send = function () { return false; };
 
   WhepSession.prototype.start = async function () {
-    const { udid, canvas, display, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
+    const { udid, canvas, display, congestion, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
     const log = onLog || (() => {});
     this.alive = true;
 
@@ -96,7 +99,7 @@
 
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    const response = await window.fetch(WhepSession.whepPath(udid, display), {
+    const response = await window.fetch(WhepSession.whepPath(udid, display, congestion), {
       method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp,
     });
     const body = await response.text();

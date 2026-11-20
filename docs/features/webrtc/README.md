@@ -53,10 +53,19 @@ socket carries what the stream socket carries from its page — gestures
 ```
 
 Each viewer has its own H.264 encoder, starting at the stream socket's defaults
-(60 fps, 8 Mbps, full scale). Its bitrate then follows the link: the browser
-reports when each packet arrived (transport-cc), baguette estimates the bandwidth
-the way Google's WebRTC does, and retunes the encoder between 300 kbps and 8 Mbps,
-at most once a second. The server log shows each change:
+(60 fps, 8 Mbps, full scale). Its bitrate then follows the link, retuned between
+300 kbps and 8 Mbps at most once a second, by one of three methods:
+
+| `congestion=` | Who estimates the bandwidth |
+|---|---|
+| `transport-cc` (the default when offered) | baguette, from the browser's per-packet arrival reports, the way Google's WebRTC does |
+| `remb` | the browser, which sends its estimate (the older way) |
+| `off` | nobody: the bitrate stays where it started or where `set_bitrate` put it |
+
+Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the
+device page with it (`/devices/<UDID>?congestion=remb`) to compare them by hand.
+A method the browser didn't offer falls back to `off`. The server log shows each
+change:
 
 ```
 [baguette] [webrtc] retune 8000 → 1700 kbps

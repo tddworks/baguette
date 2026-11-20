@@ -158,23 +158,27 @@ extension SessionDescriptionTests {
 private let offerWithTransportCC = chromeOffer
     .replacingOccurrences(
         of: "a=rtcp-mux\r\n",
-        with: "a=rtcp-mux\r\na=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
+        with: "a=rtcp-mux\r\na=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time\r\n"
+            + "a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n")
     .replacingOccurrences(of: "a=rtcp-fb:112 nack pli\r\n", with: "a=rtcp-fb:112 nack pli\r\na=rtcp-fb:112 transport-cc\r\n")
 
 extension SessionDescriptionTests {
-    @Test func `should read the offer's transport-wide sequence extension id`() throws {
-        #expect(try SessionDescription(offer: offerWithTransportCC).transportWideSequenceID == 3)
-        #expect(try SessionDescription(offer: chromeOffer).transportWideSequenceID == nil)
+    @Test func `should read the offer's transport-wide sequence and abs-send-time extension ids`() throws {
+        let offered = try SessionDescription(offer: offerWithTransportCC)
+        #expect(offered.transportWideSequenceID == 3)
+        #expect(offered.absSendTimeID == 2)
+        let bare = try SessionDescription(offer: chromeOffer)
+        #expect(bare.transportWideSequenceID == nil && bare.absSendTimeID == nil)
     }
 
-    @Test func `should answer with transport-cc feedback and the extension when the offer has them`() throws {
-        let answer = try SessionDescription(offer: offerWithTransportCC)
-            .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [])
+    @Test func `should put its congestion control's lines in the answer, and none of its own`() throws {
+        let description = try SessionDescription(offer: offerWithTransportCC)
+        let lines = ["a=extmap:3 http://example/ext", "a=rtcp-fb:112 transport-cc"]
 
-        #expect(answer.contains(
-            "a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\n"))
-        #expect(answer.contains("a=rtcp-fb:112 transport-cc\r\n"))
-        #expect(!answer.contains("goog-remb"))
+        let answer = description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [], congestion: lines)
+
+        #expect(answer.contains("a=setup:passive\r\na=extmap:3 http://example/ext\r\na=rtcp-fb:112 transport-cc\r\n"))
+        #expect(!description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: []).contains("extmap"))
     }
 }
 

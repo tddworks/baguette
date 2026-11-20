@@ -9,9 +9,9 @@ import Foundation
 /// - **securing**: DTLS from that address only, until the handshake exports
 ///   the SRTP keys; then it asks its stream for a keyframe and goes live.
 /// - **live**: every picture leaves as SRTP; a lost picture brings a keyframe,
-///   lost packets are resent as they were sent. When the browser offered
-///   transport-cc, every packet carries a transport-wide sequence number, and its
-///   reports drive a `BandwidthEstimate` that retunes the encoder (`EncoderRetune`).
+///   lost packets are resent as they were sent. Its `CongestionControl` stamps
+///   every packet, reads the browser's feedback and sets the bitrate it wants;
+///   `EncoderRetune` decides when the encoder follows.
 /// - **hungUp**: by request, a failed handshake or stream, or 30 s without a
 ///   check; its stream is stopped and it never sends again.
 ///
@@ -46,11 +46,7 @@ public final class WebRTCViewer: @unchecked Sendable {
     private var historyOrder: [UInt16] = []
     private var hangUpHandlers: [@Sendable () -> Void] = []
     private let packetizer = H264Packetizer()
-    // Congestion control, when the browser offered transport-cc.
-    private let transportWideID: UInt8?
-    private var transportSequence: UInt16 = 0
-    private var sendHistory = SendHistory()
-    private var estimate: BandwidthEstimate?
+    private let congestion: any CongestionControl
     private var retune = EncoderRetune()
 
     public init(
@@ -61,24 +57,27 @@ public final class WebRTCViewer: @unchecked Sendable {
         datagrams: any Datagrams,
         handshake: any Handshake,
         stream makeStream: (any FrameSink) -> any Stream,
+        congestion makeControl: (_ startingBitrate: Int) -> any CongestionControl,
         clock: @escaping @Sendable () -> Date = Date.init
     ) {
         self.ice = ice
         self.ssrc = ssrc
         self.payloadType = offer.payloadType
-        self.transportWideID = offer.transportWideSequenceID
         self.datagrams = datagrams
         self.handshake = handshake
         self.clock = clock
         self.sequence = firstSequence
         self.started = clock()
         self.lastCheck = started
-        self.answer = offer.answer(
-            ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc, candidates: datagrams.addresses)
         let sink = RTPFrameSink()
-        self.stream = makeStream(sink)
+        let stream = makeStream(sink)
+        let congestion = makeControl(stream.config.bitrateBps)
+        self.stream = stream
+        self.congestion = congestion
+        self.answer = offer.answer(
+            ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc, candidates: datagrams.addresses,
+            congestion: congestion.answerLines())
         sink.attach(self)
-        if transportWideID != nil { estimate = BandwidthEstimate(ceiling: stream.config.bitrateBps) }
         datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
     }
 
@@ -185,27 +184,27 @@ public final class WebRTCViewer: @unchecked Sendable {
         act(on: asks)
     }
 
-    /// What the browser asked, decrypted: resend what it lost, read its
-    /// transport-cc reports into the estimate, and tell the stream what follows
-    /// — a keyframe, a retune — outside the lock.
+    /// What the browser asked, decrypted: resend what it lost, hand the rest to
+    /// its congestion control, and tell the stream what follows — a keyframe, a
+    /// retune — outside the lock.
     func act(on asks: [RTCPFeedback]) {
         let retuneTo = lock.withLock { () -> Int? in
             guard current == .live, let browser else { return nil }
-            var retuneTo: Int?
+            let now = microsecondsNow()
+            var heard = false
             for ask in asks {
                 switch ask {
                 case .lost(let sequences):
                     sequences.compactMap { history[$0] }.forEach { datagrams.send($0, to: browser) }
-                case .transportFeedback(let feedback):
-                    guard estimate != nil else { continue }
-                    let now = microsecondsNow()
-                    estimate!.update(with: sendHistory.outcomes(of: feedback), now: now)
-                    retuneTo = retune.bitrate(for: estimate!.target, current: stream.config.bitrateBps, now: now) ?? retuneTo
-                case .keyframeRequest, .bandwidthEstimate:
+                case .keyframeRequest:
                     continue
+                case .transportFeedback, .bandwidthEstimate:
+                    congestion.heard(ask, at: now)
+                    heard = true
                 }
             }
-            return retuneTo
+            guard heard, let target = congestion.target else { return nil }
+            return retune.bitrate(for: target, current: stream.config.bitrateBps, now: now)
         }
         if asks.contains(.keyframeRequest) { stream.requestKeyframe() }
         if let retuneTo {
@@ -233,20 +232,15 @@ public final class WebRTCViewer: @unchecked Sendable {
                 picture: payload, parameterSets: tag == AVCCEnvelope.keyframeTag ? parameterSets : [])
             let timestamp = UInt32(truncatingIfNeeded: Int64(clock().timeIntervalSince(started) * 90_000))
             for (index, body) in payloads.enumerated() {
-                var extensions: [RTPHeaderExtension] = []
-                if let id = transportWideID {
-                    extensions = [RTPHeaderExtension(id: id, data: [UInt8(transportSequence >> 8), UInt8(transportSequence & 0xFF)])]
-                }
+                let now = microsecondsNow()
+                let extensions = congestion.extensions(at: now)
                 let packet = RTPPacket(
                     marker: index == payloads.count - 1, payloadType: payloadType,
                     sequence: sequence, timestamp: timestamp, ssrc: ssrc, payload: body, extensions: extensions)
                 let wire = srtp!.protect(packet)
                 datagrams.send(wire, to: browser)
                 remember(wire, as: sequence)
-                if transportWideID != nil {
-                    sendHistory.sent(sequence: transportSequence, at: microsecondsNow(), size: wire.count)
-                    transportSequence &+= 1
-                }
+                congestion.sent(size: wire.count, at: now)
                 sequence &+= 1
             }
         }

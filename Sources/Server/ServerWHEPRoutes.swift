@@ -9,7 +9,7 @@ import NIOCore
 /// viewer of the device with a stream of its own; its touches and stream
 /// control ride the viewer's control socket; `DELETE` hangs it up.
 ///
-///   POST   /devices/:udid/whep                  offer → 201, Location, answer
+///   POST   /devices/:udid/whep[?congestion=transport-cc|remb|off]   offer → 201, Location, answer
 ///   DELETE /devices/:udid/whep/:viewer          hang up → 204
 ///   WS     /devices/:udid/whep/:viewer/control  gestures, describe_ui, paste, retune
 ///
@@ -48,8 +48,15 @@ extension Server {
     }
 
     /// A viewer for the device the path names, on the display plane the query
-    /// asks for.
+    /// asks for, with the congestion control it asks for (`CongestionChoice`).
     static func admit(offer: String, request: Request, devices: any Devices, viewers: WebRTCViewers) -> Response {
+        var congestion: CongestionChoice?
+        if let asked = request.uri.queryParameters.get("congestion").map({ String($0) }) {
+            guard let choice = CongestionChoice(rawValue: asked) else {
+                return pluginError("unknown congestion control: \(asked) (transport-cc, remb or off)", status: .badRequest)
+            }
+            congestion = choice
+        }
         let udid = udidParam(request)
         guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             return pluginError("unknown udid: \(udid)", status: .notFound)
@@ -60,7 +67,8 @@ extension Server {
             requireExistingDisplay: false)
         do {
             let bound = try plan.bind(to: device)
-            let (id, answer) = try viewers.admit(offer: offer, on: bound.screen, input: bound.input)
+            let (id, answer) = try viewers.admit(
+                offer: offer, on: bound.screen, input: bound.input, congestion: congestion)
             return Response(
                 status: .created,
                 headers: [.location: "/devices/\(udid)/whep/\(id)", .contentType: "application/sdp", .cacheControl: "no-cache"],

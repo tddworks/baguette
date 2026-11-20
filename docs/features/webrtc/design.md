@@ -137,6 +137,21 @@ WebRTCViewers  ◆                      the live viewers by id — admit(offer, 
                                        THE LOWER OF THE TWO, between a floor and the starting bitrate
 ```
 
+**How much the link takes is one role, `CongestionControl`, with three
+implementations the viewer can't tell apart** (decided 2026-11-20): it answers
+which SDP lines it needs, what each packet carries, what it makes of the
+browser's feedback, and the bitrate it wants (or none).
+
+| Implementation | Who estimates | Each packet carries | Feedback read |
+|---|---|---|---|
+| `TransportWideControl` (default) | baguette (GCC, below) | transport-wide sequence | transport-cc |
+| `ReceiverEstimateControl` | the browser | `abs-send-time` (24-bit, 6.18 s) | REMB |
+| `FixedBitrate` | nobody | nothing | nothing |
+
+`CongestionChoice` picks one per viewer: `?congestion=transport-cc|remb|off` on
+the WHEP `POST`, else transport-cc if offered, else REMB if offered, else none.
+The viewer keeps `EncoderRetune` (law 12), shared by all three.
+
 **Congestion control is the sender's (transport-cc), as libwebrtc does it.**
 Every packet carries a transport-wide sequence number (an RTP header extension);
 the browser reports when each one arrived (RTCP transport-cc feedback, about every

@@ -19,16 +19,6 @@ private let offer = try! SessionDescription(offer: [
     "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
 ].joined(separator: "\r\n"))
 
-/// The same offer with the transport-wide sequence extension at id 5.
-private let offerWithTransportCC = try! SessionDescription(offer: [
-    "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 112", "a=mid:0",
-    "a=ice-ufrag:h6vY", "a=ice-pwd:browserpasswordbrowserpass",
-    "a=fingerprint:sha-256 6B:8B", "a=setup:actpass",
-    "a=extmap:5 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
-    "a=rtpmap:112 H264/90000", "a=rtcp-fb:112 transport-cc",
-    "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
-].joined(separator: "\r\n"))
-
 /// RFC 5769's sample check is addressed to "evtj" and signed with this password.
 private let ours = ICECredentials(ufrag: "evtj", password: "VOkJxbRl1RmTxUk/WvJxBt")
 private let check = hex(
@@ -65,13 +55,17 @@ private struct Rig {
     let datagrams = MockDatagrams()
     let handshake = MockHandshake()
     let stream = MockStream()
+    let congestion = MockCongestionControl()
     let sent = Box<[(Data, DatagramAddress)]>([])
     let received = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
     let now = Box(Date(timeIntervalSince1970: 1_000))
     let sink = Box<(any FrameSink)?>(nil)
     let viewer: WebRTCViewer
 
-    init(progress: HandshakeProgress = .complete(replies: [], srtpExport: export), offer: SessionDescription = offer) {
+    init(
+        progress: HandshakeProgress = .complete(replies: [], srtpExport: export),
+        target: Int? = nil, stamp: [RTPHeaderExtension] = [], answerLines: [String] = []
+    ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
         given(datagrams).onReceive(.any).willProduce { [received] handler in received.value = handler }
@@ -83,11 +77,17 @@ private struct Rig {
         given(stream).stop().willReturn()
         given(stream).config.willReturn(.default)
         given(stream).apply(.any).willReturn()
-        let (stream, sink, now) = (stream, sink, now)
+        given(congestion).answerLines().willReturn(answerLines)
+        given(congestion).extensions(at: .any).willReturn(stamp)
+        given(congestion).sent(size: .any, at: .any).willReturn()
+        given(congestion).heard(.any, at: .any).willReturn()
+        given(congestion).target.willReturn(target)
+        let (stream, sink, now, congestion) = (stream, sink, now, congestion)
         viewer = WebRTCViewer(
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             datagrams: datagrams, handshake: handshake,
             stream: { frames in sink.value = frames; return stream },
+            congestion: { _ in congestion },
             clock: { now.value })
     }
 
@@ -317,50 +317,38 @@ struct WebRTCViewerTests {
         #expect(told.value == 1)
     }
 
-    @Test func `should number every packet with a transport-wide sequence when the browser offered transport-cc`() {
-        let rig = Rig(offer: offerWithTransportCC)
+    @Test func `should answer with the lines its congestion control needs`() {
+        let rig = Rig(answerLines: ["a=extmap:9 http://example/ext"])
+
+        #expect(rig.viewer.answer.contains("a=extmap:9 http://example/ext\r\n"))
+    }
+
+    @Test func `should stamp every packet with what its congestion control asks, and report it sent`() {
+        let rig = Rig(stamp: [RTPHeaderExtension(id: 9, data: [7])])
         rig.goLive()
 
         rig.show(AVCCEnvelope.description(avcc: avcC))
         rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
 
-        #expect(rig.packets.map(\.extensions) == [
-            [RTPHeaderExtension(id: 5, data: [0, 0])],
-            [RTPHeaderExtension(id: 5, data: [0, 1])],
-        ])
+        #expect(rig.packets.map(\.extensions) == [[RTPHeaderExtension(id: 9, data: [7])], [RTPHeaderExtension(id: 9, data: [7])]])
+        verify(rig.congestion).sent(size: .any, at: .any).called(2)
     }
 
-    @Test func `should number no packet when the browser offered no transport-cc`() {
-        let rig = Rig()
+    @Test func `should hand the browser's feedback to its congestion control and retune to its target`() {
+        let rig = Rig(target: 4_000_000)
         rig.goLive()
 
-        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
+        rig.viewer.act(on: [.bandwidthEstimate(bitsPerSecond: 4_000_000)])
 
-        #expect(rig.packets.allSatisfy { $0.extensions.isEmpty })
-    }
-
-    @Test func `should retune its encoder to what the browser's reports say gets through`() {
-        let rig = Rig(offer: offerWithTransportCC)
-        rig.goLive()
-        // A keyframe big enough for 30 packets, every one of them reported lost.
-        let slice = Data([0x65] + [UInt8](repeating: 7, count: 35_000))
-        rig.show(AVCCEnvelope.keyframe(avcc: Data([0, 0, UInt8(slice.count >> 8), UInt8(slice.count & 0xFF)]) + slice))
-        let sent = rig.packets.count
-        #expect(sent >= 20)
-
-        rig.viewer.act(on: [.transportFeedback(TransportFeedback(
-            feedbackCount: 0, arrivals: (0..<sent).map { .init(sequence: UInt16($0), microseconds: nil) }))])
-
-        // All lost: the loss-based rate halves 8 Mbps.
+        verify(rig.congestion).heard(.any, at: .any).called(1)
         verify(rig.stream).apply(.value(StreamConfig.default.with(bitrateBps: 4_000_000))).called(1)
     }
 
-    @Test func `should leave its encoder alone without transport-cc`() {
-        let rig = Rig()
+    @Test func `should leave its encoder alone while its congestion control wants no bitrate`() {
+        let rig = Rig(target: nil)
         rig.goLive()
 
-        rig.viewer.act(on: [.transportFeedback(TransportFeedback(
-            feedbackCount: 0, arrivals: (0..<30).map { .init(sequence: UInt16($0), microseconds: nil) }))])
+        rig.viewer.act(on: [.bandwidthEstimate(bitsPerSecond: 1_000_000)])
 
         verify(rig.stream).apply(.any).called(0)
     }

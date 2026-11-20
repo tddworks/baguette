@@ -118,8 +118,10 @@ WebRTCViewers  ◆      THE LIVE WEBRTC (WHEP) VIEWERS, by id — admit(offer) �
 └── WebRTCViewer  ◆   ONE BROWSER watching one device over WebRTC, with a Stream of its own:
                       new → connecting (STUN) → securing (DTLS) → live → hung up.
                       SessionDescription ◇ (offer in, answer out) · STUNMessage ◇ · RTPPacket ◇ ·
-                      H264Packetizer ◇ · SRTPContext ◇ · RTCPFeedback ◇ · TransportFeedback ◇ ·
-                      SendHistory ◇ · BandwidthEstimate ◇ (transport-cc congestion control); at the outside world,
+                      H264Packetizer ◇ · SRTPContext ◇ · RTCPFeedback ◇; how much the link takes is
+                      its CongestionControl ◆ — TransportWideControl (transport-cc: TransportFeedback ◇ ·
+                      SendHistory ◇ · BandwidthEstimate ◇), ReceiverEstimateControl (REMB) or FixedBitrate,
+                      picked by CongestionChoice ◇; at the outside world,
                       Datagrams ◆ (its UDP socket) and Handshake ◆ (its DTLS handshake)
 CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇; the device's
                       Camera ◆ (a simulator's: VirtualCamera injected) is what it feeds
@@ -194,6 +196,8 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
 | a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
+| a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
+| with no congestion control, nothing retunes the encoder: it stays where it started or where `set_bitrate` put it | `FixedBitrate` |
 | a viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
