@@ -72,6 +72,16 @@ struct PacerTests {
         #expect(pacer.release(at: 0) == Array(0..<60))
     }
 
+    @Test func `should tell how long its oldest packet has waited, and nothing when empty`() {
+        var pacer = Pacer<Int>(bitrate: 300_000)
+        #expect(pacer.oldestWait(at: 0) == nil)
+
+        frame(60, into: &pacer, at: 1_000)
+        _ = pacer.release(at: 1_000)
+
+        #expect(pacer.oldestWait(at: 81_000) == 80_000)
+    }
+
     @Test func `should keep the order packets came in`() {
         var pacer = Pacer<Int>(bitrate: 8_000_000)
         frame(60, into: &pacer, at: 0)

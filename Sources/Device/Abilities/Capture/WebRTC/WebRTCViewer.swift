@@ -52,6 +52,7 @@ public final class WebRTCViewer: @unchecked Sendable {
     private var pacer: Pacer<RTPPacket>
     /// Whether the pacer's next slice is already scheduled.
     private var sliceScheduled = false
+    private var lastHoldLog: Int64 = .min
     private let schedule: Schedule
 
     /// Runs `work` after a delay: how the pacer comes back for its next slice.
@@ -275,6 +276,11 @@ public final class WebRTCViewer: @unchecked Sendable {
             datagrams.send(wire, to: browser)
             remember(wire, as: packet.sequence)
             congestion.sent(size: wire.count, at: now)
+        }
+        // What the bench needs to tell the pacer's delay from the link's.
+        if let wait = pacer.oldestWait(at: now), wait > 50_000, now - lastHoldLog >= 250_000 {
+            lastHoldLog = now
+            log("[webrtc] pacer holding \(wait / 1_000) ms at \(pacer.bitrate / 1_000) kbps")
         }
         guard !pacer.isEmpty, !sliceScheduled else { return }
         sliceScheduled = true

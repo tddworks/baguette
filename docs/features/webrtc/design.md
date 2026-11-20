@@ -593,6 +593,29 @@ this doc.
     sender with and without it (`?pacing=off`), same link, same run — measured
     on smoothness against p95.
 
+    **The pacer's own A/B (2026-11-20)**: the same sender with and without its
+    pacer (`?pacing=off`), one after the other, phone on mobile data over
+    Tailscale:
+
+    | Run | Pacer | misses | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|---|
+    | 100 taps | on | 0 | 386 ms | 709 ms | 898 ms | 51.9 | 3.3 ms | 0 |
+    | 100 taps | off | 0 | 379 ms | 409 ms | 438 ms | 50.2 | 7.1 ms | 0 |
+
+    | 30 s, animated list | Pacer | Payload | Packets | fps |
+    |---|---|---|---|---|
+    | | on | 7.37 Mbps | 23,456 | 52.1 |
+    | | off | 7.02 Mbps | 22,381 | 47.2 |
+
+    With the pacer: half the frame jitter and ~10 % more frames on a busy
+    screen; the median the same; a worse tail (p95 +300 ms), from episodes
+    (taps 20 and 50, ~600 ms) — the shape Pion showed too. The server logged no
+    retune in these runs, so the pacer ran at 2.5 × 8 Mbps, where a whole
+    keyframe drains in ~30 ms: by its own arithmetic it can't hold a frame
+    300 ms. One run each can't say whether the tail is the pacer or the radio;
+    the server now logs `[webrtc] pacer holding N ms at T kbps` for any packet
+    held over 50 ms, so the next runs (alternated, several each) show which.
+
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
     samples); and each tap is answered in its own colour (left red, right green,

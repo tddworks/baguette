@@ -34,6 +34,9 @@ public struct Pacer<Packet>: Sendable where Packet: Sendable {
 
     public var isEmpty: Bool { head == queue.count }
 
+    /// How long its oldest packet has waited at `now`; nil when it holds none.
+    public func oldestWait(at now: Int64) -> Int64? { isEmpty ? nil : now - queue[head].at }
+
     public mutating func enqueue(_ packet: Packet, size: Int, at now: Int64) {
         if isEmpty {
             last = now
