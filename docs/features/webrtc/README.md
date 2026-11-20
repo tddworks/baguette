@@ -58,14 +58,15 @@ Each viewer has its own H.264 encoder, starting at the stream socket's defaults
 
 | `congestion=` | Who estimates the bandwidth |
 |---|---|
-| `transport-cc` (the default when offered) | baguette, from the browser's per-packet arrival reports, the way Google's WebRTC does |
-| `remb` | the browser, which sends its estimate (the older way) |
+| `remb` (the default when offered) | the browser, which sends its estimate (the older way) |
+| `transport-cc` | baguette, from the browser's per-packet arrival reports, the way Google's WebRTC does |
 | `off` | nobody: the bitrate stays where it started or where `set_bitrate` put it |
 
 Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the
 device page with it (`/devices/<UDID>?congestion=remb`) to compare them by hand.
-A method the browser didn't offer falls back to `off`. The server log shows each
-change:
+A method the browser didn't offer falls back to `off`. With REMB, a still screen
+in desktop Chrome drops to 300 kbps until the screen moves (the browser's estimate
+follows what arrives); `transport-cc` doesn't. The server log shows each change:
 
 ```
 [baguette] [webrtc] retune 8000 → 1700 kbps

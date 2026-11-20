@@ -163,15 +163,19 @@ struct WHEPRouterTests {
         #expect(messages == [#"{"ok":false,"error":"unknown viewer: ghost"}"#])
     }
 
-    @Test func `should give a viewer the congestion control asked for, and transport-cc when nothing is`() async throws {
+    @Test func `should give a viewer the congestion control asked for, and REMB when nothing is`() async throws {
         try await whepServer().test { client in
             let remb = try await client.send(.post, "/devices/U/whep?congestion=remb", body: offerWithBoth, headers: sdp)
             #expect(remb.status == .created)
             #expect(remb.text.contains("a=rtcp-fb:112 goog-remb\r\n"))
             #expect(!remb.text.contains("transport-cc"))
 
+            let cc = try await client.send(.post, "/devices/U/whep?congestion=transport-cc", body: offerWithBoth, headers: sdp)
+            #expect(cc.text.contains("a=rtcp-fb:112 transport-cc\r\n"))
+
             let plain = try await client.send(.post, "/devices/U/whep", body: offerWithBoth, headers: sdp)
-            #expect(plain.text.contains("a=rtcp-fb:112 transport-cc\r\n"))
+            #expect(plain.text.contains("a=rtcp-fb:112 goog-remb\r\n"))
+            #expect(!plain.text.contains("transport-cc"))
 
             let off = try await client.send(.post, "/devices/U/whep?congestion=off", body: offerWithBoth, headers: sdp)
             #expect(!off.text.contains("extmap"))

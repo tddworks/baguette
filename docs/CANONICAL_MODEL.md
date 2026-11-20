@@ -196,7 +196,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
 | a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
-| a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
+| a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, REMB if offered, else transport-cc if offered, else none | `CongestionChoice` |
 | with no congestion control, nothing retunes the encoder: it stays where it started or where `set_bitrate` put it | `FixedBitrate` |
 | a viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
