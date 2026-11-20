@@ -19,10 +19,14 @@ public struct TransportFeedback: Equatable, Sendable {
 
     /// Counts the browser's reports, so a lost or reordered one shows.
     public let feedbackCount: UInt8
+    /// The report's reference time in microseconds, as the browser sent it:
+    /// 24 signed bits of 64 ms, so it wraps (every ~12.4 days of its clock).
+    public let reference: Int64
     public let arrivals: [Arrival]
 
-    public init(feedbackCount: UInt8, arrivals: [Arrival]) {
+    public init(feedbackCount: UInt8, reference: Int64 = 0, arrivals: [Arrival]) {
         self.feedbackCount = feedbackCount
+        self.reference = reference
         self.arrivals = arrivals
     }
 
@@ -77,6 +81,7 @@ public struct TransportFeedback: Equatable, Sendable {
             arrivals.append(Arrival(sequence: sequence, microseconds: time))
         }
         feedbackCount = bytes[7]
+        self.reference = Int64(reference) * 64_000
         self.arrivals = arrivals
     }
 

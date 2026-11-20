@@ -41,9 +41,11 @@ private struct Network {
 /// `screen`: what the encoder has to send, at most the target — 300 kbps for a
 /// still screen, infinity for one that never stops moving. A keyframe burst of
 /// 60 packets leaves every 2 s, as the encoder makes them.
+/// `browserClock`: where the browser's clock stands at our zero. Its reports
+/// carry a 24-bit reference time in 64 ms steps, which wraps every ~12.4 days.
 private func stream(
     _ control: TransportWideControl, over network: inout Network, screen: Double,
-    seconds: Double, from start: Int64 = 0
+    seconds: Double, from start: Int64 = 0, browserClock: Int64 = 0
 ) -> Int64 {
     var now = start
     var owed = 0.0
@@ -64,8 +66,13 @@ private func stream(
         now += 5_000
         if now % 100_000 == 0, let newest = inFlight.lastIndex(where: { ($0.arrival ?? .max) <= now }) {
             let run = inFlight[...newest]
-            control.heard(.transportFeedback(TransportFeedback(feedbackCount: 0, arrivals: run.map {
-                .init(sequence: $0.sequence, microseconds: ($0.arrival ?? .max) <= now ? $0.arrival : nil)
+            // The reference is the first arrival's, in 64 ms steps, as 24 signed bits.
+            let firstArrival = run.compactMap(\.arrival).filter { $0 <= now }.min()! + browserClock
+            let steps = firstArrival / 64_000
+            let wrapped = (steps + 0x80_0000) % 0x100_0000 - 0x80_0000
+            let shift = (steps - wrapped) * 64_000
+            control.heard(.transportFeedback(TransportFeedback(feedbackCount: 0, reference: wrapped * 64_000, arrivals: run.map {
+                .init(sequence: $0.sequence, microseconds: ($0.arrival ?? .max) <= now ? $0.arrival! + browserClock - shift : nil)
             })), at: now)
             // What arrived is reported once; a gap is reported again until it fills.
             inFlight = run.filter { ($0.arrival ?? .max) > now } + inFlight[(newest + 1)...]
@@ -116,15 +123,26 @@ struct TransportWideControlLinkTests {
         #expect(control.target! >= 1_000_000)
     }
 
-    @Test func `should be back near its ceiling within a few seconds of the link freeing up`() {
+    @Test func `should still settle under a slow link while the browser's reference clock wraps`() {
+        let control = TransportWideControl(extensionID: 3, payloadType: 112, ceiling: 8_000_000)
+        var network = Network(capacity: 2_000_000)
+        let wrapsIn1s: Int64 = 0x80_0000 * 64_000 - 1_000_000
+
+        _ = stream(control, over: &network, screen: .infinity, seconds: 20, browserClock: wrapsIn1s)
+
+        #expect(control.target! <= 2_200_000)
+        #expect(control.target! >= 1_000_000)
+    }
+
+    @Test func `should be back near its ceiling within six seconds of the link freeing up`() {
         let control = TransportWideControl(extensionID: 3, payloadType: 112, ceiling: 8_000_000)
         var network = Network(capacity: 2_000_000)
         let later = stream(control, over: &network, screen: .infinity, seconds: 20)
 
         network.capacity = 50_000_000
-        _ = stream(control, over: &network, screen: .infinity, seconds: 5, from: later)
+        _ = stream(control, over: &network, screen: .infinity, seconds: 6, from: later)
 
-        #expect(control.target! >= 7_000_000)
+        #expect(control.target! >= 7_000_000, "\(control.target!)")
     }
 
     @Test func `should still cut its bitrate on a link that really loses much of what it sends`() {

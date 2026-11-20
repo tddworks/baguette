@@ -10,6 +10,7 @@ public final class TransportWideControl: CongestionControl, @unchecked Sendable 
     private var sequence: UInt16 = 0
     private var history = SendHistory()
     private var estimate: BandwidthEstimate
+    private var clock = FeedbackClock()
 
     public init(extensionID: UInt8, payloadType: UInt8, ceiling: Int) {
         self.extensionID = extensionID
@@ -34,7 +35,9 @@ public final class TransportWideControl: CongestionControl, @unchecked Sendable 
 
     public func heard(_ feedback: RTCPFeedback, at now: Int64) {
         guard case .transportFeedback(let report) = feedback else { return }
-        lock.withLock { estimate.update(with: history.outcomes(of: report, now: now), now: now) }
+        lock.withLock {
+            estimate.update(with: history.outcomes(of: clock.unwrap(report), now: now), now: now)
+        }
     }
 
     public var target: Int? { lock.withLock { estimate.target } }
