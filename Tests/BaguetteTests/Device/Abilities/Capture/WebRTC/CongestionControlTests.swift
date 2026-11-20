@@ -46,9 +46,10 @@ struct TransportWideControlTests {
         }
 
         control.heard(.transportFeedback(TransportFeedback(
-            feedbackCount: 0, arrivals: (0..<30).map { .init(sequence: UInt16($0), microseconds: nil) })), at: 100_000)
+            feedbackCount: 0, arrivals: (0..<30).map { .init(sequence: UInt16($0), microseconds: nil) })), at: 600_000)
 
-        #expect(control.target == 4_000_000)   // all lost: the loss-based rate halves
+        // All still missing half a second after they left: lost, and the loss-based rate halves.
+        #expect(control.target == 4_000_000)
     }
 }
 

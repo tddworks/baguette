@@ -34,7 +34,7 @@ public final class TransportWideControl: CongestionControl, @unchecked Sendable 
 
     public func heard(_ feedback: RTCPFeedback, at now: Int64) {
         guard case .transportFeedback(let report) = feedback else { return }
-        lock.withLock { estimate.update(with: history.outcomes(of: report), now: now) }
+        lock.withLock { estimate.update(with: history.outcomes(of: report, now: now), now: now) }
     }
 
     public var target: Int? { lock.withLock { estimate.target } }

@@ -130,11 +130,14 @@ WebRTCViewers  ◆                      the live viewers by id — admit(offer, 
     ├─ RTCPFeedback ◇                  PLI · FIR → keyframe; NACK → resend from history;
     │                                  transport-cc → arrivals (TransportFeedback ◇)
     ├─ SendHistory ◇                   transport-wide sequence → send time and size, bounded;
-    │                                  feedback in, "sent at / arrived at" pairs out
-    └─ BandwidthEstimate ◇             Google Congestion Control (GCC): a delay-based rate (trendline
-                                       over the arrival-minus-send delay, overuse detector with an
-                                       adaptive threshold, AIMD) and a loss-based rate; THE TARGET IS
-                                       THE LOWER OF THE TWO, between a floor and the starting bitrate
+    │                                  each packet's outcome once; LOST ONLY AFTER 500 ms MISSING
+    └─ BandwidthEstimate ◇             GCC's shape (AIMD + a loss-based rate; THE TARGET IS THE LOWER
+        │                              OF THE TWO, between a floor and the starting bitrate), with
+        │                              recovery from its own bursts' measured capacity, and fast
+        │                              (50 %/s) back to the rate before a cut the queue never repeated
+        └─ QueueDelay ◇                the queue = the delay FLOOR of packets sent in the last 200 ms
+                                       minus the floor of the last 10 s; jitter can't lift a floor;
+                                       fewer than 10 packets is no evidence
 ```
 
 **How much the link takes is one role, `CongestionControl`, with three
@@ -456,6 +459,29 @@ this doc.
     6. ~~*`WebRTCViewer` retunes its encoder*~~ **DONE** (laws 11–12).
     7. *Prove it* on a throttled link (Network Link Conditioner or `impair.sh`).
     A pacer (spacing a keyframe's burst) is a later slice if the bench needs it.
+
+    **Rebuilt from first principles after the phone test (2026-11-20).** On the
+    phone, transport-cc blurred the picture where REMB didn't. A simulated link
+    with per-packet jitter reproduced it — on a 20 Mbps link with room to spare,
+    still / busy screen, the target after 30 s:
+
+    | Jitter | GCC as first ported | Now |
+    |---|---|---|
+    | 15 ms | 8,000 / 7,521 kbps | 8,000 / 8,000 kbps |
+    | 40 ms | 8,000 / 1,381 kbps | 8,000 / 8,000 kbps |
+    | 80 ms | 1,102 / 382 kbps | 8,000 / 8,000 kbps |
+    | 150 ms | 300 / 300 kbps | 8,000 / 8,000 kbps |
+
+    The causes, each a GCC assumption a screen over a mobile link breaks: a
+    packet reported "not received" was counted lost, though over a jittery link
+    it is usually just late (now: lost only after 500 ms missing, each packet
+    once); GCC's trendline over 5 ms groups read random jitter as a growing
+    queue (now: `QueueDelay`'s delay floor, by send time, and no judgement from
+    fewer than 10 packets — a still screen's handful); and after any cut it
+    crawled back at 8 %/s (now: up to its bursts' measured capacity at once, or
+    50 %/s back to the rate before a cut the queue never repeated). Real limits
+    still bite: on a 2 Mbps link it settles at ~1.9 Mbps; 20 % loss still cuts;
+    freed, it is back at 8 Mbps about 5 s later (`TransportWideControlLinkTests`).
 
     Over a simulated 2 Mbps bottleneck (`BandwidthEstimateTests`), the target
     falls from 8 Mbps to 1.7 Mbps within 2 s and saw-tooths just under 2 Mbps

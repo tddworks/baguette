@@ -1,12 +1,15 @@
 import Foundation
 
 /// The bitrate a viewer's encoder should aim for, from the browser's
-/// transport-cc reports — Google Congestion Control, as libwebrtc does it:
+/// transport-cc reports — Google Congestion Control's shape, with the two
+/// parts a screen stream over a mobile link needs done differently:
 ///
-/// - **delay-based**: `DelayTrend`'s signal drives an AIMD rate. Normal climbs
-///   (8 % a second, or about one packet per response time once near the link's
-///   measured capacity); overuse drops to 85 % of what is actually arriving;
-///   underuse holds while the queue drains.
+/// - **delay-based**: `QueueDelay`'s signal (the delay floor, which jitter
+///   can't lift) drives an AIMD rate. Normal climbs (8 % a second, or about one
+///   packet per response time near the link's capacity) and jumps straight to
+///   85 % of the capacity its own bursts measured — a keyframe's packets leave
+///   together, and how spread out they arrive is the link's rate; overuse drops
+///   to 85 % of what is actually arriving; underuse holds while the queue drains.
 /// - **loss-based**: under 2 % loss it climbs 8 % (at most once a second);
 ///   over 10 % it cuts by half the loss (at most every 300 ms).
 ///
@@ -19,7 +22,10 @@ public struct BandwidthEstimate: Sendable {
 
     private enum RateState { case hold, increase, decrease }
 
-    private var trend = DelayTrend()
+    private var queue = QueueDelay()
+    private var burstCapacity: (at: Int64, bitsPerSecond: Double)?
+    /// The rate held when the last cut came: where to climb back to, fast.
+    private var beforeCut: Double?
     private var delayRate: Double
     private var lossRate: Double
     private var state = RateState.increase
@@ -36,6 +42,9 @@ public struct BandwidthEstimate: Sendable {
     private static let additiveIncrease = 1_200.0 * 8 / 0.2  // one packet per ~200 ms response time, per second
     private static let nearCapacity = 0.2                   // within 20 % of the measured capacity
     private static let ackWindow: Int64 = 500_000
+    private static let burstPackets = 10                    // a burst this big measures the link
+    private static let burstFreshness: Int64 = 5_000_000    // trusted for 5 s
+    private static let recovery = 1.5                       // per second, back toward the rate before a cut
 
     public init(floor: Int = 300_000, ceiling: Int) {
         self.floor = floor
@@ -47,8 +56,9 @@ public struct BandwidthEstimate: Sendable {
 
     /// One report's outcomes, in sending order, read at `now` on the viewer's clock.
     public mutating func update(with outcomes: [PacketOutcome], now: Int64) {
+        queue.read(outcomes)
+        measureBursts(in: outcomes, now: now)
         for outcome in outcomes {
-            trend.add(outcome)
             lossCounted.total += 1
             if let arrival = outcome.arrivedAt {
                 received.append((arrival, outcome.size * 8))
@@ -69,10 +79,31 @@ public struct BandwidthEstimate: Sendable {
         return Double(received.map(\.bits).reduce(0, +)) / (Double(last - first) / 1_000_000)
     }
 
+    /// Packets that left together (within 1 ms) and arrived spread over some
+    /// time crossed the link back to back: their bits over that spread is its
+    /// capacity. Arrived all at once means faster than we can tell: the ceiling's
+    /// tenfold.
+    private mutating func measureBursts(in outcomes: [PacketOutcome], now: Int64) {
+        var bursts: [[PacketOutcome]] = []
+        for outcome in outcomes where outcome.arrivedAt != nil {
+            if let first = bursts.last?.first, outcome.sentAt - first.sentAt <= 1_000 {
+                bursts[bursts.count - 1].append(outcome)
+            } else {
+                bursts.append([outcome])
+            }
+        }
+        for burst in bursts where burst.count >= Self.burstPackets {
+            let arrivals = burst.compactMap(\.arrivedAt)
+            let spread = Double(arrivals.max()! - arrivals.min()!) / 1_000_000
+            let bits = Double(burst.dropFirst().map(\.size).reduce(0, +) * 8)
+            burstCapacity = (now, spread > 0 ? bits / spread : Double(ceiling) * 10)
+        }
+    }
+
     private mutating func updateDelayRate(now: Int64) {
         let elapsed = lastRateUpdate.map { min(Double(now - $0) / 1_000_000, 1) } ?? 0
         lastRateUpdate = now
-        switch trend.signal {
+        switch queue.signal {
         case .normal: if state == .hold { state = .increase }
         case .underusing: state = .hold
         case .overusing: state = .decrease
@@ -82,6 +113,15 @@ public struct BandwidthEstimate: Sendable {
             break
         case .increase:
             var increased = delayRate
+            // The link just showed what it carries: go there at once, not 8 % a second.
+            if let measured = burstCapacity, now - measured.at <= Self.burstFreshness {
+                increased = max(increased, Self.backoff * measured.bitsPerSecond)
+            }
+            // A cut the queue never repeated was likely wrong (a jitter spike):
+            // climb back fast; on a full link the queue builds again and stops it.
+            if let before = beforeCut, delayRate < before {
+                increased = max(increased, min(before, delayRate * pow(Self.recovery, elapsed)))
+            }
             if let capacity = linkCapacity, abs(delayRate - capacity) <= Self.nearCapacity * capacity {
                 increased += Self.additiveIncrease * elapsed
             } else {
@@ -96,6 +136,7 @@ public struct BandwidthEstimate: Sendable {
             }
             delayRate = increased
         case .decrease:
+            beforeCut = delayRate
             if let acknowledged {
                 delayRate = min(delayRate, Self.backoff * acknowledged)
                 linkCapacity = linkCapacity.map { 0.95 * $0 + 0.05 * acknowledged } ?? acknowledged
