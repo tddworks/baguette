@@ -1,0 +1,152 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Live view bench</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font:13px ui-monospace,monospace;background:#111;color:#ddd;margin:16px}a{color:#8cf}
+#view{display:flex;flex-wrap:wrap;gap:16px}canvas,video{height:600px;max-height:60vh;max-width:100%;background:#222;border:1px solid #444}
+pre{white-space:pre-wrap}</style></head>
+<body>
+<a id="back" href="./">← back</a>
+<div id="view"><canvas id="cv"></canvas><video id="vid" autoplay playsinline muted></video><pre id="log"></pre></div>
+<script>
+// ?transport=ws|webrtc&udid=&taps=100[&mode=bw&secs=30] — serve and WHEP are reached through this page's origin (proxy.mjs)
+const q = new URLSearchParams(location.search);
+const T = q.get('transport') || 'ws', UDID = q.get('udid'), TAPS = +(q.get('taps') || 100);
+const SERVE = q.get('serve') || location.origin + '/api', WHEP = q.get('whep') || location.origin + '/whep';
+const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
+document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
+const logEl = document.getElementById('log'); const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log('[bench]', ...a); };
+const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+const R = window.__bench = { transport: T, t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
+
+// Every presented frame lands here with its vsync timestamp and its centre-pixel luma.
+let lastLuma = 0;
+function presented(ts, src, sw, sh) {
+  if (R.firstFrame === null) { R.firstFrame = ts - R.t0; log('first frame', R.firstFrame.toFixed(0), 'ms'); }
+  R.frames.push(ts);
+  probe.drawImage(src, sw / 2, sh / 2, 1, 1, 0, 0, 1, 1);
+  const d = probe.getImageData(0, 0, 1, 1).data; lastLuma = (d[0] + d[1] + d[2]) / 3;
+  if (waiter && waiter.want(lastLuma)) { const w = waiter; waiter = null; w.resolve(ts); }
+}
+let waiter = null;
+const until = (want, ms) => new Promise((resolve, reject) => {
+  waiter = { want, resolve };
+  setTimeout(() => { if (waiter && waiter.resolve === resolve) { waiter = null; resolve(null); } }, ms);
+});
+
+// --- transport: today's stream WebSocket, decoded like frame-decoder.js, painted on rAF like stream-session.js.
+// Like the serve page (stream-format.js, issue #71): H.264 needs WebCodecs, which browsers only give secure
+// contexts (HTTPS or localhost), so a plain-http page on a phone gets MJPEG, as it does from baguette serve.
+function startWS() {
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  document.getElementById('vid').style.display = 'none';
+  let pending = null, cfg = null, ts = 0;
+  const avcc = typeof VideoDecoder !== 'undefined';
+  R.format = avcc ? 'avcc' : 'mjpeg';
+  log('WebSocket format:', avcc ? 'H.264 (WebCodecs)' : 'MJPEG (no WebCodecs on a plain-http page)');
+  const keep = f => { if (pending) pending.close(); pending = f; };
+  const dec = avcc ? new VideoDecoder({ output: keep, error: e => log('decoder', e.message) }) : null;
+  const ws = new WebSocket(SERVE.replace('http', 'ws') + '/devices/' + UDID + '/stream?format=' + R.format);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => { for (const m of [{ type: 'set_scale', scale: 1 }, { type: 'set_fps', fps: 60 }, { type: 'set_bitrate', bps: 8000000 }, { type: 'force_idr' }]) ws.send(JSON.stringify(m)); };
+  ws.onmessage = e => {
+    if (!(e.data instanceof ArrayBuffer)) return;
+    R.wsBytes = (R.wsBytes || 0) + e.data.byteLength; R.wsMsgs = (R.wsMsgs || 0) + 1;
+    if (!avcc) { createImageBitmap(new Blob([e.data], { type: 'image/jpeg' })).then(keep, () => {}); return; }
+    const b = new Uint8Array(e.data), tag = b[0], p = b.slice(1);
+    if (tag === 1) { cfg = { codec: 'avc1.' + [1, 2, 3].map(i => p[i].toString(16).padStart(2, '0')).join(''), description: p.buffer, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' }; dec.configure(cfg); }
+    else if ((tag === 2 || tag === 3) && dec.state === 'configured') { dec.decode(new EncodedVideoChunk({ type: tag === 2 ? 'key' : 'delta', timestamp: ts, data: p.buffer })); ts += 16667; }
+  };
+  ws.onclose = e => log('ws closed', e.code, e.reason);
+  const paint = t => {
+    if (pending) {
+      const f = pending; pending = null;
+      const w = f.displayWidth || f.width, h = f.displayHeight || f.height;
+      if (cv.width !== w) { cv.width = w; cv.height = h; }
+      ctx.drawImage(f, 0, 0);
+      presented(t, f, w, h); f.close();
+    }
+    requestAnimationFrame(paint);
+  };
+  requestAnimationFrame(paint);
+  R.stop = () => ws.close();
+}
+
+// --- transport: WHEP, set up as the design doc's "The viewer" section describes
+async function startWebRTC() {
+  document.getElementById('cv').style.display = 'none';
+  const vid = document.getElementById('vid');
+  const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle' });
+  const tr = pc.addTransceiver('video', { direction: 'recvonly' });
+  const caps = RTCRtpReceiver.getCapabilities('video').codecs;
+  tr.setCodecPreferences([...caps.filter(c => c.mimeType.toLowerCase() === 'video/h264'), ...caps.filter(c => c.mimeType.toLowerCase() !== 'video/h264')]);
+  pc.ontrack = e => { e.receiver.jitterBufferTarget = 0; if ('playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; vid.srcObject = e.streams[0]; };
+  pc.onconnectionstatechange = () => log('pc', pc.connectionState);
+  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+  const res = await fetch(WHEP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
+  if (!res.ok) { log('WHEP', res.status, await res.text()); return; }
+  let sdp = (await res.text()).replace(/a=rtcp-fb:\d+ goog-remb\r?\n/g, '');
+  if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
+  await pc.setRemoteDescription({ type: 'answer', sdp });
+  const onFrame = (now, meta) => { presented(now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
+  vid.requestVideoFrameCallback(onFrame);
+  R.pc = pc; R.stop = () => pc.close();
+}
+
+// --- the probe: tap the fixture's centre, time until the centre turns white
+async function tap() {
+  // text/plain + no-cors: a simple request, so no preflight; we don't read the ack.
+  return fetch(SERVE + '/devices/' + UDID + '/input', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ type: 'tap', x: W / 2, y: H / 2, width: W, height: H, duration: 0.15 }) });
+}
+const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]; };
+async function rtcBytes() { let b = 0, p = 0; (await R.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') { b += r.bytesReceived + (r.headerBytesReceived || 0); p += r.packetsReceived; } }); return { b, p }; }
+async function counter() { return T === 'ws' ? { b: R.wsBytes || 0, p: R.wsMsgs || 0 } : rtcBytes(); }
+async function bw(secs) {
+  await new Promise(r => setTimeout(r, 3000));
+  const a = await counter(), f0 = R.frames.length, t0 = performance.now();
+  await new Promise(r => setTimeout(r, secs * 1000));
+  const z = await counter(), dt = (performance.now() - t0) / 1000;
+  // per-packet overhead below the counted bytes: WS = TCP/IP + WS header per ~1448 B segment; WebRTC = UDP/IP + SRTP auth tag per packet
+  const payload = z.b - a.b, packets = z.p - a.p;
+  const wire = T === 'ws' ? payload + Math.ceil(payload / 1448) * 52 + packets * 4 : payload + packets * (28 + 10);
+  R.summary = { transport: T, format: R.format || 'h264', secs: +dt.toFixed(1), payloadMbps: +(payload * 8 / dt / 1e6).toFixed(2), wireMbpsEst: +(wire * 8 / dt / 1e6).toFixed(2),
+    mbPerMin: +(wire / dt * 60 / 1e6).toFixed(1), messagesOrPackets: packets, fps: +((R.frames.length - f0) / dt).toFixed(1) };
+  log(JSON.stringify(R.summary)); R.done = true; R.stop();
+}
+async function run() {
+  // One encoder per run: the WHEP source runs only for WebRTC.
+  await fetch('bridge/' + (T === 'ws' ? 'off' : 'on'), { method: 'POST' });
+  if (T !== 'ws') { log('starting the WHEP source…'); await new Promise(r => setTimeout(r, 5000)); }
+  T === 'ws' ? startWS() : await startWebRTC();
+  while (R.firstFrame === null) await new Promise(r => setTimeout(r, 50));
+  if (q.get('mode') === 'bw') return bw(+(q.get('secs') || 30));
+  await new Promise(r => setTimeout(r, 2000));
+  // The probe needs the black/white page on screen: anything already bright at the centre would make every
+  // "tap" just the time to the next frame.
+  if (lastLuma > 128 && await until(l => l < 128, 3000) === null) {
+    log('ABORTED: the screen centre is not black. Put the "Black/white probe" page on the simulator first.');
+    R.summary = { transport: T, aborted: 'probe page not on screen' }; R.done = true; R.stop(); return;
+  }
+  for (let i = 0; i < TAPS; i++) {
+    if (lastLuma > 128) await until(l => l < 128, 2000);
+    await new Promise(r => setTimeout(r, 250 + Math.random() * 200));  // de-phase taps from vsync
+    const t0 = performance.now(); tap();
+    const t1 = await until(l => l > 128, 2000);
+    R.samples.push(t1 === null ? null : t1 - t0);
+    if (i % 10 === 9) log('tap', i + 1, t1 === null ? 'MISS' : (t1 - t0).toFixed(1) + ' ms');
+  }
+  const ok = R.samples.filter(x => x !== null);
+  const iv = R.frames.slice(1).map((t, i) => t - R.frames[i]);
+  const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
+  const durMin = (R.frames.at(-1) - R.frames[0]) / 60000;
+  R.summary = {
+    transport: T, format: R.format || 'h264', taps: TAPS, misses: TAPS - ok.length,
+    p50: +pct(ok, 50).toFixed(1), p95: +pct(ok, 95).toFixed(1), p99: +pct(ok, 99).toFixed(1), min: +Math.min(...ok).toFixed(1), max: +Math.max(...ok).toFixed(1),
+    firstFrameMs: +R.firstFrame.toFixed(0), presentedFps: +(1000 / mean).toFixed(1),
+    intervalStddevMs: +Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length).toFixed(2),
+    freezesPerMin: +(iv.filter(x => x > 200).length / durMin).toFixed(2),
+  };
+  log(JSON.stringify(R.summary, null, 1)); R.done = true; R.stop();
+}
+run().catch(e => log('ERR', e.message));
+</script></body></html>

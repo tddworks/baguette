@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000}canvas{width:100vw;height:100vh;display:block}</style></head>
+<body><canvas id=c></canvas><script>
+// A busy but realistic screen: scrolling text rows plus moving coloured cards, redrawn every frame.
+const c=document.getElementById('c'),x=c.getContext('2d');const dpr=devicePixelRatio;c.width=innerWidth*dpr;c.height=innerHeight*dpr;x.scale(dpr,dpr);
+const W=innerWidth,H=innerHeight;let t=0;
+(function f(){t++;x.fillStyle='#f4f4f6';x.fillRect(0,0,W,H);
+for(let i=0;i<40;i++){const y=((i*44-t*3)%(40*44)+40*44)%(40*44)-44;x.fillStyle='hsl('+(i*37%360)+',70%,60%)';x.fillRect(16,y+6,32,32);
+x.fillStyle='#222';x.font='15px -apple-system';x.fillText('Row '+i+' — the quick brown fox '+(t+i),60,y+22);x.fillStyle='#888';x.font='12px -apple-system';x.fillText('subtitle '+(i*7919%1000),60,y+38);}
+requestAnimationFrame(f)})();
+</script></body></html>

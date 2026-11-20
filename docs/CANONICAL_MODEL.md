@@ -112,7 +112,14 @@ Simulators  ◆                               THE SIMULATOR FAMILY — a device 
 
 Chromes  ◆            bezels and profiles by device type — panels(forDeviceName:) says if it folds
 DeviceModels  ◆       installed 3D models · DeviceRenderer ◆ · DeviceScene ◆ (the page's 3D book)
-Stream  ◆             a framebuffer as MJPEG or AVCC — StreamFormat ◇ · StreamDisplayPlan ◇
+Stream  ◆             a framebuffer as MJPEG or AVCC — StreamFormat ◇ · StreamDisplayPlan ◇; its frames
+                      leave through a FrameSink: stdout, a WebSocket, or a WebRTC viewer
+WebRTCViewers  ◆      THE LIVE WEBRTC (WHEP) VIEWERS, by id — admit(offer) → answer · find(id) · hangUp(id)
+└── WebRTCViewer  ◆   ONE BROWSER watching one device over WebRTC, with a Stream of its own:
+                      new → connecting (STUN) → securing (DTLS) → live → hung up.
+                      SessionDescription ◇ (offer in, answer out) · STUNMessage ◇ · RTPPacket ◇ ·
+                      H264Packetizer ◇ · SRTPContext ◇ · RTCPFeedback ◇; at the outside world,
+                      Datagrams ◆ (its UDP socket) and Handshake ◆ (its DTLS handshake)
 CameraSessions  ◆     one virtual camera per server — Cameras ◆ · CameraSource ◇; the device's
                       Camera ◆ (a simulator's: VirtualCamera injected) is what it feeds
 Plugins  ◆            installed plugins — PluginManifest ◇ · PluginRoute ◇ · PluginGrants ◆
@@ -135,6 +142,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | `orientation <value>` | `orientation.set(_:) → PoseDelivery` | on a foldable, through the hinge motor |
 | `describe-ui [--x --y] [--short]` | `DescribeUI.read(from: accessibility)` | `--short` answers with the short answer, not the tree |
 | `screenshot` · `stream` · `record` | `StreamDisplayPlan.bind(to:)` → `Screen` | CarPlay fails closed, never the phone instead |
+| the page's WebRTC view (`POST /devices/:udid/whep`) · hang up (`DELETE …/whep/:viewer`) | `viewers.admit(offer, …)` · `viewers.hangUp(id)` | the viewer's touches ride its control WebSocket, through `GestureDispatcher` as any socket's do |
 | `location set · start · walk · clear` | `location.set` · `start(route)` · `start(walk.route())` · `clear` | |
 | `motion start · set · stop` | `motion.publish` · `clear` | injected |
 | `network set · clear · status` | `network.apply` · `clear` · `current` | injected; `clear` reaches running apps |
@@ -176,6 +184,14 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a short read is of a screen, not a point; `x` and `y` come together | `DescribeUI` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
 | a physical phone's touches go to the Universal HID service it registers for its main touchscreen, `0x101` — measured, never computed | `CoreDeviceDigitizer.mainTouchscreen` |
+| a WebRTC viewer sees no picture before a keyframe: it asks its stream for one when its handshake completes and whenever the browser reports a lost picture (PLI or FIR) | `WebRTCViewer` |
+| a viewer sends nothing before its DTLS handshake completes, and every packet after it through SRTP | `WebRTCViewer` |
+| one viewer, one encoder: each viewer owns its stream, and hanging up stops it | `WebRTCViewer` |
+| a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCViewer` |
+| a STUN check is answered only when its integrity matches the viewer's ICE password | `STUNMessage` |
+| an offer with no H.264 the encoder can send (packetization mode 1) is refused, never answered with another codec | `SessionDescription` |
+| no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
+| a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
@@ -252,13 +268,13 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Orientation** | *which way is it turned?* | ◆ `Orientation` |
 | **Accessibility** | *what is on screen?* | ◆ `Accessibility` · ◇ `AXNode` `AXScreen` |
 | **Chrome** · **Render** · **Capture** | *what does the device look like, and how is it framed?* | ◆ `Chromes` · `DeviceModels` · ◇ `CaptureSize` |
-| **Stream** · **Recording** | *how do frames leave?* | ◆ `Stream` · `Reel` |
+| **Stream** · **Recording** | *how do frames leave?* | ◆ `Stream` · `Reel` · `WebRTCViewers` → `WebRTCViewer` · ◇ `RTPPacket` (shared with CoreDevice, which receives a phone's screen as RTP) |
 | **Location** · **Motion** · **Network** · **Interface** · **StatusBar** · **Shake** · **Camera** | *what conditions does the app run under?* | one ◆ role each |
 | **Apps** · **Defaults** · **Pasteboard** · **Photos** | *which apps, and what data?* | one ◆ role each |
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
 | **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
-| **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `RTPPacket` `VideoDepacketizer` (its screen) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
+| **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `VideoDepacketizer` (its screen; `RTPPacket` is the Stream context's) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind
 
