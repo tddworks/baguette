@@ -19,6 +19,16 @@ private let offer = try! SessionDescription(offer: [
     "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
 ].joined(separator: "\r\n"))
 
+/// The same offer with the transport-wide sequence extension at id 5.
+private let offerWithTransportCC = try! SessionDescription(offer: [
+    "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 112", "a=mid:0",
+    "a=ice-ufrag:h6vY", "a=ice-pwd:browserpasswordbrowserpass",
+    "a=fingerprint:sha-256 6B:8B", "a=setup:actpass",
+    "a=extmap:5 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+    "a=rtpmap:112 H264/90000", "a=rtcp-fb:112 transport-cc",
+    "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
+].joined(separator: "\r\n"))
+
 /// RFC 5769's sample check is addressed to "evtj" and signed with this password.
 private let ours = ICECredentials(ufrag: "evtj", password: "VOkJxbRl1RmTxUk/WvJxBt")
 private let check = hex(
@@ -61,7 +71,7 @@ private struct Rig {
     let sink = Box<(any FrameSink)?>(nil)
     let viewer: WebRTCViewer
 
-    init(progress: HandshakeProgress = .complete(replies: [], srtpExport: export)) {
+    init(progress: HandshakeProgress = .complete(replies: [], srtpExport: export), offer: SessionDescription = offer) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
         given(datagrams).onReceive(.any).willProduce { [received] handler in received.value = handler }
@@ -71,6 +81,8 @@ private struct Rig {
         given(handshake).resend().willReturn([Data([0x16, 0xFE, 0xFD, 9])])
         given(stream).requestKeyframe().willReturn()
         given(stream).stop().willReturn()
+        given(stream).config.willReturn(.default)
+        given(stream).apply(.any).willReturn()
         let (stream, sink, now) = (stream, sink, now)
         viewer = WebRTCViewer(
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
@@ -303,6 +315,54 @@ struct WebRTCViewerTests {
         rig.viewer.hangUp()
 
         #expect(told.value == 1)
+    }
+
+    @Test func `should number every packet with a transport-wide sequence when the browser offered transport-cc`() {
+        let rig = Rig(offer: offerWithTransportCC)
+        rig.goLive()
+
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
+
+        #expect(rig.packets.map(\.extensions) == [
+            [RTPHeaderExtension(id: 5, data: [0, 0])],
+            [RTPHeaderExtension(id: 5, data: [0, 1])],
+        ])
+    }
+
+    @Test func `should number no packet when the browser offered no transport-cc`() {
+        let rig = Rig()
+        rig.goLive()
+
+        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
+
+        #expect(rig.packets.allSatisfy { $0.extensions.isEmpty })
+    }
+
+    @Test func `should retune its encoder to what the browser's reports say gets through`() {
+        let rig = Rig(offer: offerWithTransportCC)
+        rig.goLive()
+        // A keyframe big enough for 30 packets, every one of them reported lost.
+        let slice = Data([0x65] + [UInt8](repeating: 7, count: 35_000))
+        rig.show(AVCCEnvelope.keyframe(avcc: Data([0, 0, UInt8(slice.count >> 8), UInt8(slice.count & 0xFF)]) + slice))
+        let sent = rig.packets.count
+        #expect(sent >= 20)
+
+        rig.viewer.act(on: [.transportFeedback(TransportFeedback(
+            feedbackCount: 0, arrivals: (0..<sent).map { .init(sequence: UInt16($0), microseconds: nil) }))])
+
+        // All lost: the loss-based rate halves 8 Mbps.
+        verify(rig.stream).apply(.value(StreamConfig.default.with(bitrateBps: 4_000_000))).called(1)
+    }
+
+    @Test func `should leave its encoder alone without transport-cc`() {
+        let rig = Rig()
+        rig.goLive()
+
+        rig.viewer.act(on: [.transportFeedback(TransportFeedback(
+            feedbackCount: 0, arrivals: (0..<30).map { .init(sequence: UInt16($0), microseconds: nil) }))])
+
+        verify(rig.stream).apply(.any).called(0)
     }
 }
 

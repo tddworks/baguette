@@ -9,7 +9,9 @@ import Foundation
 /// - **securing**: DTLS from that address only, until the handshake exports
 ///   the SRTP keys; then it asks its stream for a keyframe and goes live.
 /// - **live**: every picture leaves as SRTP; a lost picture brings a keyframe,
-///   lost packets are resent as they were sent.
+///   lost packets are resent as they were sent. When the browser offered
+///   transport-cc, every packet carries a transport-wide sequence number, and its
+///   reports drive a `BandwidthEstimate` that retunes the encoder (`EncoderRetune`).
 /// - **hungUp**: by request, a failed handshake or stream, or 30 s without a
 ///   check; its stream is stopped and it never sends again.
 ///
@@ -44,6 +46,12 @@ public final class WebRTCViewer: @unchecked Sendable {
     private var historyOrder: [UInt16] = []
     private var hangUpHandlers: [@Sendable () -> Void] = []
     private let packetizer = H264Packetizer()
+    // Congestion control, when the browser offered transport-cc.
+    private let transportWideID: UInt8?
+    private var transportSequence: UInt16 = 0
+    private var sendHistory = SendHistory()
+    private var estimate: BandwidthEstimate?
+    private var retune = EncoderRetune()
 
     public init(
         offer: SessionDescription,
@@ -58,6 +66,7 @@ public final class WebRTCViewer: @unchecked Sendable {
         self.ice = ice
         self.ssrc = ssrc
         self.payloadType = offer.payloadType
+        self.transportWideID = offer.transportWideSequenceID
         self.datagrams = datagrams
         self.handshake = handshake
         self.clock = clock
@@ -69,6 +78,7 @@ public final class WebRTCViewer: @unchecked Sendable {
         let sink = RTPFrameSink()
         self.stream = makeStream(sink)
         sink.attach(self)
+        if transportWideID != nil { estimate = BandwidthEstimate(ceiling: stream.config.bitrateBps) }
         datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
     }
 
@@ -170,14 +180,41 @@ public final class WebRTCViewer: @unchecked Sendable {
         guard data.count > 1, (192...223).contains(data[data.startIndex + 1]) else { return }
         let asks = lock.withLock { () -> [RTCPFeedback] in
             guard current == .live, address == browser, let plain = srtp?.unprotectRTCP(data) else { return [] }
-            let asks = RTCPFeedback.parse(plain)
-            for case .lost(let sequences) in asks {
-                sequences.compactMap { history[$0] }.forEach { datagrams.send($0, to: address) }
+            return RTCPFeedback.parse(plain)
+        }
+        act(on: asks)
+    }
+
+    /// What the browser asked, decrypted: resend what it lost, read its
+    /// transport-cc reports into the estimate, and tell the stream what follows
+    /// — a keyframe, a retune — outside the lock.
+    func act(on asks: [RTCPFeedback]) {
+        let retuneTo = lock.withLock { () -> Int? in
+            guard current == .live, let browser else { return nil }
+            var retuneTo: Int?
+            for ask in asks {
+                switch ask {
+                case .lost(let sequences):
+                    sequences.compactMap { history[$0] }.forEach { datagrams.send($0, to: browser) }
+                case .transportFeedback(let feedback):
+                    guard estimate != nil else { continue }
+                    let now = microsecondsNow()
+                    estimate!.update(with: sendHistory.outcomes(of: feedback), now: now)
+                    retuneTo = retune.bitrate(for: estimate!.target, current: stream.config.bitrateBps, now: now) ?? retuneTo
+                case .keyframeRequest, .bandwidthEstimate:
+                    continue
+                }
             }
-            return asks
+            return retuneTo
         }
         if asks.contains(.keyframeRequest) { stream.requestKeyframe() }
+        if let retuneTo {
+            log("[webrtc] retune \(stream.config.bitrateBps / 1_000) → \(retuneTo / 1_000) kbps")
+            try? stream.apply(stream.config.with(bitrateBps: retuneTo))
+        }
     }
+
+    private func microsecondsNow() -> Int64 { Int64(clock().timeIntervalSince(started) * 1_000_000) }
 
     // MARK: - what leaves
 
@@ -196,12 +233,20 @@ public final class WebRTCViewer: @unchecked Sendable {
                 picture: payload, parameterSets: tag == AVCCEnvelope.keyframeTag ? parameterSets : [])
             let timestamp = UInt32(truncatingIfNeeded: Int64(clock().timeIntervalSince(started) * 90_000))
             for (index, body) in payloads.enumerated() {
+                var extensions: [RTPHeaderExtension] = []
+                if let id = transportWideID {
+                    extensions = [RTPHeaderExtension(id: id, data: [UInt8(transportSequence >> 8), UInt8(transportSequence & 0xFF)])]
+                }
                 let packet = RTPPacket(
                     marker: index == payloads.count - 1, payloadType: payloadType,
-                    sequence: sequence, timestamp: timestamp, ssrc: ssrc, payload: body)
+                    sequence: sequence, timestamp: timestamp, ssrc: ssrc, payload: body, extensions: extensions)
                 let wire = srtp!.protect(packet)
                 datagrams.send(wire, to: browser)
                 remember(wire, as: sequence)
+                if transportWideID != nil {
+                    sendHistory.sent(sequence: transportSequence, at: microsecondsNow(), size: wire.count)
+                    transportSequence &+= 1
+                }
                 sequence &+= 1
             }
         }
