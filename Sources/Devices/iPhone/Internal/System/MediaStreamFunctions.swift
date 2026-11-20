@@ -31,7 +31,9 @@ final class MediaStreamCall: @unchecked Sendable {
 /// checks against the type's own size before calling.
 typealias MediaStreamFunctionsWords = (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64,
                                        UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64)
-@_silgen_name("$s10CoreDevice20MediaStreamFunctionsV6deviceAcA06RemoteB0C_tcfC")
+// Weak, and left unresolved at link time (Package.swift's `-U`): a CoreDevice
+// without the media stream leaves these null; `startMediaStream` checks first.
+@_weakLinked @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV6deviceAcA06RemoteB0C_tcfC")
 private func mediaStreamFunctions(device: __owned RemoteDeviceObject) -> MediaStreamFunctionsWords
 
 /// Stands at a `MediaStreamFunctions` value, so its methods get its address.
@@ -40,10 +42,10 @@ private struct MediaStreamFunctionsObject {
 }
 private extension MediaStreamFunctionsObject {
     /// MediaStreamFunctions.mediaStreamSupportInfo { get async throws }
-    @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV05mediaD11SupportInfoAA0bcD0V0gH8ResponseVvg")
+    @_weakLinked @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV05mediaD11SupportInfoAA0bcD0V0gH8ResponseVvg")
     mutating func supportInfo(_ result: UnsafeMutableRawPointer) async throws
     /// MediaStreamFunctions.startMediaStream(with:) async throws
-    @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV05startcD04withAA0bcD0V13StartResponseVAG0H7RequestV_tYaKF")
+    @_weakLinked @_silgen_name("$s10CoreDevice20MediaStreamFunctionsV05startcD04withAA0bcD0V13StartResponseVAG0H7RequestV_tYaKF")
     mutating func start(_ result: UnsafeMutableRawPointer, _ request: UnsafeRawPointer) async throws
 }
 

@@ -19,27 +19,38 @@ import Foundation
 public final class ControlChannel: @unchecked Sendable {
     private weak var stream: AnyObject?
     private var buffer = Data()
-    private let stdin = FileHandle.standardInput
+    private let stdin: FileHandle
     private let onFailure: @Sendable (any Error) -> Void
+    private let lock = NSLock()
+    private var listening = false
+
+    /// True from `start()` until `stop()` or until stdin reaches EOF.
+    public var isListening: Bool { lock.withLock { listening } }
 
     public init(
         stream: any Stream,
+        input: FileHandle = .standardInput,
         onFailure: @escaping @Sendable (any Error) -> Void = { _ in }
     ) {
         self.stream = stream as AnyObject
+        self.stdin = input
         self.onFailure = onFailure
     }
 
     public func start() {
+        lock.withLock { listening = true }
         stdin.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            // Empty means EOF. A handler left installed at EOF fires again at
+            // once, forever — a full core spinning on a closed stdin.
+            guard !chunk.isEmpty else { self?.stop(); return }
             self?.feed(chunk)
         }
     }
 
     public func stop() {
         stdin.readabilityHandler = nil
+        lock.withLock { listening = false }
     }
 
     /// Test seam: feed bytes directly without going through stdin.
