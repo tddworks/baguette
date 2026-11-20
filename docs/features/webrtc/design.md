@@ -7,8 +7,8 @@ description: A proposal to carry the serve live view over WebRTC (WHEP) next to 
 **Status:** BUILT on `feat/whep-live-view`, slices 1–10 of [§6](#6--build-sequence-test-first-each-slice-green):
 the WHEP routes and the page's **WebRTC** choice play through baguette's own
 ICE-lite, DTLS-SRTP and RTP, checked end to end in Chrome on 2026-11-20 (the serve
-page at 38–40 fps, touches through the control socket). Not built: REMB → bitrate
-(slice 11). How to use it: [README](README.md).
+page at 38–40 fps, touches through the control socket). Not built: bitrate adaptation
+(slice 11), designed and built on its own branch, `feat/webrtc-congestion-control`. How to use it: [README](README.md).
 
 This doc owns **how encoded frames travel from `baguette serve` to the page,
 and how we compare two ways of doing it**. It doesn't change what gets encoded
@@ -398,7 +398,7 @@ this doc.
    the control WebSocket, through `InProcessServer`.
 10. ~~**The page**~~ **DONE**: a WebRTC option beside H.264 and MJPEG, painting the `<video>`
     onto the stream canvas. *Pinned: `make test-web`.*
-11. **REMB → bitrate.**
+11. **Bitrate adaptation**: on its own branch, `feat/webrtc-congestion-control` (transport-cc, as libwebrtc does it).
 12. **Docs**: a user README, `serve.md` rows, CHANGELOG; the bench kit pointed
     at the native route, and the full matrix run on it.
 
@@ -419,3 +419,27 @@ this doc.
    confirms that, WebRTC is a remote-viewing feature, and the
    [handheld](../handheld/README.md) phone-over-Wi-Fi case is its first real
    user.
+5. **Publishing to an SFU (later, its own PR).** An SFU (Selective Forwarding
+   Unit: Cloudflare Calls, LiveKit, mediasoup, Janus, MediaMTX) relays one upload
+   to many viewers without re-encoding. It would give baguette many simultaneous
+   viewers for one encoder and upload (a team on one simulator, a device farm
+   watched from many machines), and reach viewers that can't reach the Mac, since
+   the Mac connects out. Revyl's page uses Cloudflare's STUN server, which suggests
+   they sit behind Cloudflare's SFU (an inference; the page doesn't show it).
+   What it takes — baguette publishes with **WHIP** (RFC 9725's publishing twin),
+   so the roles flip:
+
+   | | Today (WHEP, direct) | SFU (WHIP publish) |
+   |---|---|---|
+   | Offer | the browser makes it | baguette makes it |
+   | ICE | baguette answers checks (ICE-lite) | baguette sends checks (full ICE, controlling) |
+   | DTLS | server | client (`BoringSSLHandshake` has the role; tests use it) |
+   | Reach | browsers reach the Mac | the Mac connects out |
+   | Bandwidth feedback | transport-cc from the browser | the same, from the SFU |
+
+   RTP, packetizing, SRTP and RTCP feedback carry over unchanged, and so would
+   congestion control (built on its own branch). New: writing an offer, full-ICE checks, and a setting naming the
+   SFU's WHIP URL and token. An SFU forwards one bitrate to everyone: adapting per
+   viewer would need simulcast (several encodings at once), a further step.
+   Worth it once many viewers or a hosted device cloud matter; for one or a few
+   viewers the direct connection is the right shape.
