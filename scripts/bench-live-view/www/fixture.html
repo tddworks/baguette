@@ -1,7 +1,10 @@
 <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <style>html,body{margin:0;height:100%;background:#000;touch-action:none;overflow:hidden}</style></head>
 <body><script>
-const on=()=>document.body.style.background='#fff', off=()=>document.body.style.background='#000';
-addEventListener('touchstart',e=>{e.preventDefault();on()},{passive:false});
+// Black at rest; a touch turns the screen red on the left half, green on the right, so the bench can
+// tell which tap a frame answers (bench.html alternates sides): a late answer to the last tap is the
+// other colour, never mistaken for this one.
+const off=()=>document.body.style.background='#000';
+addEventListener('touchstart',e=>{e.preventDefault();document.body.style.background=e.touches[0].clientX<innerWidth/2?'#f00':'#0f0'},{passive:false});
 addEventListener('touchend',off);addEventListener('touchcancel',off);
 </script></body></html>

@@ -26,13 +26,17 @@ const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PI
 // Every presented frame lands here with the time it reaches the screen and its centre-pixel luma.
 // Both paths stamp the moment the frame is expected on screen, never the start of the frame
 // interval it arrived in: that can precede the tap, which once gave a "-1.4 ms" tap-to-photon.
-let lastLuma = 0;
+// The centre pixel of the last presented frame. The probe page is black at rest, red while a
+// touch on its left half is down, green for its right half.
+let last = { r: 0, g: 0, b: 0 };
+const black = c => c.r < 64 && c.g < 64 && c.b < 64;
+const red = c => c.r > 128 && c.g < 96, green = c => c.g > 128 && c.r < 96;
 function presented(ts, src, sw, sh) {
   if (R.firstFrame === null) { R.firstFrame = ts - R.t0; log('first frame', R.firstFrame.toFixed(0), 'ms'); }
   R.frames.push(ts);
   probe.drawImage(src, sw / 2, sh / 2, 1, 1, 0, 0, 1, 1);
-  const d = probe.getImageData(0, 0, 1, 1).data; lastLuma = (d[0] + d[1] + d[2]) / 3;
-  if (waiter && waiter.want(lastLuma)) { const w = waiter; waiter = null; w.resolve(ts); }
+  const d = probe.getImageData(0, 0, 1, 1).data; last = { r: d[0], g: d[1], b: d[2] };
+  if (waiter && waiter.want(last)) { const w = waiter; waiter = null; w.resolve(ts); }
 }
 let waiter = null;
 const until = (want, ms) => new Promise((resolve, reject) => {
@@ -106,10 +110,10 @@ async function startWebRTC() {
 }
 
 // --- the probe: tap the fixture's centre, time until the centre turns white
-async function tap() {
+async function tap(side) {
   // text/plain + no-cors: a simple request, so no preflight; we don't read the ack.
   return fetch(SERVE + '/devices/' + UDID + '/input', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ type: 'tap', x: W / 2, y: H / 2, width: W, height: H, duration: 0.15 }) });
+    body: JSON.stringify({ type: 'tap', x: side === 'left' ? W / 4 : 3 * W / 4, y: H / 2, width: W, height: H, duration: 0.15 }) });
 }
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p / 100 * s.length))]; };
 async function rtcBytes() { let b = 0, p = 0; (await R.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') { b += r.bytesReceived + (r.headerBytesReceived || 0); p += r.packetsReceived; } }); return { b, p }; }
@@ -134,17 +138,20 @@ async function run() {
   while (R.firstFrame === null) await new Promise(r => setTimeout(r, 50));
   if (q.get('mode') === 'bw') return bw(+(q.get('secs') || 30));
   await new Promise(r => setTimeout(r, 2000));
-  // The probe needs the black/white page on screen: anything already bright at the centre would make every
+  // The probe needs the tap probe page on screen: anything already lit at the centre would make every
   // "tap" just the time to the next frame.
-  if (lastLuma > 128 && await until(l => l < 128, 3000) === null) {
-    log('ABORTED: the screen centre is not black. Put the "Black/white probe" page on the simulator first.');
+  if (!black(last) && await until(black, 3000) === null) {
+    log('ABORTED: the screen centre is not black. Put the "Tap probe" page on the simulator first.');
     R.summary = { transport: T, aborted: 'probe page not on screen' }; R.done = true; R.stop(); return;
   }
   for (let i = 0; i < TAPS; i++) {
-    if (lastLuma > 128) await until(l => l < 128, 2000);
+    if (!black(last)) await until(black, 5000);
     await new Promise(r => setTimeout(r, 250 + Math.random() * 200));  // de-phase taps from vsync
-    const t0 = performance.now(); tap();
-    const t1 = await until(l => l > 128, 2000);
+    // Alternate sides: this tap's answer is its own colour, so a late answer to the last tap
+    // (the other colour) is never counted for this one. Waits 5 s, so a stall is measured, not missed.
+    const side = i % 2 ? 'right' : 'left';
+    const t0 = performance.now(); tap(side);
+    const t1 = await until(side === 'left' ? red : green, 5000);
     R.samples.push(t1 === null ? null : t1 - t0);
     if (i % 10 === 9) log('tap', i + 1, t1 === null ? 'MISS' : (t1 - t0).toFixed(1) + ' ms');
   }
