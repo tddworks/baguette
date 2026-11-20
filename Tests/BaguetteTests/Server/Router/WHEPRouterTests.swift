@@ -159,6 +159,22 @@ struct WHEPRouterTests {
         verify(input.touch).tap(at: .any, size: .any, duration: .any, edge: .any).called(1)
     }
 
+    @Test func `should not reach a viewer through another device's address`() async throws {
+        let viewers = mockViewers()
+        let server = whepServer(viewers: viewers)
+        let location = try await server.test { client in
+            try #require(try await client.send(.post, "/devices/U/whep", body: offer, headers: sdp).header("Location"))
+        }
+        let id = String(location.split(separator: "/").last!)
+
+        let messages = try await socketConversation("/devices/OTHER/whep/\(id)/control", server: server)
+        let hungUp = try await server.test { client in await client.status(.delete, "/devices/OTHER/whep/\(id)") }
+
+        #expect(messages == [#"{"ok":false,"error":"unknown viewer: \#(id)"}"#])
+        #expect(hungUp == .notFound)
+        #expect(viewers.count == 1)
+    }
+
     @Test func `should say so on the control socket when no viewer has the id`() async throws {
         let messages = try await socketConversation("/devices/U/whep/ghost/control", server: whepServer())
 

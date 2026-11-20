@@ -33,7 +33,8 @@ extension Server {
             router.delete(RouterPath(path)) { request, context in
                 if let rejected = rejectUntrustedBrowser(request) { return rejected }
                 let id = context.parameters.get("viewer") ?? ""
-                guard (try? viewers.hangUp(id)) != nil else {
+                let udid = request.uri.path.split(separator: "/").dropFirst().first.map(String.init) ?? ""
+                guard (try? viewers.hangUp(id, of: DeviceID(udid.removingPercentEncoding ?? udid))) != nil else {
                     return Self.pluginError("unknown viewer: \(id)", status: .notFound)
                 }
                 return Response(status: .noContent)
@@ -68,7 +69,7 @@ extension Server {
         do {
             let bound = try plan.bind(to: device)
             let (id, answer) = try viewers.admit(
-                offer: offer, on: bound.screen, input: bound.input, congestion: congestion)
+                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion)
             return Response(
                 status: .created,
                 headers: [.location: "/devices/\(udid)/whep/\(id)", .contentType: "application/sdp", .cacheControl: "no-cache"],
@@ -93,7 +94,8 @@ extension Server {
         let parts = request.uri.path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
         let udid = parts.count > 1 ? parts[1] : ""
         let id = parts.count > 3 ? parts[3] : ""
-        guard let viewer = try? viewers.find(id) else {
+        // The viewer only through the device it watches: one id, one device.
+        guard let viewer = try? viewers.find(id, of: DeviceID(udid)) else {
             try? await outbound.write(.text(#"{"ok":false,"error":"unknown viewer: \#(jsonEscape(id))"}"#))
             return
         }

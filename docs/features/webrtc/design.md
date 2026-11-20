@@ -242,7 +242,8 @@ getStats() every 500 ms: reconnect when no first frame in 10 s or no new frame f
 | 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
 | 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | 12 | A viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
-| 13 | An offer carries a congestion-control method only when it numbers its extension 1–14 and asks for its feedback on our H.264 | `SessionDescription` |
+| 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
+| 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
 | 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
 | 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
@@ -496,8 +497,9 @@ this doc.
     an id of 1–14 (Pion intersects the same way); `FeedbackClock` unwraps the
     24-bit reference time, as libwebrtc's feedback adapter does; the measured
     arrival rate spans the earliest to the latest arrival and a report is read
-    in sending order however listed (libwebrtc keys by arrival time too), and
-    that more honest rate makes recovery ~0.5 s slower than before; a retune is a
+    in sending order however listed, its window ending at the latest arrival
+    (libwebrtc keys by arrival time too) — the more honest rate makes recovery
+    ~0.5 s slower than before; a retune is a
     `StreamConfig.Change` the stream applies on its own queue, so it can't undo
     a `set_fps` that lands at the same moment.
 

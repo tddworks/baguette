@@ -124,6 +124,17 @@ struct WebRTCViewersTests {
         #expect(rig.viewers.count == 0)
     }
 
+    @Test func `should know a viewer only by the device it watches`() throws {
+        let rig = Rig()
+
+        let (id, _) = try rig.viewers.admit(offer: offer, on: rig.screen, of: "U")
+
+        #expect((try? rig.viewers.find(id, of: "U")) != nil)
+        #expect(throws: WebRTCViewers.Refusal.unknownViewer(id)) { try rig.viewers.find(id, of: "OTHER") }
+        #expect(throws: WebRTCViewers.Refusal.unknownViewer(id)) { try rig.viewers.hangUp(id, of: "OTHER") }
+        #expect(rig.viewers.count == 1)
+    }
+
     @Test func `should keep the input bound with a viewer's picture, for its touches`() throws {
         let rig = Rig()
         let touch = MockTouch()

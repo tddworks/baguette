@@ -3,7 +3,8 @@ import Foundation
 /// The live WebRTC (WHEP) viewers of one server, by id. It admits a browser's
 /// offer with a viewer of its own, streaming the screen it is given, and lets
 /// the viewer go the moment it hangs up, for whatever reason (its stream, which
-/// stops its screen, goes with it). An id it doesn't know is a refusal naming it.
+/// stops its screen, goes with it). An id it doesn't know, or asked for through
+/// another device than the one its viewer watches, is a refusal naming it.
 public final class WebRTCViewers: @unchecked Sendable {
     public enum Refusal: Error, Equatable { case unknownViewer(String) }
 
@@ -11,9 +12,14 @@ public final class WebRTCViewers: @unchecked Sendable {
     public typealias Connect = @Sendable (_ browserFingerprint: String) throws -> (any Datagrams, any Handshake)
 
     private let lock = NSLock()
-    private var viewers: [String: WebRTCViewer] = [:]
-    /// The input bound with each viewer's picture: its touches go where it shows.
-    private var inputs: [String: Abilities] = [:]
+    /// One admitted viewer: the device it watches, and the input bound with its
+    /// picture (its touches go where it shows) — one record, so they can't disagree.
+    private struct Admitted {
+        let viewer: WebRTCViewer
+        let device: DeviceID?
+        let input: Abilities?
+    }
+    private var admitted: [String: Admitted] = [:]
     private let connect: Connect
     private let makeStream: (any FrameSink) -> any Stream
     private var timer: DispatchSourceTimer?
@@ -47,16 +53,18 @@ public final class WebRTCViewers: @unchecked Sendable {
         return (try UDPDatagrams(), handshake)
     }
 
-    public var count: Int { lock.withLock { viewers.count } }
+    public var count: Int { lock.withLock { admitted.count } }
 
     /// A viewer for the browser whose WHEP `offer` this is, its own stream
     /// started on `screen`: its id, and the SDP answer. Throws the offer's
     /// refusal, or why the viewer couldn't be connected or started.
+    /// `device`: the device `screen` is of; the viewer is found only through it.
     /// `input`: the input bound with `screen` (the same display plane and
     /// panel), kept for the viewer's control socket. `congestion`: the method
     /// asked for (`?congestion=`), or nil for the default.
     public func admit(
-        offer: String, on screen: any Screen, input: Abilities? = nil, congestion: CongestionChoice? = nil
+        offer: String, on screen: any Screen, of device: DeviceID? = nil, input: Abilities? = nil,
+        congestion: CongestionChoice? = nil
     ) throws -> (id: String, answer: String) {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
@@ -70,15 +78,9 @@ public final class WebRTCViewers: @unchecked Sendable {
             throw error
         }
         let id = UUID().uuidString.lowercased()
-        lock.withLock {
-            viewers[id] = viewer
-            inputs[id] = input
-        }
+        lock.withLock { admitted[id] = Admitted(viewer: viewer, device: device, input: input) }
         viewer.onHangUp { [weak self] in
-            self?.lock.withLock {
-                self?.viewers[id] = nil
-                self?.inputs[id] = nil
-            }
+            self?.lock.withLock { self?.admitted[id] = nil }
         }
         return (id, viewer.answer)
     }
@@ -86,20 +88,23 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// The input bound with viewer `id`'s picture, or nil when it was admitted without one.
     public func input(of id: String) throws -> Abilities? {
         try lock.withLock {
-            guard viewers[id] != nil else { throw Refusal.unknownViewer(id) }
-            return inputs[id]
+            guard let found = admitted[id] else { throw Refusal.unknownViewer(id) }
+            return found.input
         }
     }
 
-    public func find(_ id: String) throws -> WebRTCViewer {
-        guard let viewer = lock.withLock({ viewers[id] }) else { throw Refusal.unknownViewer(id) }
-        return viewer
+    /// Viewer `id`, when it watches `device` (any device, when nil).
+    public func find(_ id: String, of device: DeviceID? = nil) throws -> WebRTCViewer {
+        guard let found = lock.withLock({ admitted[id] }), device == nil || found.device == device else {
+            throw Refusal.unknownViewer(id)
+        }
+        return found.viewer
     }
 
-    public func hangUp(_ id: String) throws { try find(id).hangUp() }
+    public func hangUp(_ id: String, of device: DeviceID? = nil) throws { try find(id, of: device).hangUp() }
 
     /// Time passing, for every viewer: those whose browsers went quiet hang up.
     public func tick(now: Date) {
-        lock.withLock { Array(viewers.values) }.forEach { $0.tick(now: now) }
+        lock.withLock { admitted.values.map(\.viewer) }.forEach { $0.tick(now: now) }
     }
 }

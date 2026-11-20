@@ -194,9 +194,9 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
-| a viewer is found by its id until it hangs up; an unknown id is a refusal naming it | `WebRTCViewers` |
+| a viewer is found by its id until it hangs up, and only through the device it watches; an unknown id, or one asked for through another device, is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
-| an offer carries a congestion-control method only when it numbers its header extension 1–14 (what a one-byte header holds) and asks for its feedback (`transport-cc`, `goog-remb`) on the H.264 the viewer sends | `SessionDescription` |
+| an offer carries a congestion-control method only when it numbers its header extension 1–14 (what a one-byte header holds), will receive it (not `inactive` or `sendonly`), and asks for its feedback (`transport-cc`, `goog-remb`) on the H.264 the viewer sends or on every format (`*`) | `SessionDescription` |
 | a browser's transport-cc reports are read on one unbroken timeline, though their 24-bit reference time wraps | `FeedbackClock` |
 | a retune turns one knob of the config as it stands then (`StreamConfig.Change`), so two at once both land | each `Stream` |
 | a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
