@@ -12,6 +12,8 @@ public final class WebRTCViewers: @unchecked Sendable {
 
     private let lock = NSLock()
     private var viewers: [String: WebRTCViewer] = [:]
+    /// The input bound with each viewer's picture: its touches go where it shows.
+    private var inputs: [String: Abilities] = [:]
     private let connect: Connect
     private let makeStream: (any FrameSink) -> any Stream
     private var timer: DispatchSourceTimer?
@@ -50,7 +52,9 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// A viewer for the browser whose WHEP `offer` this is, its own stream
     /// started on `screen`: its id, and the SDP answer. Throws the offer's
     /// refusal, or why the viewer couldn't be connected or started.
-    public func admit(offer: String, on screen: any Screen) throws -> (id: String, answer: String) {
+    /// `input`: the input bound with `screen` (the same display plane and
+    /// panel), kept for the viewer's control socket.
+    public func admit(offer: String, on screen: any Screen, input: Abilities? = nil) throws -> (id: String, answer: String) {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
         let viewer = WebRTCViewer(offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream)
@@ -61,9 +65,25 @@ public final class WebRTCViewers: @unchecked Sendable {
             throw error
         }
         let id = UUID().uuidString.lowercased()
-        lock.withLock { viewers[id] = viewer }
-        viewer.onHangUp { [weak self] in self?.lock.withLock { self?.viewers[id] = nil } }
+        lock.withLock {
+            viewers[id] = viewer
+            inputs[id] = input
+        }
+        viewer.onHangUp { [weak self] in
+            self?.lock.withLock {
+                self?.viewers[id] = nil
+                self?.inputs[id] = nil
+            }
+        }
         return (id, viewer.answer)
+    }
+
+    /// The input bound with viewer `id`'s picture, or nil when it was admitted without one.
+    public func input(of id: String) throws -> Abilities? {
+        try lock.withLock {
+            guard viewers[id] != nil else { throw Refusal.unknownViewer(id) }
+            return inputs[id]
+        }
     }
 
     public func find(_ id: String) throws -> WebRTCViewer {

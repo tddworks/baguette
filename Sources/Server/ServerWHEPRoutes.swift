@@ -60,7 +60,7 @@ extension Server {
             requireExistingDisplay: false)
         do {
             let bound = try plan.bind(to: device)
-            let (id, answer) = try viewers.admit(offer: offer, on: bound.screen)
+            let (id, answer) = try viewers.admit(offer: offer, on: bound.screen, input: bound.input)
             return Response(
                 status: .created,
                 headers: [.location: "/devices/\(udid)/whep/\(id)", .contentType: "application/sdp", .cacheControl: "no-cache"],
@@ -89,17 +89,13 @@ extension Server {
             try? await outbound.write(.text(#"{"ok":false,"error":"unknown viewer: \#(jsonEscape(id))"}"#))
             return
         }
-        guard let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
-              let bound = try? StreamDisplayPlan.from(
-                  query: request.uri.queryParameters.get("display"),
-                  panel: request.uri.queryParameters.get("panel").map { String($0) },
-                  requireExistingDisplay: false).bind(to: device)
-        else {
+        guard let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             try? await outbound.write(.text(#"{"ok":false,"error":"unknown udid"}"#))
             return
         }
-        // The plane's input only; its screen is the viewer's, already showing.
-        let input = bound.input ?? Abilities(device: device.name)
+        // The input bound with the viewer's picture when it was admitted — the
+        // same display plane and panel — never a second binding from this URL.
+        let input = ((try? viewers.input(of: id)) ?? nil) ?? Abilities(device: device.name)
         let pasteboard = try? device.require(.pasteboard)
         let accessibility = try? device.require(.accessibility)
         let dispatcher = GestureDispatcher(input: input)

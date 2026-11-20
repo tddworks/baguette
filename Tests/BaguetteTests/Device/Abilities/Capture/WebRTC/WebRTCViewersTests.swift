@@ -122,4 +122,17 @@ struct WebRTCViewersTests {
 
         #expect(rig.viewers.count == 0)
     }
+
+    @Test func `should keep the input bound with a viewer's picture, for its touches`() throws {
+        let rig = Rig()
+        let touch = MockTouch()
+        var input = Abilities(device: "iPhone 17")
+        input.register(.touch) { touch }
+
+        let (id, _) = try rig.viewers.admit(offer: offer, on: rig.screen, input: input)
+
+        let kept = try #require(try rig.viewers.input(of: id))
+        #expect((try kept.require(.touch) as AnyObject) === touch)
+        #expect(throws: WebRTCViewers.Refusal.unknownViewer("ghost")) { try rig.viewers.input(of: "ghost") }
+    }
 }
