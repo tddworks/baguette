@@ -253,6 +253,34 @@ struct CoreDevicePhonesTests {
         #expect(try phones.find(id: DeviceID(phoneUDID))?.name == "second")
     }
 
+    @Test func `should keep its last listing when a refresh fails`() throws {
+        let fake = FakeDevicectl(), now = Clock(), behind = Deferred()
+        fake.writeFile = { path, _ in FileManager.default.createFile(atPath: path, contents: listing("first")) }
+        let phones = CoreDevicePhones(
+            devicectl: Devicectl(makeSubprocess: fake.make), clock: { now.value }, refresh: { behind.work.append($0) })
+        _ = phones.all
+
+        now.value += 3
+        fake.status = 1
+        _ = phones.all
+        behind.work.forEach { $0() }
+
+        #expect(try phones.find(id: DeviceID(phoneUDID))?.name == "first")
+    }
+
+    @Test func `should list once when the first lookups come together`() async {
+        let fake = FakeDevicectl()
+        fake.writeFile = { path, _ in
+            usleep(50_000)   // devicectl takes its time
+            FileManager.default.createFile(atPath: path, contents: listing("first"))
+        }
+        let phones = CoreDevicePhones(devicectl: Devicectl(makeSubprocess: fake.make), refresh: { _ in })
+
+        await offTheTestThreads { DispatchQueue.concurrentPerform(iterations: 4) { _ in _ = phones.all } }
+
+        #expect(fake.arguments.count == 1)
+    }
+
     @Test func `should list no phones when devicectl can't list them`() {
         let fake = FakeDevicectl()
         fake.status = 1

@@ -174,7 +174,7 @@ struct AVCCStreamTests {
         stream.stop()
     }
 
-    @Test func `should keep every change when its frame rate and bitrate are changed at once`() throws {
+    @Test func `should keep every change when its frame rate and bitrate are changed at once`() async throws {
         let session = session([keyframe])
         // Retuning the encoder takes a moment, as VideoToolbox does.
         given(session).set(.any).willProduce { _ in usleep(200); return 0 }
@@ -183,8 +183,10 @@ struct AVCCStreamTests {
         send(Surfaces.filled(0x10), to: stream)
 
         // One caller walks the frame rate up, the other the bitrate, together.
-        DispatchQueue.concurrentPerform(iterations: 2) { caller in
-            for step in 1...200 { try! stream.update(caller == 0 ? .fps(step) : .bitrate(step * 10_000)) }
+        await offTheTestThreads {
+            DispatchQueue.concurrentPerform(iterations: 2) { caller in
+                for step in 1...200 { try! stream.update(caller == 0 ? .fps(step) : .bitrate(step * 10_000)) }
+            }
         }
 
         #expect(stream.config.fps == 200 && stream.config.bitrateBps == 2_000_000)
@@ -231,4 +233,12 @@ final class Held: @unchecked Sendable {
     private var answers: [@Sendable () -> Void] = []
     func keep(_ answer: @escaping @Sendable () -> Void) { lock.withLock { answers.append(answer) } }
     func release() { lock.withLock { answers }.forEach { $0() } }
+}
+
+/// Runs blocking work on a plain dispatch thread, never one of the test
+/// runner's shared ones: blocking those starves every test running beside it.
+func offTheTestThreads(_ work: @escaping @Sendable () -> Void) async {
+    await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+        DispatchQueue.global().async { work(); done.resume() }
+    }
 }

@@ -19,6 +19,7 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
     private let clock: @Sendable () -> Date
     private let refresh: Refresh
     private let lock = NSLock()
+    private let firstLock = NSLock()
     private var listed: (at: Date, phones: [PhysicalPhone])?
     private var refreshing = false
 
@@ -48,16 +49,13 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
             if stale { refreshing = true }
             return (listed.phones, stale)
         }
-        guard let last else {
-            let phones = list()
-            lock.withLock { listed = (clock(), phones) }
-            return phones
-        }
+        guard let last else { return firstListing() }
         if stale {
             refresh { [self] in
                 let phones = list()
                 lock.withLock {
-                    listed = (clock(), phones)
+                    // A failed refresh keeps the last good listing; it is tried again next time.
+                    if let phones { listed = (clock(), phones) }
                     refreshing = false
                 }
             }
@@ -65,14 +63,25 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
         return last
     }
 
-    private func list() -> [PhysicalPhone] {
+    /// The first listing, made once however many lookups arrive together.
+    private func firstListing() -> [PhysicalPhone] {
+        firstLock.withLock {
+            if let listed = lock.withLock({ listed }) { return listed.phones }
+            let phones = list() ?? []
+            lock.withLock { listed = (clock(), phones) }
+            return phones
+        }
+    }
+
+    /// nil when devicectl couldn't list.
+    private func list() -> [PhysicalPhone]? {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("baguette-devicectl-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: file) }
         guard (try? devicectl.runAndWait(["list", "devices", "--quiet", "--json-output", file.path])) != nil,
               let data = try? Data(contentsOf: file),
               let phones = try? PhysicalPhone.list(fromDevicectlJSON: data)
-        else { return [] }
+        else { return nil }
         return phones
     }
 }
