@@ -636,10 +636,15 @@ this doc.
     each `POST /input` builds the device's input afresh — a new HID connection,
     `[hid] symbols resolved` logged per request — and the request takes ~300 ms
     even for a 10 ms tap. The device page doesn't pay it: its socket keeps one
-    input. So every tap-to-photon above carries ~300 ms a user doesn't feel;
-    what they feel is about 80 ms plus a long-lived socket's dispatch. Two
-    fixes, either one: the route keeps each device's input (plugins tapping
-    over HTTP pay the same 300 ms today), or the bench taps over a socket.
+    input. **Fixed:** `DeviceInputs` keeps each running device's input
+    across requests (dropped once the device is seen not running), and
+    POST → `touchstart` fell to 206–245 ms (median ~222; the request itself
+    ~470 ms first, then ~235 ms through the tap's lift). That made up ~85 ms
+    of the 307, not all: the remaining ~220 ms is the touch's way through the
+    simulator — our HID message, backboardd, Safari's web process — which the
+    device page's socket pays too, so it is in what users feel. Where those
+    220 ms go is its own investigation (`IndigoHIDInput`'s main-thread hop
+    first). Tap-to-photon on loopback is then ~220 ms input + ~80 ms video.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative

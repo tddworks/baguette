@@ -28,6 +28,7 @@ extension Server {
     ) {
         let plugins = self.plugins
         let devices = allDevices
+        let inputs = inputs
         let grants = self.grants
         let origin = "http://\(self.host):\(self.port)"
 
@@ -92,7 +93,7 @@ extension Server {
                 let buffer = try? await r.body.collect(upTo: 64 * 1024)
                 let body = buffer.map { String(buffer: $0) } ?? ""
                 switch await Self.dispatchInput(
-                    udid: Self.udidParam(r), body: body, devices: devices
+                    udid: Self.udidParam(r), body: body, devices: devices, inputs: inputs
                 ) {
                 case .ok(let ack):
                     return Self.jsonResponse(ack)
@@ -240,11 +241,12 @@ extension Server {
     /// event-loop thread yields messages the simulator silently drops.
     /// `Server.streamWS` does the same before dispatching.
     static func dispatchInput(
-        udid: String, body: String, devices: any Devices
+        udid: String, body: String, devices: any Devices, inputs: DeviceInputs = DeviceInputs()
     ) async -> InputOutcome {
         let input: Abilities
         do {
-            input = try devices.device(DeviceID(udid)).input()
+            // The device's kept input: making one is a new HID connection, ~300 ms a request.
+            input = try inputs.input(of: devices.device(DeviceID(udid)))
         } catch DeviceError.unknown {
             return .unknownDevice
         } catch let refusal as DeviceError {

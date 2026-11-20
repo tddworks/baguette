@@ -83,6 +83,8 @@ struct Server: Sendable {
     /// outlives the request that admitted it, and its control socket and
     /// `DELETE` find it by id.
     let viewers: WebRTCViewers
+    /// Each device's input, kept across `POST …/input` requests.
+    let inputs = DeviceInputs()
 
     init(
         simulators: any Simulators,

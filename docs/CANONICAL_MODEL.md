@@ -200,6 +200,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | with pacing on, a viewer's packets leave at 2.5 × its target bitrate as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once | `Pacer` |
 | a browser's transport-cc reports are read on one unbroken timeline, though their 24-bit reference time wraps | `FeedbackClock` |
 | a retune turns one knob of the config as it stands then (`StreamConfig.Change`), so two at once both land | each `Stream` |
+| a running device's input is made once and kept for every gesture posted to it, and made afresh once the device has been seen not running | `DeviceInputs` |
 | a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
 | with no congestion control, nothing retunes the encoder: it stays where it started or where `set_bitrate` put it | `FixedBitrate` |
 | a viewer retunes its encoder at most once a second, and only when the target moves by more than 10% | `WebRTCViewer` |
