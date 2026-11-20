@@ -64,16 +64,18 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// `device`: the device `screen` is of; the viewer is found only through it.
     /// `input`: the input bound with `screen` (the same display plane and
     /// panel), kept for the viewer's control socket. `congestion`: the method
-    /// asked for (`?congestion=`), or nil for the default.
+    /// asked for (`?congestion=`), or nil for the default. `pacing`: off only
+    /// for the bench's baseline (`?pacing=off`).
     public func admit(
         offer: String, on screen: any Screen, of device: DeviceID? = nil, input: Abilities? = nil,
-        congestion: CongestionChoice? = nil
+        congestion: CongestionChoice? = nil, pacing: Bool = true
     ) throws -> (id: String, answer: String) {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
         let viewer = WebRTCViewer(
             offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream,
-            congestion: { CongestionChoice.control(asked: congestion, offer: description, ceiling: $0) })
+            congestion: { CongestionChoice.control(asked: congestion, offer: description, ceiling: $0) },
+            pacing: pacing)
         do {
             try viewer.start(on: screen)
         } catch {

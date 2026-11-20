@@ -65,6 +65,13 @@ struct PacerTests {
         #expect(sent == 60)
     }
 
+    @Test func `should send every packet at once when it isn't pacing`() {
+        var pacer = Pacer<Int>(bitrate: 8_000_000, pacing: false)
+        frame(60, into: &pacer, at: 0)
+
+        #expect(pacer.release(at: 0) == Array(0..<60))
+    }
+
     @Test func `should keep the order packets came in`() {
         var pacer = Pacer<Int>(bitrate: 8_000_000)
         frame(60, into: &pacer, at: 0)

@@ -14,14 +14,16 @@ const T = q.get('transport') || 'ws', UDID = q.get('udid'), TAPS = +(q.get('taps
 // WebRTC runs use baguette's own WHEP route; `whep=/whep` measures the MediaMTX spike instead, and
 // `whep=/pion/whep` the same encoder sent through Pion (pion/main.go), the reference WebRTC sender.
 const SERVE = q.get('serve') || location.origin + '/api';
-const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep';
+// `pacing=off`: baguette's own sender without its pacer — the baseline the pacer is measured against.
+const UNPACED = q.get('pacing') === 'off';
+const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (UNPACED ? '?pacing=off' : '');
 const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const PION = WHEP.startsWith('/pion/');
 const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
 document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
 const logEl = document.getElementById('log'); const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log('[bench]', ...a); };
 const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
-const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : 'baguette', t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
+const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : UNPACED ? 'baguette, no pacer' : 'baguette', t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
 
 // Every presented frame lands here with the time it reaches the screen and its centre-pixel luma.
 // Both paths stamp the moment the frame is expected on screen, never the start of the frame

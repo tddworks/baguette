@@ -200,6 +200,22 @@ struct WHEPRouterTests {
         }
     }
 
+    @Test func `should leave a viewer unpaced when asked, for the bench, and paced otherwise`() async throws {
+        let viewers = mockViewers()
+        try await whepServer(viewers: viewers).test { client in
+            let off = try #require(try await client.send(.post, "/devices/U/whep?pacing=off", body: offer, headers: sdp)
+                .header("Location"))
+            let on = try #require(try await client.send(.post, "/devices/U/whep", body: offer, headers: sdp)
+                .header("Location"))
+
+            #expect(try viewers.find(String(off.split(separator: "/").last!)).pacing == false)
+            #expect(try viewers.find(String(on.split(separator: "/").last!)).pacing == true)
+            let unknown = try await client.send(.post, "/devices/U/whep?pacing=sometimes", body: offer, headers: sdp)
+            #expect(unknown.status == .badRequest)
+            #expect(unknown.text.contains("pacing is on or off"))
+        }
+    }
+
     @Test func `should refuse a congestion control it doesn't know, naming the ones it does`() async throws {
         try await whepServer().test { client in
             let response = try await client.send(.post, "/devices/U/whep?congestion=gcc", body: offerWithBoth, headers: sdp)

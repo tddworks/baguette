@@ -51,7 +51,7 @@ public final class WebRTCViewer: @unchecked Sendable {
     private var retune = EncoderRetune()
     private var pacer: Pacer<RTPPacket>
     /// Whether the pacer's next slice is already scheduled.
-    private var pacing = false
+    private var sliceScheduled = false
     private let schedule: Schedule
 
     /// Runs `work` after a delay: how the pacer comes back for its next slice.
@@ -70,7 +70,8 @@ public final class WebRTCViewer: @unchecked Sendable {
         stream makeStream: (any FrameSink) -> any Stream,
         congestion makeControl: (_ startingBitrate: Int) -> any CongestionControl,
         clock: @escaping @Sendable () -> Date = Date.init,
-        schedule: @escaping Schedule = WebRTCViewer.onAQueue
+        schedule: @escaping Schedule = WebRTCViewer.onAQueue,
+        pacing: Bool = true
     ) {
         self.schedule = schedule
         self.ice = ice
@@ -87,7 +88,7 @@ public final class WebRTCViewer: @unchecked Sendable {
         let congestion = makeControl(stream.config.bitrateBps)
         self.stream = stream
         self.congestion = congestion
-        self.pacer = Pacer(bitrate: stream.config.bitrateBps)
+        self.pacer = Pacer(bitrate: stream.config.bitrateBps, pacing: pacing)
         self.answer = offer.answer(
             ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc, candidates: datagrams.addresses,
             congestion: congestion.answerLines())
@@ -96,6 +97,9 @@ public final class WebRTCViewer: @unchecked Sendable {
     }
 
     public var state: State { lock.withLock { current } }
+
+    /// Whether its pacer spaces its packets (off only for the bench's baseline, `?pacing=off`).
+    public var pacing: Bool { lock.withLock { pacer.pacing } }
 
     /// Its own stream, which its page retunes (`set_bitrate`, `force_idr`, …)
     /// over its control socket as any stream socket's page does.
@@ -272,14 +276,14 @@ public final class WebRTCViewer: @unchecked Sendable {
             remember(wire, as: packet.sequence)
             congestion.sent(size: wire.count, at: now)
         }
-        guard !pacer.isEmpty, !pacing else { return }
-        pacing = true
+        guard !pacer.isEmpty, !sliceScheduled else { return }
+        sliceScheduled = true
         schedule(Double(Pacer<RTPPacket>.burst) / 1_000_000) { [weak self] in self?.paceAgain() }
     }
 
     private func paceAgain() {
         lock.withLock {
-            pacing = false
+            sliceScheduled = false
             guard current == .live, let browser else { return }
             sendPaced(to: browser, at: microsecondsNow())
         }

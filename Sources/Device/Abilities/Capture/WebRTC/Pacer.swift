@@ -5,8 +5,9 @@ import Foundation
 /// and Pion's leaky-bucket pacer do. A keyframe's 60-odd packets leave over
 /// ~30 ms instead of in one burst that overflows a phone link's queue; a
 /// small frame still leaves at once (a packet into an empty pacer brings
-/// `burst` of credit). Time it sat idle is never saved up, and no packet waits
-/// more than `maxQueueTime`: past that it sends faster than its rate.
+/// `burst` of credit). Time it sat idle is never saved up, and it aims to send
+/// every packet within `maxQueueTime`, speeding up as its oldest ages (a
+/// target: a late timer can stretch it).
 /// Times are microseconds; packets leave in the order they came.
 public struct Pacer<Packet>: Sendable where Packet: Sendable {
     /// The bitrate it paces for — the viewer's target.
@@ -22,7 +23,13 @@ public struct Pacer<Packet>: Sendable where Packet: Sendable {
     private var budget = 0.0      // bytes it may still send
     private var last: Int64 = 0
 
-    public init(bitrate: Int) { self.bitrate = bitrate }
+    /// Off, every packet leaves as soon as it comes — the bench's baseline.
+    public let pacing: Bool
+
+    public init(bitrate: Int, pacing: Bool = true) {
+        self.bitrate = bitrate
+        self.pacing = pacing
+    }
 
     public var isEmpty: Bool { head == queue.count }
 
@@ -38,6 +45,10 @@ public struct Pacer<Packet>: Sendable where Packet: Sendable {
     /// The packets whose time has come, in order.
     public mutating func release(at now: Int64) -> [Packet] {
         guard !isEmpty else { return [] }
+        guard pacing else {
+            defer { queue.removeAll(keepingCapacity: true); head = 0; queuedBytes = 0 }
+            return queue[head...].map(\.packet)
+        }
         budget += Double(max(now - last, 0)) * rate(at: last) / 8_000_000
         last = now
         var out: [Packet] = []

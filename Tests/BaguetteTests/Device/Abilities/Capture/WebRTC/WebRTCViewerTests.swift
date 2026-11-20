@@ -66,7 +66,7 @@ private struct Rig {
 
     init(
         progress: HandshakeProgress = .complete(replies: [], srtpExport: export),
-        target: Int? = nil, stamp: [RTPHeaderExtension] = [], answerLines: [String] = []
+        target: Int? = nil, stamp: [RTPHeaderExtension] = [], answerLines: [String] = [], pacing: Bool = true
     ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
@@ -91,7 +91,8 @@ private struct Rig {
             stream: { frames in sink.value = frames; return stream },
             congestion: { _ in congestion },
             clock: { now.value },
-            schedule: { _, work in scheduled.value.append(work) })
+            schedule: { _, work in scheduled.value.append(work) },
+            pacing: pacing)
     }
 
     /// Time passing: the clock moves on and what was due runs, in 5 ms steps.
@@ -352,6 +353,18 @@ struct WebRTCViewerTests {
         #expect(rig.packets.count > 55)
         #expect(rig.packets.map(\.sequence) == (0..<UInt16(rig.packets.count)).map { 1000 + $0 })
         #expect(rig.packets.last?.marker == true)
+    }
+
+    @Test func `should send a keyframe's packets all at once when told not to pace`() {
+        let rig = Rig(pacing: false)
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+
+        let slice = Data([0x65]) + Data(repeating: 7, count: 71_999)
+        rig.show(AVCCEnvelope.keyframe(avcc: withUnsafeBytes(of: UInt32(slice.count).bigEndian) { Data($0) } + slice))
+
+        #expect(rig.packets.count > 55)
+        #expect(rig.viewer.pacing == false)
     }
 
     @Test func `should stamp every packet with what its congestion control asks, and report it sent`() {

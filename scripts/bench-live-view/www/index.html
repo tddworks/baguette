@@ -5,7 +5,7 @@
 body{font:15px -apple-system,system-ui,sans-serif;background:#111;color:#ddd;margin:0;padding:16px;max-width:560px}
 h1{font-size:20px;margin:0 0 4px}p{color:#999;margin:4px 0 16px;line-height:1.4}
 h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#888;margin:24px 0 8px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.row3{grid-template-columns:1fr 1fr 1fr}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 a.b,button{display:block;text-align:center;padding:14px 8px;border-radius:10px;background:#223;color:#cde;text-decoration:none;border:1px solid #334;font:inherit}
 a.b.rtc{background:#232;border-color:#343;color:#cec}
 button{width:100%;background:#222;color:#ddd;cursor:pointer}
@@ -13,7 +13,7 @@ code{color:#fc8}
 </style></head>
 <body>
 <h1>Live view bench</h1>
-<p>Same simulator, same H.264 encoder: the WebSocket, baguette's WebRTC, and the same encoder sent through Pion's WebRTC (the reference: its congestion control and pacer retune the encoder). Run one at a time; results appear on the page when the run ends.</p>
+<p>Same simulator, same H.264 encoder: the WebSocket, baguette's WebRTC (with and without its pacer), and the same encoder sent through Pion's WebRTC (the reference: its congestion control and pacer retune the encoder). Run one at a time; results appear on the page when the run ends.</p>
 
 <h2>Drive it yourself · baguette serve's own page</h2>
 <a class="b" id="page">Open the device page</a>
@@ -27,13 +27,13 @@ code{color:#fc8}
 <p>Latency runs need the probe. Bandwidth runs mean most on the animated list.</p>
 
 <h2>Latency · 100 taps</h2>
-<div class="row row3"><a class="b" data-t="ws" data-q="taps=100">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="taps=100">WebRTC (baguette)</a><a class="b rtc" data-t="webrtc" data-q="taps=100&whep=/pion/whep">WebRTC (Pion)</a></div>
+<div class="row"><a class="b" data-t="ws" data-q="taps=100">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="taps=100">WebRTC (baguette)</a><a class="b rtc" data-t="webrtc" data-q="taps=100&pacing=off">WebRTC (no pacer)</a><a class="b rtc" data-t="webrtc" data-q="taps=100&whep=/pion/whep">WebRTC (Pion)</a></div>
 
 <h2>Bandwidth · 30 s</h2>
-<div class="row row3"><a class="b" data-t="ws" data-q="mode=bw&secs=30">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="mode=bw&secs=30">WebRTC (baguette)</a><a class="b rtc" data-t="webrtc" data-q="mode=bw&secs=30&whep=/pion/whep">WebRTC (Pion)</a></div>
+<div class="row"><a class="b" data-t="ws" data-q="mode=bw&secs=30">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="mode=bw&secs=30">WebRTC (baguette)</a><a class="b rtc" data-t="webrtc" data-q="mode=bw&secs=30&pacing=off">WebRTC (no pacer)</a><a class="b rtc" data-t="webrtc" data-q="mode=bw&secs=30&whep=/pion/whep">WebRTC (Pion)</a></div>
 
 <h2>Quick check · 10 taps</h2>
-<div class="row row3"><a class="b" data-t="ws" data-q="taps=10">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="taps=10">WebRTC (baguette)</a><a class="b rtc" data-t="webrtc" data-q="taps=10&whep=/pion/whep">WebRTC (Pion)</a></div>
+<div class="row"><a class="b" data-t="ws" data-q="taps=10">WebSocket</a><a class="b rtc" data-t="webrtc" data-q="taps=10">WebRTC (baguette)</a><a class="b rtc" data-t="webrtc" data-q="taps=10&pacing=off">WebRTC (no pacer)</a><a class="b rtc" data-t="webrtc" data-q="taps=10&whep=/pion/whep">WebRTC (Pion)</a></div>
 
 <p id="msg"></p>
 <script>
