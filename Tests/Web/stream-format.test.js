@@ -111,8 +111,8 @@ test('StreamFormat', async (t) => {
   await t.test('should say why a browser can\'t play it', () => {
     const StreamFormat = load();
     assert.equal(StreamFormat.named('avcc').whyUnplayable,
-      'H.264 needs WebCodecs, which browsers only expose on a secure origin. '
-      + 'Open this page over HTTPS or on localhost.');
+      'H.264 needs WebCodecs, which this browser only exposes on a secure origin. '
+      + 'Open this page over HTTPS or on localhost, or pick WebRTC.');
     assert.equal(StreamFormat.named('webrtc').whyUnplayable, 'WebRTC is not available in this browser.');
     assert.equal(StreamFormat.named('webrtc').label, 'WebRTC');
     assert.equal(StreamFormat.named('webrtc').needsHardwareDecoder, false);

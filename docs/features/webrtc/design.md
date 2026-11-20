@@ -75,7 +75,7 @@ benefit below needs the viewer on another machine, and none is measured yet:
 | **Bitrate follows the link** | Fixed 8 Mbps until someone sends `set_bitrate` | Wire the viewer's TWCC/REMB estimate to `H264 Stream.apply(config)`. MediaMTX can't, so the spike shows none of it |
 | **Reaches viewers behind NAT** | `serve` binds loopback; remote means `--allowed-hosts` plus a reverse proxy and open ports | STUN, and TURN for strict networks: a relay to run or rent |
 | **Any WHEP player can watch** | AVCC-over-WebSocket is baguette's own framing; only our page reads it | Nothing extra. OBS, GStreamer, Cloudflare, LiveKit and MediaMTX speak WHEP. An SFU can fan one upload out to many viewers |
-| **H.264 on a phone without HTTPS** | WebCodecs needs a secure context, so a plain-`http` phone page gets MJPEG (issue #71): more bytes, skipped frames | Nothing extra. `<video>` decodes WebRTC H.264 on any page |
+| **H.264 in any browser without HTTPS** | Desktop Chrome offers WebCodecs only in a secure context, so a plain-`http` page there gets MJPEG (issue #71): more bytes, skipped frames. iOS browsers (WebKit) offer it on plain `http`, measured 2026-11-20, so this one doesn't apply on an iPhone | Nothing extra. `<video>` decodes WebRTC H.264 on any page |
 | **The browser decodes and paints** | The page runs WebCodecs plus canvas painting in JS | Nothing extra, but the spike's `<video>` showed fewer fps (42 vs 52), so this isn't a win yet |
 
 **Cost:** a WebRTC stack (open question 1), a second transport to maintain, a
@@ -267,12 +267,13 @@ viewer ──http :8777──▶ proxy.mjs ─┬─ /bench/*          ▶ the b
                                   └─ everything else   ▶ baguette serve 127.0.0.1:8421, as is (HTTP + WebSocket)
 ```
 
-- **A phone gets MJPEG on the WebSocket, H.264 on WebRTC.** Browsers only
-  expose WebCodecs (`VideoDecoder`) to secure contexts (HTTPS or localhost).
-  So a phone on plain `http://` can't decode the WebSocket's H.264, and the
-  serve page falls back to MJPEG (issue #71); the bench does the same. WebRTC's
-  `<video>` needs no secure context, so it plays H.264 on that same page.
-  **H.264 on a phone without HTTPS is itself a WebRTC benefit.** Note: MJPEG
+- **Which H.264 a viewer can decode depends on its browser.** Desktop Chrome
+  exposes WebCodecs (`VideoDecoder`) only to secure contexts (HTTPS or
+  localhost), so on plain `http://` the WebSocket's H.264 is unavailable and the
+  serve page falls back to MJPEG (issue #71); the bench does the same. iOS
+  browsers (WebKit; Chrome on iOS checked 2026-11-20) expose it on plain `http`
+  too (`isSecureContext` false, `VideoDecoder` a function), so an iPhone gets
+  H.264 either way. WebRTC's `<video>` needs no secure context anywhere. Note: MJPEG
   skips unchanged frames, so on the static probe its presented fps and
   "freezes" read low; that's by design, not a stall. Over Tailscale, MediaMTX
   announces the tailnet address as an ICE candidate and keeps RTP payloads

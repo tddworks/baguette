@@ -80,8 +80,10 @@
     /** The picker's tooltip on a format this browser can't play. */
     get whyUnplayable() {
       if (this.id === 'webrtc') return 'WebRTC is not available in this browser.';
-      return this.label + ' needs WebCodecs, which browsers only expose on a '
-        + 'secure origin. Open this page over HTTPS or on localhost.';
+      // Desktop Chrome hides WebCodecs on a plain-http page that isn't
+      // localhost; iOS browsers (WebKit) don't, so this is per browser.
+      return this.label + ' needs WebCodecs, which this browser only exposes on a '
+        + 'secure origin. Open this page over HTTPS or on localhost, or pick WebRTC.';
     }
 
     /** The wire spelling, so a format drops straight into a URL. */

@@ -26,8 +26,10 @@ What changes and what doesn't:
   keep their WebSocket, at H.264 (or MJPEG where the browser can't decode H.264).
 - The picture still lands on the page's canvas, so recording, screenshots of
   the view and the accessibility inspector work as before.
-- It plays on a plain-`http` page. H.264 over the WebSocket needs a secure page
-  (HTTPS or localhost), so a phone on `http://` otherwise gets MJPEG.
+- It plays on a plain-`http` page in every browser. H.264 over the WebSocket
+  decodes with WebCodecs, which desktop Chrome only offers on a secure page
+  (HTTPS or localhost); there, on `http://`, the choice is MJPEG or WebRTC.
+  iOS browsers offer WebCodecs on plain `http` too, so all three work on a phone.
 
 ## HTTP and WebSocket
 
