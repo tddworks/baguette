@@ -748,6 +748,21 @@ this doc.
     match, RED/ULPFEC (rebuild a lost packet without the round trip) or a
     lower ceiling on mobile (fewer packets, fewer losses per frame).
 
+    **Its no-pacer counterpart, and the decision (2026-11-20)**, same link,
+    one viewer each: 100 taps p50 156 / p95 298 / p99 377 ms, 0 misses,
+    interval σ 27.0 ms, 8.9 freezes/min; 30 s animated list 3.4 Mbps,
+    37.5 fps. Against the paced run (147 / 257 / 339 ms, σ 20.1, 11.1/min,
+    7.25 Mbps, 46.6 fps) the pacer led on latency, smoothness and throughput,
+    trailing only on the freeze count. The logs differ most: the paced
+    bandwidth run made **no cut**; the unpaced one was cut 20 times, for
+    queues of +238, +152, +434 and once +1212 ms — what unpaced bursts do to
+    a mobile queue (that link was also rougher: twice the loss reports).
+    **The pacer stays on by default**; `?pacing=off` remains for A/Bs. The
+    same log still shows the cap lifting on a stall's catch-up
+    (`2050 → 8000` a second later): lifting it only on sustained arrival is
+    still to do, and so is a minimum pacing rate, so a keyframe drains in
+    ~50 ms even at a low target.
+
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
     samples); and each tap is answered in its own colour (left red, right green,
