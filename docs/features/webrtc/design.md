@@ -108,10 +108,13 @@ decide it.
 
 Each viewer owns a stream of its own, the way each stream WebSocket does today,
 so `Stream` gains no attach/detach and two viewers never share an encoder's
-reference chain. Everything below lives in the Stream context:
-`Sources/Device/Abilities/Capture/RTP/` (`RTPPacket`, `H264Packetizer`, shared
-with a phone's screen) and `Capture/WebRTC/` (the rest). The laws are also in
-[CANONICAL_MODEL](../../CANONICAL_MODEL.md).
+reference chain. The viewer, its registry and `EncoderRetune` live in the
+Stream context (`Sources/Device/Abilities/Capture/WebRTC/`); everything that
+sends — `SessionDescription`, ICE-lite, DTLS-SRTP, RTP and RTCP, the pacer,
+congestion control — is **WebRTCKit** (`Sources/WebRTCKit/`: `Signaling/`,
+`Transport/`, `Media/`, `Congestion/`), a library that knows nothing of devices
+and is to become its own package. `RTPPacket` is the kit's, shared with a
+phone's screen. The laws are also in [CANONICAL_MODEL](../../CANONICAL_MODEL.md).
 
 ```
 WebRTCViewers  ◆                      the live viewers by id — admit(offer, …) → answer · find(id) · hangUp(id)

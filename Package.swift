@@ -66,14 +66,29 @@ let package = Package(
             name: "CoreDeviceABI",
             path: "Sources/CoreDeviceABI"
         ),
+        // WebRTC, sending: encoded H.264 frames in, a browser's session out —
+        // signaling, ICE-lite, DTLS-SRTP, RTP and RTCP, pacing, resends and
+        // congestion control. Knows nothing of devices; its own SwiftPM
+        // package later.
+        .target(
+            name: "WebRTCKit",
+            dependencies: [
+                .product(name: "Mockable", package: "Mockable"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+            ],
+            path: "Sources/WebRTCKit",
+            swiftSettings: [
+                .define("MOCKING", .when(configuration: .debug)),
+            ]
+        ),
         // What a device is: its id, kind and state, how it looks (Chrome)
         // and what it can do (Abilities) — the roles and their values. The
         // innermost context: it depends on nothing of baguette's.
         .target(
             name: "BaguetteDevice",
             dependencies: [
+                "WebRTCKit",
                 .product(name: "Mockable", package: "Mockable"),
-                .product(name: "NIOSSL", package: "swift-nio-ssl"),
             ],
             path: "Sources/Device",
             swiftSettings: [
@@ -84,6 +99,7 @@ let package = Package(
             name: "Baguette",
             dependencies: [
                 "BaguetteDevice",
+                "WebRTCKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
@@ -95,7 +111,7 @@ let package = Package(
             // Sources/Baguette, which also keeps the resources.
             path: "Sources",
             // Their own targets; listed so this one doesn't warn about them.
-            exclude: ["Device", "CoreDeviceABI"],
+            exclude: ["Device", "CoreDeviceABI", "WebRTCKit"],
             sources: ["Baguette/RootCommand.swift", "Commands", "Server", "Devices", "Plugins"],
             resources: [
                 // Static HTML/CSS/JS for `baguette serve`. Each file is
@@ -145,10 +161,22 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "WebRTCKitTests",
+            dependencies: [
+                "WebRTCKit",
+                .product(name: "Mockable", package: "Mockable"),
+            ],
+            path: "Tests/WebRTCKitTests",
+            swiftSettings: [
+                .define("MOCKING"),
+            ]
+        ),
+        .testTarget(
             name: "BaguetteTests",
             dependencies: [
                 "Baguette",
                 "BaguetteDevice",
+                "WebRTCKit",
                 .product(name: "Mockable", package: "Mockable"),
                 // In-process router + socket drivers for the serve routes.
                 // Test target only: the release binary never links them.

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 private func hex(_ string: String) -> [UInt8] {
     stride(from: 0, to: string.count, by: 2).map {

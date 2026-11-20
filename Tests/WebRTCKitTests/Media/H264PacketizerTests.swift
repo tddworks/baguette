@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// A picture as the encoder hands it over: each NAL unit behind a 4-byte length.
 private func avcc(_ nalUnits: [Data]) -> Data {

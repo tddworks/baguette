@@ -1,6 +1,7 @@
 import BaguetteDevice
 import ArgumentParser
 import Foundation
+import WebRTCKit
 
 /// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
 /// `             [--allowed-hosts …] [--plugin-dir …] [--no-plugins]`

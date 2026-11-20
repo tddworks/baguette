@@ -3,6 +3,7 @@ import Mockable
 import Testing
 @testable import BaguetteDevice
 @testable import protocol BaguetteDevice.Stream
+@testable import WebRTCKit
 
 private let offer = [
     "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 112", "a=mid:0",

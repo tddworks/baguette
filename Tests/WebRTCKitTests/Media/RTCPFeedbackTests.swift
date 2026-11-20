@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// One RTCP packet: V=2, count/FMT, packet type, length in 32-bit words minus one.
 private func rtcp(format: UInt8, type: UInt8, _ body: [UInt8]) -> [UInt8] {

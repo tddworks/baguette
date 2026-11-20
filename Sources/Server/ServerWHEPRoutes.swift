@@ -4,6 +4,7 @@ import HTTPTypes
 import Hummingbird
 import HummingbirdWebSocket
 import NIOCore
+import WebRTCKit
 
 /// The WebRTC (WHEP, draft-ietf-wish-whep) live view: a page posts an SDP offer and gets a
 /// viewer of the device with a stream of its own; its touches and stream

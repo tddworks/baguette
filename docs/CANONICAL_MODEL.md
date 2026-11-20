@@ -280,13 +280,14 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Orientation** | *which way is it turned?* | ◆ `Orientation` |
 | **Accessibility** | *what is on screen?* | ◆ `Accessibility` · ◇ `AXNode` `AXScreen` |
 | **Chrome** · **Render** · **Capture** | *what does the device look like, and how is it framed?* | ◆ `Chromes` · `DeviceModels` · ◇ `CaptureSize` |
-| **Stream** · **Recording** | *how do frames leave?* | ◆ `Stream` · `Reel` · `WebRTCViewers` → `WebRTCViewer` · ◇ `RTPPacket` (shared with CoreDevice, which receives a phone's screen as RTP) |
+| **Stream** · **Recording** | *how do frames leave?* | ◆ `Stream` · `Reel` · `WebRTCViewers` → `WebRTCViewer` · ◇ `EncoderRetune` (when the encoder follows a viewer's target) |
+| **WebRTCKit** (`Sources/WebRTCKit`, its own module; depends on nothing of baguette's) | *how does a stream reach a browser over WebRTC?* | ◇ `SessionDescription` `ICECredentials` `MediaPorts` (signaling) · `STUNMessage` `Datagrams` `Handshake` `SRTPContext` (transport) · `RTPPacket` `H264Packetizer` `Pacer` `RTCPFeedback` (media; `RTPPacket` shared with CoreDevice) · `CongestionControl` `BandwidthEstimate` `TransportWideControl` (congestion) |
 | **Location** · **Motion** · **Network** · **Interface** · **StatusBar** · **Shake** · **Camera** | *what conditions does the app run under?* | one ◆ role each |
 | **Apps** · **Defaults** · **Pasteboard** · **Photos** | *which apps, and what data?* | one ◆ role each |
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
 | **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
-| **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `VideoDepacketizer` (its screen; `RTPPacket` is the Stream context's) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
+| **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `VideoDepacketizer` (its screen; `RTPPacket` is WebRTCKit's) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind
 

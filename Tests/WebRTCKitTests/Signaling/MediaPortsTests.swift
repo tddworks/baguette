@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 private struct Taken: Error, Equatable { let port: UInt16 }
 

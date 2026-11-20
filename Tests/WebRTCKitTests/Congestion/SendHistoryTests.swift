@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 private func report(_ arrivals: [(UInt16, Int64?)]) -> TransportFeedback {
     // One two-bit vector chunk per 7 packets would be the wire; here only the parsed value matters.

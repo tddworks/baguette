@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import Baguette
 @testable import BaguetteDevice
+@testable import WebRTCKit
 
 @Suite("ReceiverFeedback")
 struct ReceiverFeedbackTests {

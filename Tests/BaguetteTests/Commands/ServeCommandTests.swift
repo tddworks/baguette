@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import Baguette
 @testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// `baguette serve`: which plugins it offers, and how it says so. The
 /// server it composes and binds is integration-only.

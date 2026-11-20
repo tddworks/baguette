@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// A recvonly video offer the way Chrome writes one, trimmed: VP8, two
 /// Constrained Baseline H.264s (one in packetization mode 0), a High one, and

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 @Suite("CertificateFingerprint")
 struct CertificateFingerprintTests {

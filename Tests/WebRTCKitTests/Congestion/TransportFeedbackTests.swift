@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// A transport-cc FCI (draft-holmer-rmcat-transport-wide-cc-extensions-01 §3.1):
 /// base sequence, status count, 24-bit reference time (×64 ms), feedback count,

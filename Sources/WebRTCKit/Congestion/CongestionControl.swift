@@ -20,7 +20,7 @@ public struct BitrateCut: Equatable, Sendable {
 /// (`ReceiverEstimateControl`) and none (`FixedBitrate`), picked per viewer by
 /// `CongestionChoice`. The viewer stamps every packet with what its method
 /// asks, reports it sent, hands it the browser's feedback, and retunes its
-/// encoder to the target (`EncoderRetune`). Times are microseconds.
+/// encoder to the target. Times are microseconds.
 @Mockable
 public protocol CongestionControl: AnyObject, Sendable {
     /// The SDP lines the answer needs for it (extensions, feedback).

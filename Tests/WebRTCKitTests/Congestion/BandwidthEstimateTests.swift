@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import BaguetteDevice
+@testable import WebRTCKit
 
 /// A bottleneck link: packets queue behind each other at `capacity` bits per
 /// second, after `latency`; every `lossEvery`th packet is dropped.
