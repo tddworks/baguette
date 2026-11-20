@@ -655,6 +655,28 @@ this doc.
     the floor no longer hides the noise). The pacer's own wait, logged down
     to 5 ms for one run: at most 6 ms, pacing at the full 8 Mbps.
 
+    **Phone on mobile data over Tailscale, after the input fix (2026-11-20)**,
+    one run each, back to back:
+
+    | Run | Pacer | misses | p50 | p95 | p99 | fps | interval σ | freezes/min |
+    |---|---|---|---|---|---|---|---|---|
+    | 100 taps | on | 0 | 219 ms | 353 ms | 384 ms | 44.0 | 21.3 ms | 8.37 |
+    | 100 taps | off | 2 | 246 ms | 404 ms | 472 ms | 43.5 | 22.0 ms | 10.13 |
+    | 30 s animated list | on | | 7.35 Mbps | | | 41.2 | | |
+    | 30 s animated list | off | | 7.12 Mbps | | | 41.6 | | |
+
+    The fixed input path took ~250 ms off the median (~470 → ~220 ms). This
+    time the pacer led on every latency column, where the run before it
+    trailed on the tail: on this link one run each doesn't separate them,
+    and nothing says the pacer hurts. The log says what the link did: in the
+    paced latency run the target was cut to 4.1 then 5.5 Mbps, and the pacer
+    held packets 50–53 ms at those rates (9 times); in the paced bandwidth run
+    the target saw-toothed between ~1.5 and ~3.6 Mbps. **Freezes, 8–10 a
+    minute with or without the pacer, are the link's**: the estimate keeps
+    cutting on this path, and that, not pacing, is the next thing to work on
+    (which losses or delays trigger the cuts; whether a NACK or a keyframe
+    request follows each freeze).
+
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative
     samples); and each tap is answered in its own colour (left red, right green,
