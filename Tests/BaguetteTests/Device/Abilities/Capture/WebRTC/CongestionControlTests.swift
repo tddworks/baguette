@@ -105,10 +105,9 @@ struct CongestionChoiceTests {
         #expect(CongestionChoice(rawValue: "gcc") == nil)
     }
 
-    @Test func `should take REMB when offered, else transport-cc, else none, when nothing is asked`() {
-        let transportOnly = offer(["a=extmap:3 " + transportWideURI])
-        #expect(CongestionChoice.control(asked: nil, offer: both, ceiling: 8_000_000) is ReceiverEstimateControl)
-        #expect(CongestionChoice.control(asked: nil, offer: transportOnly, ceiling: 8_000_000) is TransportWideControl)
+    @Test func `should take transport-cc when offered, else REMB, else none, when nothing is asked`() {
+        #expect(CongestionChoice.control(asked: nil, offer: both, ceiling: 8_000_000) is TransportWideControl)
+        #expect(CongestionChoice.control(asked: nil, offer: rembOnly, ceiling: 8_000_000) is ReceiverEstimateControl)
         #expect(CongestionChoice.control(asked: nil, offer: neither, ceiling: 8_000_000) is FixedBitrate)
     }
 

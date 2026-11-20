@@ -2,10 +2,11 @@ import Foundation
 
 /// Which congestion control a viewer runs, as the WHEP switch spells it
 /// (`?congestion=transport-cc|remb|off`). The method asked for, when the offer
-/// can carry it, else none; with nothing asked, REMB if offered, else
-/// transport-cc if offered, else none. REMB is the default because it gave the
-/// best picture on a phone over Tailscale (2026-11-20); transport-cc is the
-/// one that measures the link itself.
+/// can carry it, else none; with nothing asked, transport-cc if offered, else
+/// REMB if offered, else none. transport-cc is the default: it measures the link
+/// itself, and since it stopped reading jitter as congestion it gave the best
+/// picture on a phone over Tailscale (2026-11-20), where REMB started soft and
+/// ramped slowly.
 public enum CongestionChoice: String, Sendable {
     case transportWide = "transport-cc"
     case receiverEstimate = "remb"
@@ -23,7 +24,7 @@ public enum CongestionChoice: String, Sendable {
         case .transportWide?: return transportWide ?? none
         case .receiverEstimate?: return receiverEstimate ?? none
         case .off?: return none
-        case nil: return receiverEstimate ?? transportWide ?? none
+        case nil: return transportWide ?? receiverEstimate ?? none
         }
     }
 }

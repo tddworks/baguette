@@ -58,8 +58,8 @@ Each viewer has its own H.264 encoder, starting at the stream socket's defaults
 
 | `congestion=` | Who estimates the bandwidth |
 |---|---|
-| `remb` (the default when offered) | the browser, which sends its estimate (the older way) |
-| `transport-cc` | baguette, from the browser's per-packet arrival reports, the way Google's WebRTC does |
+| `transport-cc` (the default when offered) | baguette, from the browser's per-packet arrival reports, the way Google's WebRTC does |
+| `remb` | the browser, which sends its estimate (the older way) |
 | `off` | nobody: the bitrate stays where it started or where `set_bitrate` put it |
 
 Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the

@@ -147,14 +147,19 @@ browser's feedback, and the bitrate it wants (or none).
 
 | Implementation | Who estimates | Each packet carries | Feedback read |
 |---|---|---|---|
-| `TransportWideControl` | baguette (GCC, below) | transport-wide sequence | transport-cc |
-| `ReceiverEstimateControl` (default) | the browser | `abs-send-time` (24-bit, 6.18 s) | REMB |
+| `TransportWideControl` (default) | baguette (GCC, below) | transport-wide sequence | transport-cc |
+| `ReceiverEstimateControl` | the browser | `abs-send-time` (24-bit, 6.18 s) | REMB |
 | `FixedBitrate` | nobody | nothing | nothing |
 
 `CongestionChoice` picks one per viewer: `?congestion=transport-cc|remb|off` on
-the WHEP `POST`, else REMB if offered, else transport-cc if offered, else none.
+the WHEP `POST`, else transport-cc if offered, else REMB if offered, else none.
 
-**Why REMB is the default (decided 2026-11-20), and what it costs.** On a phone
+**transport-cc is the default (decided 2026-11-20, after the jitter fix).** On
+the phone it then looked as sharp as REMB had, while REMB, unchanged, started
+soft: Chrome's estimate cut on connect (`8000 → 3276 kbps`) and ramped about 10 %
+a step. REMB was briefly the default before that fix, for the reason below.
+
+**Why REMB was the default for a while (2026-11-20), and what it costs.** On a phone
 over Tailscale (Chrome on iOS), REMB gave the best picture: the log showed no
 REMB retunes at all, so it most likely stayed at 8 Mbps, while transport-cc had
 cut to ~300 kbps and was climbing back at 8 %/s. Whether that cut was real
