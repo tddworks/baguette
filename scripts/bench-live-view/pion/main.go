@@ -148,6 +148,10 @@ func admit(offer string) (string, string, error) {
 	}
 	settings := webrtc.SettingEngine{}
 	settings.SetIncludeLoopbackCandidate(true)
+	// Fixed ports, so the bench's impair.sh shapes Pion's media as it does baguette's.
+	if err := settings.SetEphemeralUDPPortRange(8195, 8199); err != nil {
+		return "", "", err
+	}
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(media), webrtc.WithInterceptorRegistry(registry), webrtc.WithSettingEngine(settings))
 	pc, err := api.NewPeerConnection(webrtc.Configuration{BundlePolicy: webrtc.BundlePolicyMaxBundle})
 	if err != nil {

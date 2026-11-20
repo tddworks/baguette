@@ -98,7 +98,7 @@ async function startWebRTC() {
   pc.onconnectionstatechange = () => log('pc', pc.connectionState);
   const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
   const res = await fetch(WHEP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp });
-  if (!res.ok) { log('WHEP', res.status, await res.text()); return; }
+  if (!res.ok) { throw new Error('WHEP ' + res.status + ' ' + (await res.text()).slice(0, 200)); }
   let sdp = (await res.text()).replace(/a=rtcp-fb:\d+ goog-remb\r?\n/g, '');
   if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
   await pc.setRemoteDescription({ type: 'answer', sdp });
@@ -135,7 +135,8 @@ async function run() {
   await fetch('bridge/' + (T === 'webrtc' && SPIKE ? 'on' : 'off'), { method: 'POST' });
   if (T === 'webrtc' && SPIKE) { log('starting the spike\'s WHEP source…'); await new Promise(r => setTimeout(r, 5000)); }
   T === 'ws' ? startWS() : await startWebRTC();
-  while (R.firstFrame === null) await new Promise(r => setTimeout(r, 50));
+  for (const until = performance.now() + 15000; R.firstFrame === null; await new Promise(r => setTimeout(r, 50)))
+    if (performance.now() > until) throw new Error('no picture within 15 s');
   if (q.get('mode') === 'bw') return bw(+(q.get('secs') || 30));
   await new Promise(r => setTimeout(r, 2000));
   // The probe needs the tap probe page on screen: anything already lit at the centre would make every
@@ -156,6 +157,7 @@ async function run() {
     if (i % 10 === 9) log('tap', i + 1, t1 === null ? 'MISS' : (t1 - t0).toFixed(1) + ' ms');
   }
   const ok = R.samples.filter(x => x !== null);
+  if (!ok.length) return finish({ transport: T, sender: R.sender, taps: TAPS, misses: TAPS, failed: 'no tap was answered within 5 s' });
   const iv = R.frames.slice(1).map((t, i) => t - R.frames[i]);
   const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
   const durMin = (R.frames.at(-1) - R.frames[0]) / 60000;
@@ -168,5 +170,7 @@ async function run() {
   };
   log(JSON.stringify(R.summary, null, 1)); R.done = true; R.stop();
 }
-run().catch(e => log('ERR', e.message));
+// Every run ends with a summary and its session closed, even one that fails.
+function finish(summary) { R.summary = summary; log(JSON.stringify(summary, null, 1)); R.done = true; R.stop?.(); }
+run().catch(e => finish({ transport: T, sender: R.sender, failed: e.message }));
 </script></body></html>

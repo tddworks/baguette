@@ -39,7 +39,8 @@ if (( LAN )); then
 fi
 
 # 1 · today's path: baguette serve (WebSocket stream + the input route both transports tap through)
-nohup $BAGUETTE serve --host 127.0.0.1 --port 8421 > $RUN/serve.log 2>&1 &
+# WebRTC media on fixed ports so impair.sh can find it: MediaMTX 8189, baguette 8190-8194, Pion 8195-8199.
+nohup $BAGUETTE serve --host 127.0.0.1 --port 8421 --webrtc-ports 8190-8194 > $RUN/serve.log 2>&1 &
 echo $! > $RUN/serve.pid
 
 # 2 · the WHEP server. Only RTSP in and WebRTC out; everything else off.
