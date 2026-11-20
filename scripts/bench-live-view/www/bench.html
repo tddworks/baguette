@@ -23,7 +23,9 @@ const logEl = document.getElementById('log'); const log = (...a) => { logEl.text
 const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
 const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : 'baguette', t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
 
-// Every presented frame lands here with its vsync timestamp and its centre-pixel luma.
+// Every presented frame lands here with the time it reaches the screen and its centre-pixel luma.
+// Both paths stamp the moment the frame is expected on screen, never the start of the frame
+// interval it arrived in: that can precede the tap, which once gave a "-1.4 ms" tap-to-photon.
 let lastLuma = 0;
 function presented(ts, src, sw, sh) {
   if (R.firstFrame === null) { R.firstFrame = ts - R.t0; log('first frame', R.firstFrame.toFixed(0), 'ms'); }
@@ -62,13 +64,17 @@ function startWS() {
     else if ((tag === 2 || tag === 3) && dec.state === 'configured') { dec.decode(new EncodedVideoChunk({ type: tag === 2 ? 'key' : 'delta', timestamp: ts, data: p.buffer })); ts += 16667; }
   };
   ws.onclose = e => log('ws closed', e.code, e.reason);
+  let vsync = 1000 / 60, lastRaf = null;
   const paint = t => {
+    if (lastRaf !== null && t - lastRaf < 50) vsync = 0.9 * vsync + 0.1 * (t - lastRaf);
+    lastRaf = t;
     if (pending) {
       const f = pending; pending = null;
       const w = f.displayWidth || f.width, h = f.displayHeight || f.height;
       if (cv.width !== w) { cv.width = w; cv.height = h; }
       ctx.drawImage(f, 0, 0);
-      presented(t, f, w, h); f.close();
+      // Drawn in this rAF, the canvas reaches the screen at the next vsync.
+      presented(t + vsync, f, w, h); f.close();
     }
     requestAnimationFrame(paint);
   };
@@ -93,7 +99,7 @@ async function startWebRTC() {
   if (!sdp.includes('b=AS:')) sdp = sdp.replace(/(c=IN\s+\S+\s+\S+\r?\n)/, '$1b=AS:15000\r\n');
   await pc.setRemoteDescription({ type: 'answer', sdp });
   const viewer = res.headers.get('Location');
-  const onFrame = (now, meta) => { presented(now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
+  const onFrame = (now, meta) => { presented(meta.expectedDisplayTime ?? now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
   vid.requestVideoFrameCallback(onFrame);
   // Hang the viewer up at the end, rather than leave it to the 30 s consent timeout.
   R.pc = pc; R.stop = () => { pc.close(); if (viewer && !SPIKE) fetch((PION ? '' : '/api') + viewer, { method: 'DELETE' }); };
