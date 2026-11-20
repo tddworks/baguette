@@ -355,6 +355,19 @@ struct WebRTCViewerTests {
         #expect(rig.packets.last?.marker == true)
     }
 
+    @Test func `should keep sending while its pacer holds packets a long time`() {
+        let rig = Rig(target: 300_000)   // paced at 750 kbps: a 72 kB keyframe takes ~0.5 s
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+        let slice = Data([0x65]) + Data(repeating: 7, count: 71_999)
+        rig.show(AVCCEnvelope.keyframe(avcc: withUnsafeBytes(of: UInt32(slice.count).bigEndian) { Data($0) } + slice))
+
+        rig.pass(0.6)
+
+        #expect(rig.packets.count > 55)
+        #expect(rig.viewer.state == .live)
+    }
+
     @Test func `should send a keyframe's packets all at once when told not to pace`() {
         let rig = Rig(pacing: false)
         rig.goLive()

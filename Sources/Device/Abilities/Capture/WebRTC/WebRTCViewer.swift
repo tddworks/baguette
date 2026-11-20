@@ -52,7 +52,7 @@ public final class WebRTCViewer: @unchecked Sendable {
     private var pacer: Pacer<RTPPacket>
     /// Whether the pacer's next slice is already scheduled.
     private var sliceScheduled = false
-    private var lastHoldLog: Int64 = .min
+    private var lastHoldLog: Int64?
     private let schedule: Schedule
 
     /// Runs `work` after a delay: how the pacer comes back for its next slice.
@@ -267,7 +267,14 @@ public final class WebRTCViewer: @unchecked Sendable {
     /// another slice in 5 ms while packets wait. Called under the lock.
     private func sendPaced(to browser: DatagramAddress, at now: Int64) {
         pacer.bitrate = congestion.target ?? stream.config.bitrateBps
-        for packet in pacer.release(at: now) {
+        let released = pacer.release(at: now)
+        // How long what just left actually waited, and the rate it was paced
+        // at then: what the bench needs to tell the pacer's delay from the link's.
+        if pacer.lastWait > 50_000, lastHoldLog.map({ now - $0 >= 250_000 }) ?? true {
+            lastHoldLog = now
+            log("[webrtc] pacer held a packet \(pacer.lastWait / 1_000) ms, pacing for \(pacer.bitrate / 1_000) kbps")
+        }
+        for packet in released {
             let stamped = RTPPacket(
                 marker: packet.marker, payloadType: packet.payloadType, sequence: packet.sequence,
                 timestamp: packet.timestamp, ssrc: packet.ssrc, payload: packet.payload,
@@ -276,11 +283,6 @@ public final class WebRTCViewer: @unchecked Sendable {
             datagrams.send(wire, to: browser)
             remember(wire, as: packet.sequence)
             congestion.sent(size: wire.count, at: now)
-        }
-        // What the bench needs to tell the pacer's delay from the link's.
-        if let wait = pacer.oldestWait(at: now), wait > 50_000, now - lastHoldLog >= 250_000 {
-            lastHoldLog = now
-            log("[webrtc] pacer holding \(wait / 1_000) ms at \(pacer.bitrate / 1_000) kbps")
         }
         guard !pacer.isEmpty, !sliceScheduled else { return }
         sliceScheduled = true

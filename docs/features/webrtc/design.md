@@ -609,12 +609,16 @@ this doc.
 
     With the pacer: half the frame jitter and ~10 % more frames on a busy
     screen; the median the same; a worse tail (p95 +300 ms), from episodes
-    (taps 20 and 50, ~600 ms) — the shape Pion showed too. The server logged no
-    retune in these runs, so the pacer ran at 2.5 × 8 Mbps, where a whole
-    keyframe drains in ~30 ms: by its own arithmetic it can't hold a frame
-    300 ms. One run each can't say whether the tail is the pacer or the radio;
-    the server now logs `[webrtc] pacer holding N ms at T kbps` for any packet
-    held over 50 ms, so the next runs (alternated, several each) show which.
+    (taps 20 and 50, ~600 ms) — the shape Pion showed too. The cause is not
+    known. The server logged no *retune*, but that says only that the
+    encoder's bitrate never moved over 10 %: the pacer reads the congestion
+    control's target afresh on every slice, so it may have paced well below
+    8 Mbps while the encoder kept sending 8 (a keyframe takes ~30 ms only at
+    the full 20 Mbps). One run each can't separate the pacer from the radio
+    either. The server now logs `[webrtc] pacer held a packet N ms, pacing for
+    T kbps` whenever packets it sends had waited over 50 ms — their real wait,
+    and the target then — so the next runs (alternated, several each), lined up
+    with the slow taps, show which.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative

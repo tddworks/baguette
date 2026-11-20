@@ -34,8 +34,8 @@ public struct Pacer<Packet>: Sendable where Packet: Sendable {
 
     public var isEmpty: Bool { head == queue.count }
 
-    /// How long its oldest packet has waited at `now`; nil when it holds none.
-    public func oldestWait(at now: Int64) -> Int64? { isEmpty ? nil : now - queue[head].at }
+    /// The longest any packet of the last `release` had waited, in microseconds.
+    public private(set) var lastWait: Int64 = 0
 
     public mutating func enqueue(_ packet: Packet, size: Int, at now: Int64) {
         if isEmpty {
@@ -48,6 +48,7 @@ public struct Pacer<Packet>: Sendable where Packet: Sendable {
 
     /// The packets whose time has come, in order.
     public mutating func release(at now: Int64) -> [Packet] {
+        lastWait = 0
         guard !isEmpty else { return [] }
         guard pacing else {
             defer { queue.removeAll(keepingCapacity: true); head = 0; queuedBytes = 0 }
@@ -58,6 +59,7 @@ public struct Pacer<Packet>: Sendable where Packet: Sendable {
         var out: [Packet] = []
         while !isEmpty, budget > 0 {
             let next = queue[head]
+            lastWait = max(lastWait, now - next.at)
             head += 1
             queuedBytes -= next.size
             budget -= Double(next.size)
