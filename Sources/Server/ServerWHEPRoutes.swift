@@ -13,7 +13,7 @@ import NIOCore
 ///   DELETE /devices/:udid/whep/:viewer          hang up → 204
 ///   WS     /devices/:udid/whep/:viewer/control  gestures, describe_ui, paste, retune
 ///
-/// Design: docs/features/stream/whep.md.
+/// Design: docs/features/webrtc/design.md.
 extension Server {
     func registerWHEPRoutes(
         on router: Router<BasicWebSocketRequestContext>,

@@ -12,7 +12,7 @@
 //   session.send({ type: 'tap', … });
 //   session.stop();
 //
-// Design: docs/features/stream/whep.md.
+// Design: docs/features/webrtc/design.md.
 (function () {
   'use strict';
 

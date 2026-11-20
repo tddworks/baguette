@@ -4,10 +4,11 @@ description: A proposal to carry the serve live view over WebRTC (WHEP) next to 
 
 # Live view over WebRTC (WHEP): design and bench
 
-**Status:** DESIGN, approved 2026-11-20; being built on `feat/whep-live-view` in the order of [§6](#6--build-sequence-test-first-each-slice-green). Slice 0 (spike) has been run on localhost; [results](#slice-0-results--localhost-2026-11-20). The stream WebSocket is the only live view
-today. Nothing under `Sources/` refers to WebRTC, WHEP, RTP or SDP. The first
-slice is a **bench**, not a feature. We ship the transport only if the bench
-meets the [decision rule](#the-decision-rule).
+**Status:** BUILT on `feat/whep-live-view`, slices 1–10 of [§6](#6--build-sequence-test-first-each-slice-green):
+the WHEP routes and the page's **WebRTC** choice play through baguette's own
+ICE-lite, DTLS-SRTP and RTP, checked end to end in Chrome on 2026-11-20 (the serve
+page at 38–40 fps, touches through the control socket). Not built: REMB → bitrate
+(slice 11). How to use it: [README](README.md).
 
 This doc owns **how encoded frames travel from `baguette serve` to the page,
 and how we compare two ways of doing it**. It doesn't change what gets encoded
@@ -15,7 +16,7 @@ or how input gets in:
 
 | For | Read |
 |---|---|
-| The encoder, AVCC tags and retune commands | [stream](README.md) |
+| The encoder, AVCC tags and retune commands | [stream](../stream/README.md) |
 | The stream WebSocket route and its messages | [serve.md](../../serve.md#one-websocket-per-stream), [wire.md](../../wire.md) |
 | How a tap reaches the simulator | [ARCHITECTURE.md](../../ARCHITECTURE.md) |
 | Many devices on one page | [device-farm](../device-farm/README.md) |
@@ -351,6 +352,11 @@ can't do that, so a native `RTPFrameSink` would have to wire TWCC/REMB to
 animated screen (~7 Mbps) into a 5 Mbps link without someone calling
 `set_bitrate`. That's what the 5 Mbps row in the matrix tests.
 
+**Native route, localhost (2026-11-20, 5 taps, same bench page):** p50 351 ms,
+p95 379 ms, 41.9 presented fps; the WebSocket measured about 355 ms in the same
+session. The ~42 fps ceiling showed with MediaMTX too, so it is Chrome's WebRTC
+playout, not the spike's ffmpeg.
+
 **Still to run:** H2 and H3, the lossy rows. These are where WebRTC is
 expected to win. They need `sudo` for dummynet.
 
@@ -372,28 +378,28 @@ this doc.
 0. ~~**Spike, no `Sources/` changes.**~~ **DONE** for localhost, and the
    kit runs from a phone (`scripts/bench-live-view`, see [Run it](#run-it)).
    Lossy and phone rows still to fill in. *Pinned: the results tables above.*
-1. **`RTPPacket`** moves from the iPhone family to the Stream context and learns
+1. ~~**`RTPPacket`**~~ **DONE** moves from the iPhone family to the Stream context and learns
    to serialize. *Pinned: "should write the header a phone's parser reads back".*
-2. **`H264Packetizer`.** *Pinned: "should fragment a picture too big for one
+2. ~~**`H264Packetizer`.**~~ **DONE** *Pinned: "should fragment a picture too big for one
    packet into FU-A packets with start and end bits", "should bundle SPS and
    PPS into one STAP-A ahead of a keyframe", "should mark the last packet of a
    picture".*
-3. **`STUNMessage`.** *Pinned: "should answer a check whose integrity matches the
+3. ~~**`STUNMessage`.**~~ **DONE** *Pinned: "should answer a check whose integrity matches the
    ICE password", "should refuse a check whose integrity doesn't match".*
-4. **`SessionDescription`.** *Pinned: "should answer an offer with its H.264
+4. ~~**`SessionDescription`.**~~ **DONE** *Pinned: "should answer an offer with its H.264
    payload type in packetization mode 1", "should refuse an offer with no H.264
    it can send".*
-5. **`SRTPContext`.** *Pinned: RFC 3711 key-derivation and protect vectors.*
-6. **`RTCPFeedback`.** *Pinned: PLI, FIR, NACK and REMB parsed from a compound
+5. ~~**`SRTPContext`.**~~ **DONE** *Pinned: RFC 3711 key-derivation and protect vectors.*
+6. ~~**`RTCPFeedback`.**~~ **DONE** *Pinned: PLI, FIR, NACK and REMB parsed from a compound
    packet.*
-7. **`Datagrams` + `Handshake`**, the two `System/` files. *Pinned: `.system`
+7. ~~**`Datagrams` + `Handshake`**~~ **DONE**, the two `System/` files. *Pinned: `.system`
    tests (a loopback UDP round trip, a DTLS handshake between two contexts that
    exports the same SRTP keys).*
-8. **`WebRTCViewer`** against `MockDatagrams` / `MockHandshake`. *Pinned: the
+8. ~~**`WebRTCViewer`**~~ **DONE** against `MockDatagrams` / `MockHandshake`. *Pinned: the
    laws 2, 5, 6, 7.*
-9. **`WebRTCViewers` and the routes**: `POST`/`DELETE /devices/:udid/whep` and
+9. ~~**`WebRTCViewers` and the routes**~~ **DONE**: `POST`/`DELETE /devices/:udid/whep` and
    the control WebSocket, through `InProcessServer`.
-10. **The page**: a WebRTC option beside H.264 and MJPEG, painting the `<video>`
+10. ~~**The page**~~ **DONE**: a WebRTC option beside H.264 and MJPEG, painting the `<video>`
     onto the stream canvas. *Pinned: `make test-web`.*
 11. **REMB → bitrate.**
 12. **Docs**: a user README, `serve.md` rows, CHANGELOG; the bench kit pointed

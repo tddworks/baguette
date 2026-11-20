@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Live-view bench: today's stream WebSocket next to a WHEP (WebRTC) spike, for one booted simulator.
-# Design and results: docs/features/stream/whep.md
+# Design and results: docs/features/webrtc/design.md
 #
 #   scripts/bench-live-view/start.sh [--lan | --tailscale | --host <ip>] [--udid <UDID>]
 #

@@ -56,6 +56,9 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `GET` | `/devices/:udid/schemes.json?q=` *any device* | URL schemes the device's apps registered | [deep-links](features/deep-links/README.md) |
 | `POST` | `/devices/:udid/notify?bundleId=` *any device* | deliver a remote notification (body: the payload) | [notifications](features/notifications/README.md) |
 | `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
+| `POST` | `/devices/:udid/whep` *any device* | WebRTC (WHEP) viewer of the screen: SDP offer in, `201` + `Location` + answer out | [webrtc](features/webrtc/README.md) |
+| `DELETE` | `/devices/:udid/whep/:viewer` *any device* | hang a WebRTC viewer up | [webrtc](features/webrtc/README.md) |
+| `WS` | `/devices/:udid/whep/:viewer/control` *any device* | a WebRTC viewer's gestures + stream control, no video | [webrtc](features/webrtc/README.md) |
 | `WS` | `/devices/:udid/stream.3d.mjpeg`, `.avcc` *any device* | live 3D stage; a phone running the companion app is posed by its motion | [3d-rendering](features/3d-rendering/README.md) |
 | `WS` | `/devices/:udid/logs?level=&style=&predicate=&bundleId=` *any device* | live unified log | [logs](features/logs/README.md) |
 | `WS` | `/devices/:udid/camera` *any device* | virtual camera control; a device with no camera baguette can feed, like a phone on a cable, is refused by name | [camera](features/camera/README.md) |
