@@ -13,10 +13,23 @@ let coreDeviceHome = "/Library/Developer/PrivateFrameworks"
 let universalHIDHome = coreDeviceHome + "/CoreDevice.framework/Versions/A/Frameworks"
 let hasCoreDevice = FileManager.default.fileExists(atPath: coreDeviceHome + "/CoreDevice.framework/CoreDevice")
     && FileManager.default.fileExists(atPath: universalHIDHome + "/UniversalHID.framework/UniversalHID")
+// A phone's media stream is newer CoreDevice API than the rest: some Macs'
+// CoreDevice (a CI runner's, 2026-11-20) doesn't export it. Those symbols
+// are weak-linked in Swift (`@_weakLinked`) and left for dyld to resolve
+// (`-U`), so the build links either way and `RemoteDevice.startMediaStream`
+// checks they're there before calling. Async methods are referenced through
+// their async function pointers (`…Tu`).
+let mediaStreamSymbols = [
+    "$s10CoreDevice20MediaStreamFunctionsV6deviceAcA06RemoteB0C_tcfC",
+    "$s10CoreDevice20MediaStreamFunctionsV05mediaD11SupportInfoAA0bcD0V0gH8ResponseVvg",
+    "$s10CoreDevice20MediaStreamFunctionsV05mediaD11SupportInfoAA0bcD0V0gH8ResponseVvgTu",
+    "$s10CoreDevice20MediaStreamFunctionsV05startcD04withAA0bcD0V13StartResponseVAG0H7RequestV_tYaKF",
+    "$s10CoreDevice20MediaStreamFunctionsV05startcD04withAA0bcD0V13StartResponseVAG0H7RequestV_tYaKFTu",
+]
 let coreDeviceLinking: [LinkerSetting] = hasCoreDevice ? [.unsafeFlags([
     "-F", coreDeviceHome, "-Xlinker", "-weak_framework", "-Xlinker", "CoreDevice",
     "-F", universalHIDHome, "-Xlinker", "-weak_framework", "-Xlinker", "UniversalHID",
-])] : []
+] + mediaStreamSymbols.flatMap { ["-Xlinker", "-U", "-Xlinker", "_" + $0] })] : []
 let coreDeviceDefine: [SwiftSetting] = hasCoreDevice ? [.define("COREDEVICE")] : []
 
 // SimulatorKit + CoreSimulator are deliberately NOT linked here. Nothing

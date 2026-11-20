@@ -41,7 +41,11 @@ struct RemoteDevice: @unchecked Sendable {
               let responseType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV13StartResponseVMa"),
               let supportType = CoreDeviceFramework.type("$s10CoreDevice0B11MediaStreamV19SupportInfoResponseVMa"),
               let functions = CoreDeviceFramework.symbol("$s10CoreDevice20MediaStreamFunctionsVN"),
-              CoreDeviceFramework.valueSize(functions) <= MemoryLayout<MediaStreamFunctionsWords>.size
+              CoreDeviceFramework.valueSize(functions) <= MemoryLayout<MediaStreamFunctionsWords>.size,
+              // Weak-linked (see Package.swift): a CoreDevice without them can't stream.
+              CoreDeviceFramework.symbol("$s10CoreDevice20MediaStreamFunctionsV6deviceAcA06RemoteB0C_tcfC") != nil,
+              CoreDeviceFramework.symbol("$s10CoreDevice20MediaStreamFunctionsV05mediaD11SupportInfoAA0bcD0V0gH8ResponseVvgTu") != nil,
+              CoreDeviceFramework.symbol("$s10CoreDevice20MediaStreamFunctionsV05startcD04withAA0bcD0V13StartResponseVAG0H7RequestV_tYaKFTu") != nil
         else { throw CoreDeviceError.unavailable }
         let handshake = MediaStreamHandshake(requestType: requestType, responseType: responseType, supportType: supportType)
         let call = MediaStreamCall(object: object, handshake: handshake, makeRequest: makeRequest)
