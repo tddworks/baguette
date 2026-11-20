@@ -58,6 +58,17 @@ struct DeviceInputsTests {
         #expect(made.value == 2)
     }
 
+    @Test func `should make a fresh input once the kept one is let go`() throws {
+        let inputs = DeviceInputs(), made = Count()
+        let phone = device("U", made: made)
+        _ = try inputs.input(of: phone)
+
+        inputs.letGo(of: "U")
+        _ = try inputs.input(of: phone)
+
+        #expect(made.value == 2)
+    }
+
     @Test func `should keep each device's input apart`() throws {
         let inputs = DeviceInputs(), made = Count()
 

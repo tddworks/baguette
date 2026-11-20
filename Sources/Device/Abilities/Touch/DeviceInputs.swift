@@ -12,6 +12,10 @@ public final class DeviceInputs: @unchecked Sendable {
 
     public init() {}
 
+    /// Drop `id`'s kept input — one that no longer reaches its device
+    /// (rebooted between two requests, which a state read can't see).
+    public func letGo(of id: DeviceID) { lock.withLock { kept[id] = nil } }
+
     /// `device`'s input: the kept one, or one made now. Refused, as
     /// `Device.input()` refuses, when it has nothing to touch or isn't running.
     public func input(of device: any Device) throws -> Abilities {

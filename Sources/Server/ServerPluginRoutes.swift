@@ -256,7 +256,13 @@ extension Server {
         }
         let dispatcher = GestureDispatcher(input: input)
         let ack = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: body) }
-        return .ok(ack)
+        // Not taken: the kept input may no longer reach the device (rebooted
+        // between two requests, which its state can't show) — once more, fresh.
+        guard ack == GestureDispatcher.notTaken, let device = try? devices.device(DeviceID(udid)) else { return .ok(ack) }
+        inputs.letGo(of: device.id)
+        guard let fresh = try? inputs.input(of: device) else { return .ok(ack) }
+        let retried = GestureDispatcher(input: fresh)
+        return .ok(await gestureQueues.run(on: udid) { retried.dispatch(line: body) })
     }
 
     // MARK: - running a contributed command
