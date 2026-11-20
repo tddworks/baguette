@@ -7,6 +7,7 @@ public final class FixedBitrate: CongestionControl, @unchecked Sendable {
     public func answerLines() -> [String] { [] }
     public func extensions(at now: Int64) -> [RTPHeaderExtension] { [] }
     public func sent(size: Int, at now: Int64) {}
-    public func heard(_ feedback: RTCPFeedback, at now: Int64) {}
+    @discardableResult
+    public func heard(_ feedback: RTCPFeedback, at now: Int64) -> BitrateCut? { nil }
     public var target: Int? { nil }
 }

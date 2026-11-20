@@ -72,17 +72,17 @@ public final class WebRTCViewers: @unchecked Sendable {
     ) throws -> (id: String, answer: String) {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
+        let id = UUID().uuidString.lowercased()
         let viewer = WebRTCViewer(
             offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream,
             congestion: { CongestionChoice.control(asked: congestion, offer: description, ceiling: $0) },
-            pacing: pacing)
+            pacing: pacing, id: id)
         do {
             try viewer.start(on: screen)
         } catch {
             viewer.hangUp()
             throw error
         }
-        let id = UUID().uuidString.lowercased()
         lock.withLock { admitted[id] = Admitted(viewer: viewer, device: device, input: input) }
         viewer.onHangUp { [weak self] in
             self?.lock.withLock { self?.admitted[id] = nil }

@@ -727,7 +727,7 @@ this doc.
       lifts and the target jumps back.
 
     The native sender now applies decreases without the cooldown (law 12).
-    Successful retunes and pacer waits carry elapsed times from the same
+    Successful retunes and pacer waits carry timestamps from the same
     viewer clock. To measure this change, compare builds with the pacer on and
     a single input path per run. The bench rejects a native tap run if its
     input socket closes. A separate experiment can test lifting the cap only
@@ -744,9 +744,9 @@ this doc.
     congestion control's nor the pacer's: the likeliest cause is loss
     repair — a frame with a lost packet waits a NACK round trip (100–200 ms
     over mobile and Tailscale), and the bench counts a gap over 200 ms as a
-    freeze. Next: time-stamp losses and freezes to line them up; if they
-    match, RED/ULPFEC (rebuild a lost packet without the round trip) or a
-    lower ceiling on mobile (fewer packets, fewer losses per frame).
+    freeze. Sender and bench timestamps can now test this explanation. A
+    match with loss recovery would support comparing RED/ULPFEC or a lower
+    mobile ceiling.
 
     **Its no-pacer counterpart, and the decision (2026-11-20)**, same link,
     one viewer each: 100 taps p50 156 / p95 298 / p99 377 ms, 0 misses,
@@ -762,6 +762,16 @@ this doc.
     (`2050 → 8000` a second later): lifting it only on sustained arrival is
     still to do, and so is a minimum pacing rate, so a keyframe drains in
     ~50 ms even at a low target.
+
+    **Correlating a stall.** Join the benchmark's `viewerID` with the sender's
+    [event log](README.md#http-and-websocket). The benchmark records
+    gaps over 200 ms within the measurement window, from the last displayed
+    frame (or the window start) through the first frame that follows. It sums
+    their full durations. `recoveredAtMs: null` means the measurement ended
+    while the picture was still stalled. When `freezeClock` is `server`, the
+    bench proxy supplied the Mac's time and `clockUncertaintyMs` gives the
+    estimate's uncertainty. If calibration is unavailable, durations remain
+    comparable and the timestamps use the browser clock.
 
     Two bench fixes came first: a frame is stamped when it reaches the screen
     (`expectedDisplayTime`), not when its interval began (that gave negative

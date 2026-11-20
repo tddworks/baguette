@@ -147,6 +147,37 @@ struct BandwidthEstimateTests {
         #expect(abs(fraction - 0.2) < 0.05)
     }
 
+    @Test func `should attribute a bitrate cut to the tighter limit when queue delay and loss rise together`() {
+        var estimate = BandwidthEstimate(ceiling: 8_000_000)
+        let steady = reports(60, extra: { _ in 0 }).flatMap { $0 }
+        estimate.update(with: steady, now: 350_000)
+
+        let congested = reports(60, from: 60, extra: { _ in 65_000 }).flatMap { $0 }.map { packet in
+            PacketOutcome(sequence: packet.sequence, sentAt: packet.sentAt, size: packet.size,
+                          arrivedAt: packet.sequence.isMultiple(of: 5) ? nil : packet.arrivedAt)
+        }
+        estimate.update(with: congested, now: 750_000)
+
+        #expect(estimate.target < 7_200_000)
+        #expect(estimate.lastCut?.to == estimate.target)
+        #expect(estimate.lastCut?.cause == .queue(delay: 65_000))
+    }
+
+    @Test func `should keep the last cut when loss cannot lower the bitrate past its floor`() {
+        var estimate = BandwidthEstimate(ceiling: 1_200_000)
+        let lost = (0..<20).map { PacketOutcome(sequence: UInt16($0), sentAt: Int64($0) * 5_000,
+                                                size: 1_200, arrivedAt: nil) }
+        estimate.update(with: lost, now: 600_000)
+        estimate.update(with: lost, now: 1_200_000)
+        let floorCut = estimate.lastCut
+
+        estimate.update(with: lost, now: 1_800_000)
+
+        #expect(floorCut?.to == 300_000)
+        #expect(estimate.target == 300_000)
+        #expect(estimate.lastCut == floorCut)
+    }
+
     @Test func `should have made no cut on a link with room to spare`() {
         var estimate = BandwidthEstimate(ceiling: 8_000_000)
         var link = Link(capacity: 50_000_000)

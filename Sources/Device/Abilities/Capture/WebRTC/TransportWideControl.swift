@@ -33,19 +33,11 @@ public final class TransportWideControl: CongestionControl, @unchecked Sendable 
         }
     }
 
-    public func heard(_ feedback: RTCPFeedback, at now: Int64) {
-        guard case .transportFeedback(let report) = feedback else { return }
-        let cut = lock.withLock { () -> BandwidthEstimate.Cut? in
-            let before = estimate.lastCut
+    @discardableResult
+    public func heard(_ feedback: RTCPFeedback, at now: Int64) -> BitrateCut? {
+        guard case .transportFeedback(let report) = feedback else { return nil }
+        return lock.withLock {
             estimate.update(with: history.outcomes(of: clock.unwrap(report), now: now), now: now)
-            return estimate.lastCut != before ? estimate.lastCut : nil
-        }
-        // Why the estimate came down, for whoever reads a stall in the log.
-        if let cut {
-            switch cut.cause {
-            case .queue(let delay): log("[webrtc] transport-cc cut to \(cut.to / 1_000) kbps: queue +\(delay / 1_000) ms")
-            case .loss(let share): log("[webrtc] transport-cc cut to \(cut.to / 1_000) kbps: \(Int(share * 100)) % lost")
-            }
         }
     }
 

@@ -69,17 +69,17 @@ in desktop Chrome drops to 300 kbps until the screen moves (the browser's estima
 follows what arrives); `transport-cc` doesn't. The server log shows each change:
 
 ```
-[baguette] [webrtc] retune 8000 → 1700 kbps at +6430 ms
+[baguette] [webrtc] retune 8000 → 1700 kbps viewer=<id> atMs=1795170906430
 ```
 
-Reading a stall in the log: each cut of the bitrate says why, the queue it
-measured or the share lost; a picture the browser lost asks for a keyframe;
-packets it reported lost add up once a second:
+The sender logs transport-cc target cuts, NACK requests with their resend
+counts, and keyframe requests and sends. The viewer ID matches the WHEP
+`Location`. The `atMs` field is the Mac's Unix time in milliseconds.
 
 ```
-[baguette] [webrtc] transport-cc cut to 4071 kbps: queue +62 ms
-[baguette] [webrtc] browser lost 14 packets in 1003 ms, 14 resent
-[baguette] [webrtc] browser lost a picture: keyframe asked for
+[baguette] [webrtc] transport-cc cut to 4071 kbps: queue +62 ms viewer=<id> atMs=1795170906100
+[baguette] [webrtc] nack requested=14 resent=14 viewer=<id> atMs=1795170906120
+[baguette] [webrtc] keyframe requested viewer=<id> atMs=1795170906150
 ```
 
 Each viewer's packets are paced: a keyframe leaves over a few milliseconds at

@@ -31,9 +31,11 @@ public final class ReceiverEstimateControl: CongestionControl, @unchecked Sendab
 
     public func sent(size: Int, at now: Int64) {}
 
-    public func heard(_ feedback: RTCPFeedback, at now: Int64) {
-        guard case .bandwidthEstimate(let bitsPerSecond) = feedback else { return }
+    @discardableResult
+    public func heard(_ feedback: RTCPFeedback, at now: Int64) -> BitrateCut? {
+        guard case .bandwidthEstimate(let bitsPerSecond) = feedback else { return nil }
         lock.withLock { estimate = min(max(Int(clamping: bitsPerSecond), floor), ceiling) }
+        return nil  // REMB supplies the target without delay or loss signals.
     }
 
     public var target: Int? { lock.withLock { estimate } }

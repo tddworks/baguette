@@ -60,6 +60,7 @@ private struct Rig {
     let received = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
     let now = Box(Date(timeIntervalSince1970: 1_000))
     let sink = Box<(any FrameSink)?>(nil)
+    let diagnostics = Box<[String]>([])
     /// Work the viewer asked to run later (its pacer's next slice), run by `pass(_:)`.
     let scheduled = Box<[@Sendable () -> Void]>([])
     let viewer: WebRTCViewer
@@ -82,9 +83,9 @@ private struct Rig {
         given(congestion).answerLines().willReturn(answerLines)
         given(congestion).extensions(at: .any).willReturn(stamp)
         given(congestion).sent(size: .any, at: .any).willReturn()
-        given(congestion).heard(.any, at: .any).willReturn()
+        given(congestion).heard(.any, at: .any).willReturn(nil)
         given(congestion).target.willReturn(target)
-        let (stream, sink, now, congestion, scheduled) = (stream, sink, now, congestion, scheduled)
+        let (stream, sink, now, congestion, scheduled, diagnostics) = (stream, sink, now, congestion, scheduled, diagnostics)
         viewer = WebRTCViewer(
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             datagrams: datagrams, handshake: handshake,
@@ -92,7 +93,7 @@ private struct Rig {
             congestion: { _ in congestion },
             clock: { now.value },
             schedule: { _, work in scheduled.value.append(work) },
-            pacing: pacing)
+            pacing: pacing, id: "test-viewer", diagnose: { diagnostics.value.append($0) })
     }
 
     /// Time passing: the clock moves on and what was due runs, in 5 ms steps.
@@ -231,6 +232,20 @@ struct WebRTCViewerTests {
         rig.deliver(lost1001)
 
         #expect(rig.sent.value.last?.0 == first)
+    }
+
+    @Test func `should put a keyframe and its loss repair on the same viewer timeline`() {
+        let rig = Rig()
+        rig.goLive()
+        rig.show(AVCCEnvelope.description(avcc: avcC))
+        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x65, 1, 2, 3]))))
+        rig.now.value += 0.25
+
+        rig.viewer.act(on: [.lost([1001, 1002]), .keyframeRequest])
+
+        #expect(rig.diagnostics.value.contains { $0.contains("keyframe sent") && $0.contains("viewer=test-viewer atMs=1000000") })
+        #expect(rig.diagnostics.value.contains { $0.contains("nack requested=2 resent=1") && $0.contains("viewer=test-viewer atMs=1000250") })
+        #expect(rig.diagnostics.value.contains { $0.contains("keyframe requested") && $0.contains("viewer=test-viewer atMs=1000250") })
     }
 
     @Test func `should hang up when the browser stops checking for 30 seconds`() {

@@ -20,24 +20,11 @@ public struct BandwidthEstimate: Sendable {
     public let ceiling: Int
     public private(set) var target: Int
 
-    /// Why the estimate came down: the queue it measured (microseconds of
-    /// delay over the link's floor), or the share of packets lost.
-    public enum CutCause: Equatable, Sendable {
-        case queue(delay: Int64)
-        case loss(Double)
-    }
-
-    /// Its latest cut: when (the viewer's clock), why, and the rate it cut to.
-    public struct Cut: Equatable, Sendable {
-        public let at: Int64
-        public let cause: CutCause
-        public let to: Int
-    }
+    public typealias CutCause = BitrateCut.Cause
+    public typealias Cut = BitrateCut
 
     /// The last cut it made, or nil while it has made none.
     public private(set) var lastCut: Cut?
-
-    private enum RateState { case hold, increase, decrease }
 
     private var queue = QueueDelay()
     private var burstCapacity: (at: Int64, bitsPerSecond: Double)?
@@ -46,7 +33,6 @@ public struct BandwidthEstimate: Sendable {
     private var cutInCurrentQueue = false
     private var delayRate: Double
     private var lossRate: Double
-    private var state = RateState.increase
     private var lastRateUpdate: Int64?
     private var linkCapacity: Double?
     private var received: [(arrival: Int64, bits: Int)] = []
@@ -80,10 +66,19 @@ public struct BandwidthEstimate: Sendable {
 
     /// One report's outcomes, read at `now` on the viewer's clock; in whatever
     /// order they come, they are read in sending order.
-    public mutating func update(with listed: [PacketOutcome], now: Int64) {
+    @discardableResult
+    public mutating func update(with listed: [PacketOutcome], now: Int64) -> Cut? {
         let outcomes = listed.sorted { $0.sentAt < $1.sentAt }
         queue.read(outcomes)
         measureBursts(in: outcomes, now: now)
+        countArrivalsAndLosses(in: outcomes)
+
+        let queueCut = updateDelayRate(now: now)
+        let lossCut = updateLossRate(now: now)
+        return chooseTarget(queueCut: queueCut, lossCut: lossCut, now: now)
+    }
+
+    private mutating func countArrivalsAndLosses(in outcomes: [PacketOutcome]) {
         for outcome in outcomes {
             lossCounted.total += 1
             if let arrival = outcome.arrivedAt {
@@ -94,10 +89,15 @@ public struct BandwidthEstimate: Sendable {
         }
         // The window ends at the latest arrival, whichever packet it was.
         if let latest = received.map(\.arrival).max() { received.removeAll { $0.arrival < latest - Self.ackWindow } }
-        updateDelayRate(now: now)
-        updateLossRate(now: now)
-        let rate = min(delayRate, lossRate)
-        target = Int(min(max(rate, Double(floor)), Double(ceiling)))
+    }
+
+    private mutating func chooseTarget(queueCut: CutCause?, lossCut: CutCause?, now: Int64) -> Cut? {
+        let previous = target
+        target = Int(bounded(min(delayRate, lossRate)))
+        guard target < previous, let cause = delayRate <= lossRate ? queueCut : lossCut else { return nil }
+        let cut = Cut(at: now, cause: cause, to: target)
+        lastCut = cut
+        return cut
     }
 
     /// The link's capacity as its latest burst measured it, in bits per second.
@@ -135,88 +135,103 @@ public struct BandwidthEstimate: Sendable {
         }
     }
 
-    private mutating func updateDelayRate(now: Int64) {
+    private mutating func updateDelayRate(now: Int64) -> CutCause? {
         let elapsed = lastRateUpdate.map { min(Double(now - $0) / 1_000_000, 1) } ?? 0
         lastRateUpdate = now
         switch queue.signal {
         case .normal:
             cutInCurrentQueue = false
-            if state == .hold { state = .increase }
-        case .underusing: state = .hold
-        case .overusing: state = .decrease
+            increaseDelayRate(elapsed: elapsed, now: now)
+            return nil
+        case .underusing:
+            return nil
+        case .overusing:
+            return cutDelayRate(now: now)
         }
-        switch state {
-        case .hold:
-            break
-        case .increase:
-            var increased = delayRate
-            let arriving = acknowledged
-            // A short burst can overstate mobile capacity; what arrives over the
-            // half-second window releases the cap once the link really improves.
-            if let confirmedCapacity,
-               now - confirmedCapacity.at > Self.confirmWindow
-                || (arriving ?? 0) > confirmedCapacity.bitsPerSecond * (1 + Self.nearCapacity) {
-                self.confirmedCapacity = nil
-            }
-            let fastCap = confirmedCapacity?.bitsPerSecond ?? .infinity
-            // The link just showed what it carries: go there at once, not 8 % a second.
-            if let measured = burstCapacity, now - measured.at <= Self.burstFreshness {
-                increased = max(increased, min(Self.backoff * measured.bitsPerSecond, fastCap))
-            }
-            // A cut the queue never repeated was likely wrong (a jitter spike):
-            // climb back fast; on a full link the queue builds again and stops it.
-            if let before = beforeCut, delayRate < before {
-                increased = max(increased, min(before, delayRate * pow(Self.recovery, elapsed), fastCap))
-            }
-            if let capacity = linkCapacity, abs(delayRate - capacity) <= Self.nearCapacity * capacity {
-                increased += Self.additiveIncrease * elapsed
-            } else {
-                if let capacity = linkCapacity, delayRate > capacity * (1 + Self.nearCapacity) { linkCapacity = nil }
-                increased *= pow(Self.multiplicativeIncrease, elapsed)
-            }
-            // Don't climb far ahead of what is getting through — but a sender
-            // that sends less than it may (a still screen) is no reason to
-            // come down: the cap only stops an increase (libwebrtc's AIMD).
-            if let arriving, increased > 1.5 * arriving + 10_000 {
-                increased = max(delayRate, 1.5 * arriving + 10_000)
-            }
-            delayRate = increased
-        case .decrease:
-            if let acknowledged {
-                let cut = max(Double(floor), Self.backoff * acknowledged)
-                if cut < delayRate {
-                    lastCut = Cut(at: now, cause: .queue(delay: queue.queue), to: Int(cut))
-                    // Several feedback reports can describe the same queue.
-                    // Keep the rate before its first cut until the queue drains.
-                    if !cutInCurrentQueue {
-                        beforeCut = delayRate
-                        cutInCurrentQueue = true
-                        if let lastQueueCutAt, now - lastQueueCutAt <= Self.confirmWindow {
-                            confirmedCapacity = (now, acknowledged)
-                        }
-                        lastQueueCutAt = now
-                    }
-                }
-                delayRate = min(delayRate, cut)
-                linkCapacity = linkCapacity.map { 0.95 * $0 + 0.05 * acknowledged } ?? acknowledged
-            }
-            state = .hold
-        }
-        delayRate = min(max(delayRate, Double(floor)), Double(ceiling))
     }
 
-    private mutating func updateLossRate(now: Int64) {
-        guard lossCounted.total >= 20 else { return }
+    private mutating func increaseDelayRate(elapsed: Double, now: Int64) {
+        let arriving = acknowledged
+        refreshConfirmedCapacity(arriving: arriving, now: now)
+        let recovered = fastRecoveryRate(elapsed: elapsed, now: now)
+        let increased = stepUp(from: recovered, elapsed: elapsed)
+
+        // A still screen may send less than it could. Its arrival rate limits
+        // the increase only, so it cannot make the estimate fall.
+        let arrivalLimit = arriving.map { max(delayRate, 1.5 * $0 + 10_000) } ?? .infinity
+        delayRate = bounded(min(increased, arrivalLimit))
+    }
+
+    private mutating func refreshConfirmedCapacity(arriving: Double?, now: Int64) {
+        guard let confirmedCapacity else { return }
+        let expired = now - confirmedCapacity.at > Self.confirmWindow
+        let improved = (arriving ?? 0) > confirmedCapacity.bitsPerSecond * (1 + Self.nearCapacity)
+        if expired || improved { self.confirmedCapacity = nil }
+    }
+
+    private func fastRecoveryRate(elapsed: Double, now: Int64) -> Double {
+        let limit = confirmedCapacity?.bitsPerSecond ?? .infinity
+        var rate = delayRate
+        if let measured = burstCapacity, now - measured.at <= Self.burstFreshness {
+            rate = max(rate, min(Self.backoff * measured.bitsPerSecond, limit))
+        }
+        // Restore the rate before a possible jitter spike while the queue stays clear.
+        if let beforeCut, delayRate < beforeCut {
+            rate = max(rate, min(beforeCut, delayRate * pow(Self.recovery, elapsed), limit))
+        }
+        return rate
+    }
+
+    private mutating func stepUp(from rate: Double, elapsed: Double) -> Double {
+        if let linkCapacity, abs(delayRate - linkCapacity) <= Self.nearCapacity * linkCapacity {
+            return rate + Self.additiveIncrease * elapsed
+        }
+        if let linkCapacity, delayRate > linkCapacity * (1 + Self.nearCapacity) { self.linkCapacity = nil }
+        return rate * pow(Self.multiplicativeIncrease, elapsed)
+    }
+
+    private mutating func cutDelayRate(now: Int64) -> CutCause? {
+        guard let arriving = acknowledged else { return nil }
+        linkCapacity = linkCapacity.map { 0.95 * $0 + 0.05 * arriving } ?? arriving
+        let cut = bounded(Self.backoff * arriving)
+        guard cut < delayRate else { return nil }
+        rememberQueueCut(arriving: arriving, now: now)
+        delayRate = cut
+        return .queue(delay: queue.queue)
+    }
+
+    private mutating func rememberQueueCut(arriving: Double, now: Int64) {
+        // Several reports can describe the same queue. Keep its first cut.
+        guard !cutInCurrentQueue else { return }
+        beforeCut = delayRate
+        cutInCurrentQueue = true
+        if let lastQueueCutAt, now - lastQueueCutAt <= Self.confirmWindow {
+            confirmedCapacity = (now, arriving)
+        }
+        lastQueueCutAt = now
+    }
+
+    private mutating func updateLossRate(now: Int64) -> CutCause? {
+        guard lossCounted.total >= 20 else { return nil }
         let loss = Double(lossCounted.lost) / Double(lossCounted.total)
         lossCounted = (0, 0)
-        if loss < 0.02, lastLossIncrease.map({ now - $0 >= 1_000_000 }) ?? true {
-            lossRate *= Self.multiplicativeIncrease
+        switch loss {
+        case ..<0.02:
+            if let lastLossIncrease, now - lastLossIncrease < 1_000_000 { return nil }
+            lossRate = bounded(lossRate * Self.multiplicativeIncrease)
             lastLossIncrease = now
-        } else if loss > 0.10, lastLossDecrease.map({ now - $0 >= 300_000 }) ?? true {
-            lossRate *= 1 - 0.5 * loss
+            return nil
+        case 0.02...0.10:
+            return nil
+        default:
+            if let lastLossDecrease, now - lastLossDecrease < 300_000 { return nil }
+            lossRate = bounded(lossRate * (1 - 0.5 * loss))
             lastLossDecrease = now
-            lastCut = Cut(at: now, cause: .loss(loss), to: Int(max(lossRate, Double(floor))))
+            return .loss(loss)
         }
-        lossRate = min(max(lossRate, Double(floor)), Double(ceiling))
+    }
+
+    private func bounded(_ rate: Double) -> Double {
+        min(max(rate, Double(floor)), Double(ceiling))
     }
 }
