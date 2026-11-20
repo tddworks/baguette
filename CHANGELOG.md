@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+- `baguette stream` no longer spins a full CPU core once its stdin closes (`< /dev/null`, `nohup`, a parent that closes the pipe); it stops reading commands and keeps streaming. → [docs](docs/features/stream/README.md)
+
 ---
 
 ## [0.3.0] - 2026-11-19
