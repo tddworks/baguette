@@ -45,6 +45,17 @@ struct SRTPContextTests {
             == Data(hex("80f0000200010000cafebabead75dbee93660e90bc0c8077d7ef64")))
     }
 
+    @Test func `should keep each stream's rollover apart`() {
+        var context = SRTPContext(local: ours, remote: browsers)
+
+        _ = context.protect(picture(sequence: 0xFFFF))
+        _ = context.protect(RTPPacket(marker: false, payloadType: 113, sequence: 5, timestamp: 0, ssrc: 0xFEED_F00D, payload: Data([1, 2])))
+
+        // The picture stream wrapped once, and the resend stream beside it changed nothing.
+        #expect(context.protect(picture(sequence: 0x0002))
+            == Data(hex("80f0000200010000cafebabead75dbee93660e90bc0c8077d7ef64")))
+    }
+
     @Test func `should read the browser's feedback once its signature checks out`() {
         let context = SRTPContext(local: ours, remote: browsers)
 

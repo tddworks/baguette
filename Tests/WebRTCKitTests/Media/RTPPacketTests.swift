@@ -78,6 +78,14 @@ struct RTPPacketTests {
         #expect(packet.payload == Data([0x65]))
     }
 
+    @Test func `should wrap a packet for resending on its own stream, its sequence number first`() {
+        let original = RTPPacket(marker: true, payloadType: 112, sequence: 0x1234, timestamp: 9, ssrc: 1, payload: Data([0x65, 1]))
+
+        let resend = original.retransmission(payloadType: 113, sequence: 7, ssrc: 2)
+
+        #expect(resend == RTPPacket(marker: true, payloadType: 113, sequence: 7, timestamp: 9, ssrc: 2, payload: Data([0x12, 0x34, 0x65, 1])))
+    }
+
     @Test func `should tell an RTCP report apart from media`() {
         // RTCP sender report: PT 200 lands in the RTP marker+type byte as 0xC8.
         let report = Data([0x80, 0xC8, 0x00, 0x06] + [UInt8](repeating: 0, count: 24))

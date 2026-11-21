@@ -20,6 +20,22 @@ struct ServeCommandTests {
         return root
     }
 
+    @Test func `should ask the STUN server it is given for each viewer's public address`() throws {
+        #expect(try ServeCommand.parse(["--stun", "stun:198.51.100.4:3478"]).stun
+            == STUNServer(address: DatagramAddress(ip: [198, 51, 100, 4], port: 3478)))
+        #expect(try ServeCommand.parse([]).stun == nil)
+        #expect(throws: (any Error).self) { try ServeCommand.parse(["--stun", "turn:example.com"]) }
+    }
+
+    @Test func `should relay through the TURN server it is given, as the user it names`() throws {
+        let command = try ServeCommand.parse(["--turn", "turn:198.51.100.4:3478", "--turn-user", "baguette", "--turn-pass", "secret"])
+
+        #expect(command.turn == TURNServer(address: DatagramAddress(ip: [198, 51, 100, 4], port: 3478),
+                                           credentials: TURNCredentials(username: "baguette", password: "secret")))
+        #expect(try ServeCommand.parse([]).turn == nil)
+        #expect(throws: (any Error).self) { try ServeCommand.parse(["--turn", "turn:198.51.100.4:3478"]) }
+    }
+
     @Test func `should keep WebRTC media to the ports it is given`() throws {
         #expect(try ServeCommand.parse(["--webrtc-ports", "8190-8194"]).mediaPorts == MediaPorts(8190...8194))
         #expect(try ServeCommand.parse([]).mediaPorts == .any)

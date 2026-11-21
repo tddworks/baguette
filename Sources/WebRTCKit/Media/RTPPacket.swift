@@ -97,6 +97,15 @@ public struct RTPPacket: Equatable, Sendable {
         return out
     }
 
+    /// This packet resent on its own stream (RTX, RFC 4588 §4): the original
+    /// sequence number ahead of the original payload, under the resend
+    /// stream's payload type, sequence number and SSRC.
+    public func retransmission(payloadType: UInt8, sequence: UInt16, ssrc: UInt32) -> RTPPacket {
+        RTPPacket(
+            marker: marker, payloadType: payloadType, sequence: sequence, timestamp: timestamp, ssrc: ssrc,
+            payload: Data([UInt8(self.sequence >> 8), UInt8(self.sequence & 0xFF)]) + payload)
+    }
+
     /// Whether `data` is RTCP sharing the port (packet types 200–206).
     public static func isRTCP(_ data: Data) -> Bool {
         data.count >= 2 && (200...206).contains(data[data.startIndex + 1])

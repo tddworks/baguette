@@ -104,3 +104,76 @@ struct STUNMessageTests {
         #expect(!STUNMessage.isSTUN(Data([0x80, 0x60, 0x00])))   // RTP
     }
 }
+
+/// Asking a STUN server what this socket looks like from outside (RFC 5389 §7):
+/// a plain Binding request, and the address its success reports.
+@Suite("STUNMessage: a public address")
+struct STUNPublicAddressTests {
+    private let id: [UInt8] = Array(1...12)
+
+    @Test func `should ask a STUN server with a plain Binding request`() throws {
+        let request = STUNMessage.bindingRequest(transactionID: id)
+
+        #expect(request == Data([0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42] + id))
+        #expect(try #require(STUNMessage(request)).isBindingRequest)
+    }
+
+    @Test func `should read the address a Binding success reports`() throws {
+        // A success like any server's: here, ours answering a check from `browser`.
+        let check = try #require(STUNMessage(sampleCheck))
+        let success = try #require(check.answer(from: browser, ice: ours))
+
+        #expect(STUNMessage(success)?.mappedAddress == browser)
+    }
+
+    @Test func `should read an IPv6 address a Binding success reports`() throws {
+        let v6 = DatagramAddress(ip: [0x20, 0x01, 0x0d, 0xb8] + [UInt8](repeating: 0, count: 11) + [1], port: 443)
+        let success = try #require(STUNMessage(sampleCheck)?.answer(from: v6, ice: ours))
+
+        #expect(STUNMessage(success)?.mappedAddress == v6)
+    }
+
+    @Test func `should read no address from a message that reports none`() throws {
+        #expect(STUNMessage(STUNMessage.bindingRequest(transactionID: id))?.mappedAddress == nil)
+    }
+}
+
+/// A full agent's own connectivity check (RFC 8445 §7.1.1) and the browser's answer to it.
+@Suite("STUNMessage: our checks")
+struct STUNCheckTests {
+    private let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+    private let id: [UInt8] = Array(21...32)
+
+    @Test func `should check the browser as its username and password say, as the controlled agent`() throws {
+        let check = STUNMessage.check(from: ours, to: browserICE, priority: 1_694_498_815, tieBreaker: 7, transactionID: id)
+
+        let message = try #require(STUNMessage(check))
+        #expect(message.isBindingRequest)
+        #expect(message.username == "h6vY:evtj")
+        // The browser answers it, as it answers any check signed with its password.
+        let answer = try #require(message.answer(from: browser, ice: browserICE))
+        #expect(STUNMessage(answer)?.isSuccess(of: id, signedWith: browserICE.password) == true)
+    }
+
+    @Test func `should take only the browser's signed success to its own check`() throws {
+        let check = try #require(STUNMessage(STUNMessage.check(from: ours, to: browserICE, priority: 1, tieBreaker: 7, transactionID: id)))
+        let answered = try #require(check.answer(from: browser, ice: browserICE))
+        let answer = try #require(STUNMessage(answered))
+
+        #expect(!answer.isSuccess(of: Array(repeating: 0, count: 12), signedWith: browserICE.password))
+        #expect(!answer.isSuccess(of: id, signedWith: "someone else's password"))
+        #expect(!check.isSuccess(of: id, signedWith: browserICE.password))
+    }
+}
+
+@Suite("STUNMessage: nomination")
+struct STUNNominationTests {
+    @Test func `should tell a check that nominates its pair from one that doesn't`() throws {
+        let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+        let plain = try #require(STUNMessage(STUNMessage.check(from: browserICE, to: ours, priority: 1, tieBreaker: 1, transactionID: Array(1...12))))
+        let nominating = try #require(STUNMessage(STUNMessage.check(
+            from: browserICE, to: ours, priority: 1, tieBreaker: 1, transactionID: Array(1...12), nominating: true)))
+
+        #expect(!plain.nominates && nominating.nominates)
+    }
+}

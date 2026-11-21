@@ -33,9 +33,37 @@ private struct Rig {
     let trusted = Box<[String]>([])
     let viewers: WebRTCViewers
 
-    init(streamStarts: Bool = true) {
+    /// `stun`: a STUN server the viewers ask; `seenAt`, what it answers (nil: silence).
+    init(streamStarts: Bool = true, stun: STUNServer? = nil, seenAt: DatagramAddress? = nil, turn: TURNServer? = nil) {
         given(datagrams).addresses.willReturn([DatagramAddress(ip: [127, 0, 0, 1], port: 5000)])
-        given(datagrams).onReceive(.any).willReturn()
+        let handler = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
+        given(datagrams).onReceive(.any).willProduce { handler.value = $0 }
+        given(datagrams).send(.any, to: .any).willProduce { request, to in
+            // A TURN server: a challenge, then a relay at :50001 and permissions, for "secret".
+            if let turn, to == turn.address, let asked = TURNReply(request) {
+                let key = TURNAuth(credentials: turn.credentials, realm: "r", nonce: "n").key
+                let reply: Data
+                if !asked.isSigned(with: key) {
+                    reply = TURNMessage.encode(type: asked.type | 0x0110, transactionID: asked.transactionID, attributes: [
+                        (TURNMessage.errorCode, [0, 0, 4, 1]), (TURNMessage.realm, [UInt8]("r".utf8)), (TURNMessage.nonce, [UInt8]("n".utf8)),
+                    ])
+                } else if asked.type == TURNMessage.allocateRequest {
+                    reply = TURNMessage.encode(type: TURNMessage.allocateSuccess, transactionID: asked.transactionID, attributes: [
+                        (TURNMessage.xorRelayedAddress, TURNMessage.xor(DatagramAddress(ip: turn.address.ip, port: 50001), transactionID: asked.transactionID)),
+                    ], key: key)
+                } else {
+                    reply = TURNMessage.encode(type: asked.type | 0x0100, transactionID: asked.transactionID, attributes: [], key: key)
+                }
+                handler.value?(reply, to)
+                return
+            }
+            // The server answers a Binding request with the address it saw.
+            guard let seenAt, let asked = STUNMessage(request), asked.isBindingRequest else { return }
+            let port = seenAt.port ^ 0x2112, cookie: [UInt8] = [0x21, 0x12, 0xA4, 0x42]
+            let ip = zip(seenAt.ip, cookie).map { $0 ^ $1 }
+            let attribute: [UInt8] = [0x00, 0x20, 0x00, 0x08, 0, 1, UInt8(port >> 8), UInt8(port & 0xFF)] + ip
+            handler.value?(Data([0x01, 0x01, 0x00, 0x0C] + cookie + asked.transactionID + attribute), to)
+        }
         given(datagrams).close().willReturn()
         given(handshake).fingerprint.willReturn("sha-256 AA")
         given(stream).stop().willReturn()
@@ -52,7 +80,8 @@ private struct Rig {
                 trusted.value.append(fingerprint)
                 return (datagrams, handshake)
             },
-            stream: { _ in stream })
+            stream: { _ in stream },
+            stun: stun, turn: turn)
     }
 
     func admit(_ sdp: String = offer) throws -> (id: String, answer: String) {
@@ -62,6 +91,33 @@ private struct Rig {
 
 @Suite("WebRTCViewers")
 struct WebRTCViewersTests {
+    @Test func `should offer each viewer the public address its STUN server sees`() throws {
+        let stun = STUNServer(address: DatagramAddress(ip: [198, 51, 100, 4], port: 3478))
+        let rig = Rig(stun: stun, seenAt: DatagramAddress(ip: [203, 0, 113, 7], port: 61000))
+
+        let (_, answer) = try rig.admit()
+
+        #expect(answer.contains("203.0.113.7 61000 typ srflx"))
+    }
+
+    @Test func `should offer each viewer a relayed address on its TURN server`() throws {
+        let turn = TURNServer(address: DatagramAddress(ip: [198, 51, 100, 4], port: 3478),
+                              credentials: TURNCredentials(username: "baguette", password: "secret"))
+        let rig = Rig(turn: turn)
+
+        let (_, answer) = try rig.admit()
+
+        #expect(answer.contains("198.51.100.4 50001 typ relay"))
+    }
+
+    @Test func `should still answer, with its own addresses, when its STUN server is silent`() throws {
+        let rig = Rig(stun: STUNServer(address: DatagramAddress(ip: [198, 51, 100, 4], port: 3478)))
+
+        let (_, answer) = try rig.admit()
+
+        #expect(answer.contains("typ host") && !answer.contains("srflx"))
+    }
+
     @Test func `should admit a browser with a viewer of its own, streaming its screen, and answer its offer`() throws {
         let rig = Rig()
 

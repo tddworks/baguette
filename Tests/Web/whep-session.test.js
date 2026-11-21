@@ -10,8 +10,11 @@ const MODULE_PATH = path.join(
 );
 
 /** A browser just big enough for a WHEP session: what it posted, opened and drew. */
-function fakeBrowser({ status = 201, answer = 'v=0\r\nanswer\r\n', location = '/devices/U/whep/v1' } = {}) {
-  const seen = { requests: [], sockets: [], drawn: [], appended: [], removed: 0, closedPeers: 0 };
+function fakeBrowser({
+  status = 201, answer = 'v=0\r\nanswer\r\n', location = '/devices/U/whep/v1',
+  iceServers = [], gathering = 'complete',
+} = {}) {
+  const seen = { requests: [], sockets: [], drawn: [], appended: [], removed: 0, closedPeers: 0, timers: [] };
   const frameCallbacks = [];
   const video = {
     style: {},
@@ -32,7 +35,14 @@ function fakeBrowser({ status = 201, answer = 'v=0\r\nanswer\r\n', location = '/
   }
   FakeSocket.OPEN = 1;
   class FakePeer {
-    constructor(config) { this.config = config; }
+    constructor(config) { this.config = config; this.iceGatheringState = gathering; }
+    get localDescription() { return this.local && { type: 'offer', sdp: this.local.sdp + (this.gathered || '') }; }
+    /** The browser finishing its gathering: one candidate more, then complete. */
+    finishGathering() {
+      this.gathered = 'a=candidate:1 1 udp 2122260223 192.168.1.20 54400 typ host\r\n';
+      this.iceGatheringState = 'complete';
+      if (this.onicegatheringstatechange) this.onicegatheringstatechange();
+    }
     addTransceiver(kind, init) { this.transceiver = { kind, init, setCodecPreferences(c) { this.codecs = c; } }; return this.transceiver; }
     async createOffer() { return { type: 'offer', sdp: 'v=0\r\noffer\r\n' }; }
     async setLocalDescription(d) { this.local = d; }
@@ -50,9 +60,13 @@ function fakeBrowser({ status = 201, answer = 'v=0\r\nanswer\r\n', location = '/
       body: { appendChild(node) { seen.appended.push(node); } },
     },
     setInterval: () => 1,
+    setTimeout: (fn, ms) => { seen.timers.push({ fn, ms }); return seen.timers.length; },
     clearInterval: () => {},
     async fetch(url, init) {
       seen.requests.push({ url, method: init.method, body: init.body, type: init.headers && init.headers['Content-Type'] });
+      if (url === '/webrtc/ice-servers') {
+        return { ok: true, status: 200, headers: { get: () => null }, async text() { return JSON.stringify({ iceServers }); } };
+      }
       return {
         ok: status >= 200 && status < 300,
         status,
@@ -79,7 +93,7 @@ test('should post its offer to the device\'s WHEP route and take the answer', as
 
   await whep.start();
 
-  assert.deepEqual(browser.seen.requests[0],
+  assert.deepEqual(browser.seen.requests.find((r) => r.method === 'POST'),
     { url: '/devices/U/whep', method: 'POST', body: 'v=0\r\noffer\r\n', type: 'application/sdp' });
   assert.equal(whep.peer.remote.sdp, 'v=0\r\nanswer\r\n');
   assert.equal(whep.peer.transceiver.init.direction, 'recvonly');
@@ -147,7 +161,7 @@ test('should ask for the display it was given', async () => {
 
   await whep.start();
 
-  assert.equal(browser.seen.requests[0].url, '/devices/U/whep?display=phone');
+  assert.equal(browser.seen.requests.find((r) => r.method === 'POST').url, '/devices/U/whep?display=phone');
 });
 
 test('should ask for the congestion control it was given, beside the display', async () => {
@@ -156,7 +170,7 @@ test('should ask for the congestion control it was given, beside the display', a
 
   await whep.start();
 
-  assert.equal(browser.seen.requests[0].url, '/devices/U/whep?display=phone&congestion=remb');
+  assert.equal(browser.seen.requests.find((r) => r.method === 'POST').url, '/devices/U/whep?display=phone&congestion=remb');
 });
 
 test('should hang up when stopped, closing its socket, peer and video', async () => {
@@ -168,10 +182,57 @@ test('should hang up when stopped, closing its socket, peer and video', async ()
   whep.stop();
   whep.stop();
 
-  assert.deepEqual(browser.seen.requests.slice(1).map((r) => [r.method, r.url]), [['DELETE', '/devices/U/whep/v1']]);
+  assert.deepEqual(browser.seen.requests.filter((r) => r.method === 'DELETE').map((r) => [r.method, r.url]), [['DELETE', '/devices/U/whep/v1']]);
   assert.equal(browser.seen.sockets[0].readyState, 3);
   assert.equal(browser.seen.closedPeers, 1);
   assert.equal(browser.seen.removed, 1);
   assert.deepEqual(closed, [true]);
   assert.equal(whep.send({ type: 'tap' }), false);
+});
+
+test('should give its peer the ICE servers the server names, asked before its offer', async () => {
+  const browser = fakeBrowser({ iceServers: [{ urls: 'stun:stun.example.com:3478' }] });
+  const whep = session(browser);
+
+  await whep.start();
+
+  assert.equal(browser.seen.requests[0].url, '/webrtc/ice-servers');
+  assert.deepEqual(whep.peer.config.iceServers, [{ urls: 'stun:stun.example.com:3478' }]);
+  assert.equal(whep.peer.config.bundlePolicy, 'max-bundle');
+});
+
+test('should post its offer with the candidates its browser gathered', async () => {
+  const browser = fakeBrowser({ gathering: 'gathering' });
+  const whep = session(browser);
+
+  const started = whep.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  whep.peer.finishGathering();
+  await started;
+
+  const post = browser.seen.requests.find((r) => r.method === 'POST');
+  assert.match(post.body, /a=candidate:1 1 udp 2122260223 192\.168\.1\.20 54400 typ host/);
+});
+
+test("should post its offer anyway when gathering doesn't finish within two seconds", async () => {
+  const browser = fakeBrowser({ gathering: 'gathering' });
+  const whep = session(browser);
+
+  const started = whep.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  const wait = browser.seen.timers.find((t) => t.ms === 2000);
+  assert.ok(wait, 'a bounded wait for gathering');
+  wait.fn();
+  await started;
+
+  assert.ok(browser.seen.requests.some((r) => r.method === 'POST'));
+});
+
+test("should still start without ICE servers when the server names none or can't be asked", async () => {
+  const browser = fakeBrowser();
+  const whep = session(browser);
+
+  await whep.start();
+
+  assert.deepEqual(whep.peer.config.iceServers, []);
 });
