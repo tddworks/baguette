@@ -91,12 +91,13 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// `input`: the input bound with `screen` (the same display plane and
     /// panel), kept for the viewer's control socket. `congestion`: the method
     /// asked for (`?congestion=`), or nil for the default. `pacing`: off only
-    /// for the bench's baseline (`?pacing=off`).
+    /// for the bench's baseline (`?pacing=off`). `rtx`: off only for the
+    /// bench's baseline (`?rtx=off`), resending as sent.
     public func admit(
         offer: String, on screen: any Screen, of device: DeviceID? = nil, input: Abilities? = nil,
-        congestion: CongestionChoice? = nil, pacing: Bool = true
+        congestion: CongestionChoice? = nil, pacing: Bool = true, rtx: Bool = true
     ) throws -> (id: String, answer: String) {
-        let description = try SessionDescription(offer: offer)
+        let description = try SessionDescription(offer: offer, rtx: rtx)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
         let id = UUID().uuidString.lowercased()
         let reflexive = stun?.publicAddress(through: datagrams)

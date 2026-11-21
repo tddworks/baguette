@@ -85,7 +85,9 @@ counts, and keyframe requests and sends. The viewer ID matches the WHEP
 Each viewer's packets are paced: a keyframe leaves over a few milliseconds at
 2.5 × the target bitrate instead of in one burst, which a phone link's queue
 takes without stalling. `?pacing=off` on the `POST` sends every packet at once —
-only to measure what pacing buys (the bench's "no pacer" column).
+only to measure what pacing buys (the bench's "no pacer" column). `?rtx=off`
+likewise resends a lost packet as it was sent instead of on its own stream —
+only to measure what RTX buys ("no RTX").
 
 A `set_bitrate` on the control socket applies at once. Later feedback can retune
 the encoder again according to [the retuning rule](design.md#4--invariants-each-law-one-owner).

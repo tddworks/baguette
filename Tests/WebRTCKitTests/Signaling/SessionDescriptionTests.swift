@@ -252,6 +252,13 @@ extension SessionDescriptionTests {
         #expect(try SessionDescription(offer: none).rtxPayloadType == nil)
     }
 
+    @Test func `should take no resend format when told to resend as sent, though the offer pairs one`() throws {
+        let declined = try SessionDescription(offer: chromeOffer, rtx: false)
+
+        #expect(declined.rtxPayloadType == nil)
+        #expect(!declined.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, rtxSSRC: 2, candidates: []).contains("rtx/90000"))
+    }
+
     @Test func `should answer with its resend format and stream when it resends on one`() throws {
         let answer = try SessionDescription(offer: chromeOffer)
             .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, rtxSSRC: 2, candidates: [])

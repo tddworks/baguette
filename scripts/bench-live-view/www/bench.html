@@ -16,7 +16,10 @@ const T = q.get('transport') || 'ws', UDID = q.get('udid'), TAPS = +(q.get('taps
 const SERVE = q.get('serve') || location.origin + '/api';
 // `pacing=off`: baguette's own sender without its pacer — the baseline the pacer is measured against.
 const UNPACED = q.get('pacing') === 'off';
-const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (UNPACED ? '?pacing=off' : '');
+// `rtx=off`: baguette's own sender resending as sent, not on its own stream — the baseline RTX is measured against.
+const NO_RTX = q.get('rtx') === 'off';
+const WHEP_QUERY = [UNPACED && 'pacing=off', NO_RTX && 'rtx=off'].filter(Boolean).join('&');
+const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (WHEP_QUERY ? '?' + WHEP_QUERY : '');
 const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const PION = WHEP.startsWith('/pion/');
 const TAP_PATH = T === 'webrtc' && (PION || SPIKE) ? 'POST /input' : 'socket';
@@ -25,7 +28,7 @@ const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
 document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
 const logEl = document.getElementById('log'); const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log('[bench]', ...a); };
 const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
-const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : UNPACED ? 'baguette, no pacer' : 'baguette', tapPath: TAP_PATH, t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
+const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : 'baguette' + (UNPACED ? ', no pacer' : '') + (NO_RTX ? ', no rtx' : ''), tapPath: TAP_PATH, t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
 
 // Every presented frame lands here with the time it reaches the screen and its centre-pixel luma.
 // Both paths stamp the moment the frame is expected on screen, never the start of the frame
@@ -211,10 +214,9 @@ async function bw(secs) {
   // per-packet overhead below the counted bytes: WS = TCP/IP + WS header per ~1448 B segment; WebRTC = UDP/IP + SRTP auth tag per packet
   const payload = z.b - a.b, packets = z.p - a.p;
   const wire = T === 'ws' ? payload + Math.ceil(payload / 1448) * 52 + packets * 4 : payload + packets * (28 + 10);
-  R.summary = { transport: T, sender: R.sender, format: R.format || 'h264', secs: +dt.toFixed(1), payloadMbps: +(payload * 8 / dt / 1e6).toFixed(2), wireMbpsEst: +(wire * 8 / dt / 1e6).toFixed(2),
+  return finish({ transport: T, sender: R.sender, format: R.format || 'h264', secs: +dt.toFixed(1), payloadMbps: +(payload * 8 / dt / 1e6).toFixed(2), wireMbpsEst: +(wire * 8 / dt / 1e6).toFixed(2),
     mbPerMin: +(wire / dt * 60 / 1e6).toFixed(1), messagesOrPackets: packets, fps: +((R.frames.length - f0) / dt).toFixed(1),
-    ...freezeSummary(t0, endedAt) };
-  log(JSON.stringify(R.summary)); R.done = true; R.stop();
+    ...freezeSummary(t0, endedAt) }, false);
 }
 async function run() {
   // One encoder per run: the WHEP source runs only for WebRTC.
@@ -252,16 +254,31 @@ async function run() {
   const iv = R.frames.slice(1).map((t, i) => t - R.frames[i]);
   const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
   const durMin = (R.frames.at(-1) - R.frames[0]) / 60000;
-  R.summary = {
+  return finish({
     transport: T, sender: R.sender, tapPath: R.tapPath, format: R.format || 'h264', taps: TAPS, misses: TAPS - ok.length,
     p50: +pct(ok, 50).toFixed(1), p95: +pct(ok, 95).toFixed(1), p99: +pct(ok, 99).toFixed(1), min: +Math.min(...ok).toFixed(1), max: +Math.max(...ok).toFixed(1),
     firstFrameMs: +R.firstFrame.toFixed(0), presentedFps: +(1000 / mean).toFixed(1),
     intervalStddevMs: +Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length).toFixed(2),
     ...freeze,
-  };
-  log(JSON.stringify(R.summary, null, 1)); R.done = true; R.stop();
+  });
 }
 // Every run ends with a summary and its session closed, even one that fails.
-function finish(summary) { R.summary = summary; log(JSON.stringify(summary, null, 1)); R.done = true; R.stop?.(); }
+// What the browser lost and got back: lost packets, the NACKs it sent, the resends that arrived, the pictures it asked for.
+async function lossStats() {
+  const out = {};
+  try {
+    (await R.pc.getStats()).forEach(r => {
+      if (r.type !== 'inbound-rtp' || r.kind !== 'video') return;
+      Object.assign(out, { packetsLost: r.packetsLost, nacksSent: r.nackCount, resendsReceived: r.retransmittedPacketsReceived, keyframesAsked: r.pliCount + (r.firCount || 0) });
+    });
+  } catch {}
+  return out;
+}
+// Every summary ends here — a tap run's, a bandwidth run's, a failure's — with the browser's loss counters, read
+// before the session closes. `pretty`: a tap run's summary is indented, a bandwidth run's is one line.
+async function finish(summary, pretty = true) {
+  if (R.pc) Object.assign(summary, await lossStats());
+  R.summary = summary; log(pretty ? JSON.stringify(summary, null, 1) : JSON.stringify(summary)); R.done = true; R.stop?.();
+}
 run().catch(e => finish({ transport: T, sender: R.sender, tapPath: R.tapPath, failed: e.message }));
 </script></body></html>

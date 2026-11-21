@@ -219,6 +219,21 @@ struct WHEPRouterTests {
         }
     }
 
+    @Test func `should resend as sent when asked, for the bench, and on a resend stream otherwise`() async throws {
+        let withRTX = offer.replacingOccurrences(of: "SAVPF 112\r\n", with: "SAVPF 112 113\r\n")
+            + "a=rtpmap:113 rtx/90000\r\na=fmtp:113 apt=112\r\n"
+        try await whepServer().test { client in
+            let off = try await client.send(.post, "/devices/U/whep?rtx=off", body: withRTX, headers: sdp)
+            let on = try await client.send(.post, "/devices/U/whep", body: withRTX, headers: sdp)
+
+            #expect(off.status == .created && !off.text.contains("rtx/90000"))
+            #expect(on.status == .created && on.text.contains("a=rtpmap:113 rtx/90000"))
+            let unknown = try await client.send(.post, "/devices/U/whep?rtx=sometimes", body: withRTX, headers: sdp)
+            #expect(unknown.status == .badRequest)
+            #expect(unknown.text.contains("rtx is on or off"))
+        }
+    }
+
     @Test func `should give the page the ICE servers its browser should use`() async throws {
         let stun = STUNServer(url: "stun:stun.example.com:3478", resolve: { _ in [198, 51, 100, 4] })
         try await whepServer(viewers: mockViewers(stun: stun)).test { client in
