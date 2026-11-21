@@ -113,3 +113,61 @@ private extension HandshakeProgress {
         }
     }
 }
+
+/// The system resolver behind `stun:<name>`.
+@Suite("HostResolver", .tags(.system), .enabled(if: SystemTests.available))
+struct HostResolverTests {
+    @Test(.timeLimit(.minutes(1)))
+    func `should resolve a host name to its IPv4 address`() {
+        #expect(HostResolver.ipv4("localhost") == [127, 0, 0, 1])
+        #expect(HostResolver.ipv4("nowhere.invalid") == nil)
+    }
+}
+
+/// A real TURN server, when one is named: `BAGUETTE_TURN_SERVER=turn:127.0.0.1:3478`
+/// (user `baguette`, password `secret`, or `BAGUETTE_TURN_USER` / `_PASS`).
+private let turnServer: TURNServer? = {
+    let env = ProcessInfo.processInfo.environment
+    guard let url = env["BAGUETTE_TURN_SERVER"] else { return nil }
+    let credentials = TURNCredentials(username: env["BAGUETTE_TURN_USER"] ?? "baguette", password: env["BAGUETTE_TURN_PASS"] ?? "secret")
+    return TURNServer(url: url, credentials: credentials, resolve: HostResolver.ipv4)
+}()
+
+private final class Heard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [(Data, DatagramAddress)] = []
+    let arrived = DispatchSemaphore(value: 0)
+    var value: [(Data, DatagramAddress)] { lock.withLock { stored } }
+    func append(_ datagram: (Data, DatagramAddress)) { lock.withLock { stored.append(datagram) }; arrived.signal() }
+}
+
+/// The TURN client against a real server: allocate, let a peer through, and
+/// carry datagrams both ways through the relay.
+@Suite("TURN relay", .tags(.system), .enabled(if: turnServer != nil))
+struct TURNRelaySystemTests {
+    @Test(.timeLimit(.minutes(1)))
+    func `should relay a peer's datagrams to us, and ours to it, through a real TURN server`() throws {
+        let server = try #require(turnServer)
+        let ours = try UDPDatagrams(), peer = try UDPDatagrams()
+        defer { peer.close() }
+        let peerAt = try #require(peer.addresses.first { $0.ip == [127, 0, 0, 1] })
+
+        let allocation = try #require(TURNAllocation.allocate(on: server, through: ours, timeout: 2))
+        let relay = RelayedDatagrams(over: ours, allocation: allocation)
+        defer { relay.close() }
+        let toUs = Heard(), toPeer = Heard()
+        relay.onReceive { toUs.append(($0, $1)) }
+        peer.onReceive { toPeer.append(($0, $1)) }
+        #expect(relay.permit([peerAt]))
+
+        peer.send(Data("hello".utf8), to: allocation.relayed)
+        #expect(toUs.arrived.wait(timeout: .now() + 5) == .success)
+        #expect(toUs.value.first?.0 == Data("hello".utf8))
+        #expect(toUs.value.first?.1 == peerAt)
+
+        relay.send(Data("back".utf8), to: peerAt)
+        #expect(toPeer.arrived.wait(timeout: .now() + 5) == .success)
+        #expect(toPeer.value.first?.0 == Data("back".utf8))
+        #expect(toPeer.value.first?.1 == allocation.relayed)
+    }
+}

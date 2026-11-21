@@ -241,3 +241,81 @@ struct ICECredentialsTests {
         #expect(one != two)
     }
 }
+
+extension SessionDescriptionTests {
+    @Test func `should read the resend format the offer pairs with our H.264`() throws {
+        #expect(try SessionDescription(offer: chromeOffer).rtxPayloadType == 113)
+    }
+
+    @Test func `should take no resend format when the offer pairs none with our H.264`() throws {
+        let none = chromeOffer.replacingOccurrences(of: "a=rtpmap:113 rtx/90000\r\na=fmtp:113 apt=112\r\n", with: "")
+        #expect(try SessionDescription(offer: none).rtxPayloadType == nil)
+    }
+
+    @Test func `should answer with its resend format and stream when it resends on one`() throws {
+        let answer = try SessionDescription(offer: chromeOffer)
+            .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, rtxSSRC: 2, candidates: [])
+
+        #expect(answer.contains("m=video 9 UDP/TLS/RTP/SAVPF 112 113\r\n"))
+        #expect(answer.contains("a=rtpmap:113 rtx/90000\r\na=fmtp:113 apt=112\r\n"))
+        #expect(answer.contains("a=ssrc-group:FID 1 2\r\n"))
+        #expect(answer.contains("a=ssrc:2 cname:baguette\r\n"))
+    }
+}
+
+extension SessionDescriptionTests {
+    @Test func `should offer its public address after its own, ranked below them`() throws {
+        let hosts = [DatagramAddress(ip: [192, 168, 1, 5], port: 50000)]
+        let outside = DatagramAddress(ip: [203, 0, 113, 7], port: 61000)
+
+        let answer = try SessionDescription(offer: chromeOffer)
+            .answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: hosts, reflexive: outside)
+
+        #expect(answer.contains(
+            "a=candidate:1 1 udp 2130706431 192.168.1.5 50000 typ host\r\n"
+            + "a=candidate:2 1 udp 1694498815 203.0.113.7 61000 typ srflx raddr 0.0.0.0 rport 0\r\n"
+            + "a=end-of-candidates\r\n"))
+    }
+}
+
+/// Full ICE: the browser's own candidates, when its offer carries them.
+extension SessionDescriptionTests {
+    @Test func `should read the browser's candidates it can be checked at, in its order`() throws {
+        let offered = try SessionDescription(offer: chromeOffer.replacingOccurrences(of: "a=rtcp-mux\r\n", with: [
+            "a=rtcp-mux",
+            "a=candidate:1 1 udp 2122260223 192.168.1.20 54400 typ host generation 0",
+            "a=candidate:2 1 udp 2122260223 4f1c2d3e-aaaa.local 54401 typ host generation 0",
+            "a=candidate:3 1 tcp 1518280447 192.168.1.20 9 typ host tcptype active",
+            "a=candidate:4 1 udp 1686052607 203.0.113.50 41000 typ srflx raddr 192.168.1.20 rport 54400",
+            "a=candidate:5 2 udp 2122260222 192.168.1.20 54402 typ host",
+            "",
+        ].joined(separator: "\r\n")))
+
+        #expect(offered.candidates == [
+            DatagramAddress(ip: [192, 168, 1, 20], port: 54400),
+            DatagramAddress(ip: [203, 0, 113, 50], port: 41000),
+        ])
+        #expect(try SessionDescription(offer: chromeOffer).candidates.isEmpty)
+    }
+
+    @Test func `should answer as a full ICE agent when asked, and as a lite one otherwise`() throws {
+        let description = try SessionDescription(offer: chromeOffer)
+
+        #expect(description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: []).contains("a=ice-lite\r\n"))
+        #expect(!description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [], lite: false).contains("ice-lite"))
+    }
+}
+
+extension SessionDescriptionTests {
+    @Test func `should offer its relayed address last, ranked lowest`() throws {
+        let relayed = DatagramAddress(ip: [198, 51, 100, 4], port: 50001)
+
+        let answer = try SessionDescription(offer: chromeOffer).answer(
+            ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [DatagramAddress(ip: [192, 168, 1, 5], port: 50000)],
+            relay: relayed)
+
+        #expect(answer.contains(
+            "a=candidate:1 1 udp 2130706431 192.168.1.5 50000 typ host\r\n"
+            + "a=candidate:2 1 udp 16777215 198.51.100.4 50001 typ relay raddr 0.0.0.0 rport 0\r\n"))
+    }
+}

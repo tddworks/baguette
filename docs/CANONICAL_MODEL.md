@@ -197,6 +197,12 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a viewer is found by its id until it hangs up, and only through the device it watches; an unknown id, or one asked for through another device, is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate. A reported cut means that target fell, and carries the signal that limited it | `BandwidthEstimate` |
 | an offer carries a congestion-control method only when it numbers its header extension 1–14 (what a one-byte header holds), will receive it (not `inactive` or `sendonly`), and asks for its feedback (`transport-cc`, `goog-remb`) on the H.264 the viewer sends or on every format (`*`) | `SessionDescription` |
+| when the browser's offer carries its candidates, a viewer checks each itself (full ICE, the controlled agent) until its session is secured; with none it stays ICE-lite | `WebRTCSender` |
+| with a TURN server given, each viewer offers a relayed address on it (lowest), lets the browser's addresses through, keeps it alive until it hangs up and then releases it; what comes through the relay reaches the sender as if from the peer | `RelayedDatagrams` |
+| a viewer's session stays on the pair the browser nominates (USE-CANDIDATE), whatever path checks it later | `WebRTCSender` |
+| with a STUN server given, each viewer offers the address the server sees its socket at (server-reflexive), below its host addresses and without naming its private base; a silent server leaves the host ones | `STUNServer` |
+| a resend leaves on its own stream (RTX), stamped anew for congestion control, when the browser's offer pairs a resend format with our H.264; else as it was sent | `WebRTCSender` |
+| a lost packet is resent as it was sent, unless it was first sent over 1 s ago, was resent in the last 100 ms, or resends would take more than half the target bitrate | `PacketHistory` |
 | with pacing on, a viewer's packets leave at 2.5 × its target bitrate as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once | `Pacer` |
 | a browser's transport-cc reports are read on one unbroken timeline, though their 24-bit reference time wraps | `FeedbackClock` |
 | a retune turns one knob of the config as it stands then (`StreamConfig.Change`), so two at once both land | each `Stream` |

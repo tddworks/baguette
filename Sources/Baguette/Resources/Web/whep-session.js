@@ -45,12 +45,33 @@
 
   WhepSession.prototype.send = function () { return false; };
 
+  /** The ICE servers the server says its browser should use; none when it names none or can't say. */
+  WhepSession.iceServers = async function () {
+    try {
+      const response = await window.fetch('/webrtc/ice-servers', { method: 'GET' });
+      if (!response.ok) return [];
+      return JSON.parse(await response.text()).iceServers || [];
+    } catch (_) { return []; }
+  };
+
+  /** Until the browser has gathered its candidates — at most `ms`: then the offer goes with what it has. */
+  WhepSession.gathered = function (peer, ms) {
+    return new Promise((resolve) => {
+      if (peer.iceGatheringState === 'complete') return resolve();
+      peer.onicegatheringstatechange = () => { if (peer.iceGatheringState === 'complete') resolve(); };
+      window.setTimeout(resolve, ms);
+    });
+  };
+
   WhepSession.prototype.start = async function () {
     const { udid, canvas, display, congestion, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
     const log = onLog || (() => {});
     this.alive = true;
 
-    const peer = new window.RTCPeerConnection({ bundlePolicy: 'max-bundle' });
+    // Its STUN servers first: the browser gathers its own public address with
+    // them, and the offer carries it, so the server can check it (full ICE).
+    const iceServers = await WhepSession.iceServers();
+    const peer = new window.RTCPeerConnection({ bundlePolicy: 'max-bundle', iceServers });
     this.peer = peer;
     const transceiver = peer.addTransceiver('video', { direction: 'recvonly' });
     try {
@@ -99,8 +120,10 @@
 
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
+    await WhepSession.gathered(peer, 2000);
     const response = await window.fetch(WhepSession.whepPath(udid, display, congestion), {
-      method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: offer.sdp,
+      method: 'POST', headers: { 'Content-Type': 'application/sdp' },
+      body: (peer.localDescription || offer).sdp,
     });
     const body = await response.text();
     if (!this.alive) return;

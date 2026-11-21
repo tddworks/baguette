@@ -23,6 +23,27 @@ public final class WebRTCViewers: @unchecked Sendable {
     private var admitted: [String: Admitted] = [:]
     private let connect: Connect
     private let makeStream: (any FrameSink) -> any Stream
+    /// Asked, per viewer and through its own socket, for the address the world
+    /// sees it at — offered to the browser beside the Mac's own.
+    private let stun: STUNServer?
+    /// Allocated on, per viewer: a relayed address for the browser when
+    /// nothing more direct gets through.
+    private let turn: TURNServer?
+
+    /// One ICE server a browser should use too: its URL, and for TURN the
+    /// credentials to use it with.
+    public struct ICEServer: Equatable, Sendable {
+        public let url: String
+        public let username: String?
+        public let credential: String?
+    }
+
+    /// The ICE servers a browser should use too (WHEP `Link: rel="ice-server"`,
+    /// and the page's own config), as their URLs.
+    public var iceServers: [ICEServer] {
+        (stun.map { [ICEServer(url: $0.url, username: nil, credential: nil)] } ?? [])
+            + (turn.map { [ICEServer(url: $0.url, username: $0.credentials.username, credential: $0.credentials.password)] } ?? [])
+    }
     private var timer: DispatchSourceTimer?
 
     /// `ticking`: how often consent and DTLS retransmission are checked; nil
@@ -33,10 +54,14 @@ public final class WebRTCViewers: @unchecked Sendable {
         connect: @escaping Connect = WebRTCViewers.onThisMac(),
         stream: @escaping (any FrameSink) -> any Stream = { sink in
             StreamFormat.avcc.makeStream(config: .default, sink: sink, quality: 0.5)
-        }
+        },
+        stun: STUNServer? = nil,
+        turn: TURNServer? = nil
     ) {
         self.connect = connect
         self.makeStream = stream
+        self.stun = stun
+        self.turn = turn
         guard let interval else { return }
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "baguette.webrtc.viewers"))
         timer.schedule(deadline: .now() + interval, repeating: interval)
@@ -74,10 +99,22 @@ public final class WebRTCViewers: @unchecked Sendable {
         let description = try SessionDescription(offer: offer)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
         let id = UUID().uuidString.lowercased()
+        let reflexive = stun?.publicAddress(through: datagrams)
+        // With a TURN server: a relayed address, the browser's addresses let
+        // through it, kept alive until the viewer hangs up.
+        var socket: any Datagrams = datagrams
+        var relayed: DatagramAddress?
+        if let turn, let allocation = TURNAllocation.allocate(on: turn, through: datagrams) {
+            let relay = RelayedDatagrams(over: datagrams, allocation: allocation)
+            if !description.candidates.isEmpty { _ = relay.permit(description.candidates) }
+            relay.keepAlive()
+            socket = relay
+            relayed = allocation.relayed
+        }
         let viewer = WebRTCViewer(
-            offer: description, datagrams: datagrams, handshake: handshake, stream: makeStream,
+            offer: description, datagrams: socket, handshake: handshake, stream: makeStream,
             congestion: { CongestionChoice.control(asked: congestion, offer: description, ceiling: $0) },
-            pacing: pacing, id: id)
+            reflexive: reflexive, relay: relayed, pacing: pacing, id: id)
         do {
             try viewer.start(on: screen)
         } catch {

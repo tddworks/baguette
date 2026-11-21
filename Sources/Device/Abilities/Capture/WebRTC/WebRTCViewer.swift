@@ -38,6 +38,8 @@ public final class WebRTCViewer: @unchecked Sendable {
         congestion makeControl: (_ startingBitrate: Int) -> any CongestionControl,
         clock: @escaping @Sendable () -> Date = Date.init,
         schedule: @escaping Schedule = WebRTCViewer.onAQueue,
+        reflexive: DatagramAddress? = nil,
+        relay: DatagramAddress? = nil,
         pacing: Bool = true,
         id: String = UUID().uuidString.lowercased(),
         diagnose: @escaping @Sendable (String) -> Void = log
@@ -51,7 +53,7 @@ public final class WebRTCViewer: @unchecked Sendable {
             datagrams: datagrams, handshake: handshake,
             congestion: makeControl(stream.config.bitrateBps),
             encoderBitrate: { [unowned self] in self.stream.config.bitrateBps },
-            events: events, clock: clock, schedule: schedule, pacing: pacing, id: id)
+            events: events, clock: clock, schedule: schedule, reflexive: reflexive, relay: relay, pacing: pacing, id: id)
         events.viewer = self
         sink.attach(self)
     }

@@ -14,3 +14,12 @@ public struct DatagramAddress: Hashable, Sendable {
 
     public var isIPv6: Bool { ip.count == 16 }
 }
+
+extension DatagramAddress: CustomStringConvertible {
+    /// `192.168.2.221:59739`, or `[2001:db8:0:0:0:0:0:1]:443`: for the log.
+    public var description: String {
+        guard isIPv6 else { return ip.map(String.init).joined(separator: ".") + ":\(port)" }
+        let groups = stride(from: 0, to: 16, by: 2).map { String(UInt16(ip[$0]) << 8 | UInt16(ip[$0 + 1]), radix: 16) }
+        return "[\(groups.joined(separator: ":"))]:\(port)"
+    }
+}

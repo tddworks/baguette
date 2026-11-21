@@ -825,6 +825,121 @@ this doc.
 12. ~~**Docs**~~ **DONE**: a user README, `serve.md` rows, CHANGELOG; the bench
     kit pointed at the native route. The full matrix on it is still to run.
 
+## 6b · Next: resends, then connectivity (simplest first)
+
+Each step stands alone: test-first, its own PR, measured on the phone where
+it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
+`Congestion/`; 3 is the serve routes; 4–7 are WebRTCKit's `Transport/`.
+
+1. ~~**Resend guard**~~ **DONE** (`Media/PacketHistory`). A resend is
+   skipped when its packet was first sent over 1 s ago, when it was resent
+   less than 100 ms ago (a repeated NACK), or when resends would take more
+   than half the target bitrate (a token bucket holding a second's worth), so
+   a loss burst can't add congestion of its own (libwebrtc caps them too).
+   *Pinned: `PacketHistoryTests`, "should resend a lost packet once for
+   reports that repeat a moment apart".*
+2. ~~**RTX**~~ **DONE** (RFC 4588; `Signaling/`, `Media/`, `Transport/`). A resend
+   now leaves on its own stream when the offer pairs a format with our H.264
+   (Chrome's does: `a=fmtp:113 apt=112`); else as it was sent. SRTP keeps each
+   stream's rollover apart. Chrome takes the answer and plays (loopback,
+   2026-11-20); the phone on mobile data is where resends happen. Before it,
+   a resend was the stored packet again — same transport-wide sequence
+   number — so `SendHistory` counted a loss repaired within its 500 ms grace
+   as a packet that *arrived late*: the loss estimate never saw it, and the
+   delay estimate got a fake queue sample of one resend round trip. With RTX,
+   the answer takes the offer's `rtx` format (`apt=` our H.264) and an
+   `ssrc-group:FID`; a resend leaves on its own stream with the original
+   sequence number in front, a new transport-wide number and its real send
+   time. *Pinned: "should resend a lost packet on its own stream, stamped
+   anew, when the browser takes resends there", "should answer with its
+   resend format and stream when it resends on one", "should keep each
+   stream's rollover apart".* Measure: freezes and cuts on the phone, before
+   and after.
+3. **Authentication** (serve) — *skipped for now (2026-11-20): Tailscale
+   stays the way to view from outside the network.* A browser reachable from the internet can
+   reach `serve`, which drives the device: WHEP and the control socket need
+   a credential first (a token per session at least). The prerequisite for
+   4–7. *Decide first: a token in the URL, or per-viewer sign-in.*
+4. ~~**Server-reflexive candidate**~~ **DONE** (`serve --stun stun:host:port`,
+   `Transport/STUNServer`). Each viewer asks the STUN server, through its own
+   socket (a plain Binding request, sent again halfway through 0.5 s), for
+   the address the world sees it at, and offers it as `typ srflx` below its
+   host candidates (`raddr 0.0.0.0`: the private base isn't named). A silent
+   server leaves the host ones. Checked against stun.l.google.com: the
+   answer gains the Mac's public address.
+   Alone it reaches only a NAT that lets anyone in — most don't; step 5
+   makes it useful.
+5. ~~**Full ICE**~~ **DONE.** When the offer carries the browser's candidates,
+   the sender answers without `a=ice-lite` and checks each one itself
+   (USERNAME `theirs:ours`, PRIORITY, ICE-CONTROLLED, signed with the
+   browser's password) — at once, then at 100/200/400/800/1600 ms until it is
+   secured — which opens its NAT toward the browser; the browser, controlling,
+   still picks the pair. mDNS (`.local`) candidates are skipped; an offer with
+   none stays ICE-lite, as before. The page fetches its ICE servers, then waits
+   for gathering (at most 2 s) before posting. Checked in Chrome on this Mac:
+   the device page fetched its servers, posted its candidates, answered the
+   sender's check, and painted the phone's screen.
+6. ~~**TURN client**~~ **DONE** (`serve --turn turn:host:3478 --turn-user …
+   --turn-pass …`; `Transport/TURNMessage`, `TURNAllocation`,
+   `RelayedDatagrams`). Each viewer allocates on the server (an unsigned
+   Allocate, the 401's realm and nonce, then signed with MD5(user:realm:pass)),
+   lets the browser's candidates through (CreatePermission), offers the
+   relayed address as `typ relay` (lowest), and keeps both alive until it
+   hangs up, then releases it. `RelayedDatagrams` unwraps a peer's Data
+   indications as if the peer sent them and answers that peer back through
+   the relay (Send indications), so the sender never knows the path. The page
+   gets the server and its credentials too. The sender now stays on the pair
+   the browser nominates (USE-CANDIDATE): with several working paths, its DTLS
+   comes from there. Verified against Pion's TURN server: a system test
+   carries datagrams both ways through a real relay
+   (`BAGUETTE_TURN_SERVER=turn:127.0.0.1:3478`), and Chrome restricted to
+   relayed candidates played (20 taps, 0 misses, p50 87 ms) with both sides
+   allocating on the server — which pair carried the media isn't logged.
+   Any TURN server works: coturn, or a provider's.
+7. ~~**WHEP `Link: rel="ice-server"`**~~ **DONE.** The answer names the ICE
+   servers (`Link: <stun:…>; rel="ice-server"`), and `GET /webrtc/ice-servers`
+   gives them to our page before its offer, so its browser gathers its own
+   public address.
+
+Until 3–6 land, Tailscale is the way to view from outside the network: it
+gives all of this, privately.
+
+## 6c · Future work — what's left, what each is for, and when it's needed
+
+Recorded 2026-11-20, after steps 1, 2 and 4 of §6b. Each item says what it
+is for; none is needed for viewing over a LAN or Tailscale, which works today.
+
+### Reaching viewers outside the network (the rest of §6b)
+
+Only worth building to let a browser reach `serve` over the internet — through
+an HTTPS tunnel (Cloudflare Tunnel, ngrok) or a public host — with media
+crossing a NAT. Today's answer to that is Tailscale: private, direct, done.
+
+| Item | What it is for | Why / when it's needed |
+|---|---|---|
+| **3 · Authentication** | A credential (a token in the link, at least) on every `serve` route, the WHEP endpoint and the control socket | `serve` drives the device — taps, typing, the clipboard. Exposed without it, anyone with the URL could. **The prerequisite for 5–7**; skipped for now |
+| **5 · Full ICE** | baguette sends its own connectivity checks to the browser's candidates instead of only answering (drop `a=ice-lite`); the page waits for its own candidates (or trickles them by WHEP `PATCH`) | A NAT lets nothing in that the Mac hasn't sent to first. Sending checks opens it toward the browser, so the `srflx` address from step 4 becomes reachable — most home and office networks |
+| **7 · Tell the browser its STUN/TURN servers** | WHEP `Link: rel="ice-server"` on the answer, and a way for the page to know them before its offer | The browser needs its own public address too, or our checks go to a phone's private one. Comes with 5 |
+| **6 · TURN client** | Allocate, permissions, channels and refreshes on a TURN server: a relay candidate | Gets through what 5 can't: symmetric NATs, strict corporate firewalls, UDP blocked. Needs a TURN server (coturn, or a provider) and adds the relay's latency — last resort |
+
+### Freezes and picture quality
+
+| Item | What it is for | Why / when it's needed |
+|---|---|---|
+| **Measure RTX on a phone** | A run on mobile data with step 2 built, before and after | Resends happen only on a lossy link; loopback can't show whether RTX reduces freezes and the cuts that follow losses. The next measurement to take |
+| **FEC (RED/ULPFEC)** | Redundancy sent with the video, so the browser rebuilds a lost packet without asking | Freezes on mobile follow bursts of loss 2–3.5× more than chance (§6, slice 11): each costs a resend round trip (100–300 ms). FEC removes the round trip for single losses, at ~10–25 % more bandwidth; bursts need more |
+| **A lower ceiling on mobile** | Cap the bitrate (e.g. 4 Mbps) when the link is a phone's | Fewer packets per frame, so a loss burst hits fewer frames. A cheap experiment before FEC |
+| **Lift the cap only on sustained arrival** | The confirmed-capacity cap (§6, slice 11) released only when a longer window shows more getting through | After a radio dropout, held packets arrive at once; the half-second window reads that as spare capacity, lifts the cap, and the target jumps back to 8 Mbps — refilling the queue |
+| **A minimum pacing rate** | The pacer never slower than what drains a keyframe in ~50 ms | At a low target — REMB's 300 kbps floor on a still screen — a keyframe waits ~300 ms in the pacer before it leaves: the first tap after idle feels slow |
+
+### The kit itself
+
+| Item | What it is for | Why / when it's needed |
+|---|---|---|
+| **A standalone session test** | A WebRTCKit test that runs a whole session over loopback — check, DTLS, an SRTP frame arriving — with no baguette code | Proof the kit stands alone, before it moves to its own SwiftPM package |
+| **Its own package** | WebRTCKit in its own repository, baguette depending on it | Other tools could send WebRTC from Swift; baguette's build gets smaller. After the standalone test |
+| **Receiving** | The kit's v1 only sends | Only if something needs to receive WebRTC (a phone's screen arrives over CoreDevice's RTP today, not WebRTC) |
+
 ## 7 · Open questions
 
 1. ~~**Which WebRTC stack?**~~ **ANSWERED: our own, in Swift.** The BoringSSL
