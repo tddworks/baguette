@@ -1,11 +1,13 @@
 import Foundation
 
-/// One browser's WebRTC session, sending: it answers the browser's offer as an
-/// ICE-lite, DTLS-passive sender, then lives through
-/// `connecting → securing → live → hungUp`:
+/// One browser's WebRTC session, sending: it answers the browser's offer as a
+/// DTLS-passive sender — the controlled ICE agent, checking the browser's
+/// candidates itself, or ICE-lite when the offer names none — then lives
+/// through `connecting → securing → live → hungUp`:
 ///
 /// - **connecting**: until a connectivity check names its ufrag and is signed
-///   with its password; that check says where the browser is.
+///   with its password; that check — or the path the browser nominates — says
+///   where the browser is.
 /// - **securing**: DTLS from that address only, until the handshake exports
 ///   the SRTP keys; then it asks its owner for a keyframe and goes live.
 /// - **live**: every frame it is given leaves as SRTP, its packets spaced by a
