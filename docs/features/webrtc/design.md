@@ -877,6 +877,14 @@ times (`requestVideoFrameCallback`: `receiveTime`, `processingDuration`).
 | Tap → frame in Chrome, p50 | 93–95 ms | 61–63 ms | 53–57 ms |
 | Frame in Chrome → shown | ~15 ms | ~16 ms | ~15 ms |
 
+**Which taps gain what.** The device lookup was paid per request, so the
+first cause cost only taps sent as `POST /input` (plugins, HTTP clients, the
+bench's `tap=post`). The device page and the stream WebSocket send gestures on
+a socket that looks its device up once, when it connects: they gain only the
+pump fix (~9 ms). A phone on mobile data the same afternoon, socket path, full
+resolution: 144 ms p50, of which 108 ms to the frame's arrival (the cellular
+link) and 34 ms from arrival to display; no packet lost.
+
 **Where the 40 ms came from**, stage by stage, tap's frame only (40 taps):
 
 | Stage | Before | After |
