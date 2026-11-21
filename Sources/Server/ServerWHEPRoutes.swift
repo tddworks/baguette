@@ -81,6 +81,14 @@ extension Server {
             }
             pacing = asked == "on"
         }
+        // `?rtx=off`: the bench's baseline, resends as they were sent, not on their own stream.
+        var rtx = true
+        if let asked = request.uri.queryParameters.get("rtx").map({ String($0) }) {
+            guard asked == "on" || asked == "off" else {
+                return pluginError("rtx is on or off, not \(asked)", status: .badRequest)
+            }
+            rtx = asked == "on"
+        }
         let udid = udidParam(request)
         guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             return pluginError("unknown udid: \(udid)", status: .notFound)
@@ -92,7 +100,7 @@ extension Server {
         do {
             let bound = try plan.bind(to: device)
             let (id, answer) = try viewers.admit(
-                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing)
+                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing, rtx: rtx)
             return Response(
                 status: .created,
                 headers: Self.answerHeaders(location: "/devices/\(udid)/whep/\(id)", iceServers: viewers.iceServers),

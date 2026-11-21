@@ -292,13 +292,15 @@ says *that* the senders differ, not which part — and close results don't
 show the encoder is the limit unless a run also shows neither estimate held
 it back. What runs found, and what they support, is in §6 (slice 11).
 
-**The matrix:** {websocket, webrtc, webrtc without pacer, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
+**The matrix:** {websocket, webrtc, webrtc without pacer, webrtc without RTX, webrtc via Pion} × {localhost, LAN Wi-Fi, 50 ms RTT, 50 ms +
 1 % loss, 50 ms + 5 % loss, 5 Mbps cap} × {1, 4, 8 devices} for CPU. We apply
 impairments with `dnctl` + `pfctl` dummynet, scripted so every run can be
-reproduced — **on loopback only** (`impair.sh` shapes `lo0`: a browser on this
-Mac). A phone over Wi-Fi or Tailscale crosses another interface the script
-doesn't touch: those runs are the real network, unimpaired, and are recorded
-apart. Network Link Conditioner is fine for spot checks.
+reproduced. `impair.sh` shapes the media ports on every interface (2026-11-21;
+before, `lo0` only), so it reaches a phone over Wi-Fi or Tailscale too, on top
+of whatever that network already does — record such runs with both. The
+bench page's summary adds the browser's own counters (`packetsLost`,
+`nacksSent`, `resendsReceived`, `keyframesAsked`), which say how much was lost
+and repaired. Network Link Conditioner is fine for spot checks.
 
 ### Run it
 

@@ -48,7 +48,9 @@ public struct SessionDescription: Equatable, Sendable {
     public static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
     public static let absSendTimeURI = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
 
-    public init(offer sdp: String) throws {
+    /// `rtx: false` takes no resend format even when the offer pairs one, so
+    /// resends go as they were sent — the bench's baseline (`?rtx=off`).
+    public init(offer sdp: String, rtx: Bool = true) throws {
         let lines = sdp.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         guard let video = lines.firstIndex(where: { $0.hasPrefix("m=video ") }) else { throw Refusal.noVideo }
         let next = lines[(video + 1)...].firstIndex { $0.hasPrefix("m=") } ?? lines.endIndex
@@ -90,7 +92,7 @@ public struct SessionDescription: Equatable, Sendable {
             return UInt8(line.dropFirst(9).prefix { $0 != " " })
         })
         candidates = section.compactMap(Self.candidate)
-        rtxPayloadType = section.compactMap { line -> UInt8? in
+        rtxPayloadType = !rtx ? nil : section.compactMap { line -> UInt8? in
             guard line.hasPrefix("a=fmtp:"), line.hasSuffix(" apt=\(payloadType)"),
                   let format = UInt8(line.dropFirst(7).prefix { $0 != " " }), rtxFormats.contains(format)
             else { return nil }

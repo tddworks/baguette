@@ -16,7 +16,10 @@ const T = q.get('transport') || 'ws', UDID = q.get('udid'), TAPS = +(q.get('taps
 const SERVE = q.get('serve') || location.origin + '/api';
 // `pacing=off`: baguette's own sender without its pacer — the baseline the pacer is measured against.
 const UNPACED = q.get('pacing') === 'off';
-const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (UNPACED ? '?pacing=off' : '');
+// `rtx=off`: baguette's own sender resending as sent, not on its own stream — the baseline RTX is measured against.
+const NO_RTX = q.get('rtx') === 'off';
+const WHEP_QUERY = [UNPACED && 'pacing=off', NO_RTX && 'rtx=off'].filter(Boolean).join('&');
+const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (WHEP_QUERY ? '?' + WHEP_QUERY : '');
 const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const PION = WHEP.startsWith('/pion/');
 const TAP_PATH = T === 'webrtc' && (PION || SPIKE) ? 'POST /input' : 'socket';
@@ -25,7 +28,7 @@ const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
 document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
 const logEl = document.getElementById('log'); const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log('[bench]', ...a); };
 const probe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
-const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : UNPACED ? 'baguette, no pacer' : 'baguette', tapPath: TAP_PATH, t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
+const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PION ? 'pion' : SPIKE ? 'mediamtx' : 'baguette' + (UNPACED ? ', no pacer' : '') + (NO_RTX ? ', no rtx' : ''), tapPath: TAP_PATH, t0: performance.now(), firstFrame: null, frames: [], samples: [], done: false };
 
 // Every presented frame lands here with the time it reaches the screen and its centre-pixel luma.
 // Both paths stamp the moment the frame is expected on screen, never the start of the frame
@@ -262,6 +265,20 @@ async function run() {
   log(JSON.stringify(R.summary, null, 1)); R.done = true; R.stop();
 }
 // Every run ends with a summary and its session closed, even one that fails.
-function finish(summary) { R.summary = summary; log(JSON.stringify(summary, null, 1)); R.done = true; R.stop?.(); }
+// What the browser lost and got back: lost packets, the NACKs it sent, the resends that arrived, the pictures it asked for.
+async function lossStats() {
+  const out = {};
+  try {
+    (await R.pc.getStats()).forEach(r => {
+      if (r.type !== 'inbound-rtp' || r.kind !== 'video') return;
+      Object.assign(out, { packetsLost: r.packetsLost, nacksSent: r.nackCount, resendsReceived: r.retransmittedPacketsReceived, keyframesAsked: r.pliCount + (r.firCount || 0) });
+    });
+  } catch {}
+  return out;
+}
+async function finish(summary) {
+  if (R.pc) Object.assign(summary, await lossStats());
+  R.summary = summary; log(JSON.stringify(summary, null, 1)); R.done = true; R.stop?.();
+}
 run().catch(e => finish({ transport: T, sender: R.sender, tapPath: R.tapPath, failed: e.message }));
 </script></body></html>
