@@ -214,10 +214,9 @@ async function bw(secs) {
   // per-packet overhead below the counted bytes: WS = TCP/IP + WS header per ~1448 B segment; WebRTC = UDP/IP + SRTP auth tag per packet
   const payload = z.b - a.b, packets = z.p - a.p;
   const wire = T === 'ws' ? payload + Math.ceil(payload / 1448) * 52 + packets * 4 : payload + packets * (28 + 10);
-  R.summary = { transport: T, sender: R.sender, format: R.format || 'h264', secs: +dt.toFixed(1), payloadMbps: +(payload * 8 / dt / 1e6).toFixed(2), wireMbpsEst: +(wire * 8 / dt / 1e6).toFixed(2),
+  return finish({ transport: T, sender: R.sender, format: R.format || 'h264', secs: +dt.toFixed(1), payloadMbps: +(payload * 8 / dt / 1e6).toFixed(2), wireMbpsEst: +(wire * 8 / dt / 1e6).toFixed(2),
     mbPerMin: +(wire / dt * 60 / 1e6).toFixed(1), messagesOrPackets: packets, fps: +((R.frames.length - f0) / dt).toFixed(1),
-    ...freezeSummary(t0, endedAt) };
-  log(JSON.stringify(R.summary)); R.done = true; R.stop();
+    ...freezeSummary(t0, endedAt) }, false);
 }
 async function run() {
   // One encoder per run: the WHEP source runs only for WebRTC.
@@ -255,14 +254,13 @@ async function run() {
   const iv = R.frames.slice(1).map((t, i) => t - R.frames[i]);
   const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
   const durMin = (R.frames.at(-1) - R.frames[0]) / 60000;
-  R.summary = {
+  return finish({
     transport: T, sender: R.sender, tapPath: R.tapPath, format: R.format || 'h264', taps: TAPS, misses: TAPS - ok.length,
     p50: +pct(ok, 50).toFixed(1), p95: +pct(ok, 95).toFixed(1), p99: +pct(ok, 99).toFixed(1), min: +Math.min(...ok).toFixed(1), max: +Math.max(...ok).toFixed(1),
     firstFrameMs: +R.firstFrame.toFixed(0), presentedFps: +(1000 / mean).toFixed(1),
     intervalStddevMs: +Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length).toFixed(2),
     ...freeze,
-  };
-  log(JSON.stringify(R.summary, null, 1)); R.done = true; R.stop();
+  });
 }
 // Every run ends with a summary and its session closed, even one that fails.
 // What the browser lost and got back: lost packets, the NACKs it sent, the resends that arrived, the pictures it asked for.
@@ -276,9 +274,11 @@ async function lossStats() {
   } catch {}
   return out;
 }
-async function finish(summary) {
+// Every summary ends here — a tap run's, a bandwidth run's, a failure's — with the browser's loss counters, read
+// before the session closes. `pretty`: a tap run's summary is indented, a bandwidth run's is one line.
+async function finish(summary, pretty = true) {
   if (R.pc) Object.assign(summary, await lossStats());
-  R.summary = summary; log(JSON.stringify(summary, null, 1)); R.done = true; R.stop?.();
+  R.summary = summary; log(pretty ? JSON.stringify(summary, null, 1) : JSON.stringify(summary)); R.done = true; R.stop?.();
 }
 run().catch(e => finish({ transport: T, sender: R.sender, tapPath: R.tapPath, failed: e.message }));
 </script></body></html>
