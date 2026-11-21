@@ -1,8 +1,10 @@
 import Foundation
 import IOSurface
 
-/// Pace raw surfaces before encoding. Once encoded, every reference frame reaches
-/// the sink in order; the idle repeat keeps browser decoder pipelines progressing.
+/// The screen's newest surface, one at a time (`LatestFrame`): the encoder is
+/// ready for the next once VideoToolbox answers. Once encoded, every reference
+/// frame reaches the sink in order; a still screen is refreshed on a steady
+/// beat (`RefreshCadence`), which keeps browser decoder pipelines progressing.
 public final class AVCCStream: Stream, @unchecked Sendable {
     private let configLock = NSLock()
     private var currentConfig: StreamConfig
@@ -14,9 +16,13 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     /// Where every frame is encoded, including VideoToolbox's answers; the
     /// stream's state is confined to it.
     let queue = DispatchQueue(label: "baguette.avcc", qos: .userInteractive)
-    private lazy var pump = StreamFramePump<IOSurface>(
-        queue: queue, fps: config.fps, repeating: true
-    ) { [weak self] in self?.encode($0) }
+    private lazy var latest = LatestFrame<IOSurface>(queue: queue, fps: config.fps) { [weak self] surface, ready in
+        guard let self else { return ready() }
+        encode(surface, ready: ready)
+    }
+    /// Confined to `queue`.
+    private lazy var cadence = RefreshCadence(fps: config.fps)
+    private var refreshTimer: DispatchSourceTimer?
 
     private var screen: (any Screen)?
     private var running = false
@@ -45,15 +51,16 @@ public final class AVCCStream: Stream, @unchecked Sendable {
             pendingForceKeyframe = true
             pendingSeedSnapshot = true
         }
-        pump.start()
-        do { try screen.start { [weak self] in self?.pump.offer($0) } } catch {
+        latest.start()
+        queue.sync { startRefreshing() }
+        do { try screen.start { [weak self] in self?.latest.offer($0) } } catch {
             stop()
             throw error
         }
     }
 
     public func stop() {
-        pump.stop()
+        latest.stop()
         screen?.stop()
         screen = nil
         queue.sync { stopEncoding() }
@@ -80,7 +87,11 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         if old.fps != newConfig.fps { try h264.setFrameRate(newConfig.fps) }
         if old.bitrateBps != newConfig.bitrateBps { try h264.setBitrate(newConfig.bitrateBps) }
         configLock.withLock { currentConfig = newConfig }
-        pump.apply(fps: newConfig.fps)
+        latest.apply(fps: newConfig.fps)
+        if old.fps != newConfig.fps, refreshTimer != nil {
+            cadence.fps = newConfig.fps
+            scheduleRefresh()
+        }
     }
 
     public func requestKeyframe() { queue.sync { pendingForceKeyframe = true } }
@@ -90,16 +101,42 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     private func stopEncoding() {
         running = false
         generation += 1
-        pump.stop()
+        refreshTimer?.cancel()
+        refreshTimer = nil
+        latest.stop()
         h264.stop()
     }
 
-    /// One paced screen: a seed when one is due, then the frame to the
-    /// encoder. Runs on `queue`.
-    func encode(_ surface: IOSurface) {
-        guard running else { return }
+    /// The refresh beat, on `queue`: each refresh is taken only when the
+    /// encoder has nothing else (`LatestFrame.refresh`).
+    private func startRefreshing() {
+        refreshTimer?.cancel()
+        cadence = RefreshCadence(fps: config.fps)
+        let timer = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
+        timer.setEventHandler { [weak self] in
+            guard let self, running else { return }
+            latest.refresh()
+            scheduleRefresh()
+        }
+        refreshTimer = timer
+        scheduleRefresh()
+        timer.resume()
+    }
+
+    private func scheduleRefresh() {
+        let now = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        let due = cadence.next(at: now)
+        refreshTimer?.schedule(deadline: DispatchTime(uptimeNanoseconds: UInt64(due * 1_000_000_000)), leeway: .microseconds(250))
+    }
+
+    /// One screen: a seed when one is due, then the frame to the encoder.
+    /// `ready` once VideoToolbox has answered — or at once when the frame
+    /// isn't encoded at all, or the stream would wait on it for good.
+    /// Runs on `queue`.
+    func encode(_ surface: IOSurface, ready: @escaping @Sendable () -> Void) {
+        guard running else { return ready() }
         // A Screen may recycle the IOSurface; VT must retain its own GPU copy.
-        guard let pb = scaler.scale(surface, by: config.scale) else { return }
+        guard let pb = scaler.scale(surface, by: config.scale) else { return ready() }
         if pendingSeedSnapshot {
             pendingSeedSnapshot = false
             if let bytes = jpeg.encode(pb) { sink.write(AVCCEnvelope.seed(jpeg: bytes)) }
@@ -108,8 +145,9 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         pendingForceKeyframe = false
         let submittedGeneration = generation
         h264.encode(pb, forceKeyframe: force) { [weak self] result in
-            guard let self else { return }
+            guard let self else { return ready() }
             queue.async { [self] in
+                defer { ready() }
                 guard running, generation == submittedGeneration else { return }
                 switch result {
                 case .success(let encoded?): write(encoded)
