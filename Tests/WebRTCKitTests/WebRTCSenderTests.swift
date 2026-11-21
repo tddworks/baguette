@@ -52,6 +52,18 @@ private let dtlsHello = Data([0x16, 0xFE, 0xFD, 0, 0])
 private let sps = Data([0x67, 0x64, 0x00, 0x1F, 0xAC]), pps = Data([0x68, 0xEE, 0x3C, 0x80])
 private func picture(_ nal: Data) -> Data { Data([0, 0, 0, UInt8(nal.count)]) + nal }
 
+/// The browser's NACK for `sequence`, as SRTCP signed with its key from the
+/// same DTLS export the rig's sender gets: what a browser on any path sends.
+private func signedNACK(for sequence: UInt16) -> Data {
+    let keys = SRTPSessionKeys(SRTPKeys.fromDTLS(export: export)!.remote, labels: .rtcp)
+    let sender: UInt32 = 0x1234_5678
+    let header: [UInt8] = [0x81, 205, 0, 3] + (0..<4).map { UInt8(sender >> (24 - 8 * $0) & 0xFF) }
+    let body: [UInt8] = [0xCA, 0xFE, 0xBA, 0xBE, UInt8(sequence >> 8), UInt8(sequence & 0xFF), 0, 0]
+    let sealed = AESCounter.apply(key: keys.cipherKey, iv: keys.iv(ssrc: sender, index: 1), to: body)
+    let trailer: [UInt8] = [0x80, 0, 0, 1]
+    return Data(header + sealed + trailer + keys.tag(header + sealed + trailer))
+}
+
 private final class Box<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var stored: T
@@ -215,6 +227,36 @@ struct WebRTCSenderTests {
         rig.deliver(dtlsHello, from: browser)
 
         #expect(rig.sender.state == .live)
+    }
+
+    @Test func `should follow the browser to the path it nominates last`() {
+        let rig = Rig()
+        let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+        let other = DatagramAddress(ip: [198, 51, 100, 4], port: 50001)
+        func nomination() -> Data {
+            STUNMessage.check(from: browserICE, to: ours, priority: 1, tieBreaker: 1,
+                              transactionID: (0..<12).map { _ in UInt8.random(in: 0...255) }, nominating: true)
+        }
+        rig.deliver(nomination(), from: browser)
+        rig.deliver(dtlsHello, from: browser)
+
+        rig.deliver(nomination(), from: other)
+        rig.sender.send(EncodedFrame(avcc: picture(Data([0x65, 1, 2, 3])), isKeyframe: true, parameterSets: [sps, pps]))
+
+        let media = rig.sent.value.filter { RTPPacket($0.0) != nil }.map(\.1)
+        #expect(!media.isEmpty && media.allSatisfy { $0 == other })
+    }
+
+    @Test func `should act on the browser's signed feedback from whichever of its addresses it arrives`() {
+        let rig = Rig()
+        rig.goLive()
+        rig.sender.send(EncodedFrame(avcc: picture(Data([0x65, 1, 2, 3])), isKeyframe: true, parameterSets: [sps, pps]))
+        let before = rig.packets.count
+
+        rig.deliver(signedNACK(for: 1000), from: DatagramAddress(ip: [192, 168, 2, 30], port: 63632))
+
+        #expect(rig.packets.count == before + 1)
+        #expect(rig.packets.last?.sequence == 1000)
     }
 
     @Test func `should stay ICE-lite and check no one when the offer gives no addresses`() {

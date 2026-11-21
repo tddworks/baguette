@@ -62,7 +62,7 @@ WebRTCSender  ◆                     ONE BROWSER'S SESSION: connecting → secu
 ├─ answer : String                  written once by SessionDescription ◇ from the offer:
 │                                   H.264 + RTX formats, ICE credentials, candidates, fingerprint
 ├─ ice : ICECredentials ◇            ours; the browser's, and its candidates, come from the offer
-├─ nominated : DatagramAddress?     the path the browser chose; once set, the only one
+├─ nominated : DatagramAddress?     the path the browser chose last; media goes there
 ├─ datagrams : any Datagrams  ◆     one UDP socket, told apart by first byte (RFC 7983)
 │   ├─ UDPDatagrams                 the socket itself (Internal/System/)
 │   └─ RelayedDatagrams  ◆          the socket with a TURN relay beside it; reached through it,
@@ -93,7 +93,7 @@ STUNServer ◇ → publicAddress (srflx)  ·  TURNAllocation.allocate → Relaye
 | **Owns** | Its state; which path it is on; what it sent in the last second; the target |
 | **Tell it** | `send(_ frame:)` · `tick(now:)` · `hangUp()` · `note(_:)` (an owner's line on its timeline) |
 | **It answers** | `answer` · `state` · `pacing` |
-| **Never** | Encodes, chooses the encoder's bitrate, sends before it is secured, sends in the clear, follows a path the browser didn't nominate once one is, or knows what it is showing |
+| **Never** | Encodes, chooses the encoder's bitrate, sends before it is secured, sends in the clear, moves to a path the browser didn't nominate once one is, ignores signed feedback for where it came from, or knows what it is showing |
 
 ### `RelayedDatagrams` — the socket with a relay beside it
 
@@ -134,7 +134,8 @@ sender.hangUp()                                              // closes the socke
 | An offer carries a congestion-control method only when it numbers the extension 1–14, will receive it, and asks for its feedback on our H.264 or on every format | `SessionDescription` |
 | A check is answered only when it names our username fragment and is signed with our ICE password | `STUNMessage` |
 | With candidates in the offer, the sender checks each itself as the controlled agent, at once and then backing off (0.1–1.6 s), until secured; with none it is ICE-lite | `WebRTCSender` |
-| Once the browser nominates a path, the session stays on it, whatever path checks it later | `WebRTCSender` |
+| The session follows the path the browser nominated last; a check that doesn't nominate never moves it | `WebRTCSender` |
+| Feedback is the browser's when its SRTCP signature checks out, whichever of its addresses it arrives from | `WebRTCSender` |
 | Nothing is sent before the handshake completes, and everything after it through SRTP | `WebRTCSender` |
 | A secured session asks its owner for a keyframe, and again whenever the browser reports a lost picture | `WebRTCSender` |
 | 30 s without a check hangs up; a hang-up is told to the owner once and nothing is sent after it | `WebRTCSender` |
@@ -165,6 +166,12 @@ its device) are in [the webrtc design](../webrtc/design.md#4--invariants-each-la
    ICE-CONTROLLED, signed with the browser's password). The SDP parser takes
    UDP candidates with numeric IPs and skips mDNS (`.local`) and TCP. With
    none, the answer says `a=ice-lite` and the sender only answers checks.
+   Media goes to the path the browser nominated last. **Why "last", not
+   "first":** Chrome with several paths to the Mac (loopback, LAN, Tailscale)
+   nominates one, then a better one, and sends its RTCP from there. Locked to
+   the first, the sender dropped all 258 of a run's RTCP packets (2026-11-21):
+   no resends, no keyframe requests, no congestion feedback, while the picture
+   still played.
 3. **Securing.** DTLS from the selected path only. When the handshake exports
    the SRTP keys the sender goes live and asks for a keyframe.
 4. **Live.** Each frame is packetized, paced, stamped, protected and sent;
