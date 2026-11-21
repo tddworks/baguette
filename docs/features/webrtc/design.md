@@ -818,10 +818,49 @@ what the implementation has demonstrated in the live-view build.
 | Change | What was verified | What remains to measure |
 |---|---|---|
 | Resend guard | Kit unit tests cover the eligibility rules for repeated or stale NACKs and the resend budget. | |
-| RTX | Kit tests cover SDP negotiation, a fresh transport-wide sequence number on a resend, and SRTP rollover per stream. Chrome negotiated RTX and played over loopback on 2026-11-20. | Whether RTX reduces freezes or bitrate cuts on a lossy mobile link. |
+| RTX | Kit tests cover SDP negotiation, a fresh transport-wide sequence number on a resend, and SRTP rollover per stream. Chrome negotiated RTX and played over loopback on 2026-11-20. On a phone over mobile data with 2 % added loss, RTX cut the tap run's frozen time from 14.0 s to 4.1 s (below). | A second round of runs; the 30 s runs didn't separate the two. |
 | STUN | `stun.l.google.com` returned the Mac's mapped address and it appeared in the SDP answer. | Reachability of that address through real NATs. |
 | Active ICE checks and ICE server signaling | In Chrome on the Mac, the device page fetched its ICE servers, posted candidates, answered the sender's checks, and displayed the phone's screen. | End-to-end connectivity across separate networks with NAT. |
 | TURN | A kit system test sent datagrams both ways through Pion's TURN server. Chrome restricted to relay candidates played locally with both sides allocating on that server (20 taps, 0 misses, p50 87 ms). | The selected pair was not logged. Establish which side used the relay for media and verify an end-to-end deployment across real NATs. |
+
+### RTX on a phone, mobile data (2026-11-21)
+
+iPhone on mobile data through Tailscale, `impair.sh 0 0.02` (2 % of the video
+dropped on top of the network's own loss), the same server build each run;
+`?rtx=off` for the baseline. One run of each, alternating.
+
+| | RTX | No RTX |
+|---|---|---|
+| **Taps** (100): total frozen | **4.1 s** (18 freezes) | 14.0 s (23) |
+| longest freeze | **0.32 s** | 3.1 s (also 2.8, 1.1) |
+| p50 / p95 / p99 | **157 / 322 / 386 ms** | 188 / 341 / 655 ms |
+| misses · keyframes asked | 1 · **0** | 4 · 2 |
+| frame-interval jitter (σ) | **25 ms** | 79 ms |
+| **30 s**: total frozen | 1.7 s (7) | 1.3 s (5) |
+| keyframes asked | 1 | 0 |
+| packets lost · NACKs · resends received | 463 · 571 · 550 | 3 · 629 · — |
+
+**RTX turns long stalls into short ones.** With it, every freeze in the tap
+run ended within about one resend round trip (~0.2–0.3 s) and the phone
+never needed a keyframe; without it, some resends came too late, the
+picture stalled for seconds and recovered only from keyframes. The 30 s runs
+were a draw. Without RTX `packetsLost` reads near zero because a plain
+resend reuses the original's sequence number, so the browser counts the gap
+filled; compare NACKs, keyframes and freezes instead.
+
+**What's left is the round trip itself:** ~14 short freezes a minute remain,
+each the time to ask for a packet and get it back. That's FEC's job (§6c).
+
+**Found on the way:** a sender locked to the browser's *first* nomination
+dropped every RTCP packet that came in on Chrome's later, better path (258 of
+258 in a desktop run): no resends, keyframe requests or congestion feedback,
+though the picture played. Fixed (#154) — the session follows the latest
+nomination and takes feedback by its SRTCP signature. In desktop Chrome at the
+same loss, NACKs went 593 → 20, resends received 5 → 19 of 19, keyframes asked
+7 → 0, freezes 7.5 → 0 a minute. The phone runs above were on a build with
+the fix; with its addresses hidden behind `.local` names it had one path and
+was barely touched by the bug (RTX taps: 8.8 freezes a minute before, 9.7 and
+14.3 after — noise).
 
 The page gets its server list from `GET /webrtc/ice-servers` and waits up to 2 s
 for candidate gathering before posting its offer. The WHEP answer also returns
@@ -845,7 +884,7 @@ Record the chosen candidate pair to establish which path carried media.
 
 | Item | What it is for | Why / when it's needed |
 |---|---|---|
-| **Measure RTX on a phone** | A run on mobile data with RTX on and off | Resends happen only on a lossy link; loopback can't show whether RTX reduces freezes and the cuts that follow losses. The next measurement to take |
+| ~~**Measure RTX on a phone**~~ | **Done** 2026-11-21 ([§6b](#rtx-on-a-phone-mobile-data-2026-11-21)): RTX cut frozen time 14.0 s → 4.1 s in the tap run | A second round would firm up the 30 s runs, which didn't separate |
 | **FEC (RED/ULPFEC)** | Redundancy sent with the video, so the browser rebuilds a lost packet without asking | Freezes on mobile follow bursts of loss 2–3.5× more than chance (§6, slice 11): each costs a resend round trip (100–300 ms). FEC removes the round trip for single losses, at ~10–25 % more bandwidth; bursts need more |
 | **A lower ceiling on mobile** | Cap the bitrate (e.g. 4 Mbps) when the link is a phone's | Fewer packets per frame, so a loss burst hits fewer frames. A cheap experiment before FEC |
 | **Lift the cap only on sustained arrival** | The confirmed-capacity cap (§6, slice 11) released only when a longer window shows more getting through | After a radio dropout, held packets arrive at once; the half-second window reads that as spare capacity, lifts the cap, and the target jumps back to 8 Mbps — refilling the queue |
