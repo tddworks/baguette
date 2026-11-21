@@ -219,7 +219,9 @@ public final class WebRTCSender: @unchecked Sendable {
         guard let answer = message.answer(from: address, ice: ice) else { return }
         lock.withLock {
             guard current != .hungUp else { return }
-            if message.nominates, nominated == nil { nominated = address }
+            // The browser, controlling, may nominate a better path once it has one:
+            // the session follows its latest nomination, never a mere check.
+            if message.nominates { nominated = address }
             browser = nominated ?? address
             lastCheck = clock()
             if current == .connecting { current = .securing }
@@ -255,7 +257,9 @@ public final class WebRTCSender: @unchecked Sendable {
         // RFC 5761: RTCP packet types sit at 192–223 in the second byte.
         guard data.count > 1, (192...223).contains(data[data.startIndex + 1]) else { return }
         let asks = lock.withLock { () -> [RTCPFeedback] in
-            guard current == .live, address == browser, let plain = srtp?.unprotectRTCP(data) else { return [] }
+            // Its signature, not its address, says the browser sent it: feedback comes
+            // on whichever of its paths the browser sends from.
+            guard current == .live, let plain = srtp?.unprotectRTCP(data) else { return [] }
             return RTCPFeedback.parse(plain)
         }
         act(on: asks)
