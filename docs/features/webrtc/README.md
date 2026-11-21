@@ -96,23 +96,19 @@ the encoder again according to [the retuning rule](design.md#4--invariants-each-
   packetization mode 1 is refused (422) and the page falls back to H.264 or
   MJPEG over the WebSocket. Chrome and Safari offer it; Firefox offers only
   Constrained Baseline, so it falls back.
-- **Host addresses only.** baguette answers with this Mac's own IPv4 addresses
-  (LAN, Tailscale, loopback); there is no STUN or TURN, so a viewer behind a
-  NAT that can't reach one of them gets no picture.
+- **Host addresses by default.** baguette offers this Mac's own IPv4 addresses
+  (LAN, Tailscale, loopback). The browser needs a reachable address to play.
 - **Media on any free UDP port, unless told.** Each viewer takes its own port;
   to open a firewall for them, give `baguette serve --webrtc-ports 8190-8194`
   and each viewer takes the first free one in the range (a full range refuses
   the next viewer).
-- **Its public address, when asked.** `baguette serve --stun stun:host:port`
-  has each viewer learn the address the world sees it at and offer it too.
-  The page asks for the same servers and posts its own candidates, and
-  baguette checks them itself (full ICE), which opens its NAT toward the
-  browser. That reaches most networks; until `serve` has authentication,
-  don't expose it to the internet — use Tailscale from outside your network.
-- **A relay for the rest.** `baguette serve --turn turn:host:3478 --turn-user
-  … --turn-pass …` has each viewer offer a relayed address on that TURN
-  server too (coturn, or a provider's), and gives the page the same server and
-  credentials. It gets through strict networks, at the relay's latency.
+- **Optional STUN and TURN.** `baguette serve --stun stun:host:port` adds
+  a mapped address. `baguette serve --turn turn:host:3478 --turn-user …
+  --turn-pass …` adds a relay candidate when allocation succeeds. The page
+  fetches the configured ICE servers before posting its offer. For what
+  each option does, see [WebRTCKit](../webrtc-kit/README.md).
+- **Remote access via Tailscale.** Keep `serve` on a private network while it
+  lacks application authentication. See [remote access status](design.md#reaching-viewers-outside-the-network).
 - **A viewer goes when its browser does.** Switching format or leaving the page
   hangs it up; if that goodbye never arrives, it hangs up after 30 s without a
   connectivity check, and its encoder stops either way.
@@ -127,5 +123,5 @@ to use it and what it measured: [design.md#run-it](design.md#run-it).
 
 ## See also
 
-[design.md](design.md) · [stream](../stream/README.md) ·
+[Design and bench](design.md) · [WebRTCKit](../webrtc-kit/README.md) · [stream](../stream/README.md) ·
 [serve.md](../../serve.md) · [handheld](../handheld/README.md)

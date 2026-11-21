@@ -187,10 +187,10 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a short read is of a screen, not a point; `x` and `y` come together | `DescribeUI` |
 | a probe override may name only a known target | `DisplayTouchTarget.parseOverride` |
 | a physical phone's touches go to the Universal HID service it registers for its main touchscreen, `0x101` — measured, never computed | `CoreDeviceDigitizer.mainTouchscreen` |
-| a WebRTC viewer sees no picture before a keyframe: it asks its stream for one when its handshake completes and whenever the browser reports a lost picture (PLI or FIR) | `WebRTCViewer` |
-| a viewer sends nothing before its DTLS handshake completes, and every packet after it through SRTP | `WebRTCViewer` |
+| a WebRTC viewer sees no picture before a keyframe: its sender asks for one when its handshake completes and whenever the browser reports a lost picture (PLI or FIR) | `WebRTCSender` |
+| a viewer sends nothing before its DTLS handshake completes, and every packet after it through SRTP | `WebRTCSender` |
 | one viewer, one encoder: each viewer owns its stream, and hanging up stops it | `WebRTCViewer` |
-| a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCViewer` |
+| a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCSender` |
 | a STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
 | an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |

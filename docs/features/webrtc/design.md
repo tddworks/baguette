@@ -1,15 +1,12 @@
 ---
-description: A proposal to carry the serve live view over WebRTC (WHEP) next to the stream WebSocket, and how we measure whether it is actually faster before we build it. Read before changing how the browser receives video.
+description: How the serve live view travels over WebRTC (WHEP) next to the stream WebSocket — the viewer, its stream and retuning, the bench that compares the two, and the build record. Read before changing how the browser receives video.
 ---
 
 # Live view over WebRTC (WHEP): design and bench
 
-**Status:** BUILT on `feat/whep-live-view`, slices 1–10 of [§6](#6--build-sequence-test-first-each-slice-green):
-the WHEP routes and the page's **WebRTC** choice play through baguette's own
-ICE-lite, DTLS-SRTP and RTP, checked end to end in Chrome on 2026-11-20 (the serve
-page at 38–40 fps, touches through the control socket). Congestion control (slice 11,
-transport-cc) is built and tested over a simulated link; not yet measured on a
-real throttled one. How to use it: [README](README.md).
+The WHEP routes and the page's **WebRTC** choice are built. The implementation
+and measurements are recorded in [§6](#6--build-sequence-test-first-each-slice-green)
+and [§6b](#6b--packet-recovery-and-connectivity-verification).
 
 This doc owns **how encoded frames travel from `baguette serve` to the page,
 and how we compare two ways of doing it**. It doesn't change what gets encoded
@@ -17,6 +14,8 @@ or how input gets in:
 
 | For | Read |
 |---|---|
+| What STUN, ICE, TURN, and packet recovery do | [WebRTCKit overview](../webrtc-kit/README.md) |
+| The sender's boundaries and session lifecycle | [WebRTCKit architecture](../webrtc-kit/design.md) |
 | The encoder, AVCC tags and retune commands | [stream](../stream/README.md) |
 | The stream WebSocket route and its messages | [serve.md](../../serve.md#one-websocket-per-stream), [wire.md](../../wire.md) |
 | How a tap reaches the simulator | [ARCHITECTURE.md](../../ARCHITECTURE.md) |
@@ -109,45 +108,30 @@ decide it.
 Each viewer owns a stream of its own, the way each stream WebSocket does today,
 so `Stream` gains no attach/detach and two viewers never share an encoder's
 reference chain. The viewer, its registry and `EncoderRetune` live in the
-Stream context (`Sources/Device/Abilities/Capture/WebRTC/`); everything that
-sends — `SessionDescription`, ICE-lite, DTLS-SRTP, RTP and RTCP, the pacer,
-congestion control — is **WebRTCKit** (`Sources/WebRTCKit/`: `Signaling/`,
-`Transport/`, `Media/`, `Congestion/`), a library that knows nothing of devices
-and is to become its own package. The viewer is a `WebRTCSender` (the kit's
+Stream context (`Sources/Device/Abilities/Capture/WebRTC/`). The
+[WebRTCKit target](../webrtc-kit/design.md) owns the sender and its transport
+without depending on the device model. The viewer is a `WebRTCSender` (the kit's
 session: `EncodedFrame` in, `SenderEvents` out) plus a stream of its own: it
 turns AVCC envelopes into frames, asks the stream for the keyframes the
 sender needs, and lets the encoder follow the sender's bitrate through
-`EncoderRetune`. `RTPPacket` is the kit's, shared with a phone's screen. The laws are also in [CANONICAL_MODEL](../../CANONICAL_MODEL.md).
+`EncoderRetune`. Everything below the sender — its parts, its tells and its
+laws — is in [the WebRTCKit design](../webrtc-kit/design.md#2--the-aggregate-from-the-root-down);
+this tree stops at it. The laws are also in [CANONICAL_MODEL](../../CANONICAL_MODEL.md).
 
 ```
-WebRTCViewers  ◆                      the live viewers by id — admit(offer, …) → answer · find(id) · hangUp(id)
-└─ WebRTCViewer  ◆                    ONE BROWSER: new → connecting → securing → live → hung up
-    ├─ stream : any Stream            its own AVCCStream; hanging up stops it
-    ├─ offer → answer : SessionDescription ◇   H.264 packetization mode 1 or a refusal; ice-lite,
-    │                                  our ufrag/pwd and DTLS fingerprint, setup:passive, sendonly
-    ├─ datagrams : any Datagrams  ◆   its UDP socket (System/): send(_:to:) · onReceive
-    ├─ handshake : any Handshake  ◆   its DTLS server (System/, BoringSSL): receive(datagram) → replies;
-    │                                  when done, the SRTP keys
-    ├─ STUNMessage ◇                   a connectivity check in, its success response out (integrity + fingerprint)
-    ├─ RTPFrameSink                    the stream's FrameSink: AVCC envelope → access unit → packets
-    │   └─ H264Packetizer ◇            RFC 6184: single NAL or FU-A, SPS/PPS as STAP-A; ≤ 1200 B payload
-    ├─ RTPPacket ◇                     header + payload, both ways (shared with a phone's screen)
-    ├─ SRTPContext ◇                   AES-CM-128 + HMAC-SHA1-80: protect RTP, unprotect RTCP
-    ├─ RTCPFeedback ◇                  PLI · FIR → keyframe; NACK → resend from history;
-    │                                  transport-cc → arrivals (TransportFeedback ◇)
-    ├─ SendHistory ◇                   transport-wide sequence → send time and size, bounded;
-    │                                  each packet's outcome once; LOST ONLY AFTER 500 ms MISSING
-    └─ BandwidthEstimate ◇             GCC's shape (AIMD + a loss-based rate; THE TARGET IS THE LOWER
-        │                              OF THE TWO, between a floor and the starting bitrate), with
-        │                              recovery from its own bursts' measured capacity, and fast
-        │                              (50 %/s) back to the rate before a cut the queue never repeated
-        └─ QueueDelay ◇                the queue = the delay FLOOR of packets sent in the last 200 ms
-                                       minus the floor of the last 10 s; jitter can't lift a floor;
-                                       fewer than 10 packets is no evidence
+WebRTCViewers  ◆                  the live viewers by id — admit(offer, …) → answer · find(id, of:) · hangUp(id, of:)
+│                                 · iceServers (what the page and the Link header are told);
+│                                 gathers each viewer's srflx (STUNServer) and relay (TURNAllocation)
+└─ WebRTCViewer  ◆                ONE BROWSER watching one device: its sender's state, its own stream
+    ├─ stream : any Stream        its own AVCCStream; hanging up stops it
+    ├─ RTPFrameSink               the stream's FrameSink: each AVCC envelope to viewer.show → EncodedFrame
+    ├─ sender : WebRTCSender ◆    WebRTCKit's session — path, DTLS-SRTP, RTP, resends, pacing,
+    │                             congestion control: see the kit's own aggregate (link above)
+    └─ EncoderRetune ◇            what the sender's estimate does to the encoder (law 12)
 ```
 
 **How much the link takes is one role, `CongestionControl`, with three
-implementations the viewer can't tell apart** (decided 2026-11-20): it answers
+implementations the sender can't tell apart** (decided 2026-11-20; WebRTCKit's `Congestion/`): it answers
 which SDP lines it needs, what each packet carries, what it makes of the
 browser's feedback, and the bitrate it wants (or none).
 
@@ -157,7 +141,7 @@ browser's feedback, and the bitrate it wants (or none).
 | `ReceiverEstimateControl` | the browser | `abs-send-time` (24-bit, 6.18 s) | REMB |
 | `FixedBitrate` | nobody | nothing | nothing |
 
-`CongestionChoice` picks one per viewer: `?congestion=transport-cc|remb|off` on
+`CongestionChoice` picks one per sender: `?congestion=transport-cc|remb|off` on
 the WHEP `POST`, else transport-cc if offered, else REMB if offered, else none.
 
 **transport-cc is the default (decided 2026-11-20, after the jitter fix).** On
@@ -179,13 +163,13 @@ The viewer keeps `EncoderRetune` (law 12), shared by all three.
 **Congestion control is the sender's (transport-cc), as libwebrtc does it.**
 Every packet carries a transport-wide sequence number (an RTP header extension);
 the browser reports when each one arrived (RTCP transport-cc feedback, about every
-50–100 ms); the viewer estimates the bandwidth from those reports and retunes its
-own encoder. REMB, where the browser does the estimating and sends one number,
+50–100 ms); the sender estimates the bandwidth from those reports, and the viewer
+retunes its own encoder from that estimate. REMB, where the browser does the estimating and sends one number,
 was the simpler option and was turned down for the industry's current way
 (decided 2026-11-20). The same feedback comes from an SFU, so it carries over to
 publishing (open question 5).
 
-The demultiplexing of one UDP port (RFC 7983) is the viewer's: first byte 0–3
+The demultiplexing of one UDP port (RFC 7983) is the sender's: first byte 0–3
 is STUN, 20–63 is DTLS, 128–191 is RTP/RTCP.
 
 ### `WebRTCViewer` — one browser watching one device
@@ -194,27 +178,28 @@ is STUN, 20–63 is DTLS, 128–191 is RTP/RTCP.
 
 | | |
 |---|---|
-| **Owns — the call's state** | `new → connecting → securing → live → hungUp`; a hung-up viewer never sends again and its stream is stopped |
-| **Tell it** | `receive(_ datagram:, from:)` · `send(_ envelope:)` (from its sink) · `tick(now:)` (consent) · `hangUp()` |
-| **It answers** | `state` · `id` · `answer` |
-| **Never** | Encodes, sends before `live`, sends in the clear, or knows which device it shows |
+| **Owns — the call's picture** | Its own stream, started on the device's screen and stopped when its sender hangs up; whether the encoder follows the sender's estimate |
+| **Tell it** | `start(on:)` · `hangUp()` · `tick(now:)` · `onHangUp(_:)` · (from its sink) `show(_ envelope:)` |
+| **It answers** | `id` · `answer` · `state` · `pacing` (all its sender's) · `ownStream` |
+| **Never** | Encodes itself, touches a packet, or lets the kit see its device |
 
-`Datagrams` and `Handshake` are the two conversations with the outside
-(pattern 2 in AGENTS.md); the viewer is tested against `MockDatagrams` and
-`MockHandshake`. Their concrete forms are `Internal/System/` files of under 100
-lines each.
+It hears its sender through `SenderEvents`: a keyframe needed becomes
+`stream.requestKeyframe()`, an estimate goes through `EncoderRetune` to
+`stream.update(.bitrate(_))`, a hang-up stops its stream. Tested with
+`MockStream` and the kit's `MockDatagrams` / `MockHandshake`.
 
 ## 3 · The tells
 
 ```
 POST /devices/:udid/whep  body: SDP offer
-  viewers.admit(offer, stream: …, datagrams: …, handshake: …) → (id, answer)  or a refusal (422)
-  → 201 Created, Location: /devices/:udid/whep/:id, body: SDP answer
-viewer.receive(STUN)      → a success response; the browser's address is learned
-viewer.receive(DTLS)      → handshake replies; when done: SRTP keys, state live, stream.requestKeyframe()
-stream → sink.write(env)  → viewer.show(env): packets into its Pacer; each stamped, SRTP'd and sent as it leaves
-viewer.receive(SRTCP)     → PLI/FIR: stream.requestKeyframe() · NACK: resend · transport-cc / REMB: its
-                            CongestionControl's target → EncoderRetune → stream.update(.bitrate(target))
+  viewers.admit(offer:, on:, of:, input:, congestion:, pacing:) → viewer  or a refusal (422)
+  → 201 Created, Location: /devices/:udid/whep/:id, body: SDP answer, Link: <stun:…>; rel="ice-server"
+GET /webrtc/ice-servers   viewers.iceServers → the page's RTCPeerConnection config, before its offer
+  ↳ the kit's own tells (checks, DTLS, frames, feedback): WebRTCKit design §3
+sender → keyframeNeeded   → stream.requestKeyframe()   (once secured; on PLI/FIR)
+stream → sink.write(env)  → viewer.show(env) → sender.send(EncodedFrame)
+sender → estimated(bps)   → EncoderRetune → stream.update(.bitrate(target)), noted on the sender's timeline
+sender → hungUp           → the viewer stops its stream and leaves the registry
 WS  /devices/:udid/whep/:id/control   gestures and stream control for that viewer, through GestureDispatcher
 DELETE /devices/:udid/whep/:id        viewers.hangUp(id)
 ```
@@ -241,22 +226,19 @@ ontrack: receiver.jitterBufferTarget = 0, playoutDelayHint = 0 → <video autopl
 | # | Law | Owner |
 |---|---|---|
 | 1 | Both transports carry the same encoded frames: same tuning, same bitrate, same fps | `H264 Stream` |
-| 2 | A viewer sees no picture before a keyframe: it asks for one when its handshake completes and whenever the browser reports a lost picture | `WebRTCViewer` |
 | 3 | Only the stream makes an IDR; a viewer only asks for one | `H264 Stream.requestKeyframe` |
-| 4 | No RTP packet carries more than 1200 bytes of payload | `H264Packetizer` |
-| 5 | A viewer sends nothing before its handshake completes, and every packet after it through SRTP | `WebRTCViewer` |
 | 6 | One viewer, one encoder; hanging up stops it | `WebRTCViewer` |
-| 7 | A viewer the browser stops answering (no STUN check for 30 s) hangs up | `WebRTCViewer` |
-| 8 | A STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
-| 9 | An offer with no High-profile H.264 in packetization mode 1 is refused | `SessionDescription` |
-| 11 | A viewer's encoder targets the lower of the delay-based and loss-based estimates, between a floor (300 kbps) and its starting bitrate | `BandwidthEstimate` |
 | 12 | A viewer retunes its encoder on a move of more than 10%. Drops apply immediately. Increases wait at least one second after the last retune | `EncoderRetune` |
-| 13 | An offer carries a congestion-control method only when it numbers its extension 1–14, will receive it (not `inactive`/`sendonly`), and asks for its feedback on our H.264 or on every format (`*`) | `SessionDescription` |
-| 17 | With pacing on, a viewer's packets leave at 2.5 × its target as the normal rate, faster whenever the queue couldn't otherwise empty within 500 ms of its oldest packet; a small frame leaves at once. `?pacing=off` sends each as it comes | `Pacer` |
-| 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
-| 14 | Transport-cc reports are read on one unbroken timeline, across the wrap of their 24-bit reference time | `FeedbackClock` |
 | 15 | A retune turns one knob of the config as it stands, so a viewer's retune and its page's `set_fps` both land | each `Stream` (`update(_: StreamConfig.Change)`) |
+| 16 | A viewer is reached only through the device it watches: its control socket and hang-up refuse another device's address | `WebRTCViewers` |
 | 10 | Every bench run compares the transports on the same device, build, encoder settings and impairment, one transport at a time | the bench harness (`scripts/bench-live-view`) |
+
+Laws 2, 4, 5, 7, 8, 9, 11, 13, 14 and 17 are the sender's, and moved with it
+(2026-11-21) to [WebRTCKit's invariants](../webrtc-kit/design.md#4--invariants--each-law-one-owner):
+the keyframe on securing and on a lost picture (2), the 1200-byte payload (4),
+nothing before the handshake (5), consent (7), signed checks (8), the H.264
+refusal (9), the target (11), the extension rules (13), the feedback timeline
+(14) and pacing (17). The numbers are kept so the references above still read.
 
 Law 1 is what makes the comparison fair. If WebRTC needs different tuning
 (for example a shorter GOP for loss recovery), the bench runs both transports
@@ -383,7 +365,7 @@ Chrome 157, M-series Mac. Same encoder settings on both paths (60 fps, 8 Mbps,
 scale 1). The WebSocket path is the real `serve` route. The WebRTC path is
 `baguette stream --format avcc` → AVCC-to-Annex-B script → `ffmpeg -c copy` →
 RTSP → MediaMTX 1.21 → WHEP. The page sets up its peer as described in
-[the viewer](#the-viewer).
+[the viewer](#webrtcviewer--one-browser-watching-one-device).
 Taps go over `POST /devices/:udid/input` on both paths. Two alternating rounds
 of 100 taps each.
 
@@ -825,108 +807,43 @@ this doc.
 12. ~~**Docs**~~ **DONE**: a user README, `serve.md` rows, CHANGELOG; the bench
     kit pointed at the native route. The full matrix on it is still to run.
 
-## 6b · Next: resends, then connectivity (simplest first)
+## 6b · Packet recovery and connectivity verification
 
-Each step stands alone: test-first, its own PR, measured on the phone where
-it changes what the viewer sees. Steps 1–2 are WebRTCKit's `Media/` and
-`Congestion/`; 3 is the serve routes; 4–7 are WebRTCKit's `Transport/`.
+The [WebRTCKit architecture](../webrtc-kit/design.md) explains the resend
+rules, packet framing, and ICE and TURN path selection. These checks record
+what the implementation has demonstrated in the live-view build.
 
-1. ~~**Resend guard**~~ **DONE** (`Media/PacketHistory`). A resend is
-   skipped when its packet was first sent over 1 s ago, when it was resent
-   less than 100 ms ago (a repeated NACK), or when resends would take more
-   than half the target bitrate (a token bucket holding a second's worth), so
-   a loss burst can't add congestion of its own (libwebrtc caps them too).
-   *Pinned: `PacketHistoryTests`, "should resend a lost packet once for
-   reports that repeat a moment apart".*
-2. ~~**RTX**~~ **DONE** (RFC 4588; `Signaling/`, `Media/`, `Transport/`). A resend
-   now leaves on its own stream when the offer pairs a format with our H.264
-   (Chrome's does: `a=fmtp:113 apt=112`); else as it was sent. SRTP keeps each
-   stream's rollover apart. Chrome takes the answer and plays (loopback,
-   2026-11-20); the phone on mobile data is where resends happen. Before it,
-   a resend was the stored packet again — same transport-wide sequence
-   number — so `SendHistory` counted a loss repaired within its 500 ms grace
-   as a packet that *arrived late*: the loss estimate never saw it, and the
-   delay estimate got a fake queue sample of one resend round trip. With RTX,
-   the answer takes the offer's `rtx` format (`apt=` our H.264) and an
-   `ssrc-group:FID`; a resend leaves on its own stream with the original
-   sequence number in front, a new transport-wide number and its real send
-   time. *Pinned: "should resend a lost packet on its own stream, stamped
-   anew, when the browser takes resends there", "should answer with its
-   resend format and stream when it resends on one", "should keep each
-   stream's rollover apart".* Measure: freezes and cuts on the phone, before
-   and after.
-3. **Authentication** (serve) — *skipped for now (2026-11-20): Tailscale
-   stays the way to view from outside the network.* A browser reachable from the internet can
-   reach `serve`, which drives the device: WHEP and the control socket need
-   a credential first (a token per session at least). The prerequisite for
-   4–7. *Decide first: a token in the URL, or per-viewer sign-in.*
-4. ~~**Server-reflexive candidate**~~ **DONE** (`serve --stun stun:host:port`,
-   `Transport/STUNServer`). Each viewer asks the STUN server, through its own
-   socket (a plain Binding request, sent again halfway through 0.5 s), for
-   the address the world sees it at, and offers it as `typ srflx` below its
-   host candidates (`raddr 0.0.0.0`: the private base isn't named). A silent
-   server leaves the host ones. Checked against stun.l.google.com: the
-   answer gains the Mac's public address.
-   Alone it reaches only a NAT that lets anyone in — most don't; step 5
-   makes it useful.
-5. ~~**Full ICE**~~ **DONE.** When the offer carries the browser's candidates,
-   the sender answers without `a=ice-lite` and checks each one itself
-   (USERNAME `theirs:ours`, PRIORITY, ICE-CONTROLLED, signed with the
-   browser's password) — at once, then at 100/200/400/800/1600 ms until it is
-   secured — which opens its NAT toward the browser; the browser, controlling,
-   still picks the pair. mDNS (`.local`) candidates are skipped; an offer with
-   none stays ICE-lite, as before. The page fetches its ICE servers, then waits
-   for gathering (at most 2 s) before posting. Checked in Chrome on this Mac:
-   the device page fetched its servers, posted its candidates, answered the
-   sender's check, and painted the phone's screen.
-6. ~~**TURN client**~~ **DONE** (`serve --turn turn:host:3478 --turn-user …
-   --turn-pass …`; `Transport/TURNMessage`, `TURNAllocation`,
-   `RelayedDatagrams`). Each viewer allocates on the server (an unsigned
-   Allocate, the 401's realm and nonce, then signed with MD5(user:realm:pass)),
-   lets the browser's candidates through (CreatePermission), offers the
-   relayed address as `typ relay` (lowest), and keeps both alive until it
-   hangs up, then releases it. `RelayedDatagrams` unwraps a peer's Data
-   indications as if the peer sent them and answers that peer back through
-   the relay (Send indications), so the sender never knows the path. The page
-   gets the server and its credentials too. The sender now stays on the pair
-   the browser nominates (USE-CANDIDATE): with several working paths, its DTLS
-   comes from there. Verified against Pion's TURN server: a system test
-   carries datagrams both ways through a real relay
-   (`BAGUETTE_TURN_SERVER=turn:127.0.0.1:3478`), and Chrome restricted to
-   relayed candidates played (20 taps, 0 misses, p50 87 ms) with both sides
-   allocating on the server — which pair carried the media isn't logged.
-   Any TURN server works: coturn, or a provider's.
-7. ~~**WHEP `Link: rel="ice-server"`**~~ **DONE.** The answer names the ICE
-   servers (`Link: <stun:…>; rel="ice-server"`), and `GET /webrtc/ice-servers`
-   gives them to our page before its offer, so its browser gathers its own
-   public address.
+| Change | What was verified | What remains to measure |
+|---|---|---|
+| Resend guard | Kit unit tests cover the eligibility rules for repeated or stale NACKs and the resend budget. | |
+| RTX | Kit tests cover SDP negotiation, a fresh transport-wide sequence number on a resend, and SRTP rollover per stream. Chrome negotiated RTX and played over loopback on 2026-11-20. | Whether RTX reduces freezes or bitrate cuts on a lossy mobile link. |
+| STUN | `stun.l.google.com` returned the Mac's mapped address and it appeared in the SDP answer. | Reachability of that address through real NATs. |
+| Active ICE checks and ICE server signaling | In Chrome on the Mac, the device page fetched its ICE servers, posted candidates, answered the sender's checks, and displayed the phone's screen. | End-to-end connectivity across separate networks with NAT. |
+| TURN | A kit system test sent datagrams both ways through Pion's TURN server. Chrome restricted to relay candidates played locally with both sides allocating on that server (20 taps, 0 misses, p50 87 ms). | The selected pair was not logged. Establish which side used the relay for media and verify an end-to-end deployment across real NATs. |
 
-Until 3–6 land, Tailscale is the way to view from outside the network: it
-gives all of this, privately.
+The page gets its server list from `GET /webrtc/ice-servers` and waits up to 2 s
+for candidate gathering before posting its offer. The WHEP answer also returns
+the configured servers in `Link` headers with `rel="ice-server"`. To run the
+real relay system test, set `BAGUETTE_TURN_SERVER` to a reachable server such
+as `turn:127.0.0.1:3478` and supply `BAGUETTE_TURN_USER` and
+`BAGUETTE_TURN_PASS` if the server uses credentials other than the test defaults.
 
 ## 6c · Future work — what's left, what each is for, and when it's needed
 
-Recorded 2026-11-20, after steps 1, 2 and 4 of §6b. Each item says what it
-is for; none is needed for viewing over a LAN or Tailscale, which works today.
+### Reaching viewers outside the network
 
-### Reaching viewers outside the network (the rest of §6b)
-
-Only worth building to let a browser reach `serve` over the internet — through
-an HTTPS tunnel (Cloudflare Tunnel, ngrok) or a public host — with media
-crossing a NAT. Today's answer to that is Tailscale: private, direct, done.
-
-| Item | What it is for | Why / when it's needed |
-|---|---|---|
-| **3 · Authentication** | A credential (a token in the link, at least) on every `serve` route, the WHEP endpoint and the control socket | `serve` drives the device — taps, typing, the clipboard. Exposed without it, anyone with the URL could. **The prerequisite for 5–7**; skipped for now |
-| **5 · Full ICE** | baguette sends its own connectivity checks to the browser's candidates instead of only answering (drop `a=ice-lite`); the page waits for its own candidates (or trickles them by WHEP `PATCH`) | A NAT lets nothing in that the Mac hasn't sent to first. Sending checks opens it toward the browser, so the `srflx` address from step 4 becomes reachable — most home and office networks |
-| **7 · Tell the browser its STUN/TURN servers** | WHEP `Link: rel="ice-server"` on the answer, and a way for the page to know them before its offer | The browser needs its own public address too, or our checks go to a phone's private one. Comes with 5 |
-| **6 · TURN client** | Allocate, permissions, channels and refreshes on a TURN server: a relay candidate | Gets through what 5 can't: symmetric NATs, strict corporate firewalls, UDP blocked. Needs a TURN server (coturn, or a provider) and adds the relay's latency — last resort |
+Tailscale is the current way to view from outside the private network.
+Application authentication for `serve` is still open. Public deployments
+need credentials on the routes that grant access to device video and control,
+including WHEP and the control socket. Once that is in place, verify STUN, ICE,
+and TURN in an end-to-end session across separate networks with real NATs.
+Record the chosen candidate pair to establish which path carried media.
 
 ### Freezes and picture quality
 
 | Item | What it is for | Why / when it's needed |
 |---|---|---|
-| **Measure RTX on a phone** | A run on mobile data with step 2 built, before and after | Resends happen only on a lossy link; loopback can't show whether RTX reduces freezes and the cuts that follow losses. The next measurement to take |
+| **Measure RTX on a phone** | A run on mobile data with RTX on and off | Resends happen only on a lossy link; loopback can't show whether RTX reduces freezes and the cuts that follow losses. The next measurement to take |
 | **FEC (RED/ULPFEC)** | Redundancy sent with the video, so the browser rebuilds a lost packet without asking | Freezes on mobile follow bursts of loss 2–3.5× more than chance (§6, slice 11): each costs a resend round trip (100–300 ms). FEC removes the round trip for single losses, at ~10–25 % more bandwidth; bursts need more |
 | **A lower ceiling on mobile** | Cap the bitrate (e.g. 4 Mbps) when the link is a phone's | Fewer packets per frame, so a loss burst hits fewer frames. A cheap experiment before FEC |
 | **Lift the cap only on sustained arrival** | The confirmed-capacity cap (§6, slice 11) released only when a longer window shows more getting through | After a radio dropout, held packets arrive at once; the half-second window reads that as spare capacity, lifts the cap, and the target jumps back to 8 Mbps — refilling the queue |
@@ -970,13 +887,13 @@ crossing a NAT. Today's answer to that is Tailscale: private, direct, done.
    | | Today (WHEP, direct) | SFU (WHIP publish) |
    |---|---|---|
    | Offer | the browser makes it | baguette makes it |
-   | ICE | baguette answers checks (ICE-lite) | baguette sends checks (full ICE, controlling) |
+   | ICE | browser nominates, baguette can send checks as ICE-controlled | baguette sends checks as ICE-controlling |
    | DTLS | server | client (`BoringSSLHandshake` has the role; tests use it) |
    | Reach | browsers reach the Mac | the Mac connects out |
    | Bandwidth feedback | transport-cc from the browser | the same, from the SFU |
 
    RTP, packetizing, SRTP, RTCP feedback and congestion control carry over
-   unchanged. New: writing an offer, full-ICE checks, and a setting naming the
+   unchanged. New: writing an offer, running ICE as the controlling peer, and a setting naming the
    SFU's WHIP URL and token. An SFU forwards one bitrate to everyone: adapting per
    viewer would need simulcast (several encodings at once), a further step.
    Worth it once many viewers or a hosted device cloud matter; for one or a few
