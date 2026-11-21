@@ -3,9 +3,9 @@ import IOSurface
 
 /// A screen whose frames are composed through one persistent 3D device scene.
 ///
-/// Rendering is serialized away from the screen's frame callback. At most one
-/// pending surface is retained, so a slow model drops stale frames instead of
-/// blocking capture or growing an unbounded queue.
+/// Rendering is serialized away from the screen's frame callback, the newest
+/// surface one at a time (`LatestFrame`), so a slow model drops stale frames
+/// instead of blocking capture or growing a queue.
 public final class RenderedScreen: DeviceFrames, @unchecked Sendable {
     private let source: any Screen
     private let scene: any DeviceScene
@@ -15,13 +15,13 @@ public final class RenderedScreen: DeviceFrames, @unchecked Sendable {
         qos: .userInteractive
     )
     private let fps: Int?
-    private lazy var pump = fps.map { rate in
-        StreamFramePump<IOSurface>(queue: queue, fps: rate, repeating: false) { [weak self] in self?.render($0) }
+    private lazy var renders = LatestFrame<IOSurface>(queue: queue, fps: fps ?? 0) { [weak self] surface, ready in
+        self?.render(surface)
+        ready()
     }
     private var delivery: (@Sendable (IOSurface) -> Void)?
     private var frameDelivery: (@Sendable (Result<DeviceFrame, any Error>) -> Void)?
-    private var isRendering = false
-    private var pendingSurface: IOSurface?
+    /// The simulator's last frame, recomposed when the pose changes (`refresh`).
     private var latestSurface: IOSurface?
     private var isStopped = true
 
@@ -41,7 +41,7 @@ public final class RenderedScreen: DeviceFrames, @unchecked Sendable {
             delivery = onFrame
             isStopped = false
         }
-        pump?.start()
+        renders.start()
         do {
             try source.start { [weak self] surface in
                 self?.enqueue(surface)
@@ -52,7 +52,7 @@ public final class RenderedScreen: DeviceFrames, @unchecked Sendable {
                 frameDelivery = nil
                 isStopped = true
             }
-            pump?.stop(waitForDelivery: false)
+            renders.stop(waitForDelivery: false)
             throw error
         }
     }
@@ -60,29 +60,21 @@ public final class RenderedScreen: DeviceFrames, @unchecked Sendable {
     public func stop() {
         lock.withLock {
             isStopped = true
-            pendingSurface = nil
             latestSurface = nil
             delivery = nil
             frameDelivery = nil
         }
-        pump?.stop(waitForDelivery: false)
+        renders.stop(waitForDelivery: false)
         source.stop()
     }
 
     private func enqueue(_ surface: IOSurface) {
-        let shouldStart = lock.withLock {
+        let running = lock.withLock {
             guard !isStopped else { return false }
             latestSurface = surface
-            if fps != nil { return true }
-            if isRendering {
-                pendingSurface = surface
-                return false
-            }
-            isRendering = true
             return true
         }
-        guard shouldStart else { return }
-        if let pump { pump.offer(surface) } else { queue.async { [weak self] in self?.render(surface) } }
+        if running { renders.offer(surface) }
     }
 
     /// Recompose the retained simulator frame after an in-place pose change.
@@ -93,33 +85,21 @@ public final class RenderedScreen: DeviceFrames, @unchecked Sendable {
         enqueue(surface)
     }
 
-    private func render(_ firstSurface: IOSurface) {
-        var surface: IOSurface? = firstSurface
-        while let current = surface {
-            do {
-                if lock.withLock({ frameDelivery != nil }) {
-                    let rendered = try scene.renderFrame(screen: current)
-                    let callback = lock.withLock { isStopped ? nil : frameDelivery }
-                    callback?(.success(rendered))
-                } else {
-                    let rendered = try scene.render(screen: current)
-                    let callback = lock.withLock { isStopped ? nil : delivery }
-                    callback?(rendered)
-                }
-            } catch {
+    private func render(_ current: IOSurface) {
+        do {
+            if lock.withLock({ frameDelivery != nil }) {
+                let rendered = try scene.renderFrame(screen: current)
                 let callback = lock.withLock { isStopped ? nil : frameDelivery }
-                callback?(.failure(error))
-                log("3D screen frame skipped: \(error)")
+                callback?(.success(rendered))
+            } else {
+                let rendered = try scene.render(screen: current)
+                let callback = lock.withLock { isStopped ? nil : delivery }
+                callback?(rendered)
             }
-            surface = lock.withLock {
-                guard !isStopped, let pendingSurface else {
-                    self.pendingSurface = nil
-                    isRendering = false
-                    return nil
-                }
-                self.pendingSurface = nil
-                return pendingSurface
-            }
+        } catch {
+            let callback = lock.withLock { isStopped ? nil : frameDelivery }
+            callback?(.failure(error))
+            log("3D screen frame skipped: \(error)")
         }
     }
 }
