@@ -305,6 +305,8 @@ async function lossStats() {
 // before the session closes. `pretty`: a tap run's summary is indented, a bandwidth run's is one line.
 async function finish(summary, pretty = true) {
   if (R.pc) Object.assign(summary, await lossStats());
+  // `fixture=small`: which probe page the simulator shows (the runner says; the page can't see it).
+  if (q.get('fixture')) summary.fixture = q.get('fixture');
   R.summary = summary; log(pretty ? JSON.stringify(summary, null, 1) : JSON.stringify(summary)); R.done = true; R.stop?.();
 }
 run().catch(e => finish({ transport: T, sender: R.sender, tapPath: R.tapPath, failed: e.message }));

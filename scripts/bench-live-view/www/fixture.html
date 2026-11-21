@@ -1,10 +1,17 @@
 <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<style>html,body{margin:0;height:100%;background:#000;touch-action:none;overflow:hidden}</style></head>
-<body><script>
+<style>html,body{margin:0;height:100%;background:#000;touch-action:none;overflow:hidden}
+#spot{position:fixed;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;background:#000}</style></head>
+<body><div id="spot"></div><script>
 // Black at rest; a touch turns the screen red on the left half, green on the right, so the bench can
 // tell which tap a frame answers (bench.html alternates sides): a late answer to the last tap is the
 // other colour, never mistaken for this one.
-const off=()=>document.body.style.background='#000';
-addEventListener('touchstart',e=>{e.preventDefault();document.body.style.background=e.touches[0].clientX<innerWidth/2?'#f00':'#0f0'},{passive:false});
+// `?small=1`: only a 64-point square at the centre changes — the bench reads the centre either way — so
+// a tap makes a small frame, not one where every pixel changes.
+const small = new URLSearchParams(location.search).has('small');
+const spot = document.getElementById('spot');
+if (!small) spot.remove();          // the bench reads the centre: nothing may cover it in full-screen mode
+const target = small ? spot : document.body;
+const off=()=>target.style.background='#000';
+addEventListener('touchstart',e=>{e.preventDefault();target.style.background=e.touches[0].clientX<innerWidth/2?'#f00':'#0f0'},{passive:false});
 addEventListener('touchend',off);addEventListener('touchcancel',off);
 </script></body></html>
