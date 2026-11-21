@@ -51,17 +51,23 @@ jobs:
       - name: Generate lcov report
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          # The bundle's name depends on the build system: the native one
-          # makes BaguettePackageTests.xctest, swiftbuild (Swift 6.4's
-          # default) names it after the target, BaguetteTests.xctest.
-          BUNDLE=$(find "$BIN_PATH" -maxdepth 1 -name '*Tests.xctest' | head -1)
-          [ -n "$BUNDLE" ] || { echo "::error::No test bundle in $BIN_PATH"; exit 1; }
-          XCTEST="$BUNDLE/Contents/MacOS/$(basename "$BUNDLE" .xctest)"
+          # The bundles' names depend on the build system: the native one
+          # makes one BaguettePackageTests.xctest; swiftbuild (Swift 6.4's
+          # default) makes one per test target (BaguetteTests,
+          # WebRTCKitTests). Every one goes in, or the report covers only
+          # the sources the first one links.
+          OBJECTS=()
+          for BUNDLE in "$BIN_PATH"/*Tests.xctest; do
+            [ -d "$BUNDLE" ] || continue
+            BIN="$BUNDLE/Contents/MacOS/$(basename "$BUNDLE" .xctest)"
+            if [ ${#OBJECTS[@]} -eq 0 ]; then OBJECTS+=("$BIN"); else OBJECTS+=(-object "$BIN"); fi
+          done
+          [ ${#OBJECTS[@]} -gt 0 ] || { echo "::error::No test bundle in $BIN_PATH"; exit 1; }
           PROFDATA="$(dirname "$(swift test --show-codecov-path)")/default.profdata"
           # What is left out lives in codecov.yml's `ignore:`, one list;
           # the regex is generated from it.
           IGNORE=$(python3 scripts/check-coverage.py --regex)
-          xcrun llvm-cov export "$XCTEST" \
+          xcrun llvm-cov export "${OBJECTS[@]}" \
             -instr-profile "$PROFDATA" \
             -format=lcov \
             -ignore-filename-regex="$IGNORE" \
