@@ -919,8 +919,18 @@ taken only when the encoder is idle. Same bench: tap to picture p50 **72 →
 66–68 ms** (p95 87–89), frames Chrome shows a second **41 → 53**. The 3D
 screens' hand-written copy of the same idea went too.
 
+**A slower refresh, measured (2026-11-21).** A still screen is refreshed
+every frame interval. Refreshing once a second instead, as libwebrtc does,
+changed tap to picture within the noise on both paths (WebSocket 71 → 67–79 ms,
+WebRTC 63–68 → 70–72), so no browser decoder holds a changed frame back for a
+following one. But every quiet second then reads as a freeze to a detector
+that expects frames from a still screen (14–47 "freezes" a minute, frames shown
+53–60 → 22–27 a second). It stays at every frame until those detectors tell
+still from stalled; then a slower refresh saves encoding and bandwidth.
+
 **What's left:** the app redrawing (~31 ms) belongs to the simulator. Of the
-11 ms to the touch, ~4 ms is the simulator lookup, not yet cached.
+11 ms to the touch, the simulator lookup now builds only the simulator it finds
+(30.4 → 29.2 ms round trip); fetching CoreSimulator's device set remains.
 
 The page gets its server list from `GET /webrtc/ice-servers` and waits up to 2 s
 for candidate gathering before posting its offer. The WHEP answer also returns

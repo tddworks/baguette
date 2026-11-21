@@ -3,6 +3,11 @@
 /// interval after the previous one was *due*, never after it ran, so a refresh
 /// that runs late doesn't push every later one back; a beat that was missed
 /// altogether is skipped, not caught up.
+///
+/// Not the simulator screen's idle floor (`ScreenIdleFloor`): that *captures*
+/// a fresh surface when SimulatorKit stops calling back (CarPlay's home screen,
+/// a quiet lock screen), so content isn't missed; this *re-sends* the frame
+/// already encoded, so a decoder keeps moving on a still picture.
 public struct RefreshCadence: Equatable, Sendable {
     public var fps: Int {
         didSet { if fps != oldValue { due = nil } }
