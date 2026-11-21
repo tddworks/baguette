@@ -41,6 +41,26 @@ struct LatestFrameRulesTests {
         #expect(rules.due(at: 0.1) == .start(2))
     }
 
+    @Test func `should start about 30 frames a second when frames arrive at 60 Hz`() {
+        var rules = LatestFrameRules<Int>(fps: 30)
+        var started: [Int] = []
+        var wake: Double?
+        for index in 0...60 {
+            let now = Double(index) / 60
+            if let due = wake, now >= due, case .start(let frame) = rules.due(at: due) { started.append(frame); _ = rules.ready(at: due) }
+            wake = nil
+            switch rules.offer(index, at: now) {
+            case .start(let frame): started.append(frame); _ = rules.ready(at: now)
+            case .wake(let at): wake = at
+            case .nothing: break
+            }
+        }
+        if let due = wake, case .start(let frame) = rules.due(at: due) { started.append(frame) }
+
+        #expect(started.first == 0 && started.last == 60)
+        #expect((28...32).contains(started.count))
+    }
+
     @Test func `should count a frame a hair early as on time, as a recording does`() {
         var rules = LatestFrameRules<Int>(fps: 10)
         _ = rules.offer(1, at: 0)

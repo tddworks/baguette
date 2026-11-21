@@ -21,6 +21,21 @@ struct FrameBacklogTests {
         frame(AVCCEnvelope.descriptionTag, bytes: bytes, marker: marker)
     }
 
+    @Test func `should keep every AVCC reference frame while letting MJPEG discard old frames`() {
+        var avcc = FrameBacklog(format: .avcc)
+        let half = Data(repeating: 0x02, count: FrameBacklog.referenceByteBudget / 2)
+        let first = avcc.append(half)
+        let second = avcc.append(half)
+        let overflow = avcc.append(Data([0x02]))
+        #expect(first && second && !overflow)
+        #expect(avcc.droppedCount == 0 && avcc.count == 2)
+        var jpeg = FrameBacklog(format: .mjpeg)
+        let image = Data(repeating: 0xFF, count: FrameBacklog.defaultByteBudget)
+        jpeg.append(image)
+        jpeg.append(Data([0xFF, 0xD8]))
+        #expect(jpeg.count == 1 && jpeg.droppedCount == 1)
+    }
+
     @Test func `should keep every frame while the backlog is under budget`() {
         var backlog = FrameBacklog(byteBudget: 100)
         backlog.append(delta(20))

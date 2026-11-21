@@ -909,12 +909,18 @@ link) and 34 ms from arrival to display; no packet lost.
    *fresh* frame, never after a repeat, and a fresh frame due sooner re-arms
    the timer.
 
+**Then the pump itself went (the same day).** It pushed frames on a clock
+and never learned when the encoder was done, so it needed timers even for
+fresh frames, and its repeat beat drifted. `LatestFrame` replaced it with the
+industry's "latest" backpressure: the newest frame wins, one frame is with the
+encoder until VideoToolbox answers (`ready`), a timer only for the frame-rate
+cap, and a still screen refreshed on `RefreshCadence`'s clock-anchored beat,
+taken only when the encoder is idle. Same bench: tap to picture p50 **72 →
+66–68 ms** (p95 87–89), frames Chrome shows a second **41 → 53**. The 3D
+screens' hand-written copy of the same idea went too.
+
 **What's left:** the app redrawing (~31 ms) belongs to the simulator. Of the
-11 ms to the touch, ~4 ms is the simulator lookup, not yet cached. A still
-screen's repeats come every ~20 ms instead of 16.7 (the next repeat is timed
-from when the last one fired, ~3 ms late each time), so Chrome shows ~41 frames
-a second where 60 are sent for; anchoring the beat to the clock is the fix, for
-smoothness rather than latency.
+11 ms to the touch, ~4 ms is the simulator lookup, not yet cached.
 
 The page gets its server list from `GET /webrtc/ice-servers` and waits up to 2 s
 for candidate gathering before posting its offer. The WHEP answer also returns

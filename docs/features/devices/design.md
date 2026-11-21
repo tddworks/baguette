@@ -242,7 +242,7 @@ try devices.require(.power, of: id).turnOn()
 Gesture.execute(on: try devices.require(.input, of: id))
 
 // the stream route
-try devices.require(.screen, of: id).start(onFrame: pump.push)
+try devices.require(.screen, of: id).start(onFrame: latest.offer)
 
 // baguette list · GET /devices.json — kind and abilities per device; the page shows those cards
 devices.listJSON
@@ -297,7 +297,7 @@ Sources/
 ├── Device/          module BaguetteDevice — id, kind, power, Device, Devices, Abilities
 │   ├── Chrome/      how a device looks; Internal/: chrome store, RealityKit renderer
 │   ├── Abilities/<ability>/   each role and its values; Internal/: the Mac's side of it
-│   │                (Capture/Internal: encoders and pumps; Camera/Internal: AV capture)
+│   │                (Capture/Internal: encoders and LatestFrame; Camera/Internal: AV capture)
 │   └── Internal/    what every family shares: Subprocess, Xcode, the log
 └── Baguette/        `@main` and the Resources the page and the guest helpers ship in
 ```

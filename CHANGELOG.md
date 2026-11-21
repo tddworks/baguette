@@ -11,7 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Changed
-- `POST /devices/:udid/input` taps land ~35 ms sooner: no longer waiting on the Android tools to list devices. Every live stream encodes a changed screen at once, not after the next idle repeat (~9 ms). → [docs](docs/features/webrtc/design.md#tap-latency-before-and-after-2026-11-21)
+- `POST /devices/:udid/input` taps land ~35 ms sooner (no wait on the Android tools listing devices); live streams encode a changed screen at once and refresh a still one on a steady beat (~14 ms; 53 frames shown/s, was 41).
 
 ---
 
