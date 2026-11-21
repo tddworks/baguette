@@ -46,6 +46,20 @@ struct AndroidDevicesTests {
         #expect(try devices(fake).find(id: "nobody") == nil)
     }
 
+    @Test func `should answer a lookup from its last listing while it is fresh, without running adb again`() throws {
+        let fake = FakeDevicectl()
+        fake.output = Self.listing
+        let android = AndroidDevices(adb: AndroidTool(executable: Self.adbPath, makeSubprocess: fake.make),
+                                     emulator: URL(fileURLWithPath: "/sdk/emulator/emulator"),
+                                     runningEmulators: { [] }, installedAVDs: { [] }, refresh: { _ in })
+
+        _ = try android.find(id: "37201FDJH004VE")
+        let simulator = try android.find(id: "2D44ACD5-7343-4889-95B3-670841E23D05")
+
+        #expect(simulator == nil)
+        #expect(fake.arguments == [["devices", "-l"]])
+    }
+
     @Test func `should list no Android devices when adb isn't installed`() {
         #expect(AndroidDevices(adb: nil).all.isEmpty)
     }

@@ -55,8 +55,15 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         }
     }
 
+    /// The one simulator with this UDID, its state read now. Matches the UDID
+    /// before reading anything else: every gesture looks its device up, and
+    /// building every installed simulator (name, runtime, model — dozens of
+    /// reads into CoreSimulator each) to keep one cost each tap ~4 ms.
     func find(udid: String) -> (any Simulator)? {
-        all.first { $0.udid == udid }
+        guard let set = resolveSet() else { return nil }
+        return availableDevices(in: set.object)
+            .first { ($0.value(forKey: "UDID") as? NSUUID)?.uuidString == udid }
+            .map { coreSimulator(from: $0, deviceSetPath: set.path) }
     }
 
     // MARK: - resolution

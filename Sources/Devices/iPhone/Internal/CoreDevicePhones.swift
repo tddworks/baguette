@@ -2,26 +2,15 @@ import BaguetteDevice
 import Foundation
 
 /// The CoreDevice family as a source of `Devices`: the real phones
-/// `devicectl list devices` knows. Listing runs devicectl (~0.2 s), and every
-/// per-device request asks every source, so a simulator's tap paid it too:
-/// the first listing is waited for; for `freshness` after it, the last one
-/// answers; after that it still answers at once while a fresh one is read
-/// behind (`refresh`), so a phone plugged in shows within a couple of seconds
-/// and no request waits on devicectl again. A host where devicectl can't list
-/// (no Xcode 15+) has no phones.
+/// `devicectl list devices` knows. Listing runs devicectl (~0.2 s), so the
+/// last listing answers and a stale one is read again behind
+/// (`RecentListing`). A host where devicectl can't list (no Xcode 15+) has
+/// no phones.
 final class CoreDevicePhones: Devices, @unchecked Sendable {
-    /// Runs work off the caller's thread.
-    typealias Refresh = @Sendable (_ work: @escaping @Sendable () -> Void) -> Void
-
-    static let freshness: TimeInterval = 2
+    typealias Refresh = RecentListing<PhysicalPhone>.Refresh
 
     private let devicectl: Devicectl
-    private let clock: @Sendable () -> Date
-    private let refresh: Refresh
-    private let lock = NSLock()
-    private let firstLock = NSLock()
-    private var listed: (at: Date, phones: [PhysicalPhone])?
-    private var refreshing = false
+    private var listing: RecentListing<PhysicalPhone>!
 
     init(
         devicectl: Devicectl = Devicectl(),
@@ -29,52 +18,19 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
         refresh: @escaping Refresh = { work in DispatchQueue.global(qos: .utility).async(execute: work) }
     ) {
         self.devicectl = devicectl
-        self.clock = clock
-        self.refresh = refresh
+        listing = RecentListing(clock: clock, refresh: refresh) { [devicectl] in Self.list(devicectl) }
     }
 
     var all: [any Device] {
-        phones().map { CoreDevicePhone($0, devicectl: devicectl) }
+        listing.items.map { CoreDevicePhone($0, devicectl: devicectl) }
     }
 
     func find(id: DeviceID) throws -> (any Device)? {
         all.first { $0.id == id }
     }
 
-    private func phones() -> [PhysicalPhone] {
-        let now = clock()
-        let (last, stale) = lock.withLock { () -> ([PhysicalPhone]?, Bool) in
-            guard let listed else { return (nil, false) }
-            let stale = now.timeIntervalSince(listed.at) >= Self.freshness && !refreshing
-            if stale { refreshing = true }
-            return (listed.phones, stale)
-        }
-        guard let last else { return firstListing() }
-        if stale {
-            refresh { [self] in
-                let phones = list()
-                lock.withLock {
-                    // A failed refresh keeps the last good listing; it is tried again next time.
-                    if let phones { listed = (clock(), phones) }
-                    refreshing = false
-                }
-            }
-        }
-        return last
-    }
-
-    /// The first listing, made once however many lookups arrive together.
-    private func firstListing() -> [PhysicalPhone] {
-        firstLock.withLock {
-            if let listed = lock.withLock({ listed }) { return listed.phones }
-            let phones = list() ?? []
-            lock.withLock { listed = (clock(), phones) }
-            return phones
-        }
-    }
-
     /// nil when devicectl couldn't list.
-    private func list() -> [PhysicalPhone]? {
+    private static func list(_ devicectl: Devicectl) -> [PhysicalPhone]? {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("baguette-devicectl-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: file) }

@@ -1,7 +1,7 @@
 import Foundation
 import IOSurface
 
-/// Stateless JPEG frames, paced before encoding with only the latest pending surface.
+/// Stateless JPEG frames: the screen's newest surface, one at a time (`LatestFrame`).
 public final class MJPEGStream: Stream, @unchecked Sendable {
     private let configLock = NSLock()
     private var currentConfig: StreamConfig
@@ -11,9 +11,10 @@ public final class MJPEGStream: Stream, @unchecked Sendable {
     private let scaler = VideoFrameScaler()
     /// Where every frame is encoded; the stream's state is confined to it.
     let queue = DispatchQueue(label: "baguette.mjpeg", qos: .userInteractive)
-    private lazy var pump = StreamFramePump<IOSurface>(
-        queue: queue, fps: config.fps, repeating: false
-    ) { [weak self] in self?.encode($0) }
+    private lazy var latest = LatestFrame<IOSurface>(queue: queue, fps: config.fps) { [weak self] surface, ready in
+        self?.encode(surface)
+        ready()
+    }
     private var screen: (any Screen)?
     private var filter = SeedFilter()
 
@@ -28,15 +29,15 @@ public final class MJPEGStream: Stream, @unchecked Sendable {
         sink.write(MJPEGEnvelope.header)
         self.screen = screen
         queue.sync { filter = SeedFilter() }
-        pump.start()
-        do { try screen.start { [weak self] in self?.pump.offer($0) } } catch {
+        latest.start()
+        do { try screen.start { [weak self] in self?.latest.offer($0) } } catch {
             stop()
             throw error
         }
     }
 
     public func stop() {
-        pump.stop()
+        latest.stop()
         screen?.stop()
         screen = nil
     }
@@ -45,14 +46,14 @@ public final class MJPEGStream: Stream, @unchecked Sendable {
         queue.sync {
             let next = change.applied(to: config)
             configLock.withLock { currentConfig = next }
-            pump.apply(fps: next.fps)
+            latest.apply(fps: next.fps)
         }
     }
 
     public func apply(_ newConfig: StreamConfig) {
         queue.sync {
             configLock.withLock { currentConfig = newConfig }
-            pump.apply(fps: newConfig.fps)
+            latest.apply(fps: newConfig.fps)
         }
     }
 

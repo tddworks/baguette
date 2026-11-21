@@ -862,6 +862,120 @@ the fix; with its addresses hidden behind `.local` names it had one path and
 was barely touched by the bug (RTX taps: 8.8 freezes a minute before, 9.7 and
 14.3 after — noise).
 
+### Tap latency, before and after (2026-11-21)
+
+Tap to picture on a clean link: headless Chrome on the Mac, the bench's
+colour-tap probe, 100 taps a run, taps through `POST /input`, the viewer at
+half resolution (`scale=2`, 604×1312), H.264 at 60 fps and 8 Mbps. Each stage
+was timed with wall-clock marks in the server and Chrome's own per-frame
+times (`requestVideoFrameCallback`: `receiveTime`, `processingDuration`).
+
+| | Before | After device lookup cache | After pump re-arm |
+|---|---|---|---|
+| **Tap → picture, p50** | **112 ms** (3 runs: 112 · 111 · 112) | 77 ms (77 · 78) | **72 ms** (3 runs: 72 · 70 · 72) |
+| Tap → picture, p95 | 136–150 ms | 100–111 ms | 90–92 ms |
+| Tap → frame in Chrome, p50 | 93–95 ms | 61–63 ms | 53–57 ms |
+| Frame in Chrome → shown | ~15 ms | ~16 ms | ~15 ms |
+
+**Which taps gain what.** The device lookup was paid per request, so the
+first cause cost only taps sent as `POST /input` (plugins, HTTP clients, the
+bench's `tap=post`). The device page and the stream WebSocket send gestures on
+a socket that looks its device up once, when it connects: they gain only the
+pump fix (~9 ms). A phone on mobile data the same afternoon, socket path, full
+resolution: 144 ms p50, of which 108 ms to the frame's arrival (the cellular
+link) and 34 ms from arrival to display; no packet lost.
+
+**Where the 40 ms came from**, stage by stage, tap's frame only (40 taps):
+
+| Stage | Before | After |
+|---|---|---|
+| tap → touch sent to the simulator | ~47 ms, of which the device lookup 45 | 11 ms |
+| touch → compositor's frame callback (the app redraws) | 31–32 ms | 31 ms |
+| callback → surface fetched (XPC) | 2 ms | 2 ms |
+| **surface → encoder input (the frame pump)** | **10.3 ms** | **1.2 ms** |
+| encode | 4 ms | 4 ms |
+| encoded → first packet out | 0.3 ms | 0.4 ms |
+
+1. **Every gesture looked up its device in every family, and the Android
+   family read its listing fresh each time:** `adb devices -l`, the running
+   emulators and the installed AVDs, 25.6 ms a lookup, 45 ms under load, on a
+   Mac with no Android device at all. Simulators took 4.2 ms, phones 0.1 ms
+   (cached since #144). Now both slow families read through `RecentListing`:
+   the last listing answers, a stale one is read again behind.
+2. **A changed screen waited for the next idle repeat.** The pump holds one
+   timer; while the screen was still, it was nearly always armed for the next
+   repeat (475 of 517 fresh frames found one), so a fresh frame waited up to
+   one frame interval. Now a fresh frame is due one interval after the last
+   *fresh* frame, never after a repeat, and a fresh frame due sooner re-arms
+   the timer.
+
+**Then the pump itself went (the same day).** It pushed frames on a clock
+and never learned when the encoder was done, so it needed timers even for
+fresh frames, and its repeat beat drifted. `LatestFrame` replaced it with the
+industry's "latest" backpressure: the newest frame wins, one frame is with the
+encoder until VideoToolbox answers (`ready`), a timer only for the frame-rate
+cap, and a still screen refreshed on `RefreshCadence`'s clock-anchored beat,
+taken only when the encoder is idle. Same bench: tap to picture p50 **72 →
+66–68 ms** (p95 87–89), frames Chrome shows a second **41 → 53**. The 3D
+screens' hand-written copy of the same idea went too.
+
+**A slower refresh, measured (2026-11-21).** A still screen is refreshed
+every frame interval. Refreshing once a second instead, as libwebrtc does,
+changed tap to picture within the noise on both paths (WebSocket 71 → 67–79 ms,
+WebRTC 63–68 → 70–72), so no browser decoder holds a changed frame back for a
+following one. But every quiet second then reads as a freeze to a detector
+that expects frames from a still screen (14–47 "freezes" a minute, frames shown
+53–60 → 22–27 a second). It stays at every frame until those detectors tell
+still from stalled; then a slower refresh saves encoding and bandwidth.
+
+**What's left:** the app redrawing (~31 ms) belongs to the simulator. Of the
+11 ms to the touch, the simulator lookup now builds only the simulator it finds
+(30.4 → 29.2 ms round trip); fetching CoreSimulator's device set remains.
+
+### On a phone after the fixes (2026-11-21)
+
+iPhone over Tailscale (direct, 28 ms ping), the device page's control socket
+for taps, 100 taps a run. On a Mac the stream is at its floor (~60–70 ms, no
+freezes); on a phone the link and the phone itself decide.
+
+| Phone run | Tap → picture p50 / p95 | Arrival → shown | Phone's jitter buffer | Freezes/min | Frames dropped | Lost / resent |
+|---|---|---|---|---|---|---|
+| Wi-Fi, full resolution, full-screen probe | 128 / 252 ms | 45 ms | 31 ms | 10.7 | 106 | 21 / 21 |
+| Mobile data, full resolution, full-screen probe | 148 / 323 ms | 30 ms | 28 ms | 7.9 | 36 | 152 / 115 |
+| Half resolution (`scale=2`), full-screen probe | 131 / 262 ms | 26 ms | 16 ms | 20.0 | 151 | 50 / 50 |
+| No taps, 30 s | — | — | 31 ms | 2.0 | 0 | 0 / 66 resent |
+| Small-square probe, round 1 | 156 / 233 ms | 42 ms | 25 ms | **0** | **0** | 0 |
+| Small-square probe, round 2 | 133 / 249 ms | 31 ms | 19 ms | 6.3 | 21 | 0 |
+
+The bench's probe page (`fixture.html`) flips the whole screen on a tap; with
+`?small=1` only a 64-point square at the centre changes, and the bench reads
+the centre either way. On the Mac a full-screen change costs ~20 ms more to
+reach the browser than a small one (tap → frame received 53–62 against 36–38 ms).
+
+**What it says.**
+
+1. **Big frames are ours, and the phone's freezes start there.** Every pixel
+   changing makes one burst the phone link can't absorb: frames bunch, the
+   phone drops them (36–151 a run), and taps freeze. With small changes the
+   drops fell to 0–21 and one run had no freeze. Real apps do this on every
+   screen change, app launch or fast scroll.
+2. **The phone holds each frame ~30 ms before showing it** — its jitter buffer
+   (16–31 ms) against ~7 ms in desktop Chrome, which doesn't honour the page's
+   `jitterBufferTarget = 0`.
+3. **The link stalls in windows** — 2–3 s about every 20 s, with nothing lost
+   (small-square round 2: freezes at :49–:50, :09–:11, :30–:31, ~1 s apart
+   inside each, the tap rhythm). That points at the phone's Wi-Fi power saving
+   or radio, not the sender; a ping log alongside a run is to confirm it.
+4. **On the phone, half resolution helped the display side** (jitter buffer 16
+   against ~30 ms) **but not the freezes**, so the phone's decoder isn't the cause.
+
+**Next, in order:** cap a single frame's size in the encoder (VideoToolbox
+`DataRateLimits`, as libwebrtc's encoder does), so a full-screen change is
+spread over a few frames, target under 2 freezes a minute with full-screen
+flips; then the playout-delay header extension, so a phone shows a frame as it
+arrives (~30 → ~15 ms), if its offer carries the extension; then confirm the
+periodic stalls are the network. The Mac path is at its floor; no more work there.
+
 The page gets its server list from `GET /webrtc/ice-servers` and waits up to 2 s
 for candidate gathering before posting its offer. The WHEP answer also returns
 the configured servers in `Link` headers with `rel="ice-server"`. To run the

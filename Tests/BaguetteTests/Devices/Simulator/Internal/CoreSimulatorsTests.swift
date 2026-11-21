@@ -48,6 +48,16 @@ struct CoreSimulatorsTests {
         }
     }
 
+    /// A device that counts how often its details are read.
+    @objc(FakeCoreSimCountedDevice) final class CountedDevice: NSObject, @unchecked Sendable {
+        @objc let UDID = NSUUID()
+        @objc let name = "iPhone 17"
+        @objc let state: NSNumber = 3
+        private(set) var detailReads = 0
+        @objc var runtime: NSObject? { detailReads += 1; return nil }
+        @objc var deviceType: NSObject? { detailReads += 1; return nil }
+    }
+
     @objc(FakeCoreSimSet) final class FakeSet: NSObject {
         @objc let availableDevices: [NSObject]
         init(_ devices: [NSObject]) { availableDevices = devices }
@@ -105,6 +115,16 @@ struct CoreSimulatorsTests {
         #expect(listed.metadata == SimulatorMetadata(
             deviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro", productFamily: "iPhone",
             runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-4", runtimeVersion: "26.4"))
+    }
+
+    @Test func `should read only the simulator it finds, not every one installed`() throws {
+        let other = CountedDevice(), wanted = CountedDevice()
+
+        let found = simulators(FakeContext(default: FakeSet([other, wanted]))).find(udid: wanted.UDID.uuidString)
+
+        #expect(found?.udid == wanted.UDID.uuidString)
+        #expect(other.detailReads == 0)
+        #expect(wanted.detailReads > 0)
     }
 
     @Test func `should name the runtime by its version when it has no name`() throws {

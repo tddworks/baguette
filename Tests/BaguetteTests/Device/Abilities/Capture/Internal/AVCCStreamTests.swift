@@ -54,7 +54,7 @@ struct AVCCStreamTests {
 
     /// Hand the stream one screen, and wait for what it makes of it.
     private func send(_ surface: IOSurface, to stream: AVCCStream) {
-        stream.queue.sync { stream.encode(surface) }
+        stream.queue.sync { stream.encode(surface, ready: {}) }
         stream.queue.sync {}
     }
 
@@ -129,12 +129,36 @@ struct AVCCStreamTests {
         stream.stop()
     }
 
+    @Test func `should be ready for the next frame once the encoder answers`() throws {
+        let held = Held()
+        let stream = stream(session([keyframe], holding: held), sink: RecordingSink())
+        try stream.start(on: screen())
+        let ready = Flag()
+
+        stream.queue.sync { stream.encode(Surfaces.filled(0x10), ready: ready.set) }
+        let early = ready.value
+        held.release()
+        stream.queue.sync {}
+
+        #expect(!early && ready.value)
+        stream.stop()
+    }
+
+    @Test func `should be ready for the next frame when a frame is not encoded`() {
+        let stream = stream(session([keyframe]), sink: RecordingSink())
+        let ready = Flag()
+
+        stream.queue.sync { stream.encode(Surfaces.filled(0x10), ready: ready.set) }
+
+        #expect(ready.value)
+    }
+
     @Test func `should drop a frame encoded at the old scale`() throws {
         let sink = RecordingSink()
         let held = Held()
         let stream = stream(session([keyframe], holding: held), sink: sink)
         try stream.start(on: screen())
-        stream.queue.sync { stream.encode(Surfaces.filled(0x10)) }
+        stream.queue.sync { stream.encode(Surfaces.filled(0x10), ready: {}) }
 
         try stream.apply(StreamConfig.default.with(scale: 2))
         held.release()
@@ -228,6 +252,13 @@ private final class Counter: @unchecked Sendable {
 }
 
 /// An encoder answer kept back until the test lets it go.
+final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var on = false
+    var value: Bool { lock.withLock { on } }
+    var set: @Sendable () -> Void { { [self] in lock.withLock { on = true } } }
+}
+
 final class Held: @unchecked Sendable {
     private let lock = NSLock()
     private var answers: [@Sendable () -> Void] = []

@@ -2,8 +2,9 @@ import BaguetteDevice
 import Foundation
 
 /// The Android family as a source of `Devices`: every emulator and phone
-/// `adb devices -l` lists, and every installed AVD that isn't running (off),
-/// read fresh on every call. An emulator is named by its AVD — the same across
+/// `adb devices -l` lists, and every installed AVD that isn't running (off).
+/// Listing spawns adb and the emulator tool (~25 ms), so the last listing
+/// answers and a stale one is read again behind (`RecentListing`). An emulator is named by its AVD — the same across
 /// boots, as a simulator's UDID — a phone by its serial. A Mac without adb has
 /// none. Design: docs/features/android/design.md.
 final class AndroidDevices: Devices, @unchecked Sendable {
@@ -11,6 +12,7 @@ final class AndroidDevices: Devices, @unchecked Sendable {
     private let emulator: URL?
     private let runningEmulators: @Sendable () -> [RunningEmulator]
     private let installedAVDs: @Sendable () -> [String]
+    private var listing: RecentListing<AndroidDevice>!
 
     init(adb: AndroidTool? = AndroidTool.adb,
          emulator: URL? = AndroidSDKLocation.emulator(),
@@ -18,15 +20,24 @@ final class AndroidDevices: Devices, @unchecked Sendable {
          installedAVDs: @escaping @Sendable () -> [String] = {
              (AndroidTool.emulator.flatMap { try? $0.runAndWait(["-list-avds"]) })
                  .map { AVDListing.names(in: String(decoding: $0, as: UTF8.self)) } ?? []
+         },
+         clock: @escaping @Sendable () -> Date = Date.init,
+         refresh: @escaping RecentListing<AndroidDevice>.Refresh = { work in
+             DispatchQueue.global(qos: .utility).async(execute: work)
          }) {
         self.adb = adb
         self.emulator = emulator
         self.runningEmulators = runningEmulators
         self.installedAVDs = installedAVDs
+        listing = RecentListing(clock: clock, refresh: refresh) { [unowned self] in read() }
     }
 
-    var all: [any Device] {
-        guard let adb, let listing = try? adb.runAndWait(["devices", "-l"]) else { return [] }
+    var all: [any Device] { listing.items }
+
+    /// Every device adb and the emulator tool know now; nil when adb fails.
+    private func read() -> [AndroidDevice]? {
+        guard let adb else { return [] }
+        guard let listing = try? adb.runAndWait(["devices", "-l"]) else { return nil }
         let running = runningEmulators()
         let attached = AdbListing.entries(in: String(decoding: listing, as: UTF8.self)).map { entry in
             AndroidDevice(attached: entry, emulator: running.first { $0.serial == entry.serial },
