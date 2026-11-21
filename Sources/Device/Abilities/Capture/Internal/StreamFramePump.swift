@@ -9,6 +9,8 @@ public final class StreamFramePump<Frame>: @unchecked Sendable {
     private let lock = NSLock()
     private var schedule: StreamFrameSchedule<Frame>
     private var task: DispatchWorkItem?
+    /// When the armed task runs: a fresh frame due sooner takes its place.
+    private var armedAt: Double?
     private var generation = 0
     private var running = false
 
@@ -30,6 +32,12 @@ public final class StreamFramePump<Frame>: @unchecked Sendable {
         lock.withLock {
             guard running else { return }
             schedule.offer(frame)
+            // A repeat already waiting its turn must not hold a fresh frame back.
+            if task != nil, let armedAt, let due = schedule.deadline(at: Self.now), due < armedAt {
+                task?.cancel()
+                task = nil
+                generation += 1
+            }
             arm()
         }
     }
@@ -63,6 +71,7 @@ public final class StreamFramePump<Frame>: @unchecked Sendable {
         let current = generation
         let work = DispatchWorkItem { [weak self] in self?.fire(generation: current) }
         task = work
+        armedAt = deadline
         queue.asyncAfter(deadline: .init(uptimeNanoseconds: UInt64(ceil(deadline * 1_000_000_000))), execute: work)
     }
 
@@ -70,6 +79,7 @@ public final class StreamFramePump<Frame>: @unchecked Sendable {
         let frame: Frame? = lock.withLock {
             guard running, current == generation else { return nil }
             task = nil
+            armedAt = nil
             return schedule.take(at: Self.now)
         }
         if let frame { deliver(frame) }
