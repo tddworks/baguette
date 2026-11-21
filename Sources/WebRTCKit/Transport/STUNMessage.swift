@@ -15,6 +15,9 @@ public struct STUNMessage: Equatable, Sendable {
     private static let messageIntegrity: UInt16 = 0x0008
     private static let xorMappedAddress: UInt16 = 0x0020
     private static let fingerprint: UInt16 = 0x8028
+    private static let priorityType: UInt16 = 0x0024
+    private static let iceControlled: UInt16 = 0x8029
+    private static let useCandidate: UInt16 = 0x0025
 
     public let type: UInt16
     public let transactionID: [UInt8]
@@ -27,8 +30,37 @@ public struct STUNMessage: Equatable, Sendable {
 
     /// The address a Binding success reports (XOR-MAPPED-ADDRESS), or nil.
     public let mappedAddress: DatagramAddress?
+    /// Whether this check nominates its pair (USE-CANDIDATE): the controlling
+    /// agent's choice of the path the session runs on.
+    public let nominates: Bool
 
     public var isBindingRequest: Bool { type == Self.bindingRequestType }
+
+    /// A full agent's own connectivity check (RFC 8445 §7.1.1): to the browser,
+    /// named "<its ufrag>:<ours>", carrying the pair's priority and our role —
+    /// the controlled agent, with a tie-breaker — and signed with its password.
+    public static func check(
+        from ours: ICECredentials, to theirs: ICECredentials, priority: UInt32, tieBreaker: UInt64, transactionID: [UInt8],
+        nominating: Bool = false
+    ) -> Data {
+        var body = attribute(username, [UInt8]("\(theirs.ufrag):\(ours.ufrag)".utf8))
+        body += attribute(priorityType, bigEndian(priority))
+        body += attribute(iceControlled, bigEndian(UInt32(tieBreaker >> 32)) + bigEndian(UInt32(tieBreaker & 0xFFFF_FFFF)))
+        if nominating { body += attribute(useCandidate, []) }
+        let header = { (length: Int) in Self.header(bindingRequestType, length: length, transactionID: transactionID) }
+        body += attribute(messageIntegrity, hmac(header(body.count + 24) + body, key: theirs.password))
+        let crc = crc32(header(body.count + 8) + body) ^ 0x5354_554E
+        body += attribute(fingerprint, bigEndian(crc))
+        return Data(header(body.count) + body)
+    }
+
+    /// Whether this is the success to our check `transactionID`, signed with
+    /// the browser's `password`: the answer that the pair works.
+    public func isSuccess(of transactionID: [UInt8], signedWith password: String) -> Bool {
+        guard type == Self.bindingSuccessType, self.transactionID == transactionID, let at = integrityAt else { return false }
+        let signed = Self.withLength(at + 24 - 20, Array(bytes[0..<at]))
+        return Self.same(Self.hmac(signed, key: password), Array(bytes[at + 4..<at + 24]))
+    }
 
     /// A plain Binding request, as a STUN server expects: no attributes, so
     /// it answers with the address it saw it come from.
@@ -52,12 +84,14 @@ public struct STUNMessage: Equatable, Sendable {
         var username: String?
         var integrityAt: Int?
         var mapped: DatagramAddress?
+        var nominates = false
         var at = 20
         while at + 4 <= bytes.count {
             let type = Self.half(bytes, at: at), size = Int(Self.half(bytes, at: at + 2))
             guard at + 4 + size <= bytes.count else { return nil }
             if type == Self.username { username = String(decoding: bytes[at + 4..<at + 4 + size], as: UTF8.self) }
             if type == Self.messageIntegrity, size == 20, integrityAt == nil { integrityAt = at }
+            if type == Self.useCandidate { nominates = true }
             if type == Self.xorMappedAddress, mapped == nil {
                 mapped = Self.unmapped(Array(bytes[at + 4..<at + 4 + size]), transactionID: Array(bytes[8..<20]))
             }
@@ -69,6 +103,7 @@ public struct STUNMessage: Equatable, Sendable {
         self.bytes = bytes
         self.integrityAt = integrityAt
         self.mappedAddress = mapped
+        self.nominates = nominates
     }
 
     /// The Binding success for this check, telling the browser the address it
@@ -94,7 +129,7 @@ public struct STUNMessage: Equatable, Sendable {
 
     // MARK: - wire
 
-    private static func mapped(_ address: DatagramAddress, transactionID: [UInt8]) -> [UInt8] {
+    static func mapped(_ address: DatagramAddress, transactionID: [UInt8]) -> [UInt8] {
         let key = bigEndian(magicCookie) + transactionID
         let port = address.port ^ UInt16(magicCookie >> 16)
         let ip = zip(address.ip, key).map { $0 ^ $1 }
@@ -103,7 +138,7 @@ public struct STUNMessage: Equatable, Sendable {
 
     /// XOR-MAPPED-ADDRESS read back: family 1 (IPv4) or 2 (IPv6), port and
     /// address XORed with the magic cookie (and, for IPv6, the transaction id).
-    private static func unmapped(_ value: [UInt8], transactionID: [UInt8]) -> DatagramAddress? {
+    static func unmapped(_ value: [UInt8], transactionID: [UInt8]) -> DatagramAddress? {
         guard value.count >= 8 else { return nil }
         let length = value[1] == 1 ? 4 : value[1] == 2 ? 16 : 0
         guard length > 0, value.count >= 4 + length else { return nil }
@@ -112,32 +147,34 @@ public struct STUNMessage: Equatable, Sendable {
         return DatagramAddress(ip: zip(value[4..<4 + length], key).map { $0 ^ $1 }, port: port)
     }
 
-    private static func header(_ type: UInt16, length: Int, transactionID: [UInt8]) -> [UInt8] {
+    static func header(_ type: UInt16, length: Int, transactionID: [UInt8]) -> [UInt8] {
         [UInt8(type >> 8), UInt8(type & 0xFF), UInt8(length >> 8), UInt8(length & 0xFF)]
             + bigEndian(magicCookie) + transactionID
     }
 
-    private static func attribute(_ type: UInt16, _ value: [UInt8]) -> [UInt8] {
+    static func attribute(_ type: UInt16, _ value: [UInt8]) -> [UInt8] {
         let padding = [UInt8](repeating: 0, count: (4 - value.count % 4) % 4)
         return [UInt8(type >> 8), UInt8(type & 0xFF), UInt8(value.count >> 8), UInt8(value.count & 0xFF)] + value + padding
     }
 
-    private static func withLength(_ length: Int, _ bytes: [UInt8]) -> [UInt8] {
+    static func withLength(_ length: Int, _ bytes: [UInt8]) -> [UInt8] {
         var out = bytes
         out[2] = UInt8(length >> 8)
         out[3] = UInt8(length & 0xFF)
         return out
     }
 
-    private static func hmac(_ message: [UInt8], key: String) -> [UInt8] {
-        let key = [UInt8](key.utf8)
+    static func hmac(_ message: [UInt8], key: String) -> [UInt8] { hmac(message, key: [UInt8](key.utf8)) }
+
+    /// HMAC-SHA1 under a key of bytes — TURN's long-term key is an MD5 digest.
+    static func hmac(_ message: [UInt8], key: [UInt8]) -> [UInt8] {
         var digest = [UInt8](repeating: 0, count: Int(CC_SHA1_DIGEST_LENGTH))
         CCHmac(CCHmacAlgorithm(kCCHmacAlgSHA1), key, key.count, message, message.count, &digest)
         return digest
     }
 
     /// Compared in full, whatever differs first: no timing hint for a forger.
-    private static func same(_ a: [UInt8], _ b: [UInt8]) -> Bool {
+    static func same(_ a: [UInt8], _ b: [UInt8]) -> Bool {
         a.count == b.count && zip(a, b).reduce(0) { $0 | ($1.0 ^ $1.1) } == 0
     }
 
@@ -145,17 +182,17 @@ public struct STUNMessage: Equatable, Sendable {
         (0..<8).reduce(UInt32(n)) { c, _ in c & 1 != 0 ? 0xEDB8_8320 ^ (c >> 1) : c >> 1 }
     }
 
-    private static func crc32(_ bytes: [UInt8]) -> UInt32 {
+    static func crc32(_ bytes: [UInt8]) -> UInt32 {
         ~bytes.reduce(~UInt32(0)) { crcTable[Int(($0 ^ UInt32($1)) & 0xFF)] ^ ($0 >> 8) }
     }
 
-    private static func bigEndian(_ value: UInt32) -> [UInt8] {
+    static func bigEndian(_ value: UInt32) -> [UInt8] {
         [UInt8(value >> 24), UInt8(value >> 16 & 0xFF), UInt8(value >> 8 & 0xFF), UInt8(value & 0xFF)]
     }
 
-    private static func half(_ bytes: [UInt8], at i: Int) -> UInt16 { UInt16(bytes[i]) << 8 | UInt16(bytes[i + 1]) }
+    static func half(_ bytes: [UInt8], at i: Int) -> UInt16 { UInt16(bytes[i]) << 8 | UInt16(bytes[i + 1]) }
 
-    private static func word(_ bytes: [UInt8], at i: Int) -> UInt32 {
+    static func word(_ bytes: [UInt8], at i: Int) -> UInt32 {
         bytes[i..<i + 4].reduce(0) { $0 << 8 | UInt32($1) }
     }
 }

@@ -8,8 +8,13 @@ public struct STUNServer: Equatable, Sendable {
     public static let defaultPort: UInt16 = 3478
 
     public let address: DatagramAddress
+    /// As it was written — a browser told to use it resolves the name itself.
+    public let url: String
 
-    public init(address: DatagramAddress) { self.address = address }
+    public init(address: DatagramAddress) {
+        self.address = address
+        url = "stun:\(address.ip.map(String.init).joined(separator: ".")):\(address.port)"
+    }
 
     /// `stun:host[:port]`, its host an IPv4 address or a name `resolve` turns
     /// into one; nil for anything else, or a name that doesn't resolve.
@@ -22,6 +27,7 @@ public struct STUNServer: Equatable, Sendable {
         let dotted = host.split(separator: ".").compactMap { UInt8($0) }
         guard let ip = dotted.count == 4 ? dotted : resolve(host), ip.count == 4 else { return nil }
         address = DatagramAddress(ip: ip, port: port)
+        self.url = url
     }
 
     /// The address it sees `datagrams` at, asked with a Binding request (and

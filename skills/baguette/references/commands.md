@@ -451,7 +451,7 @@ baguette logs --udid <udid> [--level <level>] [--style <style>] [--predicate <pr
 Start the standalone simulator UI server
 
 ```
-baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> …] [--plugin-dir <plugin-dir> …] [--no-plugins] [--webrtc-ports <webrtc-ports>] [--stun <stun>]
+baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> …] [--plugin-dir <plugin-dir> …] [--no-plugins] [--webrtc-ports <webrtc-ports>] [--stun <stun>] [--turn <turn>] [--turn-user <turn-user>] [--turn-pass <turn-pass>]
 ```
 
 | Flag | Required | Default | Description |
@@ -463,6 +463,9 @@ baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> 
 | `--no-plugins` |  |  | Ignore every installed plugin, including bundled ones. |
 | `--webrtc-ports` |  |  | UDP ports WebRTC viewers' media may use, e.g. 8190-8194 (default: any free port). |
 | `--stun` |  |  | A STUN server to learn each WebRTC viewer's public address from, e.g. stun:stun.l.google.com:19302. |
+| `--turn` |  |  | A TURN server to relay WebRTC viewers through, e.g. turn:turn.example.com:3478 (with --turn-user and --turn-pass). |
+| `--turn-user` |  |  | The TURN server's username. |
+| `--turn-pass` |  |  | The TURN server's password. |
 
 ## baguette orientation
 

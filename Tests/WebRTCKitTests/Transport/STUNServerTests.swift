@@ -74,6 +74,11 @@ struct STUNServerTests {
             == DatagramAddress(ip: [198, 51, 100, 4], port: 19302))
     }
 
+    @Test func `should keep a STUN server's name as it was written, for the browser`() {
+        #expect(STUNServer(url: "stun:stun.example.com", resolve: { _ in [198, 51, 100, 4] })?.url == "stun:stun.example.com")
+        #expect(STUNServer(address: server).url == "stun:198.51.100.4:3478")
+    }
+
     @Test func `should read no STUN server from what isn't one`() {
         let resolve: @Sendable (String) -> [UInt8]? = { _ in [198, 51, 100, 4] }
         for written in ["turn:stun.example.com", "stun:", "stun.example.com:3478", "stun:host:port", "stun:host:70000"] {

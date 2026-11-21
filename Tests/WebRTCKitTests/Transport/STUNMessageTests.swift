@@ -137,3 +137,43 @@ struct STUNPublicAddressTests {
         #expect(STUNMessage(STUNMessage.bindingRequest(transactionID: id))?.mappedAddress == nil)
     }
 }
+
+/// A full agent's own connectivity check (RFC 8445 §7.1.1) and the browser's answer to it.
+@Suite("STUNMessage: our checks")
+struct STUNCheckTests {
+    private let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+    private let id: [UInt8] = Array(21...32)
+
+    @Test func `should check the browser as its username and password say, as the controlled agent`() throws {
+        let check = STUNMessage.check(from: ours, to: browserICE, priority: 1_694_498_815, tieBreaker: 7, transactionID: id)
+
+        let message = try #require(STUNMessage(check))
+        #expect(message.isBindingRequest)
+        #expect(message.username == "h6vY:evtj")
+        // The browser answers it, as it answers any check signed with its password.
+        let answer = try #require(message.answer(from: browser, ice: browserICE))
+        #expect(STUNMessage(answer)?.isSuccess(of: id, signedWith: browserICE.password) == true)
+    }
+
+    @Test func `should take only the browser's signed success to its own check`() throws {
+        let check = try #require(STUNMessage(STUNMessage.check(from: ours, to: browserICE, priority: 1, tieBreaker: 7, transactionID: id)))
+        let answered = try #require(check.answer(from: browser, ice: browserICE))
+        let answer = try #require(STUNMessage(answered))
+
+        #expect(!answer.isSuccess(of: Array(repeating: 0, count: 12), signedWith: browserICE.password))
+        #expect(!answer.isSuccess(of: id, signedWith: "someone else's password"))
+        #expect(!check.isSuccess(of: id, signedWith: browserICE.password))
+    }
+}
+
+@Suite("STUNMessage: nomination")
+struct STUNNominationTests {
+    @Test func `should tell a check that nominates its pair from one that doesn't`() throws {
+        let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+        let plain = try #require(STUNMessage(STUNMessage.check(from: browserICE, to: ours, priority: 1, tieBreaker: 1, transactionID: Array(1...12))))
+        let nominating = try #require(STUNMessage(STUNMessage.check(
+            from: browserICE, to: ours, priority: 1, tieBreaker: 1, transactionID: Array(1...12), nominating: true)))
+
+        #expect(!plain.nominates && nominating.nominates)
+    }
+}

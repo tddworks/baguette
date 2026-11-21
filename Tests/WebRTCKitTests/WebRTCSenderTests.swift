@@ -28,6 +28,17 @@ private let offerWithRTX = try! SessionDescription(offer: [
     "a=rtpmap:113 rtx/90000", "a=fmtp:113 apt=112",
 ].joined(separator: "\r\n"))
 
+/// The offer as a browser posts it after gathering: one address of its own.
+private let browserCandidate = DatagramAddress(ip: [192, 168, 1, 20], port: 54400)
+private let offerWithCandidate = try! SessionDescription(offer: [
+    "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 112", "a=mid:0",
+    "a=ice-ufrag:h6vY", "a=ice-pwd:browserpasswordbrowserpass",
+    "a=fingerprint:sha-256 6B:8B", "a=setup:actpass",
+    "a=candidate:1 1 udp 2122260223 192.168.1.20 54400 typ host",
+    "a=rtpmap:112 H264/90000",
+    "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
+].joined(separator: "\r\n"))
+
 /// RFC 5769's sample check is addressed to "evtj" and signed with this password.
 private let ours = ICECredentials(ufrag: "evtj", password: "VOkJxbRl1RmTxUk/WvJxBt")
 private let check = hex(
@@ -60,11 +71,13 @@ private struct Rig {
     let events = MockSenderEvents()
     let sent = Box<[(Data, DatagramAddress)]>([])
     let received = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
+    /// Work the sender asked to run later, run by `pass()`.
+    let scheduled = Box<[@Sendable () -> Void]>([])
     let sender: WebRTCSender
 
     init(
         progress: HandshakeProgress = .complete(replies: [], srtpExport: export), target: Int? = nil,
-        offer: SessionDescription = offer, reflexive: DatagramAddress? = nil
+        offer: SessionDescription = offer, reflexive: DatagramAddress? = nil, relay: DatagramAddress? = nil
     ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
@@ -85,10 +98,21 @@ private struct Rig {
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             rtxSSRC: 0xFEED_F00D, firstRetransmissionSequence: 500,
             datagrams: datagrams, handshake: handshake, congestion: congestion,
-            encoderBitrate: { 8_000_000 }, events: events, schedule: { _, _ in }, reflexive: reflexive)
+            encoderBitrate: { 8_000_000 }, events: events,
+            schedule: { [scheduled] _, work in scheduled.value.append(work) }, reflexive: reflexive, relay: relay)
     }
 
     func deliver(_ data: Data, from address: DatagramAddress = browser) { received.value?(data, address) }
+    /// Runs what was due, once.
+    func pass() {
+        let due = scheduled.value
+        scheduled.value = []
+        due.forEach { $0() }
+    }
+    /// The connectivity checks it sent, and to where.
+    var checks: [DatagramAddress] {
+        sent.value.filter { STUNMessage($0.0)?.isBindingRequest == true }.map(\.1)
+    }
     func goLive() { deliver(check); deliver(dtlsHello) }
     var packets: [RTPPacket] { sent.value.compactMap { RTPPacket($0.0) }.filter { !RTPPacket.isRTCP($0.data) } }
 }
@@ -145,11 +169,59 @@ struct WebRTCSenderTests {
         verify(rig.congestion).sent(size: .any, at: .any).called(3)
     }
 
+    @Test func `should offer its relayed address when it has one`() {
+        let rig = Rig(relay: DatagramAddress(ip: [198, 51, 100, 4], port: 50001))
+
+        #expect(rig.sender.answer.contains("198.51.100.4 50001 typ relay raddr 0.0.0.0 rport 0"))
+    }
+
     @Test func `should offer its public address beside its own when it has one`() {
         let rig = Rig(reflexive: DatagramAddress(ip: [203, 0, 113, 7], port: 61000))
 
         #expect(rig.sender.answer.contains("203.0.113.7 61000 typ srflx raddr 0.0.0.0 rport 0"))
         #expect(!Rig().sender.answer.contains("srflx"))
+    }
+
+    @Test func `should check the browser at the addresses its offer gives, as a full agent`() {
+        let rig = Rig(offer: offerWithCandidate)
+
+        #expect(rig.checks == [browserCandidate])
+        #expect(!rig.sender.answer.contains("ice-lite"))
+    }
+
+    @Test func `should check again, backing off, until its session is secured`() {
+        let rig = Rig(offer: offerWithCandidate)
+        rig.pass()
+        rig.pass()
+        #expect(rig.checks.count == 3)
+
+        rig.goLive()
+        rig.pass()
+
+        #expect(rig.checks.count == 3)
+    }
+
+    @Test func `should keep sending where the browser nominated, whatever path checks it later`() throws {
+        let rig = Rig()
+        let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+        let other = DatagramAddress(ip: [198, 51, 100, 4], port: 50001)
+        func check(nominating: Bool) -> Data {
+            STUNMessage.check(from: browserICE, to: ours, priority: 1, tieBreaker: 1,
+                              transactionID: (0..<12).map { _ in UInt8.random(in: 0...255) }, nominating: nominating)
+        }
+
+        rig.deliver(check(nominating: true), from: browser)
+        rig.deliver(check(nominating: false), from: other)
+        rig.deliver(dtlsHello, from: browser)
+
+        #expect(rig.sender.state == .live)
+    }
+
+    @Test func `should stay ICE-lite and check no one when the offer gives no addresses`() {
+        let rig = Rig()
+
+        #expect(rig.checks.isEmpty)
+        #expect(rig.sender.answer.contains("a=ice-lite"))
     }
 
     @Test func `should tell its owner what the link can take after the browser's feedback`() {
