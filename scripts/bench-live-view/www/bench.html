@@ -22,7 +22,8 @@ const WHEP_QUERY = [UNPACED && 'pacing=off', NO_RTX && 'rtx=off'].filter(Boolean
 const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (WHEP_QUERY ? '?' + WHEP_QUERY : '');
 const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const PION = WHEP.startsWith('/pion/');
-const TAP_PATH = T === 'webrtc' && (PION || SPIKE) ? 'POST /input' : 'socket';
+// `tap=post`: every sender's taps posted to baguette serve's POST /input, so the senders compare on one input path.
+const TAP_PATH = (T === 'webrtc' && (PION || SPIKE)) || q.get('tap') === 'post' ? 'POST /input' : 'socket';
 const BANDWIDTH_ONLY = q.get('mode') === 'bw';
 const W = +(q.get('w') || 402), H = +(q.get('h') || 874);
 document.getElementById('back').href = './?udid=' + encodeURIComponent(UDID);
@@ -38,12 +39,12 @@ const R = window.__bench = { transport: T, sender: T === 'ws' ? 'websocket' : PI
 let last = { r: 0, g: 0, b: 0 };
 const black = c => c.r < 64 && c.g < 64 && c.b < 64;
 const red = c => c.r > 128 && c.g < 96, green = c => c.g > 128 && c.r < 96;
-function presented(ts, src, sw, sh) {
+function presented(ts, src, sw, sh, meta) {
   if (R.firstFrame === null) { R.firstFrame = ts - R.t0; log('first frame', R.firstFrame.toFixed(0), 'ms'); }
   R.frames.push(ts);
   probe.drawImage(src, sw / 2, sh / 2, 1, 1, 0, 0, 1, 1);
   const d = probe.getImageData(0, 0, 1, 1).data; last = { r: d[0], g: d[1], b: d[2] };
-  if (waiter && waiter.want(last)) { const w = waiter; waiter = null; w.resolve(ts); }
+  if (waiter && waiter.want(last)) { const w = waiter; waiter = null; R.hitMeta = meta; w.resolve(ts); }
 }
 let waiter = null;
 const until = (want, ms) => new Promise((resolve, reject) => {
@@ -137,7 +138,16 @@ async function startWebRTC() {
     });
     inputSocket();
   }
-  const onFrame = (now, meta) => { presented(meta.expectedDisplayTime ?? now, vid, meta.width, meta.height); vid.requestVideoFrameCallback(onFrame); };
+  // `scale=2`: baguette's viewer streams at that divisor (its control socket's set_scale), so it can be
+  // compared at the resolution of a reference sender that streams at half size.
+  const SCALE = +q.get('scale');
+  if (SCALE > 1 && !PION && !SPIKE && viewer) {
+    const control = R.taps?.readyState === WebSocket.OPEN ? R.taps : new WebSocket(SERVE.replace('http', 'ws') + viewer + '/control');
+    const send = () => control.send(JSON.stringify({ type: 'set_scale', scale: SCALE }));
+    if (control.readyState === WebSocket.OPEN) send(); else control.onopen = send;
+    if (control !== R.taps) R.scaleControl = control;
+  }
+  const onFrame = (now, meta) => { presented(meta.expectedDisplayTime ?? now, vid, meta.width, meta.height, meta); vid.requestVideoFrameCallback(onFrame); };
   vid.requestVideoFrameCallback(onFrame);
 }
 
@@ -245,6 +255,10 @@ async function run() {
     const t0 = performance.now(); tap(side);
     const t1 = await until(side === 'left' ? red : green, 5000);
     R.samples.push(t1 === null ? null : t1 - t0);
+    // Where the tap's frame spent its time, by Chrome's own clock (requestVideoFrameCallback metadata):
+    // tap → first packet received (the sender's side) · decode · received → shown (the receiver's side).
+    const m = R.hitMeta; R.hitMeta = null;
+    if (t1 !== null && m?.receiveTime) (R.stages ||= []).push({ received: m.receiveTime - t0, decodeMs: (m.processingDuration || 0) * 1000, shown: t1 - t0 });
     if (i % 10 === 9) log('tap', i + 1, t1 === null ? 'MISS' : (t1 - t0).toFixed(1) + ' ms');
   }
   const freeze = freezeSummary(startedAt, performance.now());
@@ -260,7 +274,14 @@ async function run() {
     firstFrameMs: +R.firstFrame.toFixed(0), presentedFps: +(1000 / mean).toFixed(1),
     intervalStddevMs: +Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length).toFixed(2),
     ...freeze,
+    ...stageSummary(),
   });
+}
+function stageSummary() {
+  const st = R.stages || []; if (!st.length) return {};
+  const med = a => +pct(a, 50).toFixed(1);
+  return { stages: { n: st.length, tapToReceivedP50: med(st.map(x => x.received)), decodeP50: med(st.map(x => x.decodeMs)),
+    receivedToShownP50: med(st.map(x => x.shown - x.received)), tapToReceivedP90: +pct(st.map(x => x.received), 90).toFixed(1) } };
 }
 // Every run ends with a summary and its session closed, even one that fails.
 // What the browser lost and got back: lost packets, the NACKs it sent, the resends that arrived, the pictures it asked for.
@@ -269,8 +290,14 @@ async function lossStats() {
   try {
     (await R.pc.getStats()).forEach(r => {
       if (r.type !== 'inbound-rtp' || r.kind !== 'video') return;
-      Object.assign(out, { packetsLost: r.packetsLost, nacksSent: r.nackCount, resendsReceived: r.retransmittedPacketsReceived, keyframesAsked: r.pliCount + (r.firCount || 0) });
+      Object.assign(out, { packetsLost: r.packetsLost, nacksSent: r.nackCount, resendsReceived: r.retransmittedPacketsReceived, keyframesAsked: r.pliCount + (r.firCount || 0),
+        fecReceived: r.fecPacketsReceived, fecDiscarded: r.fecPacketsDiscarded, size: r.frameWidth && r.frameHeight ? r.frameWidth + 'x' + r.frameHeight : undefined,
+        framesReceived: r.framesReceived, framesDecoded: r.framesDecoded, framesDropped: r.framesDropped,
+        jitterBufferMs: r.jitterBufferEmittedCount ? Math.round(1000 * r.jitterBufferDelay / r.jitterBufferEmittedCount) : undefined,
+        codecId: r.codecId });
     });
+    if (out.codecId) { const c = (await R.pc.getStats()).get(out.codecId); out.codec = c?.mimeType; }
+    delete out.codecId;
   } catch {}
   return out;
 }

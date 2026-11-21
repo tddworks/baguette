@@ -207,6 +207,8 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a browser's transport-cc reports are read on one unbroken timeline, though their 24-bit reference time wraps | `FeedbackClock` |
 | a retune turns one knob of the config as it stands then (`StreamConfig.Change`), so two at once both land | each `Stream` |
 | a running device's input is made once and kept for every gesture posted to it, and made afresh once the device has been seen not running | `DeviceInputs` |
+| a family whose listing is slow to read (a process to spawn) answers a lookup from its last listing; past 2 s it still answers at once and reads again behind; a failed read keeps the last listing — so no gesture waits on adb or devicectl | `RecentListing` |
+| a live stream encodes a fresh frame as soon as it arrives unless another fresh frame left within `1/fps`; a repeat of a still screen never holds one back | `StreamFrameSchedule`, armed by `StreamFramePump` |
 | a viewer's congestion control is the one asked for (`?congestion=transport-cc\|remb\|off`) when the offer can carry it, else none; with nothing asked, transport-cc if offered, else REMB if offered, else none | `CongestionChoice` |
 | with no congestion control, nothing retunes the encoder: it stays where it started or where `set_bitrate` put it | `FixedBitrate` |
 | a viewer retunes its encoder when the target moves by more than 10%. A decrease applies immediately. An increase waits at least a second after the last retune | `EncoderRetune` |

@@ -862,6 +862,52 @@ the fix; with its addresses hidden behind `.local` names it had one path and
 was barely touched by the bug (RTX taps: 8.8 freezes a minute before, 9.7 and
 14.3 after — noise).
 
+### Tap latency, before and after (2026-11-21)
+
+Tap to picture on a clean link: headless Chrome on the Mac, the bench's
+colour-tap probe, 100 taps a run, taps through `POST /input`, the viewer at
+half resolution (`scale=2`, 604×1312), H.264 at 60 fps and 8 Mbps. Each stage
+was timed with wall-clock marks in the server and Chrome's own per-frame
+times (`requestVideoFrameCallback`: `receiveTime`, `processingDuration`).
+
+| | Before | After device lookup cache | After pump re-arm |
+|---|---|---|---|
+| **Tap → picture, p50** | **112 ms** (3 runs: 112 · 111 · 112) | 77 ms (77 · 78) | **72 ms** (3 runs: 72 · 70 · 72) |
+| Tap → picture, p95 | 136–150 ms | 100–111 ms | 90–92 ms |
+| Tap → frame in Chrome, p50 | 93–95 ms | 61–63 ms | 53–57 ms |
+| Frame in Chrome → shown | ~15 ms | ~16 ms | ~15 ms |
+
+**Where the 40 ms came from**, stage by stage, tap's frame only (40 taps):
+
+| Stage | Before | After |
+|---|---|---|
+| tap → touch sent to the simulator | ~47 ms, of which the device lookup 45 | 11 ms |
+| touch → compositor's frame callback (the app redraws) | 31–32 ms | 31 ms |
+| callback → surface fetched (XPC) | 2 ms | 2 ms |
+| **surface → encoder input (the frame pump)** | **10.3 ms** | **1.2 ms** |
+| encode | 4 ms | 4 ms |
+| encoded → first packet out | 0.3 ms | 0.4 ms |
+
+1. **Every gesture looked up its device in every family, and the Android
+   family read its listing fresh each time:** `adb devices -l`, the running
+   emulators and the installed AVDs, 25.6 ms a lookup, 45 ms under load, on a
+   Mac with no Android device at all. Simulators took 4.2 ms, phones 0.1 ms
+   (cached since #144). Now both slow families read through `RecentListing`:
+   the last listing answers, a stale one is read again behind.
+2. **A changed screen waited for the next idle repeat.** The pump holds one
+   timer; while the screen was still, it was nearly always armed for the next
+   repeat (475 of 517 fresh frames found one), so a fresh frame waited up to
+   one frame interval. Now a fresh frame is due one interval after the last
+   *fresh* frame, never after a repeat, and a fresh frame due sooner re-arms
+   the timer.
+
+**What's left:** the app redrawing (~31 ms) belongs to the simulator. Of the
+11 ms to the touch, ~4 ms is the simulator lookup, not yet cached. A still
+screen's repeats come every ~20 ms instead of 16.7 (the next repeat is timed
+from when the last one fired, ~3 ms late each time), so Chrome shows ~41 frames
+a second where 60 are sent for; anchoring the beat to the clock is the fix, for
+smoothness rather than latency.
+
 The page gets its server list from `GET /webrtc/ice-servers` and waits up to 2 s
 for candidate gathering before posting its offer. The WHEP answer also returns
 the configured servers in `Link` headers with `rel="ice-server"`. To run the

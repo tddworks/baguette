@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- Taps show on the device page ~40 ms sooner (112 → 72 ms, tap to picture): a gesture no longer waits on the Android tools to list devices, and a changed screen is encoded at once, not after the next idle repeat. → [docs](docs/features/webrtc/design.md#tap-latency-before-and-after-2026-11-21)
+
 ---
 
 ## [0.3.1] - 2026-11-21
