@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.3.1] - 2026-11-21
+
 ### Added
 - The device page's format picker offers **WebRTC** beside H.264 and MJPEG: the phone's screen as H.264 over UDP (WHEP), for viewing from a phone or another machine; it plays on plain HTTP too. → [docs](docs/features/webrtc/README.md)
 
@@ -45,5 +49,6 @@ For releases prior to this changelog, see the
 
 [0.2](docs/changelog/0.2.md) · [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/tddworks/baguette/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/tddworks/baguette/compare/v0.2.15...v0.3.0
