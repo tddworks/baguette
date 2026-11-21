@@ -126,8 +126,8 @@ public struct SessionDescription: Equatable, Sendable {
     /// control needs (`CongestionControl.answerLines`).
     public func answer(
         ice: ICECredentials, fingerprint: String, ssrc: UInt32, rtxSSRC: UInt32? = nil,
-        candidates: [DatagramAddress], reflexive: DatagramAddress? = nil, congestion: [String] = [],
-        lite: Bool = true
+        candidates: [DatagramAddress], reflexive: DatagramAddress? = nil, relay: DatagramAddress? = nil,
+        congestion: [String] = [], lite: Bool = true
     ) -> String {
         let pt = payloadType
         // Resends on their own stream only when the offer has a format for them.
@@ -162,6 +162,11 @@ public struct SessionDescription: Equatable, Sendable {
         if let reflexive {
             lines.append("a=candidate:\(candidates.count + 1) 1 udp \(100 << 24 | 65_535 << 8 | 255) "
                 + "\(Self.text(reflexive.ip)) \(reflexive.port) typ srflx raddr 0.0.0.0 rport 0")
+        }
+        // The address a TURN server relays at (type preference 0): the last resort.
+        if let relay {
+            lines.append("a=candidate:\(candidates.count + (reflexive == nil ? 1 : 2)) 1 udp \(65_535 << 8 | 255) "
+                + "\(Self.text(relay.ip)) \(relay.port) typ relay raddr 0.0.0.0 rport 0")
         }
         lines += ["a=end-of-candidates", ""]
         return lines.joined(separator: "\r\n")

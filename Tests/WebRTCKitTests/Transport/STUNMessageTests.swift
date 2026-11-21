@@ -165,3 +165,15 @@ struct STUNCheckTests {
         #expect(!check.isSuccess(of: id, signedWith: browserICE.password))
     }
 }
+
+@Suite("STUNMessage: nomination")
+struct STUNNominationTests {
+    @Test func `should tell a check that nominates its pair from one that doesn't`() throws {
+        let browserICE = ICECredentials(ufrag: "h6vY", password: "browserpasswordbrowserpass")
+        let plain = try #require(STUNMessage(STUNMessage.check(from: browserICE, to: ours, priority: 1, tieBreaker: 1, transactionID: Array(1...12))))
+        let nominating = try #require(STUNMessage(STUNMessage.check(
+            from: browserICE, to: ours, priority: 1, tieBreaker: 1, transactionID: Array(1...12), nominating: true)))
+
+        #expect(!plain.nominates && nominating.nominates)
+    }
+}

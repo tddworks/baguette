@@ -6,6 +6,7 @@ import WebRTCKit
 /// `baguette serve [--port 8421] [--host 127.0.0.1] [--device-set …]`
 /// `             [--allowed-hosts …] [--plugin-dir …] [--no-plugins]`
 /// `             [--webrtc-ports 8190-8194] [--stun stun:host:port]`
+/// `             [--turn turn:host:port --turn-user … --turn-pass …]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
 /// in a browser and the simulator picker loads — no SPA dependency,
@@ -58,6 +59,30 @@ struct ServeCommand: AsyncParsableCommand {
             return server
         })
     var stun: STUNServer?
+
+    @Option(name: .customLong("turn"), help: "A TURN server to relay WebRTC viewers through, e.g. turn:turn.example.com:3478 (with --turn-user and --turn-pass).")
+    var turnURL: String?
+
+    @Option(name: .customLong("turn-user"), help: "The TURN server's username.")
+    var turnUser: String?
+
+    @Option(name: .customLong("turn-pass"), help: "The TURN server's password.")
+    var turnPass: String?
+
+    /// The TURN server, as the three options name it.
+    var turn: TURNServer? {
+        guard let turnURL, let turnUser, let turnPass else { return nil }
+        return TURNServer(url: turnURL, credentials: TURNCredentials(username: turnUser, password: turnPass),
+                          resolve: HostResolver.ipv4)
+    }
+
+    func validate() throws {
+        guard let turnURL else { return }
+        guard turnUser != nil, turnPass != nil else { throw ValidationError("--turn needs --turn-user and --turn-pass") }
+        guard turn != nil else {
+            throw ValidationError("--turn takes turn:host[:port][?transport=udp], a host that resolves to IPv4: \(turnURL)")
+        }
+    }
 
     func run() async throws {
         // Someone reads this log while driving a page, and no agent pays for it.

@@ -28,7 +28,12 @@ extension Server {
         // address with them, and posts that among its candidates.
         router.get("/webrtc/ice-servers") { request, _ in
             if let rejected = rejectUntrustedBrowser(request) { return rejected }
-            let servers = viewers.iceServers.map { #"{"urls":"\#(jsonEscape($0))"}"# }.joined(separator: ",")
+            let servers = viewers.iceServers.map { server in
+                var fields = [#""urls":"\#(jsonEscape(server.url))""#]
+                if let username = server.username { fields.append(#""username":"\#(jsonEscape(username))""#) }
+                if let credential = server.credential { fields.append(#""credential":"\#(jsonEscape(credential))""#) }
+                return "{" + fields.joined(separator: ",") + "}"
+            }.joined(separator: ",")
             return Self.jsonResponse(#"{"iceServers":[\#(servers)]}"#)
         }
 
@@ -157,10 +162,16 @@ extension Server {
 
     /// The answer's headers; its ICE servers as WHEP names them (`Link`, one
     /// per server, comma-joined).
-    static func answerHeaders(location: String, iceServers: [String]) -> HTTPFields {
+    static func answerHeaders(location: String, iceServers: [WebRTCViewers.ICEServer]) -> HTTPFields {
         var headers: HTTPFields = [.location: location, .contentType: "application/sdp", .cacheControl: "no-cache"]
         if !iceServers.isEmpty {
-            headers[HTTPField.Name("Link")!] = iceServers.map { "<\($0)>; rel=\"ice-server\"" }.joined(separator: ", ")
+            headers[HTTPField.Name("Link")!] = iceServers.map { server in
+                var link = "<\(server.url)>; rel=\"ice-server\""
+                if let username = server.username, let credential = server.credential {
+                    link += "; username=\"\(username)\"; credential=\"\(credential)\"; credential-type=\"password\""
+                }
+                return link
+            }.joined(separator: ", ")
         }
         return headers
     }

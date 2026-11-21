@@ -305,3 +305,17 @@ extension SessionDescriptionTests {
         #expect(!description.answer(ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [], lite: false).contains("ice-lite"))
     }
 }
+
+extension SessionDescriptionTests {
+    @Test func `should offer its relayed address last, ranked lowest`() throws {
+        let relayed = DatagramAddress(ip: [198, 51, 100, 4], port: 50001)
+
+        let answer = try SessionDescription(offer: chromeOffer).answer(
+            ice: ours, fingerprint: fingerprint, ssrc: 1, candidates: [DatagramAddress(ip: [192, 168, 1, 5], port: 50000)],
+            relay: relayed)
+
+        #expect(answer.contains(
+            "a=candidate:1 1 udp 2130706431 192.168.1.5 50000 typ host\r\n"
+            + "a=candidate:2 1 udp 16777215 198.51.100.4 50001 typ relay raddr 0.0.0.0 rport 0\r\n"))
+    }
+}

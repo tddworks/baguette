@@ -61,6 +61,9 @@ public final class WebRTCSender: @unchecked Sendable {
     private let id: String
     private var lastCheck: Date
     private var browser: DatagramAddress?
+    /// Where the browser nominated (USE-CANDIDATE): once set, the session
+    /// stays there, whatever path checks it later — its DTLS comes from there.
+    private var nominated: DatagramAddress?
     private var srtp: SRTPContext?
     private var sequence: UInt16
     /// What it sent, for the browser's NACKs: which to resend is its call.
@@ -86,7 +89,9 @@ public final class WebRTCSender: @unchecked Sendable {
 
     /// `encoderBitrate`: what its owner's encoder makes now — the pacer's rate
     /// while the congestion control has no target of its own. `reflexive`: the
-    /// address a STUN server sees its socket at, offered beside its own. `events` is held
+    /// address a STUN server sees its socket at, offered beside its own;
+    /// `relay`, the address a TURN server relays at for it (its `datagrams`
+    /// then a `RelayedDatagrams`). `events` is held
     /// weakly: the owner holds the sender.
     public init(
         offer: SessionDescription,
@@ -103,6 +108,7 @@ public final class WebRTCSender: @unchecked Sendable {
         clock: @escaping @Sendable () -> Date = Date.init,
         schedule: @escaping Schedule = WebRTCSender.onAQueue,
         reflexive: DatagramAddress? = nil,
+        relay: DatagramAddress? = nil,
         pacing: Bool = true,
         id: String = UUID().uuidString.lowercased()
     ) {
@@ -126,7 +132,7 @@ public final class WebRTCSender: @unchecked Sendable {
         self.pacer = Pacer(bitrate: encoderBitrate(), pacing: pacing)
         self.answer = offer.answer(
             ice: ice, fingerprint: handshake.fingerprint, ssrc: ssrc,
-            rtxSSRC: offer.rtxPayloadType == nil ? nil : rtxSSRC, candidates: datagrams.addresses, reflexive: reflexive,
+            rtxSSRC: offer.rtxPayloadType == nil ? nil : rtxSSRC, candidates: datagrams.addresses, reflexive: reflexive, relay: relay,
             congestion: congestion.answerLines(), lite: offer.candidates.isEmpty)
         datagrams.onReceive { [weak self] data, from in self?.receive(data, from: from) }
         if !remote.candidates.isEmpty { checkRound(0) }
@@ -211,7 +217,8 @@ public final class WebRTCSender: @unchecked Sendable {
         guard let answer = message.answer(from: address, ice: ice) else { return }
         lock.withLock {
             guard current != .hungUp else { return }
-            browser = address
+            if message.nominates, nominated == nil { nominated = address }
+            browser = nominated ?? address
             lastCheck = clock()
             if current == .connecting { current = .securing }
             datagrams.send(answer, to: address)

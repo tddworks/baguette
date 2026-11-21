@@ -19,7 +19,7 @@ private let offer = [
 
 /// Viewers whose sockets, handshakes and streams are mocks: no port, no DTLS,
 /// no encoder.
-private func mockViewers(stun: STUNServer? = nil) -> WebRTCViewers {
+private func mockViewers(stun: STUNServer? = nil, turn: TURNServer? = nil) -> WebRTCViewers {
     WebRTCViewers(
         ticking: nil,
         connect: { _ in
@@ -42,7 +42,7 @@ private func mockViewers(stun: STUNServer? = nil) -> WebRTCViewers {
             given(stream).requestSnapshot().willReturn()
             return stream
         },
-        stun: stun)
+        stun: stun, turn: turn)
 }
 
 private func screen() -> MockScreen {
@@ -230,6 +230,16 @@ struct WHEPRouterTests {
         try await whepServer().test { client in
             let none = try await client.send(.get, "/webrtc/ice-servers")
             #expect(none.text == #"{"iceServers":[]}"#)
+        }
+    }
+
+    @Test func `should give the page its TURN server with the credentials to use it`() async throws {
+        let turn = TURNServer(url: "turn:turn.example.com:3478", credentials: TURNCredentials(username: "baguette", password: "secret"),
+                              resolve: { _ in [198, 51, 100, 4] })
+        try await whepServer(viewers: mockViewers(turn: turn)).test { client in
+            let response = try await client.send(.get, "/webrtc/ice-servers")
+
+            #expect(response.text == #"{"iceServers":[{"urls":"turn:turn.example.com:3478","username":"baguette","credential":"secret"}]}"#)
         }
     }
 

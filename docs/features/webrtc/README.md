@@ -109,6 +109,10 @@ the encoder again according to [the retuning rule](design.md#4--invariants-each-
   baguette checks them itself (full ICE), which opens its NAT toward the
   browser. That reaches most networks; until `serve` has authentication,
   don't expose it to the internet — use Tailscale from outside your network.
+- **A relay for the rest.** `baguette serve --turn turn:host:3478 --turn-user
+  … --turn-pass …` has each viewer offer a relayed address on that TURN
+  server too (coturn, or a provider's), and gives the page the same server and
+  credentials. It gets through strict networks, at the relay's latency.
 - **A viewer goes when its browser does.** Switching format or leaving the page
   hangs it up; if that goodbye never arrives, it hangs up after 30 s without a
   connectivity check, and its encoder stops either way.
