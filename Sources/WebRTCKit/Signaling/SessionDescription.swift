@@ -39,6 +39,11 @@ public struct SessionDescription: Equatable, Sendable {
     /// The resend format (RTX, RFC 4588) the offer pairs with our H.264
     /// (`a=fmtp:<rtx> apt=<ours>`), or nil when it pairs none.
     public let rtxPayloadType: UInt8?
+    /// The addresses the browser's offer gives for itself (`a=candidate`), in
+    /// its order: UDP, component 1, written as an IP. An mDNS name (`….local`)
+    /// can't be checked from here and is left out; an offer posted before the
+    /// browser gathered has none.
+    public let candidates: [DatagramAddress]
 
     public static let transportWideSequenceURI = "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
     public static let absSendTimeURI = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
@@ -84,6 +89,7 @@ public struct SessionDescription: Equatable, Sendable {
             guard line.hasPrefix("a=rtpmap:"), line.lowercased().hasSuffix(" rtx/90000") else { return nil }
             return UInt8(line.dropFirst(9).prefix { $0 != " " })
         })
+        candidates = section.compactMap(Self.candidate)
         rtxPayloadType = section.compactMap { line -> UInt8? in
             guard line.hasPrefix("a=fmtp:"), line.hasSuffix(" apt=\(payloadType)"),
                   let format = UInt8(line.dropFirst(7).prefix { $0 != " " }), rtxFormats.contains(format)
@@ -120,14 +126,16 @@ public struct SessionDescription: Equatable, Sendable {
     /// control needs (`CongestionControl.answerLines`).
     public func answer(
         ice: ICECredentials, fingerprint: String, ssrc: UInt32, rtxSSRC: UInt32? = nil,
-        candidates: [DatagramAddress], congestion: [String] = []
+        candidates: [DatagramAddress], reflexive: DatagramAddress? = nil, relay: DatagramAddress? = nil,
+        congestion: [String] = [], lite: Bool = true
     ) -> String {
         let pt = payloadType
         // Resends on their own stream only when the offer has a format for them.
         let rtx = rtxSSRC.flatMap { stream in rtxPayloadType.map { (format: $0, ssrc: stream) } }
         var lines = [
             "v=0", "o=- 0 0 IN IP4 127.0.0.1", "s=baguette", "t=0 0",
-            "a=group:BUNDLE \(mid)", "a=ice-lite",
+            "a=group:BUNDLE \(mid)",
+        ] + (lite ? ["a=ice-lite"] : []) + [
             "m=video 9 UDP/TLS/RTP/SAVPF \(pt)" + (rtx.map { " \($0.format)" } ?? ""), "c=IN IP4 0.0.0.0",
             "a=mid:\(mid)", "a=sendonly", "a=rtcp-mux",
             "a=ice-ufrag:\(ice.ufrag)", "a=ice-pwd:\(ice.password)",
@@ -145,12 +153,40 @@ public struct SessionDescription: Equatable, Sendable {
         if let rtx {
             lines += ["a=ssrc-group:FID \(ssrc) \(rtx.ssrc)", "a=ssrc:\(rtx.ssrc) cname:baguette"]
         }
-        // Host candidates only (ICE-lite): type preference 126, in the given order.
+        // Host candidates (type preference 126), in the given order; then the
+        // address a STUN server saw (server-reflexive, 100), its base left out
+        // (`raddr 0.0.0.0`) so the answer doesn't name the Mac's private one.
         for (index, address) in candidates.enumerated() {
             lines.append("a=candidate:\(index + 1) 1 udp \(2_130_706_431 - index) \(Self.text(address.ip)) \(address.port) typ host")
         }
+        if let reflexive {
+            lines.append("a=candidate:\(candidates.count + 1) 1 udp \(100 << 24 | 65_535 << 8 | 255) "
+                + "\(Self.text(reflexive.ip)) \(reflexive.port) typ srflx raddr 0.0.0.0 rport 0")
+        }
+        // The address a TURN server relays at (type preference 0): the last resort.
+        if let relay {
+            lines.append("a=candidate:\(candidates.count + (reflexive == nil ? 1 : 2)) 1 udp \(65_535 << 8 | 255) "
+                + "\(Self.text(relay.ip)) \(relay.port) typ relay raddr 0.0.0.0 rport 0")
+        }
         lines += ["a=end-of-candidates", ""]
         return lines.joined(separator: "\r\n")
+    }
+
+    /// `a=candidate:<foundation> <component> <transport> <priority> <address> <port> typ <type> …`
+    private static func candidate(_ line: String) -> DatagramAddress? {
+        guard line.hasPrefix("a=candidate:") else { return nil }
+        let fields = line.dropFirst(12).split(separator: " ").map(String.init)
+        guard fields.count >= 6, fields[1] == "1", fields[2].lowercased() == "udp",
+              let port = UInt16(fields[5]), let ip = address(fields[4]) else { return nil }
+        return DatagramAddress(ip: ip, port: port)
+    }
+
+    /// An IPv4 or IPv6 literal's bytes; nil for a name.
+    private static func address(_ text: String) -> [UInt8]? {
+        var v4 = in_addr(), v6 = in6_addr()
+        if inet_pton(AF_INET, text, &v4) == 1 { return withUnsafeBytes(of: v4) { Array($0) } }
+        if inet_pton(AF_INET6, text, &v6) == 1 { return withUnsafeBytes(of: v6) { Array($0) } }
+        return nil
     }
 
     private static func text(_ ip: [UInt8]) -> String {
