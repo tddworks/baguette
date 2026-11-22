@@ -22,26 +22,13 @@
       };
     },
 
-    /** Where a pointer at `event` sits on the screen, in its own points (`size`). */
-    toScreen(event, screen, size) {
-      const at = LocalPointer.place(event, screen);
-      return { x: at.left / 100 * size.width, y: at.top / 100 * size.height };
-    },
-
-    /** Whether a pointer event is a hover: a mouse or trackpad moving, no button down. */
-    hovers(event) {
-      return event.pointerType === 'mouse' && event.buttons === 0;
-    },
-
     /** Whether the page draws the pointer for this kind of pointer: a mouse has its own. */
     draws(pointerType) {
       return pointerType === 'touch' || pointerType === 'pen';
     },
 
-    /** Over `screenArea`: the browser's arrow for a mouse, a drawn one for a
-     *  finger. With `onHover`, a mouse moving with no button down is handed on
-     *  in the screen's points (`size()`) — the newest, once a frame. */
-    attach(screenArea, { onHover, size } = {}) {
+    /** Over `screenArea`: the browser's arrow for a mouse, a drawn one for a finger. */
+    attach(screenArea) {
       screenArea.style.cursor = 'default';
       const arrow = document.createElement('div');
       arrow.innerHTML = ARROW;
@@ -57,15 +44,6 @@
       };
       ['pointerdown', 'pointermove'].forEach((type) =>
         screenArea.addEventListener(type, follow, { passive: true }));
-      let waiting = null;
-      if (onHover && size) {
-        screenArea.addEventListener('pointermove', (e) => {
-          if (!LocalPointer.hovers(e)) return;
-          const first = waiting === null;
-          waiting = LocalPointer.toScreen(e, screenArea.getBoundingClientRect(), size());
-          if (first) requestAnimationFrame(() => { const at = waiting; waiting = null; onHover(at); });
-        }, { passive: true });
-      }
       return { detach() { arrow.remove(); } };
     },
   };

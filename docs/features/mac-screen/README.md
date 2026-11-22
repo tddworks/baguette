@@ -62,9 +62,9 @@ none; `CGDisplayBounds` has them) or the stream's frame size both work.
 trail the hand by the whole round trip. A mouse or trackpad shows the browser's
 own arrow; a finger gets one drawn where it touches. A pointer move still
 waiting to reach the Mac is replaced by a newer one, so it never falls behind;
-clicks, keys and scrolls keep their order. A shared display also follows the
-pointer as it hovers; a physical one doesn't, since from this Mac it would
-fight the Mac's own pointer.
+clicks, keys and scrolls keep their order. A mouse moving over the picture
+moves the Mac's pointer too (hover) — so watch a display from another device:
+from this Mac, hovering over a display's picture moves your own pointer there.
 
 ## Share to your device
 

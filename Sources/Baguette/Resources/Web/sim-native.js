@@ -393,16 +393,7 @@
     try {
       sim = await useSimulator(deviceDefinitionURL);
       sim.mount(document.getElementById('nativeDeviceFrame'));
-      // A Mac display streams without its pointer; the page draws it, so it
-      // never trails the hand (docs/features/mac-screen/README.md).
-      if (devicePlatform === 'macOS' && window.Baguette && window.Baguette._LocalPointer && sim.screenArea) {
-        // A shared display (watched from another device) follows the hover
-        // too; a physical one watched from this Mac would fight its own pointer.
-        window.Baguette._LocalPointer.attach(sim.screenArea, sharedMac() && can('pointer') ? {
-          onHover: (at) => sim.screen.hover(at),
-          size: () => sim.screen.size,
-        } : {});
-      }
+      if (can('pointer')) mountPointer();
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
@@ -2888,6 +2879,14 @@
       localStorage.setItem('asc.3dInspector', 'open');
     }
     if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
+  }
+
+  /// A device with a pointer of its own (`pointer`): it streams without it, so
+  /// the page draws it — it never trails the hand — and a mouse moving over
+  /// the screen moves it (hover). docs/features/mac-screen/README.md#input.
+  function mountPointer() {
+    window.Baguette._LocalPointer.attach(sim.screenArea);
+    new window.Baguette._HoverGestureSource(sim.screen).attach(sim.screenArea);
   }
 
   /// A page showing a Mac shared to this device (`/mac/share`): the display

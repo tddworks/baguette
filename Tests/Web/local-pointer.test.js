@@ -29,13 +29,3 @@ test('should draw a pointer for a finger or a pen, and leave a mouse its own', (
   assert.equal(LocalPointer().draws('mouse'), false);
 });
 
-test('should place a hover in the screen\'s own points', () => {
-  const at = LocalPointer().toScreen({ clientX: 300, clientY: 450 }, screen, { width: 603, height: 1311 });
-  assert.deepEqual(at, { x: 301.5, y: 655.5 });
-});
-
-test('should hover only for a mouse moving with no button down', () => {
-  assert.equal(LocalPointer().hovers({ pointerType: 'mouse', buttons: 0 }), true);
-  assert.equal(LocalPointer().hovers({ pointerType: 'mouse', buttons: 1 }), false);
-  assert.equal(LocalPointer().hovers({ pointerType: 'touch', buttons: 0 }), false);
-});

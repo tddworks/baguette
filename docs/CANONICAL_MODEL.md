@@ -220,7 +220,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a Mac display's feed hands on complete pictures only, at most 4096 pixels on the long side; an unchanged one repeats the last | `MacScreen` · `DisplayCaptureSize` |
 | a Mac frame fits a display only of its screen's shape, within 2%; a display shows with no frame until one is picked | `MacFrame.fits` · `MacDisplayLooks` |
 | a pointer move still waiting is replaced by a newer one; anything else keeps its order and is never dropped, nor jumped by a move | `PendingGestures` (a stream socket posts moves, `GestureQueues` drains them) |
-| only a device with a pointer of its own takes a hover (`Pointer`, the `pointer` ability) — a Mac display; a Mac display streams without its pointer and the page draws it | each family's `Abilities` · `ScreenCaptureKitFeed` |
+| only a device with a pointer of its own takes a hover (`Pointer`, the `pointer` ability) — a Mac display; it streams without its pointer, and a page draws the pointer and sends hovers for any device that can `pointer`, no other check | each family's `Abilities` · `ScreenCaptureKitFeed` · the page's `mountPointer` |
 | a shared display is the viewer's shape — its points × the room, drawn at 2×, the long side ≤ 4096 px — made again in a new shape when the viewer turns, under the same id; main gives the previous main back, before it goes | `SharedScreenShape` · `ScreenShares` |
 | a display baguette made is captured at the pixels it made it with, never as a long-running process reads it | `MacScreen` |
 | a gesture on a Mac display lands at the same fraction of where it sits on the desktop; a key's modifiers are held around it and released in reverse; a second finger sends nothing | `DisplayEvents` |
