@@ -2,8 +2,14 @@
 // and one entry here; the sheet rule is `Panels`'.
 import { Panels } from '../device/panels.js';
 import { logsPanel } from '../panels/logs/logs-panel.js';
+import { cameraPanel } from '../panels/camera/camera-panel.js';
+import { statusBarPanel } from '../panels/status-bar/status-bar-panel.js';
+import { networkPanel } from '../panels/network/network-panel.js';
+import { notifyPanel } from '../panels/notify/notify-panel.js';
+import { defaultsPanel } from '../panels/defaults/defaults-panel.js';
+import { locationPanel } from '../panels/location/location-panel.js';
 
-export const pagePanels = [logsPanel];
+export const pagePanels = [logsPanel, cameraPanel, statusBarPanel, networkPanel, notifyPanel, defaultsPanel, locationPanel];
 
 /** The page's panels, on `page` (which finds its elements by id). */
 export function panelsOn(page) {

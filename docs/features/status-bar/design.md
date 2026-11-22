@@ -7,7 +7,7 @@ description: Why status-bar overrides go through simctl instead of SimulatorHID,
 ## Path
 
 - CLI `baguette status-bar override|clear`, `GET|POST|DELETE /devices/<UDID>/status-bar` (or `/simulators/…`),
-  and the focus-mode panel (`sim-status-bar.js`)
+  and the focus-mode panel (`panels/status-bar/status-bar-view.js`)
 - → `StatusBarOverride` (value) → `StatusBar` (`Simulator.statusBar()` vends a fresh handle)
 - → `SimctlStatusBar` → `Subprocess.run("/usr/bin/xcrun", ["simctl","status_bar",udid,"override", …])`;
   `GET` parses `simctl status_bar … list`.
@@ -34,7 +34,7 @@ so a bad slider value can't make the spawn fail.
 
 ## The panel is a dumb sender
 
-`sim-status-bar.js` `GET`s the current overrides on open, so the card reflects
+`panels/status-bar/status-bar-view.js` `GET`s the current overrides on open, so the card reflects
 the device. On change it debounces (250 ms) and `POST`s **only the field that
 changed**: changing Wi-Fi bars sends `{"wifiBars":N}` alone, so the data-network
 indicator can't flip to "5G" and the battery isn't re-applied. All domain logic

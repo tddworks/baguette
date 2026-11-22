@@ -33,7 +33,7 @@ function logsPanel(mounted) {
   };
 }
 
-const device = { id: 'D' };
+const device = { id: 'D', can: () => true };
 
 test('should open a panel in its sheet, the view and its control saying so', () => {
   const at = page('nativeLogsHost', 'nativeLogsToggle', 'nativeLogsSheet');
@@ -83,4 +83,31 @@ test('should do nothing for a panel whose place the page doesn\'t have', () => {
 test('should say which ability each panel needs, by its control', () => {
   const panels = new Panels(page(), [logsPanel([])]);
   assert.deepEqual(panels.needs(), { nativeLogsToggle: 'logs' });
+});
+
+test('should detach every panel it mounted when the page goes', () => {
+  const at = page('nativeLogsHost', 'nativeCamHost');
+  const detached = [];
+  const panel = (name, slot) => ({ name, needs: name, slot, attribute: name, mount: () => ({ detach: () => detached.push(name) }) });
+  const panels = new Panels(at, [panel('logs', 'Logs'), panel('cam', 'Cam'), panel('never', 'Never')]);
+  panels.toggle('logs', device);
+  panels.toggle('cam', device);
+  panels.detach();
+  assert.deepEqual(detached.sort(), ['cam', 'logs']);
+});
+
+test('should start each panel that watches its device, before it has ever opened', () => {
+  const at = page('nativeNetToggle');
+  const watching = [];
+  const network = { name: 'net', needs: 'network', slot: 'Net', attribute: 'net', mount: () => ({}),
+    watch: ({ device: d, control }) => watching.push({ d, control }) };
+  new Panels(at, [network, logsPanel([])]).watch(device);
+  assert.deepEqual(watching, [{ d: device, control: at.elements.nativeNetToggle }]);
+});
+
+test('should leave a panel unwatched when its device can\'t do what it needs', () => {
+  const watching = [];
+  const network = { name: 'net', needs: 'network', slot: 'Net', attribute: 'net', mount: () => ({}), watch: () => watching.push(1) };
+  new Panels(page(), [network]).watch({ id: 'D', can: (a) => a !== 'network' });
+  assert.equal(watching.length, 0);
 });

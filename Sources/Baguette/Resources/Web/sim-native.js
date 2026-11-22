@@ -62,13 +62,6 @@
   let panels = null;
   let axInspector = null;
   let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
-  let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
-  let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
-  let locationPanel = null;  // LocationPanel — simctl location map picker
-  let networkPanel = null;   // NetworkPanel — latency / bandwidth / loss / offline
-  let defaultsPanel = null;  // DefaultsPanel — an app's typed UserDefaults
-  let notifyPanel = null;    // NotifyPanel — deliver a remote notification
-  let networkArmedTimer = null; // keeps the toolbar's armed dot honest while the card is shut
   let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
@@ -501,7 +494,8 @@
     // has ever been opened. A throttle armed from the CLI in another
     // terminal is exactly the one someone forgets about, and this page is
     // where they will be looking when the app feels slow.
-    if (can('network')) watchNetworkArmed();
+    // Panels that watch their device from the start (the network's armed dot).
+    panels.watch(device);
 
   }
 
@@ -2422,12 +2416,12 @@
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
     };
     window.__nativeToggleLogs = () => panels.toggle('logs', device);
-    window.__nativeToggleCamera = () => toggleCamera();
-    window.__nativeToggleStatusBar = () => toggleStatusBar();
-    window.__nativeToggleLocation = () => toggleLocation();
-    window.__nativeToggleNetwork = () => toggleNetwork();
-    window.__nativeToggleDefaults = () => toggleDefaults();
-    window.__nativeToggleNotify = () => toggleNotify();
+    window.__nativeToggleCamera = () => panels.toggle('camera', device);
+    window.__nativeToggleStatusBar = () => panels.toggle('statusBar', device);
+    window.__nativeToggleLocation = () => panels.toggle('location', device);
+    window.__nativeToggleNetwork = () => panels.toggle('network', device);
+    window.__nativeToggleDefaults = () => panels.toggle('defaults', device);
+    window.__nativeToggleNotify = () => panels.toggle('notify', device);
     window.__nativeToggle3D = () => toggle3D();
     window.__nativeEnterHandheld = () => enterHandheld();
     window.__nativeHandheldMenu = (open) => setHandheldMenu(!!open);
@@ -2532,212 +2526,6 @@
           getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
         }
     );
-  }
-
-  // Camera sheet — same lazy-mount pattern as logs. The CameraPanel
-  // owns its WS (/devices/<udid>/camera); closing the sheet leaves
-  // the panel mounted so reopening doesn't drop the streaming state
-  // or device selection. The toolbar button's `.streaming` class
-  // tracks the panel's reported phase so the user sees "camera on"
-  // at a glance even when the sheet is closed.
-  function toggleCamera() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeCameraHost');
-    const btn  = document.getElementById('nativeCameraToggle');
-    const open = view && view.getAttribute('data-camera') === 'open';
-    if (!view || !host) return;
-    if (open) {
-      view.removeAttribute('data-camera');
-      if (btn) btn.classList.remove('active');
-    } else {
-      view.setAttribute('data-camera', 'open');
-      if (btn) btn.classList.add('active');
-      if (!cameraPanel && window.CameraPanel && udid) {
-        host.innerHTML = '';
-        cameraPanel = new window.CameraPanel();
-        cameraPanel.onPhaseChange = (phase) => {
-          const indicator = document.getElementById('nativeCameraToggle');
-          if (indicator) indicator.classList.toggle('streaming', phase === 'streaming');
-        };
-        cameraPanel.attach(host, udid);
-      }
-    }
-  }
-
-  // Status-bar card — same lazy-mount pattern as the camera sheet.
-  // StatusBarPanel posts `simctl status_bar` overrides; closing the
-  // card leaves it mounted so reopening keeps the control state. The
-  // toolbar button's `.active` class tracks open/closed.
-  function toggleStatusBar() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeStatusBarHost');
-    const btn  = document.getElementById('nativeStatusBarToggle');
-    const open = view && view.getAttribute('data-statusbar') === 'open';
-    if (!view || !host) return;
-    if (open) {
-      view.removeAttribute('data-statusbar');
-      if (btn) btn.classList.remove('active');
-    } else {
-      view.setAttribute('data-statusbar', 'open');
-      if (btn) btn.classList.add('active');
-      if (!statusBarPanel && window.StatusBarPanel && udid) {
-        host.innerHTML = '';
-        statusBarPanel = new window.StatusBarPanel();
-        statusBarPanel.attach(host, udid);
-      }
-    }
-  }
-
-  // Network-conditioning card — same lazy-mount pattern as the status-bar
-  // card, with one difference that matters: the toolbar's armed dot is kept
-  // in sync whether or not the card has ever been opened. A forgotten
-  // throttle does not announce itself — it presents as "the app is slow",
-  // possibly days later — so the indicator cannot depend on the user
-  // happening to open the panel.
-  function toggleNetwork() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeNetworkHost');
-    const btn  = document.getElementById('nativeNetworkToggle');
-    const sheet = document.getElementById('nativeNetworkSheet');
-    const open = view && view.getAttribute('data-network') === 'open';
-    if (!view || !host) return;
-    // `aria-hidden` tracks the card, rather than being pinned true in the
-    // markup: a card that is on screen but hidden from the a11y tree is
-    // unreachable to a screen reader and invisible to anything driving the
-    // page through it.
-    if (open) {
-      view.removeAttribute('data-network');
-      if (btn) btn.classList.remove('active');
-      // `inert` as well as `aria-hidden`: the closed card is only faded out
-      // by CSS, so without it the controls stay focusable and tabbing walks
-      // into a panel nobody can see.
-      if (sheet) { sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true; }
-    } else {
-      view.setAttribute('data-network', 'open');
-      if (btn) btn.classList.add('active');
-      if (sheet) { sheet.setAttribute('aria-hidden', 'false'); sheet.inert = false; }
-      if (!networkPanel && window.NetworkPanel && udid) {
-        host.innerHTML = '';
-        networkPanel = new window.NetworkPanel();
-        networkPanel.onArmedChange = (form) =>
-          markNetworkArmed(form.isConditioning, form.describe());
-        networkPanel.attach(host, udid);
-      } else if (networkPanel) {
-        networkPanel.refresh();
-      }
-    }
-  }
-
-  // Notify card — same lazy-mount pattern as the network card. Closing it
-  // keeps the panel mounted, so the app and payload survive a reopen.
-  function toggleNotify() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeNotifyHost');
-    const btn  = document.getElementById('nativeNotifyToggle');
-    const sheet = document.getElementById('nativeNotifySheet');
-    const open = view && view.getAttribute('data-notify') === 'open';
-    if (!view || !host) return;
-    if (open) {
-      view.removeAttribute('data-notify');
-      if (btn) btn.classList.remove('active');
-      if (sheet) { sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true; }
-    } else {
-      view.setAttribute('data-notify', 'open');
-      if (btn) btn.classList.add('active');
-      if (sheet) { sheet.setAttribute('aria-hidden', 'false'); sheet.inert = false; }
-      if (!notifyPanel && window.NotifyPanel && udid) {
-        host.innerHTML = '';
-        notifyPanel = new window.NotifyPanel();
-        notifyPanel.attach(host, udid);
-      }
-    }
-  }
-
-  // Defaults card — same lazy-mount pattern as the network card. Reopening
-  // re-reads the device, since the app under test may have rewritten its
-  // own preferences while the card was shut.
-  function toggleDefaults() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeDefaultsHost');
-    const btn  = document.getElementById('nativeDefaultsToggle');
-    const sheet = document.getElementById('nativeDefaultsSheet');
-    const open = view && view.getAttribute('data-defaults') === 'open';
-    if (!view || !host) return;
-    if (open) {
-      view.removeAttribute('data-defaults');
-      if (btn) btn.classList.remove('active');
-      if (sheet) { sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true; }
-    } else {
-      view.setAttribute('data-defaults', 'open');
-      if (btn) btn.classList.add('active');
-      if (sheet) { sheet.setAttribute('aria-hidden', 'false'); sheet.inert = false; }
-      if (!defaultsPanel && window.DefaultsPanel && udid) {
-        host.innerHTML = '';
-        defaultsPanel = new window.DefaultsPanel();
-        defaultsPanel.attach(host, udid);
-      } else if (defaultsPanel) {
-        defaultsPanel.refresh();
-      }
-    }
-  }
-
-  function markNetworkArmed(armed, summary) {
-    const btn = document.getElementById('nativeNetworkToggle');
-    if (!btn) return;
-    btn.classList.toggle('conditioning', !!armed);
-    // The amber dot is the whole warning, and a dot says nothing to a screen
-    // reader. Put the state in the accessible name too, so "a throttle is
-    // on" is available without seeing it.
-    const label = armed
-      ? `Network conditioning on${summary ? ` — ${summary}` : ''}`
-      : 'Network conditioning off';
-    btn.setAttribute('aria-label', label);
-    btn.setAttribute('title', label);
-  }
-
-  // Poll the device's conditioning state independently of the card. This is
-  // the safety net: the CLI and the HTTP route can arm a throttle this page
-  // never saw, and the browser is where someone is most likely to be looking
-  // when they wonder why everything is slow.
-  function watchNetworkArmed() {
-    if (!udid || networkArmedTimer) return;
-    const poll = async () => {
-      try {
-        const res = await fetch(`/devices/${encodeURIComponent(udid)}/network`);
-        if (res.ok) {
-          const state = await res.json();
-          markNetworkArmed(state.active, state.summary);
-        }
-      } catch (e) { /* leave the indicator as it was */ }
-    };
-    poll();
-    networkArmedTimer = setInterval(poll, 5000);
-  }
-
-  // Location card — same lazy-mount pattern as the status-bar card.
-  // LocationPanel hangs a Leaflet map that POSTs `simctl location`
-  // set/start/clear. Reopening re-measures the map (it may have been
-  // laid out at zero size while the card was faded out).
-  function toggleLocation() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeLocationHost');
-    const btn  = document.getElementById('nativeLocationToggle');
-    const open = view && view.getAttribute('data-location') === 'open';
-    if (!view || !host) return;
-    if (open) {
-      view.removeAttribute('data-location');
-      if (btn) btn.classList.remove('active');
-    } else {
-      view.setAttribute('data-location', 'open');
-      if (btn) btn.classList.add('active');
-      if (!locationPanel && window.LocationPanel && udid) {
-        host.innerHTML = '';
-        locationPanel = new window.LocationPanel();
-        locationPanel.attach(host, udid);
-      } else if (locationPanel) {
-        locationPanel.refresh();
-      }
-    }
   }
 
   // Live 3D is a main-view mode, not a duplicate preview. Its WebSocket
@@ -2911,12 +2699,7 @@
       try { if (screensRail) screensRail.detach(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
-      try { if (cameraPanel) cameraPanel.detach(); } catch (_) { /* ignore */ }
-      try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
-      try { if (locationPanel) locationPanel.detach(); } catch (_) { /* ignore */ }
-      try { if (networkPanel) networkPanel.detach(); } catch (_) { /* ignore */ }
-      try { if (notifyPanel) notifyPanel.detach(); } catch (_) { /* ignore */ }
-      try { if (networkArmedTimer) clearInterval(networkArmedTimer); } catch (_) { /* ignore */ }
+      try { panels.detach(); } catch (_) { /* ignore */ }
       try { if (render3DPanel) render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
   }

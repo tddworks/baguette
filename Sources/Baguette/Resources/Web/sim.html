@@ -96,18 +96,18 @@
 <script src="/whep-session.js"></script>
 <script src="/panels/logs/log-view.js"></script>
 <script src="/sim-ax-inspector.js"></script>
-<script src="/sim-camera.js"></script>
-<script src="/sim-status-bar.js"></script>
+<script src="/panels/camera/camera-view.js"></script>
+<script src="/panels/status-bar/status-bar-view.js"></script>
 <!-- Network conditioning. `network/network-condition-form.js` is the value
      type (which of the three mutually exclusive sources a request states);
      `sim-network.js` is the card that draws it, and must load after it. -->
-<script src="/network/network-condition-form.js"></script>
-<script src="/sim-network.js"></script>
+<script src="/panels/network/network-condition-form.js"></script>
+<script src="/panels/network/network-view.js"></script>
 <!-- App defaults. `defaults/preference-rows.js` shapes rows and request
      bodies; `sim-defaults.js` is the card that draws them, and loads after. -->
-<script src="/defaults/preference-rows.js"></script>
-<script src="/sim-defaults.js"></script>
-<script src="/sim-notify.js"></script>
+<script src="/panels/defaults/preference-rows.js"></script>
+<script src="/panels/defaults/defaults-view.js"></script>
+<script src="/panels/notify/notify-view.js"></script>
 <script src="/sim-file-drop.js"></script>
 <script src="/sim-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +
@@ -130,7 +130,7 @@
      before sim-location.js, which is itself lazy-used by sim-native.js
      on first open of the location card. -->
 <script src="/vendor/leaflet/leaflet.js"></script>
-<script src="/sim-location.js"></script>
+<script src="/panels/location/location-view.js"></script>
 <!-- Baguette SDK (the new shape — see Resources/Web/baguette/). The
      page-level scripts below (sim-stream / sim-native) consume the
      SDK via `Baguette.use({...}).mount(...)`. Load order matters:

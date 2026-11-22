@@ -65,7 +65,7 @@ Thresholds are pinned to the browser's own speed presets (`Walk 1.4 ·
 Run 3.5 · Cycle 6 · Drive 13.4 · Highway 29`), so the preset a user picked
 is the activity their app observes. A republish is skipped when the kind
 is unchanged and the speed moved less than 0.1 m/s — the same epsilon
-`sim-location.js` throttles its own sends with — but a kind change always
+`panels/location/location-view.js` throttles its own sends with — but a kind change always
 republishes, however small the speed step.
 
 The pedometer is cumulative across a walk → stop → walk sequence
