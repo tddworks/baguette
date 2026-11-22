@@ -27,6 +27,10 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `GET` | `/` | 302 → `/simulators` | |
 | `GET` | `/simulators` | device list page | |
 | `GET` | `/simulators.json` | `{running, available}`, same as `baguette list --json` | |
+| `GET` | `/mac/share` *with `--share-mac`* | the page that shares this Mac to the device it's opened on | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
+| `POST` · `PUT` · `DELETE` | `/mac/shares`, `/mac/shares/:id` *with `--share-mac`* | start, reshape, end a share: a display of the viewer's shape | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
+| `WS` · `GET` | `/mac/pointer`, `/mac/pointer/:id.png` *with `--share-mac`* | the Mac's pointer shape as it changes, and each shape's image | [mac-screen](features/mac-screen/README.md#input) |
+| `GET` | `/mac-frames.json?width=&height=` | `{frames}`: the installed Mac frames a display of that size fits | [mac-screen](features/mac-screen/README.md#frames) |
 | `GET` | `/devices.json` | `{devices}`: every device of every family, its kind (platform, reality, model, OS), state and abilities; what the list page reads | |
 | `GET` | `/devices/:udid` | focus-mode page, for any device (`/simulators/:udid` serves it too) | [baguette-sdk](features/baguette-sdk/README.md) |
 | `POST` | `/devices/:udid/boot`, `/shutdown` *any device* | boot / shut down | [boot](features/boot/README.md) |
@@ -34,7 +38,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/devices/:udid/input` *any device* | one gesture envelope → its ack | [wire.md](wire.md) |
 | `GET` | `/devices/:udid/describe-ui.json?x=&y=` *any device* | accessibility tree; `x`+`y` hit-tests a point | [accessibility](features/accessibility/README.md) |
 | `GET` | `/devices/:udid/screenshot.jpg`, `.png` *any device* | one frame (`quality`, `scale`, `size`, `fit`, `background`) from a simulator or a phone on a cable | [screenshot](features/screenshot/README.md), [capture-size](features/capture-size/README.md), [real-devices](features/real-devices/README.md) |
-| `GET` | `/devices/:udid/screenshot-bezel.png` *any device* | the frame inside its bezel (`buttons=`) | [screenshot](features/screenshot/README.md) |
+| `GET` | `/devices/:udid/screenshot-bezel.png` *any device* | the frame inside its bezel (`buttons=`, `chrome=` a picked one) | [screenshot](features/screenshot/README.md) |
 | `GET` | `/devices/:udid/definition.json` *any device* | SDK bootstrap: identity, screen rect, bezel URLs, buttons — the device's own bezel by its model, or `?chrome=<device name>` to borrow one (`404` with `needsChrome` when it has none) | [baguette-sdk](features/baguette-sdk/README.md) |
 | `GET` | `/devices/:udid/chrome.json`, `bezel.png`, `screen-mask.png`, `chrome-button/:file` *any device* | DeviceKit bezel layout and images (`panel=` on a foldable) | [chrome-bezel](features/chrome-bezel/README.md) |
 | `GET` | `/devices/:udid/3d-model.json` *any device* | the device's 3D model and variants, by its hardware id, model or name; a phone with none matched gets the installed models to pick from | [3d-rendering](features/3d-rendering/README.md) |

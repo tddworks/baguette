@@ -5,13 +5,13 @@ import VideoToolbox
 
 /// `CompressionSession` on VideoToolbox: each call is one `VTCompressionSession`
 /// call, mapped and answered with its status. What to call when is
-/// `H264Encoder`'s.
+/// `VideoEncoder`'s.
 final class VideoToolboxSession: CompressionSession, @unchecked Sendable {
     private var session: VTCompressionSession?
 
     deinit { close() }
 
-    func open(width: Int32, height: Int32, lowLatencyRateControl: Bool) -> Int32 {
+    func open(width: Int32, height: Int32, codec: CMVideoCodecType, lowLatencyRateControl: Bool) -> Int32 {
         close()
         let spec: CFDictionary? = lowLatencyRateControl
             ? [kVTVideoEncoderSpecification_EnableLowLatencyRateControl: kCFBooleanTrue!] as CFDictionary
@@ -19,7 +19,7 @@ final class VideoToolboxSession: CompressionSession, @unchecked Sendable {
         var created: VTCompressionSession?
         let status = VTCompressionSessionCreate(
             allocator: kCFAllocatorDefault, width: width, height: height,
-            codecType: kCMVideoCodecType_H264, encoderSpecification: spec,
+            codecType: codec, encoderSpecification: spec,
             imageBufferAttributes: nil, compressedDataAllocator: kCFAllocatorDefault,
             outputCallback: nil, refcon: nil, compressionSessionOut: &created)
         session = status == noErr ? created : nil
@@ -62,6 +62,7 @@ final class VideoToolboxSession: CompressionSession, @unchecked Sendable {
         switch property {
         case .realTime(let on): (kVTCompressionPropertyKey_RealTime, on ? kCFBooleanTrue : kCFBooleanFalse)
         case .highProfileAutoLevel: (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel)
+        case .hevcMainAutoLevel: (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_HEVC_Main_AutoLevel)
         case .allowFrameReordering(let on):
             (kVTCompressionPropertyKey_AllowFrameReordering, on ? kCFBooleanTrue : kCFBooleanFalse)
         case .averageBitRate(let bps): (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: bps))

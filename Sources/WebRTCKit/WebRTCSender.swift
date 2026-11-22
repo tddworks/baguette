@@ -82,7 +82,8 @@ public final class WebRTCSender: @unchecked Sendable {
     private var pendingChecks: [[UInt8]: DatagramAddress] = [:]
     /// Each round of checks, after the first, this long after the one before.
     private static let checkBackoff: [TimeInterval] = [0.1, 0.2, 0.4, 0.8, 1.6]
-    private let packetizer = H264Packetizer()
+    /// Cuts pictures for the codec the session chose.
+    private let packetizer: any RTPPacketizer
     private var pacer: Pacer<OutboundPacket>
     /// Whether the pacer's next slice is already scheduled.
     private var sliceScheduled = false
@@ -117,6 +118,7 @@ public final class WebRTCSender: @unchecked Sendable {
         self.ice = ice
         self.ssrc = ssrc
         self.payloadType = offer.payloadType
+        packetizer = offer.codec.packetizer
         self.datagrams = datagrams
         self.handshake = handshake
         self.congestion = congestion

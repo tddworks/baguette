@@ -195,7 +195,7 @@
 
   const DeviceFilter = window.Baguette._DeviceFilter;
 
-  const PLATFORMS = { iOS: 'iOS', watchOS: 'watchOS', tvOS: 'tvOS', visionOS: 'visionOS', android: 'Android' };
+  const PLATFORMS = { iOS: 'iOS', watchOS: 'watchOS', tvOS: 'tvOS', visionOS: 'visionOS', android: 'Android', macOS: 'macOS' };
 
   /** A `/devices.json` entry as a row: its kind flattened beside it. */
   function rowOf(device) {

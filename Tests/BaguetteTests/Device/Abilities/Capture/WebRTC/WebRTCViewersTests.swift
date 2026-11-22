@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import Mockable
 import Testing
@@ -11,6 +12,11 @@ private let offer = [
     "a=fingerprint:sha-256 6B:8B", "a=setup:actpass",
     "a=rtpmap:112 H264/90000",
     "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
+].joined(separator: "\r\n")
+
+/// An offer carrying Main-profile H.265 beside High-profile H.264, as Chrome's does.
+private let bothCodecs = offer.replacingOccurrences(of: "SAVPF 112", with: "SAVPF 49 112") + "\r\n" + [
+    "a=rtpmap:49 H265/90000", "a=fmtp:49 level-id=180;profile-id=1;tier-flag=0;tx-mode=SRST",
 ].joined(separator: "\r\n")
 
 private final class Box<T>: @unchecked Sendable {
@@ -31,10 +37,14 @@ private struct Rig {
     let stream = MockStream()
     let screen = MockScreen()
     let trusted = Box<[String]>([])
+    /// The codecs streams were made in, in order.
+    let madeIn = Box<[CMVideoCodecType]>([])
     let viewers: WebRTCViewers
 
     /// `stun`: a STUN server the viewers ask; `seenAt`, what it answers (nil: silence).
-    init(streamStarts: Bool = true, stun: STUNServer? = nil, seenAt: DatagramAddress? = nil, turn: TURNServer? = nil) {
+    /// `encodable`: the codecs this Mac can encode.
+    init(streamStarts: Bool = true, stun: STUNServer? = nil, seenAt: DatagramAddress? = nil, turn: TURNServer? = nil,
+         encodable: Set<VideoCodec.Kind> = [.h264, .h265]) {
         given(datagrams).addresses.willReturn([DatagramAddress(ip: [127, 0, 0, 1], port: 5000)])
         let handler = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
         given(datagrams).onReceive(.any).willProduce { handler.value = $0 }
@@ -73,24 +83,60 @@ private struct Rig {
         } else {
             given(stream).start(on: .any).willThrow(CancellationError())
         }
-        let (datagrams, handshake, trusted, stream) = (datagrams, handshake, trusted, stream)
+        let (datagrams, handshake, trusted, stream, madeIn) = (datagrams, handshake, trusted, stream, madeIn)
         viewers = WebRTCViewers(
             ticking: nil,
             connect: { fingerprint in
                 trusted.value.append(fingerprint)
                 return (datagrams, handshake)
             },
-            stream: { _ in stream },
+            stream: { _, codec in madeIn.value.append(codec.codecType); return stream },
+            encodable: encodable,
             stun: stun, turn: turn)
     }
 
-    func admit(_ sdp: String = offer) throws -> (id: String, answer: String) {
-        try viewers.admit(offer: sdp, on: screen)
+    func admit(_ sdp: String = offer, codec: CodecChoice? = nil) throws -> (id: String, answer: String) {
+        try viewers.admit(offer: sdp, on: screen, codec: codec)
     }
 }
 
 @Suite("WebRTCViewers")
 struct WebRTCViewersTests {
+    @Test func `should stream a viewer through a stream of its own when given no other`() throws {
+        let rig = Rig()
+        let screen = MockScreen()
+        given(screen).start(onFrame: .any).willReturn()
+        given(screen).stop().willReturn()
+        let (datagrams, handshake) = (rig.datagrams, rig.handshake)
+        let viewers = WebRTCViewers(ticking: nil, connect: { _ in (datagrams, handshake) }, encodable: [.h264])
+        let (id, _) = try viewers.admit(offer: offer, on: screen)
+        #expect(viewers.count == 1)
+        try viewers.find(id).hangUp()
+        #expect(viewers.count == 0)
+    }
+
+    @Test func `should answer with H.265 when it was asked for and the offer carries it`() throws {
+        let rig = Rig()
+        let (_, answer) = try rig.admit(bothCodecs, codec: .h265)
+
+        #expect(answer.contains("a=rtpmap:49 H265/90000"))
+        #expect(rig.madeIn.value == [kCMVideoCodecType_HEVC])
+    }
+
+    @Test func `should answer with H.264 when nothing was asked for`() throws {
+        let rig = Rig()
+        let (_, answer) = try rig.admit(bothCodecs)
+
+        #expect(answer.contains("a=rtpmap:112 H264/90000") && !answer.contains("H265"))
+        #expect(rig.madeIn.value == [kCMVideoCodecType_H264])
+    }
+
+    @Test func `should answer with H.264 when H.265 was asked for but this Mac can't encode it`() throws {
+        let (_, answer) = try Rig(encodable: [.h264]).admit(bothCodecs, codec: .h265)
+
+        #expect(answer.contains("a=rtpmap:112 H264/90000") && !answer.contains("H265"))
+    }
+
     @Test func `should offer each viewer the public address its STUN server sees`() throws {
         let stun = STUNServer(address: DatagramAddress(ip: [198, 51, 100, 4], port: 3478))
         let rig = Rig(stun: stun, seenAt: DatagramAddress(ip: [203, 0, 113, 7], port: 61000))

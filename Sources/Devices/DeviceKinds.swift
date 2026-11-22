@@ -6,15 +6,18 @@ import Foundation
 /// kind is one line here.
 ///
 /// Companion phones connect only while `serve` runs, so only it passes them.
+/// This Mac's displays are reached only when asked for — they show, and
+/// drive, the Mac itself.
 struct DeviceKinds {
     let simulators: any Simulators
     var companions: (any Devices)? = nil
     var phones: any Devices = CoreDevicePhones()
     var androids: any Devices = AndroidDevices()
+    var macs: (any Devices)? = nil
 
     /// Simulators, then companion phones, then phones on a cable, then
-    /// Android emulators and phones.
+    /// Android emulators and phones, then this Mac's displays when asked for.
     var devices: any Devices {
-        CombinedDevices([SimulatorDevices(simulators)] + (companions.map { [$0] } ?? []) + [phones, androids])
+        CombinedDevices([SimulatorDevices(simulators)] + (companions.map { [$0] } ?? []) + [phones, androids] + (macs.map { [$0] } ?? []))
     }
 }

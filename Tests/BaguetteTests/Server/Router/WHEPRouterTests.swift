@@ -32,7 +32,7 @@ private func mockViewers(stun: STUNServer? = nil, turn: TURNServer? = nil) -> We
             given(handshake).fingerprint.willReturn("sha-256 AA")
             return (datagrams, handshake)
         },
-        stream: { _ in
+        stream: { _, _ in
             let stream = MockStream()
             given(stream).start(on: .any).willReturn()
             given(stream).stop().willReturn()
@@ -42,6 +42,7 @@ private func mockViewers(stun: STUNServer? = nil, turn: TURNServer? = nil) -> We
             given(stream).requestSnapshot().willReturn()
             return stream
         },
+        encodable: [.h264, .h265],
         stun: stun, turn: turn)
 }
 
@@ -264,6 +265,28 @@ struct WHEPRouterTests {
             let response = try await client.send(.post, "/devices/U/whep", body: offer, headers: sdp)
 
             #expect(response.header("Link") == #"<stun:stun.example.com:3478>; rel="ice-server""#)
+        }
+    }
+
+    @Test func `should give a viewer H.265 when asked for it, and H.264 when nothing is`() async throws {
+        let both = offer.replacingOccurrences(of: "SAVPF 112", with: "SAVPF 49 112")
+            + "a=rtpmap:49 H265/90000\r\na=fmtp:49 level-id=180;profile-id=1;tier-flag=0;tx-mode=SRST\r\n"
+        try await whepServer().test { client in
+            let h265 = try await client.send(.post, "/devices/U/whep?codec=h265", body: both, headers: sdp)
+            #expect(h265.status == .created)
+            #expect(h265.text.contains("a=rtpmap:49 H265/90000"))
+
+            let plain = try await client.send(.post, "/devices/U/whep", body: both, headers: sdp)
+            #expect(plain.text.contains("a=rtpmap:112 H264/90000") && !plain.text.contains("H265"))
+        }
+    }
+
+    @Test func `should refuse a codec it doesn't know, naming the ones it does`() async throws {
+        try await whepServer().test { client in
+            let response = try await client.send(.post, "/devices/U/whep?codec=vp9", body: offer, headers: sdp)
+
+            #expect(response.status == .badRequest)
+            #expect(response.text.contains("unknown codec: vp9 (h265, h264 or auto)"))
         }
     }
 

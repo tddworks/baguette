@@ -25,7 +25,7 @@ struct CommandParsingTests {
             "install", "add-media",
             "openurl", "schemes", "notify",
             "plugin", "bakery", "diag-digitizer-trackpad", "lifetime", "interface",
-            "heal", "defaults",
+            "heal", "defaults", "virtual-display", "main-display", "pointer-shapes",
         ])
     }
 
@@ -122,6 +122,39 @@ struct CommandParsingTests {
     @Test func `should list as JSON when --json is given`() throws {
         let cmd = try ListCommand.parse(["--json"])
         #expect(cmd.json == true)
+    }
+
+    @Test func `should list this Mac's displays only when list is asked with --mac`() throws {
+        #expect(try ListCommand.parse([]).mac == false)
+        #expect(try ListCommand.parse(["--mac"]).mac == true)
+    }
+
+    @Test func `should offer a pointer-shapes process to serve alone, taking nothing`() throws {
+        _ = try PointerShapesCommand.parse([])
+        #expect(PointerShapesCommand.configuration.shouldDisplay == false)
+    }
+
+    @Test func `should read the display a main-display process is to make main`() throws {
+        #expect(try MainDisplayCommand.parse(["--display", "47"]).display == 47)
+        #expect(MainDisplayCommand.configuration.shouldDisplay == false)
+    }
+
+    @Test func `should read the display a virtual-display process is to make`() throws {
+        let command = try VirtualDisplayCommand.parse(["--name", "baguette – iPhone", "--width", "603", "--height", "1311", "--serial", "3"])
+        #expect(command.name == "baguette – iPhone")
+        #expect(command.shape.points == Size(width: 603, height: 1311))
+        #expect(command.serial == 3)
+        #expect(VirtualDisplayCommand.configuration.shouldDisplay == false)
+    }
+
+    @Test func `should read Mac frames from the folder serve is given, else the standard one`() throws {
+        #expect(try ServeCommand.parse([]).macFrames == nil)
+        #expect(try ServeCommand.parse(["--mac-frames", "/tmp/frames"]).macFrames == "/tmp/frames")
+    }
+
+    @Test func `should share this Mac's displays only when serve is asked with --share-mac`() throws {
+        #expect(try ServeCommand.parse([]).shareMac == false)
+        #expect(try ServeCommand.parse(["--share-mac"]).shareMac == true)
     }
 
     // MARK: - boot / shutdown share DeviceOption

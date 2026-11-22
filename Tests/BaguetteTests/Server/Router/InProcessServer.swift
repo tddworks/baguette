@@ -21,6 +21,9 @@ struct InProcessServer {
         devices: any Devices = routeDevices(),
         simulators: any Simulators = MockSimulators(),
         chromes: any Chromes = MockChromes(),
+        macFrames: MacFrames = MacFrames(folder: URL(fileURLWithPath: "/nonexistent")) { _ in nil },
+        screenShares: (any ScreenShares)? = nil,
+        pointerShapes: (any PointerShapes)? = nil,
         models: any DeviceModels = MockDeviceModels(),
         deviceRenderer: any DeviceRenderer = MockDeviceRenderer(),
         plugins: any Plugins = MockPlugins(),
@@ -31,7 +34,7 @@ struct InProcessServer {
         viewers: WebRTCViewers = WebRTCViewers(ticking: nil, connect: { _ in throw CancellationError() })
     ) {
         server = Server(
-            simulators: simulators, chromes: chromes, models: models,
+            simulators: simulators, chromes: chromes, macFrames: macFrames, screenShares: screenShares, pointerShapes: pointerShapes, models: models,
             deviceRenderer: deviceRenderer, plugins: plugins,
             allowedHosts: allowedHosts, grants: grants,
             motionSessions: motionSessions, cameraSessions: cameraSessions,

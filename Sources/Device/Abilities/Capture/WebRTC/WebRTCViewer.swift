@@ -5,8 +5,10 @@ import WebRTCKit
 /// session, from the offer to the packets on the wire — fed by a stream of
 /// its own. What the viewer adds is the device side:
 ///
+/// - its stream encodes in the codec its session was answered with;
 /// - each AVCC envelope its stream makes becomes an `EncodedFrame` (a
-///   keyframe carries the stream's latest parameter sets);
+///   keyframe carries the stream's latest parameter sets, read out of the
+///   record with the codec its session was answered with);
 /// - a keyframe the sender needs is asked of the stream;
 /// - the bitrate the link can take reaches the encoder when `EncoderRetune`
 ///   says so;
@@ -22,6 +24,8 @@ public final class WebRTCViewer: @unchecked Sendable {
     private var sender: WebRTCSender!
     private let events = Events()
     private let diagnose: @Sendable (String) -> Void
+    /// The codec its session was answered with: how its records are read.
+    private let codec: any Codec
     private var parameterSets: [Data] = []
     private var retune = EncoderRetune()
     private var hungUp = false
@@ -34,7 +38,7 @@ public final class WebRTCViewer: @unchecked Sendable {
         firstSequence: UInt16 = .random(in: 0...UInt16.max),
         datagrams: any Datagrams,
         handshake: any Handshake,
-        stream makeStream: (any FrameSink) -> any Stream,
+        stream makeStream: (any FrameSink, any Codec) -> any Stream,
         congestion makeControl: (_ startingBitrate: Int) -> any CongestionControl,
         clock: @escaping @Sendable () -> Date = Date.init,
         schedule: @escaping Schedule = WebRTCViewer.onAQueue,
@@ -45,8 +49,10 @@ public final class WebRTCViewer: @unchecked Sendable {
         diagnose: @escaping @Sendable (String) -> Void = log
     ) {
         self.diagnose = diagnose
+        codec = Codecs.of(offer.codec.kind)
         let sink = RTPFrameSink()
-        let stream = makeStream(sink)
+        // Its encoder makes exactly the codec its sender was answered with.
+        let stream = makeStream(sink, codec)
         self.stream = stream
         sender = WebRTCSender(
             offer: offer, ice: ice, ssrc: ssrc, firstSequence: firstSequence,
@@ -56,6 +62,16 @@ public final class WebRTCViewer: @unchecked Sendable {
             events: events, clock: clock, schedule: schedule, reflexive: reflexive, relay: relay, pacing: pacing, id: id)
         events.viewer = self
         sink.attach(self)
+        // Which codec it sends, of those the browser offered: how a browser's
+        // H.265 support shows up in the server's log.
+        diagnose("[webrtc] viewer \(id) sends \(Self.named(offer.codec)) (offered: \(offer.offered.map(Self.named).joined(separator: ", ")))")
+    }
+
+    private static func named(_ codec: VideoCodec) -> String {
+        switch codec {
+        case let .h264(_, profileLevelID): "\(codec.rtpmap) profile-level-id=\(profileLevelID)"
+        case let .h265(_, profileID, levelID, _): "\(codec.rtpmap) profile-id=\(profileID) level-id=\(levelID)"
+        }
     }
 
     /// The SDP answer to the browser's offer.
@@ -93,12 +109,12 @@ public final class WebRTCViewer: @unchecked Sendable {
 
     // MARK: - its stream
 
-    /// One AVCC envelope from its stream: parameter sets are kept for the next
-    /// keyframe; a picture goes to the sender.
+    /// One AVCC envelope from its stream: the parameter sets in a record are
+    /// kept for the next keyframe; a picture goes to the sender.
     func show(_ envelope: Data) {
         guard let (tag, payload) = AVCCEnvelope.unwrap(envelope) else { return }
-        if tag == AVCCEnvelope.descriptionTag, let sets = AVCCParameterSets.parse(avcC: payload) {
-            lock.withLock { parameterSets = sets.sps + sets.pps }
+        if tag == AVCCEnvelope.descriptionTag, let sets = codec.parameterSets(record: payload) {
+            lock.withLock { parameterSets = sets }
             return
         }
         guard tag == AVCCEnvelope.keyframeTag || tag == AVCCEnvelope.deltaTag else { return }

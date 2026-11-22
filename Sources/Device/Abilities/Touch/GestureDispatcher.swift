@@ -45,6 +45,16 @@ public final class GestureDispatcher: @unchecked Sendable {
         }
     }
 
+    /// The kind of pointer move `line` is — its wire type — when it is one
+    /// (`Gesture.isMotion`): read, not run, so a newer move of its kind may
+    /// replace it while it waits. Nil for anything else, or what doesn't parse.
+    public func move(line: String) -> String? {
+        guard let data = line.data(using: .utf8),
+              let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let gesture = try? registry.parse(dict), gesture.isMotion else { return nil }
+        return dict["type"] as? String
+    }
+
     /// The ack of a gesture that parsed but that its device didn't take — no
     /// reason given, as a malformed or refused one has.
     public static let notTaken = "{\"ok\":false}"

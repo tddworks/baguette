@@ -46,6 +46,12 @@ import NIOCore
 struct Server: Sendable {
     let simulators: any Simulators
     let chromes: any Chromes
+    /// The Mac frames installed on this Mac, which a Mac display's page offers.
+    let macFrames: MacFrames
+    /// This Mac shared to viewers' devices, with `--share-mac`; nil otherwise.
+    let screenShares: (any ScreenShares)?
+    /// The Mac's pointer shape for pages, with `--share-mac`; nil otherwise.
+    let pointerShapes: (any PointerShapes)?
     let models: any DeviceModels
     let deviceRenderer: any DeviceRenderer
     let plugins: any Plugins
@@ -89,6 +95,9 @@ struct Server: Sendable {
     init(
         simulators: any Simulators,
         chromes: any Chromes,
+        macFrames: MacFrames = MacFrames(),
+        screenShares: (any ScreenShares)? = nil,
+        pointerShapes: (any PointerShapes)? = nil,
         models: any DeviceModels = DeviceModelCatalog.empty,
         deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
         plugins: any Plugins = FileSystemPlugins(roots: []),
@@ -113,6 +122,9 @@ struct Server: Sendable {
         self.twinPoses = twinPoses
         self.allDevices = allDevices
         self.chromes = chromes
+        self.macFrames = macFrames
+        self.screenShares = screenShares
+        self.pointerShapes = pointerShapes
         self.models = models
         self.deviceRenderer = deviceRenderer
         self.plugins = plugins
@@ -177,6 +189,16 @@ struct Server: Sendable {
             )
         }
 
+        // The Mac frames installed here that a display of `width` × `height`
+        // fits — what a Mac display's frame picker offers.
+        router.get("/mac-frames.json") { [macFrames] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            return Self.macFramesResponse(
+                width: r.uri.queryParameters.get("width").flatMap { Double(String($0)) },
+                height: r.uri.queryParameters.get("height").flatMap { Double(String($0)) },
+                frames: macFrames)
+        }
+
         // Stream page — same sim.html, JS routes the inner view based on URL.
         router.get("/simulators/:udid") { _, _ in Self.staticAsset("sim.html") }
 
@@ -187,6 +209,9 @@ struct Server: Sendable {
         registerPowerRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerDeviceListingRoute(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerPlaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerMacShareRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerMacPointerRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser,
+                                 trustedWebSocketUpgrade: trustedWebSocketUpgrade)
         registerFileRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerHingeRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
@@ -316,6 +341,7 @@ struct Server: Sendable {
                     withButtons: r.uri.queryParameters.get("buttons")
                         .map { $0.lowercased() != "false" } ?? true,
                     options: options,
+                    picked: r.uri.queryParameters.get("chrome").map { String($0) },
                     devices: devices,
                     chromes: chromes
                 )
@@ -596,6 +622,16 @@ struct Server: Sendable {
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],
             body: .init(byteBuffer: ByteBuffer(string: json))
         )
+    }
+
+    /// `GET /mac-frames.json`: the installed Mac frames a display of the
+    /// size asked fits, by name; 400 without a size.
+    static func macFramesResponse(width: Double?, height: Double?, frames: MacFrames) -> Response {
+        guard let width, let height else {
+            return twinJSONResponse(["ok": false, "error": "width and height are required"], status: .badRequest)
+        }
+        let names = frames.fitting(Size(width: width, height: height)).map(\.name)
+        return twinJSONResponse(["frames": names], status: .ok)
     }
 
     /// `GET …/definition.json` on either tree, for any device: its own
@@ -1387,6 +1423,7 @@ struct Server: Sendable {
         scale: Int,
         withButtons: Bool,
         options: CaptureOptions,
+        picked: String? = nil,
         devices: any Devices,
         chromes: any Chromes
     ) async -> Response {
@@ -1396,7 +1433,11 @@ struct Server: Sendable {
         case .refused(let refusal): return Self.refusal(refusal)
         case .role(let role): screen = role
         }
-        guard let device = (try? devices.find(id: DeviceID(udid))) ?? nil, let assets = device.chrome(in: chromes) else {
+        // The bezel the page picked (`?chrome=`, as its definition borrows
+        // it), else the device's own.
+        guard let device = (try? devices.find(id: DeviceID(udid))) ?? nil,
+              let assets = picked.flatMap({ $0.isEmpty ? nil : chromes.assets(forDeviceName: $0) })
+                ?? (picked?.isEmpty == false ? nil : device.chrome(in: chromes)) else {
             return errorJSON("no bezel for udid \(udid)", status: .notFound)
         }
         let captured: Data
@@ -2278,6 +2319,13 @@ struct Server: Sendable {
             case "snapshot":  stream.requestSnapshot(); return
             default: break
             }
+        }
+        // A pointer move is posted, not awaited: the next message is read at
+        // once, and a newer move replaces this one while it waits — so the
+        // pointer keeps up with the hand. Anything else lands before the next.
+        if let move = dispatcher.move(line: line) {
+            gestureQueues.post(on: udid, move: move) { _ = dispatcher.dispatch(line: line) }
+            return
         }
         _ = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: line) }
     }

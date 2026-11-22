@@ -3,7 +3,8 @@ import CoreVideo
 import Foundation
 import IOSurface
 
-/// Real-time H.264 encoder. Submission is fire-and-forget — the caller
+/// Real-time video encoder, for whichever `Codec` it is given (H.264 by
+/// default) — codec-blind itself. Submission is fire-and-forget — the caller
 /// hands a frame in, the encoder hands an `Encoded` chunk back when the
 /// compression session is ready, on the session's own queue. Steady output
 /// cadence even when individual frames take 5 ms (P) or 50 ms (IDR) — the
@@ -12,9 +13,10 @@ import IOSurface
 /// It decides; the `CompressionSession` only compresses: when a session
 /// opens (the first frame, a new size), which tuning it must accept, which
 /// frames are keyframes, and which of the session's answers become a frame.
-public final class H264Encoder: @unchecked Sendable {
+public final class VideoEncoder: @unchecked Sendable {
     public struct Encoded: Sendable {
-        /// avcC parameter-set blob — emitted exactly once on the first IDR.
+        /// The codec's decoder configuration record, as its encoder made it
+        /// (`avcC`, `hvcC`) — emitted once, on a new chain's first keyframe.
         public let description: Data?
         /// Keyframe (IDR) or delta (non-IDR P-frame).
         public let kind: Kind
@@ -42,23 +44,27 @@ public final class H264Encoder: @unchecked Sendable {
     private var fps: Int32
     private var bitrate: Int
     private let tuning: H264Tuning
+    /// What makes this encoder H.264 or H.265: everything else here is codec-blind.
+    let codec: any Codec
     private var referenceChain = H264ReferenceChain()
     private var timeline = H264Timeline()
 
     public convenience init(
-        fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency,
+        fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency, codec: any Codec = H264Codec(),
         onEncoded: (@Sendable (Encoded) -> Void)? = nil
     ) {
-        self.init(fps: fps, bitrate: bitrate, tuning: tuning, session: VideoToolboxSession(), onEncoded: onEncoded)
+        self.init(fps: fps, bitrate: bitrate, tuning: tuning, codec: codec, session: VideoToolboxSession(),
+                  onEncoded: onEncoded)
     }
 
     init(
-        fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency,
+        fps: Int, bitrate: Int = 2_000_000, tuning: H264Tuning = .lowLatency, codec: any Codec = H264Codec(),
         session: any CompressionSession, onEncoded: (@Sendable (Encoded) -> Void)? = nil
     ) {
         self.fps = Int32(fps)
         self.bitrate = bitrate
         self.tuning = tuning
+        self.codec = codec
         self.session = session
         self.onEncoded = onEncoded
     }
@@ -160,8 +166,8 @@ public final class H264Encoder: @unchecked Sendable {
             }
             guard !result.dropped, let frame = result.frame else { return .success(nil) }
             var description: Data?
-            if frame.keyframe, referenceChain.needsKeyframe, let sps = frame.sps, let pps = frame.pps {
-                description = AVCDecoderConfigurationRecord.bytes(sps: sps, pps: pps)
+            if frame.keyframe, referenceChain.needsKeyframe {
+                description = frame.records[codec.recordAtom]
             }
             guard
                 referenceChain.accepts(
@@ -178,9 +184,10 @@ public final class H264Encoder: @unchecked Sendable {
 
         // Low-latency rate control is chosen when the session opens; the
         // rest of the tuning is set on it afterwards.
-        let status = session.open(width: width, height: height, lowLatencyRateControl: tuning.lowLatencyRateControl)
+        let status = session.open(width: width, height: height, codec: codec.codecType,
+                                  lowLatencyRateControl: tuning.lowLatencyRateControl)
         guard status == 0 else { throw EncodingFailure(operation: "create session", status: status) }
-        for property in tuning.properties(bitrate: bitrate, fps: fps) {
+        for property in tuning.properties(bitrate: bitrate, fps: fps, profile: codec.profile) {
             let status = session.set(property)
             if strict, status != 0 {
                 session.close()
@@ -201,6 +208,6 @@ public final class H264Encoder: @unchecked Sendable {
     private struct EncodingFailure: Error, CustomStringConvertible {
         let operation: String
         let status: Int32
-        var description: String { "H.264 \(operation) failed (\(status))" }
+        var description: String { "video \(operation) failed (\(status))" }
     }
 }

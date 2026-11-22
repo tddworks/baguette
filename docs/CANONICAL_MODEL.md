@@ -63,7 +63,8 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
                                             parse(dict); execute(on:) its role, refused by name without it
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
                                             CoreDevicePhones (screen, touch, accessibility, pasteboard) ·
-                                            AndroidDevices (listed through adb; no abilities yet)
+                                            AndroidDevices (listed through adb; no abilities yet) ·
+                                            MacDisplays (screen, touch, scroll, key, type; only when asked for)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
 └── Simulator  ◆                            ONE SIMULATOR — udid, name, state, runtime, device type;
@@ -192,7 +193,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | one viewer, one encoder: each viewer owns its stream, and hanging up stops it | `WebRTCViewer` |
 | a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCSender` |
 | a STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
-| an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
+| a viewer receives H.265 only when its owner asked for it (or `auto`), its offer carries Main-profile H.265 and the owner can send it; otherwise High-profile H.264 in packetization mode 1; neither → refused, never answered with another codec. Asking never refuses a viewer that can take H.264 | `CodecChoice` (read by `SessionDescription`) |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
 | a viewer is found by its id until it hangs up, and only through the device it watches; an unknown id, or one asked for through another device, is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate. A reported cut means that target fell, and carries the signal that limited it | `BandwidthEstimate` |
@@ -215,6 +216,15 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a viewer retunes its encoder when the target moves by more than 10%. A decrease applies immediately. An increase waits at least a second after the last retune | `EncoderRetune` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
+| this Mac's displays are reached only when asked for — `serve --share-mac`, `list --mac`, or a display's UUID given to `--udid` — and listing them asks for no permission; only watching one asks for Screen Recording | `MacDisplays` · `DeviceKinds` |
+| a Mac display's feed hands on complete pictures only, at most 4096 pixels on the long side; an unchanged one repeats the last | `MacScreen` · `DisplayCaptureSize` |
+| a Mac frame fits a display only of its screen's shape, within 2%; a display shows with no frame until one is picked | `MacFrame.fits` · `MacDisplayLooks` |
+| a pointer move still waiting is replaced by a newer move of its kind (a hover by a hover, a drag by a drag); anything else keeps its order and is never dropped, nor jumped by a move | `PendingGestures` (a stream socket posts moves, `GestureQueues` drains them) |
+| only a device with a pointer of its own takes a hover (`Pointer`, the `pointer` ability) — a Mac display; it streams without its pointer, and a page draws the pointer and sends hovers for any device that can `pointer`, no other check | each family's `Abilities` · `ScreenCaptureKitFeed` · the page's `mountPointer` |
+| a shared display is the viewer's shape — its points × the room, drawn at 2×, the long side ≤ 4096 px — made again in a new shape when the viewer turns, under the same id; main gives the previous main back, before it goes | `SharedScreenShape` · `ScreenShares` |
+| the Mac's pointer shape is read only by a process whose run loop runs, while anyone views a Mac display; each shape is known by an id that follows from its image, fetched once | `PointerShapes` · `PointerShape` |
+| a display baguette made is captured at the pixels it made it with, never as a long-running process reads it | `MacScreen` |
+| a gesture on a Mac display lands at the same fraction of where it sits on the desktop; a key's modifiers are held around it and released in reverse; a second finger sends nothing | `DisplayEvents` |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
 | a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
 | a phone's tree takes its screen from the app at its root, which fills it | `AXNode.onItsAppsScreen` |
@@ -288,7 +298,7 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Hinge** | *how far open is the fold?* | ◆ `Hinge` · `HingeMotor` · ◇ `HingeAngle` `HingeCommand` |
 | **Orientation** | *which way is it turned?* | ◆ `Orientation` |
 | **Accessibility** | *what is on screen?* | ◆ `Accessibility` · ◇ `AXNode` `AXScreen` |
-| **Chrome** · **Render** · **Capture** | *what does the device look like, and how is it framed?* | ◆ `Chromes` · `DeviceModels` · ◇ `CaptureSize` |
+| **Chrome** · **Render** · **Capture** | *what does the device look like, and how is it framed?* | ◆ `Chromes` (DeviceKit's, then `MacFrames`) · `DeviceModels` · ◇ `CaptureSize` `MacFrame` |
 | **Stream** · **Recording** | *how do frames leave?* | ◆ `Stream` · `Reel` · `WebRTCViewers` → `WebRTCViewer` · ◇ `EncoderRetune` (when the encoder follows a viewer's target) |
 | **WebRTCKit** (`Sources/WebRTCKit`, its own module; depends on nothing of baguette's) | *how does a stream reach a browser over WebRTC?* | ◆ `WebRTCSender` (one browser's session: `EncodedFrame` in, `SenderEvents` out — keyframe needed, the bitrate the link can take, hung up) · ◇ `SessionDescription` `ICECredentials` `MediaPorts` (signaling) · `STUNMessage` `Datagrams` `Handshake` `SRTPContext` (transport) · `RTPPacket` `H264Packetizer` `Pacer` `RTCPFeedback` (media; `RTPPacket` shared with CoreDevice) · `CongestionControl` `BandwidthEstimate` `TransportWideControl` (congestion) |
 | **Location** · **Motion** · **Network** · **Interface** · **StatusBar** · **Shake** · **Camera** | *what conditions does the app run under?* | one ◆ role each |
@@ -296,6 +306,7 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
 | **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
+| **Mac** | *what is this Mac's display, and how is it watched, driven and shared?* | ◇ `MacDisplayInfo` `DisplayCaptureSize` `DisplayEvents` `HostEvent` `SharedScreenShape` `ShareRequest` · ◆ `DisplayFeed` `HostEvents` `ScreenShares` `VirtualDisplays` `DisplayArrangement` · `MacDisplays` (its source of `Devices`) |
 | **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `VideoDepacketizer` (its screen; `RTPPacket` is WebRTCKit's) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind

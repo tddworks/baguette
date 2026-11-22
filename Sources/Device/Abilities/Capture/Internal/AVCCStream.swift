@@ -11,7 +11,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     public var config: StreamConfig { configLock.withLock { currentConfig } }
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
-    private let h264: H264Encoder
+    private let encoder: VideoEncoder
     private let scaler = VideoFrameScaler()
     /// Where every frame is encoded, including VideoToolbox's answers; the
     /// stream's state is confined to it.
@@ -30,16 +30,20 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     private var pendingForceKeyframe = true
     private var pendingSeedSnapshot = true
 
-    public convenience init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
+    /// `codec`: what it encodes in — H.264 unless a WebRTC session was answered with another.
+    public convenience init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7, codec: any Codec = H264Codec()) {
         self.init(config: config, sink: sink, quality: quality,
-                  encoder: H264Encoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict))
+                  encoder: VideoEncoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict, codec: codec))
     }
 
-    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: H264Encoder) {
+    /// The codec its encoder makes.
+    var codec: any Codec { encoder.codec }
+
+    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: VideoEncoder) {
         currentConfig = config
         self.sink = sink
         jpeg = JPEGEncoder(quality: quality)
-        h264 = encoder
+        self.encoder = encoder
     }
 
     public func start(on screen: any Screen) throws {
@@ -84,8 +88,8 @@ public final class AVCCStream: Stream, @unchecked Sendable {
             pendingForceKeyframe = true
             pendingSeedSnapshot = true
         }
-        if old.fps != newConfig.fps { try h264.setFrameRate(newConfig.fps) }
-        if old.bitrateBps != newConfig.bitrateBps { try h264.setBitrate(newConfig.bitrateBps) }
+        if old.fps != newConfig.fps { try encoder.setFrameRate(newConfig.fps) }
+        if old.bitrateBps != newConfig.bitrateBps { try encoder.setBitrate(newConfig.bitrateBps) }
         configLock.withLock { currentConfig = newConfig }
         latest.apply(fps: newConfig.fps)
         if old.fps != newConfig.fps, refreshTimer != nil {
@@ -104,7 +108,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         refreshTimer?.cancel()
         refreshTimer = nil
         latest.stop()
-        h264.stop()
+        encoder.stop()
     }
 
     /// The refresh beat, on `queue`: each refresh is taken only when the
@@ -144,7 +148,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         let force = pendingForceKeyframe
         pendingForceKeyframe = false
         let submittedGeneration = generation
-        h264.encode(pb, forceKeyframe: force) { [weak self] result in
+        encoder.encode(pb, forceKeyframe: force) { [weak self] result in
             guard let self else { return ready() }
             queue.async { [self] in
                 defer { ready() }
@@ -160,7 +164,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         }
     }
 
-    private func write(_ encoded: H264Encoder.Encoded) {
+    private func write(_ encoded: VideoEncoder.Encoded) {
         if let description = encoded.description { sink.write(AVCCEnvelope.description(avcc: description)) }
         switch encoded.kind {
         case .keyframe: sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))

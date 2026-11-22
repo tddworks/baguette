@@ -47,10 +47,10 @@ struct VideoToolboxDecompressionSessionTests {
         decoder.stop()
     }
 
-    private static func keyframe(width: Int, height: Int) throws -> H264Encoder.Encoded {
+    private static func keyframe(width: Int, height: Int) throws -> VideoEncoder.Encoded {
         var buffer: CVPixelBuffer?
         CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, nil, &buffer)
-        let encoder = H264Encoder(fps: 30, tuning: .strict)
+        let encoder = VideoEncoder(fps: 30, tuning: .strict)
         let answered = DispatchSemaphore(value: 0)
         let box = EncodedBox()
         let frame = try #require(buffer)
@@ -69,5 +69,5 @@ private final class SurfaceBox: @unchecked Sendable {
 }
 
 private final class EncodedBox: @unchecked Sendable {
-    var result: Result<H264Encoder.Encoded?, any Error>?
+    var result: Result<VideoEncoder.Encoded?, any Error>?
 }

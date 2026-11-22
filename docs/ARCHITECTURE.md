@@ -185,7 +185,7 @@ mocks at the port boundary.
 | Simulator | `Simulators` | `CoreSimulators` | CoreSimulator + SimulatorKit private classes via the ObjC runtime |
 | Screen | `Screen` | `SimulatorKitScreen` | `SimDevice.io` framebuffer callback registration |
 | Input | `Touch` · `Press` · `Key` · `Scroll` (a simulator's `HID`) | `IndigoHIDInput` | 9-arg `IndigoHIDMessageForMouseNSEvent` + `SimDeviceLegacyHIDClient` |
-| Stream | `Stream` | `MJPEGStream` / `AVCCStream` | `JPEGEncoder` + `H264Encoder` (VideoToolbox), envelope formatting |
+| Stream | `Stream` | `MJPEGStream` / `AVCCStream` | `JPEGEncoder` + `VideoEncoder` (VideoToolbox), envelope formatting |
 | Stream | `FrameSink` | `StdoutSink` / `WebSocketFrameSink` | per-process or per-WS sink for encoded bytes |
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
 | Chrome | `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |

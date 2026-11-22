@@ -64,6 +64,12 @@ Each viewer has its own H.264 encoder, starting at the stream socket's defaults
 
 Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the
 device page with it (`/devices/<UDID>?congestion=remb`) to compare them by hand.
+
+The page streams **H.265 when the browser offers it** and this Mac has an HEVC
+encoder, and H.264 otherwise: it asks `codec=auto`. Open
+`/devices/<UDID>?codec=h264` to force H.264, or `codec=h265`. On the `POST`,
+`codec=` is the same switch, and a client that asks nothing gets H.264 →
+[hevc](hevc.md).
 A method the browser didn't offer falls back to `off`. With REMB, a still screen
 in desktop Chrome drops to 300 kbps until the screen moves (the browser's estimate
 follows what arrives); `transport-cc` doesn't. The server log shows each change:
@@ -94,10 +100,10 @@ the encoder again according to [the retuning rule](design.md#4--invariants-each-
 
 ## Gotchas
 
-- **H.264 High profile only.** An offer without High-profile H.264 in
-  packetization mode 1 is refused (422) and the page falls back to H.264 or
-  MJPEG over the WebSocket. Chrome and Safari offer it; Firefox offers only
-  Constrained Baseline, so it falls back.
+- **High-profile H.264, or Main-profile H.265 when asked for.** An offer
+  carrying neither one the viewer may get (`codec=`) is refused (422), and the
+  page falls back to H.264 or MJPEG over the WebSocket. Chrome and Safari offer
+  both; Firefox offers only Constrained Baseline H.264, so it falls back.
 - **Host addresses by default.** baguette offers this Mac's own IPv4 addresses
   (LAN, Tailscale, loopback). The browser needs a reachable address to play.
 - **Media on any free UDP port, unless told.** Each viewer takes its own port;

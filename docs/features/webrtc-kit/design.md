@@ -8,7 +8,9 @@ description: WebRTCKit's domain design — one browser's send-only WebRTC sessio
 package with its own tests (`Tests/WebRTCKitTests`); it depends on Mockable and
 NIOSSL, never on baguette. **Designed, not built:** a standalone session test
 (ICE, DTLS and SRTP on loopback with no baguette types), its own SwiftPM
-package, IPv6 sockets, TURN over TCP or TLS, and receiving.
+package, IPv6 sockets, TURN over TCP or TLS, and receiving. **H.265** is
+built in the kit (K1–K3, 2026-11-22) but sent only when its owner asks — and
+baguette doesn't ask yet ([Codec](#codec--h264-today-h265-designed)).
 
 This doc owns **one browser's sending session: the path it reaches the browser
 by, what it sends, and what it does with the browser's feedback.** It hands
@@ -51,6 +53,10 @@ reports (a bitrate). That split is what keeps the kit free of devices.
 | **RTX** | A resend on its own stream: its own SSRC, sequence and payload type, the original sequence first (RFC 4588) | FEC: redundancy sent before anything is lost (not built) |
 | **Target** | The bitrate the link can carry now, as the congestion control reads it | The encoder's bitrate, which the owner sets |
 | **Pacing** | Spacing packets so a keyframe doesn't leave as one burst | Throttling the encoder |
+| **Codec** | How the pictures are compressed on the wire: H.264 today, H.265 designed — `VideoCodec` | The *format* (MJPEG / AVCC / WebRTC), baguette's word for the transport |
+| **Sendable codecs** | The codecs the owner's encoder can make, handed to the kit — the kit never knows what encodes them | The codecs the browser *offers* |
+| **Parameter sets** | What a decoder needs before a keyframe: SPS + PPS (H.264), VPS + SPS + PPS (H.265) | A keyframe itself |
+| **Packetizer** | Turns one picture into RTP payloads: RFC 6184 for H.264, RFC 7798 for H.265 — the `RTPPacketizer` role | The *pacer*, which decides when they leave |
 
 "Sender" over "peer connection": it sends only, and the kit has no receiving
 side to share a name with.
@@ -130,7 +136,7 @@ sender.hangUp()                                              // closes the socke
 
 | Law | Owner |
 |---|---|
-| An offer with no High-profile H.264 in packetization mode 1 is refused, never answered with another codec | `SessionDescription` |
+| A viewer gets H.265 only when its owner asked for it, its offer carries Main-profile H.265 and the owner can send it; otherwise High-profile H.264 in packetization mode 1; neither → refused ([Codec](#codec--h264-today-h265-designed)) | `CodecChoice` |
 | An offer carries a congestion-control method only when it numbers the extension 1–14, will receive it, and asks for its feedback on our H.264 or on every format | `SessionDescription` |
 | A check is answered only when it names our username fragment and is signed with our ICE password | `STUNMessage` |
 | With candidates in the offer, the sender checks each itself as the controlled agent, at once and then backing off (0.1–1.6 s), until secured; with none it is ICE-lite | `WebRTCSender` |
@@ -202,6 +208,75 @@ are renewed every `min(lifetime / 2, 240 s)`.
 Recovery only helps if the resend arrives before the browser needs the
 picture; when it doesn't, the browser asks for a keyframe, and that request
 goes to the owner.
+
+## Codec — H.264 today, H.265 designed
+
+**Built in the kit (K1–K3); not asked for yet** — baguette's encoder and wiring
+are slices 4–5. Why, when it pays and how it is measured belong to the live
+view: [webrtc/hevc.md](../webrtc/hevc.md). What the kit owns is below.
+
+**The one sentence:** *a sender sends the codec `CodecChoice` picks from what
+its owner asked for, what the browser offered and what the owner can send —
+High-profile H.264 unless all three say H.265.*
+
+```text
+ owner ── asked (h265 · h264 · auto · none) + sendable codecs ──┐
+ offer ── SessionDescription reads H.264 AND H.265 ─────────────┤
+                                                                ▼
+                                                  CodecChoice ◇ → VideoCodec ◇ | refusal
+                                                                │
+                      ┌─────────────────────────────────────────┼─────────────────────────────┐
+                      ▼                                         ▼                             ▼
+     SessionDescription.answer:                   the owner: encode in it          WebRTCSender takes
+     its rtpmap / fmtp lines                      (EncodedFrame.codec)              codec.packetizer
+```
+
+| Type | What it is |
+|---|---|
+| `VideoCodec` ◇ | `.h264(profileLevelID)` · `.h265(profileID, levelID, tier)`: its `rtpmap` / `fmtp` lines and its packetizer |
+| `CodecChoice` ◇ | the law below — beside `CongestionChoice`, which chooses the same way |
+| `RTPPacketizer` ◆ | `payloads(picture:, parameterSets:) → [Data]`; `H264Packetizer` (today, unchanged) and `H265Packetizer` play it — the sender holds `any RTPPacketizer`, so a codec is a new type, never an edit to the sender |
+| `EncodedFrame` ◇ | unchanged: its NAL units are 4-byte length-prefixed for both codecs, and `parameterSets` holds 2 (H.264) or 3 (H.265). It carries no codec — the session chose one, and the sender cuts with that codec's packetizer |
+
+**Choosing.**
+
+| asked | offer carries Main-profile H.265 | owner can send H.265 | → |
+|---|---|---|---|
+| `h265` | yes | yes | **H.265** |
+| `h265` | no, or the owner can't | — | High-profile H.264 — asking never refuses |
+| `auto` | yes | yes | **H.265** |
+| `auto` | otherwise | | H.264 |
+| `h264` / none | — | — | H.264 — the default |
+| any | neither usable | | refused (422), as today |
+
+**Packetizing.**
+
+| | H.264 — RFC 6184 (built) | H.265 — RFC 7798 (designed) |
+|---|---|---|
+| NAL header | 1 byte (type: 5 bits) | 2 bytes (type: 6 bits, layer id, temporal id) |
+| parameter sets | SPS + PPS ahead of a keyframe, in one STAP-A (type 24) | VPS + SPS + PPS ahead of a keyframe, in one Aggregation Packet (type 48) |
+| a large NAL | FU-A (type 28): FU indicator + header | FU (type 49): 2-byte payload header + FU header |
+| a small NAL | single NAL unit packet | single NAL unit packet |
+| marker · timestamp | last packet of the picture · 90 kHz | the same |
+
+**Laws** — the first replaced §4's "an offer with no High-profile H.264 … is
+refused, never answered with another codec", in the same change:
+
+| Law | Owner |
+|---|---|
+| a browser gets H.265 only when its owner asked for it (or `auto`), its offer carries Main-profile H.265 and the owner can send it; otherwise High-profile H.264; neither → refused | `CodecChoice` |
+| asking for H.265 never refuses a browser that can take H.264 | `CodecChoice` |
+| the answer names exactly the codec the sender packetizes | `SessionDescription.answer` (from one `VideoCodec`) |
+| a keyframe leaves after its parameter sets | each `RTPPacketizer` |
+| no RTP packet carries more than 1200 bytes of payload | each `RTPPacketizer` |
+
+**Build** (in `Tests/WebRTCKitTests`, no baguette types):
+
+| Slice | What | Pins |
+|---|---|---|
+| K1 | `RTPPacketizer`; `H264Packetizer` plays it unchanged; `H265Packetizer` | byte for byte: a single NAL, an AP of VPS / SPS / PPS, FU start / middle / end with the right S / E bits and payload header |
+| K2 | `VideoCodec`, `CodecChoice` | every row of *Choosing* |
+| K3 | `SessionDescription` reads every H.264 and H.265 offered and answers the chosen one; the sender takes that codec's packetizer | the offer Chrome 157 posts, captured (`Chrome157Offer.swift`): H.265 Main at 49, Main 10 at 51, High H.264 at 118. An iPhone's offer is still to capture |
 
 ## 5 · Open questions
 

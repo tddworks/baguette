@@ -7,7 +7,7 @@ import VideoToolbox
 @Suite("H264 reference chain")
 struct H264ReferenceChainTests {
     @Test func `should produce no frame for a normal encoder drop but surface a real encoder error until stopped`() throws {
-        let encoder = H264Encoder(fps: 20)
+        let encoder = VideoEncoder(fps: 20)
         for dropped in [true, false] {
             let result = CompressionResult(status: 0, dropped: dropped, frame: nil)
             #expect(try encoder.output(generation: 0, result: result).get() == nil)

@@ -18,7 +18,9 @@ const SERVE = q.get('serve') || location.origin + '/api';
 const UNPACED = q.get('pacing') === 'off';
 // `rtx=off`: baguette's own sender resending as sent, not on its own stream — the baseline RTX is measured against.
 const NO_RTX = q.get('rtx') === 'off';
-const WHEP_QUERY = [UNPACED && 'pacing=off', NO_RTX && 'rtx=off'].filter(Boolean).join('&');
+// `codec=h265`: baguette's own sender in H.265 (slice 6 of docs/features/webrtc/hevc.md), the browser preferring it.
+const CODEC = q.get('codec');
+const WHEP_QUERY = [UNPACED && 'pacing=off', NO_RTX && 'rtx=off', CODEC && 'codec=' + encodeURIComponent(CODEC)].filter(Boolean).join('&');
 const WHEP = q.get('whep') || '/api/devices/' + encodeURIComponent(UDID) + '/whep' + (WHEP_QUERY ? '?' + WHEP_QUERY : '');
 const SPIKE = /^(https?:\/\/[^/]+)?\/whep$/.test(WHEP);
 const PION = WHEP.startsWith('/pion/');
@@ -110,7 +112,9 @@ async function startWebRTC() {
   R.stop = () => { pc.close(); R.taps?.close(); if (viewer && !SPIKE) fetch((PION ? '' : '/api') + viewer, { method: 'DELETE' }); };
   const tr = pc.addTransceiver('video', { direction: 'recvonly' });
   const caps = RTCRtpReceiver.getCapabilities('video').codecs;
-  tr.setCodecPreferences([...caps.filter(c => c.mimeType.toLowerCase() === 'video/h264'), ...caps.filter(c => c.mimeType.toLowerCase() !== 'video/h264')]);
+  const named = m => caps.filter(c => c.mimeType.toLowerCase() === m);
+  const first = [...(CODEC === 'h265' || CODEC === 'auto' ? named('video/h265') : []), ...named('video/h264')];
+  tr.setCodecPreferences([...first, ...caps.filter(c => !first.includes(c))]);
   pc.ontrack = e => { e.receiver.jitterBufferTarget = 0; if ('playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; vid.srcObject = e.streams[0]; };
   pc.onconnectionstatechange = () => log('pc', pc.connectionState);
   const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
@@ -305,6 +309,8 @@ async function lossStats() {
 // before the session closes. `pretty`: a tap run's summary is indented, a bandwidth run's is one line.
 async function finish(summary, pretty = true) {
   if (R.pc) Object.assign(summary, await lossStats());
+  // A WebRTC run's format is the codec the browser decoded, not the default label.
+  if (summary.codec && summary.format) summary.format = summary.codec.replace('video/', '').toLowerCase();
   // `fixture=small`: which probe page the simulator shows (the runner says; the page can't see it).
   if (q.get('fixture')) summary.fixture = q.get('fixture');
   R.summary = summary; log(pretty ? JSON.stringify(summary, null, 1) : JSON.stringify(summary)); R.done = true; R.stop?.();

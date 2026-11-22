@@ -179,7 +179,7 @@ Device/Abilities/<x>/       <x>/Internal/ (or Devices/<F>/Internal/)   …/Inter
        Commands/ (CLI) · Server/ (/devices/:udid/<feature>, both trees)
 ```
 
-The worked example to copy: `H264Encoder` → `CompressionSession` (role) →
+The worked example to copy: `VideoEncoder` → `CompressionSession` (role) →
 `System/VideoToolboxSession` in `Device/Abilities/Capture/`.
 
 ## Phase 1: The ability (Device/Abilities/<ability>/)
@@ -301,7 +301,7 @@ that grew decisions. Everything else it uses must be a tested value.
 
 After the split:
 - Pure factories / value types: **100%** unit-tested.
-- The adapter in `Internal/` (`H264Encoder`, `IndigoHIDInput`, `SimDeviceLogStream`): **≥ 90%** unit-tested via its role's `MockXxx`.
+- The adapter in `Internal/` (`VideoEncoder`, `IndigoHIDInput`, `SimDeviceLogStream`): **≥ 90%** unit-tested via its role's `MockXxx`.
 - The irreducible call, in `Internal/System/`: integration-only, left out of coverage by its folder. Prove it with a test against the real thing, tagged `.tags(.system), .enabled(if: SystemTests.available)` with a `.timeLimit` (see `VideoToolboxSessionTests`).
 - A route: drive it through the real router with `InProcessServer` (`Tests/BaguetteTests/Server/Router/`), not just its static handler.
 
@@ -451,7 +451,7 @@ not the flag table — `make docs` writes that).
   `Equatable` / `Hashable` / `Sendable` — everything rich domain
   needs. `final class` is reserved for boundaries that genuinely
   need reference semantics (`Server`, `IndigoHIDInput`,
-  `CoreSimulators`, `LiveChromes`, `H264Encoder`). See
+  `CoreSimulators`, `LiveChromes`, `VideoEncoder`). See
   [`references/domain-models.md`](references/domain-models.md) for
   the full rule.
 - **Plumbing chrome (or any aggregate) into `IndigoHIDInput`.** SRP
@@ -481,7 +481,7 @@ not the flag table — `make docs` writes that).
   into a pure helper instead.
 - **Cramming the irreducible private-API call AND the orchestration
   logic into one file.** That's the original sin that kept
-  `IndigoHIDInput` at 14% and `H264Encoder` at 18% coverage, excluded
+  `IndigoHIDInput` at 14% and `VideoEncoder` at 18% coverage, excluded
   wholesale. The decisions go in `Internal/`, the bare call in
   `Internal/System/`; `make check-coverage` fails a System file over 100
   lines.

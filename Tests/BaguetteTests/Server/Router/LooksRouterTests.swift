@@ -220,6 +220,30 @@ struct LooksRouterTests {
         }
     }
 
+    @Test func `should composite a still into the bezel the page picked when the device has none of its own`() async throws {
+        let devices = routeDevices { $0.register(.screen) { Self.screen() } }
+        let picked = DeviceChromeAssets(
+            chrome: DeviceChrome(
+                identifier: "iMac 27-inch", screenInsets: Insets(top: 10, left: 10, bottom: 30, right: 10),
+                outerCornerRadius: 0, buttons: [], compositeImageName: nil),
+            composite: ChromeImage(data: Self.png(width: 80, height: 70), size: Size(width: 80, height: 70)))
+        let chromes = MockChromes()
+        given(chromes).panels(forDeviceName: .any).willReturn([])
+        given(chromes).assets(forDeviceName: .any).willProduce { $0 == "iMac 27-inch" ? picked : nil }
+        given(chromes).assets(forDeviceName: .any, panel: .any).willProduce { name, _ in name == "iMac 27-inch" ? picked : nil }
+
+        try await InProcessServer(devices: devices, chromes: chromes).test { client in
+            let response = try await client.send(.get, "/devices/U/screenshot-bezel.png?chrome=iMac%2027-inch")
+
+            #expect(response.status == .ok)
+            let image = try #require(CGImageSourceCreateWithData(Data(buffer: response.body) as CFData, nil)
+                .flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })
+            #expect(image.width == 80)
+            #expect(image.height == 70)
+            #expect(await client.status(.get, "/devices/U/screenshot-bezel.png") == .notFound)
+        }
+    }
+
     @Test func `should answer no bezel still for a device with no chrome or a screen that fails`() async throws {
         let devices = routeDevices { $0.register(.screen) { Self.screen() } }
         try await InProcessServer(devices: devices, chromes: Self.chromes(nil)).test { client in

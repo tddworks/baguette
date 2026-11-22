@@ -108,3 +108,8 @@ test('touch with zero or three-plus fingers builds nothing', () => {
       null
   );
 });
+
+test('should send a hover as where the pointer is, beside the screen size', () => {
+  assert.deepEqual(GestureEnvelope().hover({ x: 12.5, y: 40 }, { width: 603, height: 1311 }),
+    { type: 'hover', x: 12.5, y: 40, width: 603, height: 1311 });
+});

@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import Mockable
 import Testing
@@ -19,6 +20,15 @@ private let offer = try! SessionDescription(offer: [
     "a=rtpmap:112 H264/90000",
     "a=fmtp:112 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
 ].joined(separator: "\r\n"))
+
+/// Chrome's H.265 offer, Main profile, answered when H.265 is asked for and sendable.
+private let hevcOffer = try! SessionDescription(offer: [
+    "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 49", "a=mid:0",
+    "a=ice-ufrag:h6vY", "a=ice-pwd:browserpasswordbrowserpass",
+    "a=fingerprint:sha-256 6B:8B", "a=setup:actpass",
+    "a=rtpmap:49 H265/90000",
+    "a=fmtp:49 level-id=180;profile-id=1;tier-flag=0;tx-mode=SRST",
+].joined(separator: "\r\n"), asked: .h265, sendable: [.h264, .h265])
 
 /// RFC 5769's sample check is addressed to "evtj" and signed with this password.
 private let ours = ICECredentials(ufrag: "evtj", password: "VOkJxbRl1RmTxUk/WvJxBt")
@@ -61,6 +71,8 @@ private struct Rig {
     let received = Box<(@Sendable (Data, DatagramAddress) -> Void)?>(nil)
     let now = Box(Date(timeIntervalSince1970: 1_000))
     let sink = Box<(any FrameSink)?>(nil)
+    /// The codec its stream was made in.
+    let madeIn = Box<(any Codec)?>(nil)
     let diagnostics = Box<[String]>([])
     /// Work the viewer asked to run later (its pacer's next slice), run by `pass(_:)`.
     let scheduled = Box<[@Sendable () -> Void]>([])
@@ -68,7 +80,8 @@ private struct Rig {
 
     init(
         progress: HandshakeProgress = .complete(replies: [], srtpExport: export),
-        target: Int? = nil, stamp: [RTPHeaderExtension] = [], answerLines: [String] = [], pacing: Bool = true
+        target: Int? = nil, stamp: [RTPHeaderExtension] = [], answerLines: [String] = [], pacing: Bool = true,
+        offer: SessionDescription = offer
     ) {
         given(datagrams).addresses.willReturn(here)
         given(datagrams).send(.any, to: .any).willProduce { [sent] data, to in sent.value.append((data, to)) }
@@ -86,11 +99,11 @@ private struct Rig {
         given(congestion).sent(size: .any, at: .any).willReturn()
         given(congestion).heard(.any, at: .any).willReturn(nil)
         given(congestion).target.willReturn(target)
-        let (stream, sink, now, congestion, scheduled, diagnostics) = (stream, sink, now, congestion, scheduled, diagnostics)
+        let (stream, sink, madeIn, now, congestion, scheduled, diagnostics) = (stream, sink, madeIn, now, congestion, scheduled, diagnostics)
         viewer = WebRTCViewer(
             offer: offer, ice: ours, ssrc: 0xCAFE_BABE, firstSequence: 1000,
             datagrams: datagrams, handshake: handshake,
-            stream: { frames in sink.value = frames; return stream },
+            stream: { frames, codec in sink.value = frames; madeIn.value = codec; return stream },
             congestion: { _ in congestion },
             clock: { now.value },
             schedule: { _, work in scheduled.value.append(work) },
@@ -212,6 +225,32 @@ struct WebRTCViewerTests {
         #expect(packets.allSatisfy { $0.ssrc == 0xCAFE_BABE && $0.payloadType == 112 && $0.timestamp == 90_000 })
         // STAP-A (1 + 2 + 5 + 2 + 4) and the slice (4), each encrypted, plus a 10-byte tag.
         #expect(packets.map(\.payload.count) == [14 + 10, 4 + 10])
+    }
+
+    @Test func `should say which codec it sends, and which the browser offered`() {
+        let rig = Rig(offer: hevcOffer)
+
+        #expect(rig.diagnostics.value.contains("[webrtc] viewer test-viewer sends H265/90000 profile-id=1 level-id=180 (offered: H265/90000 profile-id=1 level-id=180)"))
+        #expect(Rig().diagnostics.value.contains("[webrtc] viewer test-viewer sends H264/90000 profile-level-id=64001f (offered: H264/90000 profile-level-id=64001f)"))
+    }
+
+    @Test func `should make its stream in the codec its session was answered with`() {
+        #expect(Rig().madeIn.value?.codecType == kCMVideoCodecType_H264)
+        #expect(Rig(offer: hevcOffer).madeIn.value?.codecType == kCMVideoCodecType_HEVC)
+    }
+
+    @Test func `should send an H.265 keyframe after its VPS, SPS and PPS when the session was answered with H.265`() {
+        let rig = Rig(offer: hevcOffer)
+        rig.goLive()
+        let sets = HVCCParameterSetsTests.self
+
+        rig.show(AVCCEnvelope.description(avcc: sets.hvcC))
+        rig.show(AVCCEnvelope.keyframe(avcc: picture(Data([0x26, 0x01, 1, 2]))))
+
+        let packets = rig.packets
+        #expect(packets.allSatisfy { $0.payloadType == 49 })
+        // The aggregation packet (2 + 2 + 3 + 2 + 4 + 2 + 3) and the slice (4), each with a 10-byte tag.
+        #expect(packets.map(\.payload.count) == [18 + 10, 4 + 10])
     }
 
     @Test func `should ask for a keyframe when the browser reports a lost picture`() {
@@ -478,7 +517,7 @@ struct WebRTCViewerStreamFailureTests {
         let made = Box<SerialStream?>(nil)
         let viewer = WebRTCViewer(
             offer: offer, ice: ours, datagrams: datagrams, handshake: handshake,
-            stream: { sink in let stream = SerialStream(sink: sink); made.value = stream; return stream },
+            stream: { sink, _ in let stream = SerialStream(sink: sink); made.value = stream; return stream },
             congestion: { _ in FixedBitrate() })
 
         made.value?.failFromItsQueue()

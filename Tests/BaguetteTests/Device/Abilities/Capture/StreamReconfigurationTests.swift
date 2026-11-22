@@ -19,7 +19,7 @@ struct StreamReconfigurationTests {
     }
 
     @Test func `should reject a zero bitrate before the encoder starts`() {
-        let encoder = H264Encoder(fps: 30)
+        let encoder = VideoEncoder(fps: 30)
         #expect(throws: (any Error).self) { try encoder.setBitrate(0) }
     }
 

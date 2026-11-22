@@ -24,10 +24,16 @@ public protocol Gesture: Sendable {
     /// What this act needs that `role` doesn't offer — a navigation the
     /// device lacks — or nil when it can act.
     func missing(from role: Role) -> String?
+
+    /// Whether the act only moves a pointer that is already down — one a
+    /// newer move may replace while it waits (`PendingGestures`).
+    var isMotion: Bool { get }
 }
 
 public extension Gesture {
     func missing(from role: Role) -> String? { nil }
+
+    var isMotion: Bool { false }
 
     /// Run the act on the screen's input: the role it needs, or a refusal
     /// naming what is missing and the device.

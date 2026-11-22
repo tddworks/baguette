@@ -32,6 +32,17 @@ struct DeviceKindsTests {
         #expect(kinds.devices.all.map(\.id) == ["SIM-1", "PHONE-1", "emulator-5554"])
     }
 
+    @Test func `should list this Mac's displays last when they are asked for`() {
+        let simulators = MockSimulators()
+        given(simulators).all.willReturn([simulator(udid: "SIM-1")])
+        let macs = MockDevices()
+        given(macs).all.willReturn([device("37D8832A-2D66-02CA-B9F7-8F30A301B230")])
+
+        let kinds = DeviceKinds(simulators: simulators, phones: none(), androids: none(), macs: macs)
+
+        #expect(kinds.devices.all.map(\.id) == ["SIM-1", "37D8832A-2D66-02CA-B9F7-8F30A301B230"])
+    }
+
     @Test func `should list no companion phones outside serve, where none can connect`() {
         let simulators = MockSimulators()
         given(simulators).all.willReturn([simulator(udid: "SIM-1")])

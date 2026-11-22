@@ -14,7 +14,7 @@ import IOSurface
 ///
 /// `docs/features/recording/README.md` records that server-side recording was
 /// tried for the live-stream / device-farm case and rejected twice over:
-/// an `ffmpeg -c copy` tap never sees the SPS/PPS that `H264Encoder`
+/// an `ffmpeg -c copy` tap never sees the SPS/PPS that `VideoEncoder`
 /// emits only on the first IDR, and a parallel `Screen` subscription
 /// with its own `AVAssetWriter` adds an N+1th VideoToolbox session on
 /// top of the one every booted device already runs for its live stream,

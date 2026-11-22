@@ -13,8 +13,12 @@ struct ListCommand: ParsableCommand {
     @Flag(name: .long, help: "Emit one running/available JSON envelope (matches /simulators.json)")
     var json: Bool = false
 
+    @Flag(name: .long, help: "Also list this Mac's displays, which `stream`, `record` and `serve --share-mac` can show and drive")
+    var mac: Bool = false
+
     func run() {
-        let kinds = DeviceOption.kinds(deviceSet: deviceSet)
+        var kinds = DeviceOption.kinds(deviceSet: deviceSet)
+        if mac, DeviceOption.reachable == nil { kinds.macs = MacDisplays.onThisMac() }
         let simulators = kinds.simulators
         if json {
             say(simulators.listJSON)
