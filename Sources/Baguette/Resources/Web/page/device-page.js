@@ -561,7 +561,7 @@
       // window.close (only works for script-opened tabs) then fall
       // back to navigating to the list.
       try { window.close(); } catch (_) { /* ignore */ }
-      if (!window.closed) location.href = '/simulators';
+      if (!window.closed) location.href = '/devices';
     });
     actions.on('setFormat', (next) => live().setFormat(next));
 
@@ -595,7 +595,7 @@
     // the cue page/devices-stream.js reads on load to auto-open the same
     // device's stream view without an extra click.
     actions.on('openSidebarView', () => {
-      location.href = '/simulators#stream=' + encodeURIComponent(udid);
+      location.href = '/devices#stream=' + encodeURIComponent(udid);
     });
 
     // Orientation cycle — one click advances 90° CW. Cycle length

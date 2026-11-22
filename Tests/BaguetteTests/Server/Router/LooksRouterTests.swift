@@ -362,18 +362,18 @@ struct LooksRouterTests {
 @Suite("Serve router: pages and lists")
 struct PageRouterTests {
 
-    @Test func `should send the bare root to the simulator list`() async throws {
+    @Test func `should send the bare root to the devices list`() async throws {
         try await InProcessServer().test { client in
             let response = try await client.send(.get, "/")
 
             #expect(response.status == .found)
-            #expect(response.headers[.location] == "/simulators")
+            #expect(response.headers[.location] == "/devices")
         }
     }
 
-    @Test func `should serve the one page for the list, a simulator, a device and the farm`() async throws {
+    @Test func `should serve the one page for the list, a simulator, a device and the farm, the old spellings too`() async throws {
         try await InProcessServer().test { client in
-            for path in ["/simulators", "/simulators/U", "/devices/U", "/farm"] {
+            for path in ["/devices", "/devices/U", "/simulators", "/simulators/U", "/farm"] {
                 let response = try await client.send(.get, path)
 
                 // Whatever the web root holds here: the source tree isn't

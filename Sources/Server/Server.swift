@@ -172,7 +172,10 @@ struct Server: Sendable {
             }
 
         // List page (HTML + sibling assets).
-        router.get("/") { _, _ in Self.redirect(to: "/simulators") }
+        // The devices list: every device, whatever its kind. `/simulators`
+        // is its old spelling, kept so links and bookmarks still land.
+        router.get("/") { _, _ in Self.redirect(to: "/devices") }
+        router.get("/devices") { _, _ in Self.staticAsset("sim.html") }
         router.get("/simulators") { _, _ in Self.staticAsset("sim.html") }
         router.get("/simulators.json") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }

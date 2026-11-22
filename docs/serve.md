@@ -8,7 +8,7 @@ description: Every HTTP and WebSocket route `baguette serve` answers, one row ea
 baguette serve                  # http://127.0.0.1:8421/simulators
 ```
 
-Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/simulators` lists devices with Boot / Shutdown; `/devices/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).
+Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/devices` lists every device with Boot / Shutdown (`/simulators` is its old spelling, still served); `/devices/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).
 
 One resource tree: no `/api/` prefix, the UDID is always in the path, and the format is the file extension.
 
@@ -24,8 +24,9 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 
 | Method | Path | What | Docs |
 |---|---|---|---|
-| `GET` | `/` | 302 → `/simulators` | |
-| `GET` | `/simulators` | device list page | |
+| `GET` | `/` | 302 → `/devices` | |
+| `GET` | `/devices` | device list page — every device, whatever its kind | |
+| `GET` | `/simulators` | the same page, its old spelling (kept for links and bookmarks) | |
 | `GET` | `/simulators.json` | `{running, available}`, same as `baguette list --json` | |
 | `GET` | `/mac/share` *with `--share-mac`* | the page that shares this Mac to the device it's opened on | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
 | `POST` · `PUT` · `DELETE` | `/mac/shares`, `/mac/shares/:id` *with `--share-mac`* | start, reshape, end a share: a display of the viewer's shape | [mac-screen](features/mac-screen/README.md#share-to-your-device) |

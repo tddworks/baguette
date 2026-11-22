@@ -11,6 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Changed
+- `/devices` is the devices list, and `/` goes there: every device, whatever its kind. `/simulators` still serves the same page, and every `/simulators/:udid/…` route still answers. → [docs](docs/serve.md) ([#157](https://github.com/tddworks/baguette/pull/157))
 - `POST /devices/:udid/input` taps land ~35 ms sooner (no wait on the Android tools listing devices); live streams encode a changed screen at once and refresh a still one on a steady beat (~14 ms; 53 frames shown/s, was 41).
 
 ### Added
