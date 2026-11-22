@@ -6,8 +6,8 @@
 # a browser on this Mac, Tailscale or Wi-Fi for a phone. A phone's WebSocket comes through the proxy (8777), so on
 # a phone only WebRTC is impaired. Taps and the browser's feedback are untouched. Check it took: `sudo pfctl -a bench -vsr` counts the packets each rule matched.
 if [[ $1 == off ]]; then pfctl -f /etc/pf.conf 2>/dev/null; dnctl -q flush; echo off; exit; fi
-dnctl pipe 1 config delay $1 plr $2 ${3:+bw $3}
-dnctl pipe 2 config delay $1 plr $2 ${3:+bw $3}
+dnctl pipe 1 config delay $1 plr $2 ${3:+bw} ${3:-}
+dnctl pipe 2 config delay $1 plr $2 ${3:+bw} ${3:-}
 sed -e '/^dummynet-anchor "com.apple/a\
 dummynet-anchor "bench"' /etc/pf.conf | pfctl -q -f -
 if [[ $IMPAIR_SCOPE == loopback-udp ]]; then

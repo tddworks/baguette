@@ -226,14 +226,31 @@ So H.265 costs nothing here: latency is the same or a little lower, and frame
 rate the same or higher. It saves nothing here either. On an unconstrained
 link, congestion control takes both to the 8 Mbit/s ceiling, so the same bits
 buy H.265 a better picture but not a smaller stream. Its case can only show on a
-link that can't carry 8 Mbit/s. That run (`impair.sh` with a bandwidth cap, then
-a phone on cellular) is still to do, and slice 7 waits on it.
+link that can't carry 8 Mbit/s:
+
+On a capped link (2026-11-22, `impair.sh 40 0.01 2Mbit/s`: 2 Mbit/s, 40 ms,
+1% loss; same simulator and browser):
+
+| | H.264 | H.265 |
+|---|---|---|
+| taps, p50 / p95 (2 runs) | 145–154 / 190–194 ms | 143–144 / 177–178 ms |
+| taps, fps / keyframes asked | 47–53 / 1–2 | 55 / 0 |
+| animated list, frozen per 30 s (5 runs, 4 for H.265) | 1.2, 3.2, 4.1, 4.6, 5.3 s | 0.7, 1.0, 3.9, 5.2 s |
+| animated list, fps | 41–49 | 41–48 |
+| animated list, jitter buffer | 74–81 ms | 47–221 ms (mostly 47–67) |
+
+One more H.265 run showed no picture in 15 s. The server sent its keyframes, but
+the browser never asked for a resend or a keyframe, so nothing arrived. Three
+repeat runs all started, so it reads as the throttle catching the connection's
+setup, not H.265. On a slow link H.265 leans better, with less freezing and
+a shorter buffer, but not in every run. Slice 7 (`auto` by default) is
+plausible but not yet proven; a phone on real cellular is the next evidence.
 
 ## 6 · Open questions
 
-- **Does H.265 hold up as well as H.264 on a slow, lossy link?** Both wait for
-  a keyframe after a lost reference. Slice 6's capped run (`impair.sh`) and a
-  phone on cellular will tell, and slice 7 waits on the answer.
+- **Does H.265 win on a real slow link?** On a capped one it leans better
+  (less freezing, a shorter buffer) but not in every run (slice 6, measured).
+  A phone on real cellular decides slice 7.
 - ~~**Does iPhone Safari offer and decode H.265 over WebRTC?**~~ Yes. An
   iPhone sharing this Mac offered `H265/90000 profile-id=1` first and was sent
   H.265 (2026-11-22). Chrome 157 offers it too.
