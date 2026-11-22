@@ -3,15 +3,23 @@
 import { deviceOf, describeListed } from '../../device/device.js';
 import { pickedChrome } from '../../device/picked-chrome.js';
 import { MacShare } from './share.js';
+import { followShare } from './share-follow.js';
+import { macPointer } from './pointer.js';
+import { macFramePicker } from './frame-picker.js';
 
 export function macDisplay(listing, { id, wire, storage, address }) {
-  const share = MacShare.fromAddress(address);
+  const shared = MacShare.fromAddress(address);
   return deviceOf(listing, {
     id,
     family: 'mac',
-    frame: { definition: pickedChrome(id, { wire, storage }), offersChromePicker: true, offersMacFrames: true },
+    frame: {
+      definition: pickedChrome(id, { wire, storage }),
+      offersChromePicker: true,
+      picker: macFramePicker(id, { wire, storage, reload: () => MacShare.reloadKeepingShare(window.location) }),
+    },
     badge: true,
+    pointer: macPointer,
     describe: () => describeListed(id, listing, wire),
-    ...(share ? { share } : {}),
+    ...(shared ? { share: { ...shared, follow: (browser) => followShare(shared, MacShare, browser) } } : {}),
   });
 }

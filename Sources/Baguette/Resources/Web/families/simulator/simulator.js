@@ -14,7 +14,7 @@ export function simulator(listing, { id, wire }) {
   return deviceOf(listing, {
     id,
     family: 'simulator',
-    frame: { definition: undefined, offersChromePicker: false, offersMacFrames: false },
+    frame: { definition: undefined, offersChromePicker: false },
     /** Its name, runtime and state, from the server's list of simulators. */
     async describe() {
       try {

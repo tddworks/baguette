@@ -338,6 +338,7 @@
       wire: {
         path: (id, suffix) => window.BaguetteTarget.path(id, suffix),
         listing: (id) => fetchDeviceListing(id),
+        json: async (url) => (await fetch(url, { cache: 'no-store' })).json(),
         simulators: async () => {
           const r = await fetch('/simulators.json', { cache: 'no-store' });
           if (!r.ok) throw new Error(String(r.status));
@@ -389,7 +390,8 @@
     try {
       sim = await useSimulator(deviceDefinitionURL);
       sim.mount(document.getElementById('nativeDeviceFrame'));
-      if (can('pointer')) mountPointer();
+      // A pointer the page draws is its family's (a Mac display's).
+      if (device.pointer) device.pointer.follow(sim);
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
@@ -430,7 +432,8 @@
     wireActions();
     wireToolbarScroll();
     wireUnload();
-    watchMacShare();
+    // A share's page follows its viewer: the Mac family's role.
+    if (device.share) device.share.follow(pageBrowser());
     applyStoredTheme();
 
     // No flat screen to hand over (a foldable's main view is the 3D
@@ -2201,86 +2204,7 @@
         'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
       osEl.insertAdjacentElement('afterend', badge);
     }
-    if (device.frame.offersMacFrames) mountMacFrameButton();
-  }
-
-  /// A Mac display shows with no frame until one is picked; this button
-  /// beside its badge picks one of the Mac frames it fits, or none.
-  function mountMacFrameButton() {
-    const badge = document.getElementById('nativeDeviceBadge');
-    if (!badge || document.getElementById('nativeMacFrameButton')) return;
-    const button = document.createElement('button');
-    button.id = 'nativeMacFrameButton';
-    button.type = 'button';
-    button.textContent = 'Frame';
-    button.title = 'Show this display in a Mac frame, or none';
-    button.style.cssText =
-        'margin-left:6px;padding:2px 10px;border:1px solid #dbeafe;border-radius:99px;' +
-        'background:#eff6ff;color:#2563eb;font-size:10.5px;font-weight:700;cursor:pointer';
-    // The badge sits inside the header's link back to the device list: the
-    // button goes after that link, and its click goes no further, so
-    // opening the picker never leaves the page.
-    button.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      void showMacFramePicker(button);
-    });
-    (badge.closest('a') || badge).insertAdjacentElement('afterend', button);
-  }
-
-  /// The frames this display fits — asked of the server by the display's own
-  /// size (its frameless definition's screen) — and no frame. A pick is
-  /// remembered per device, as a phone's borrowed chrome is, and reloads.
-  async function showMacFramePicker(anchor) {
-    const open = document.getElementById('nativeMacFramePicker');
-    if (open) { open.remove(); return; }
-    const key = 'baguette.twin.chrome.' + udid;
-    let picked = null;
-    try { picked = localStorage.getItem(key); } catch { /* no storage: nothing picked */ }
-    let frames = [];
-    try {
-      const own = await (await fetch(window.BaguetteTarget.path(udid, '/definition.json'),
-          { cache: 'no-store' })).json();
-      const rect = own && own.screen && own.screen.rect;
-      if (rect) {
-        const fit = await (await fetch('/mac-frames.json?width=' + rect.width + '&height=' + rect.height,
-            { cache: 'no-store' })).json();
-        frames = fit.frames || [];
-      }
-    } catch { /* no frames to offer: "No frame" still is */ }
-    const choices = window.Baguette._MacFrameChoices.of(frames, picked);
-    const pop = document.createElement('div');
-    pop.id = 'nativeMacFramePicker';
-    pop.style.cssText =
-        'position:absolute;z-index:70;display:flex;flex-direction:column;gap:4px;min-width:220px;' +
-        'padding:8px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;' +
-        'box-shadow:0 12px 32px rgba(15,23,42,.14);font:400 12.5px/1.4 -apple-system,Inter,sans-serif';
-    choices.forEach((choice) => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.textContent = (choice.chosen ? '✓ ' : '') + choice.label;
-      item.style.cssText =
-          'text-align:left;padding:6px 10px;border:0;border-radius:7px;cursor:pointer;' +
-          'background:' + (choice.chosen ? '#eff6ff' : 'transparent') + ';color:#1f2937;font:inherit';
-      item.addEventListener('click', () => {
-        try {
-          if (choice.pick) localStorage.setItem(key, choice.pick);
-          else localStorage.removeItem(key);
-        } catch { /* nothing remembered: the page keeps its look */ }
-        reloadPage();
-      });
-      pop.appendChild(item);
-    });
-    if (choices.length === 1) {
-      const hint = document.createElement('span');
-      hint.style.cssText = 'padding:4px 10px;color:#94a3b8;font-size:11.5px';
-      hint.textContent = 'No Mac frame fits this display, or none is installed — see docs/features/mac-screen.';
-      pop.appendChild(hint);
-    }
-    const box = anchor.getBoundingClientRect();
-    pop.style.left = (box.left + window.scrollX) + 'px';
-    pop.style.top = (box.bottom + window.scrollY + 6) + 'px';
-    document.body.appendChild(pop);
+    if (device.frame.picker) device.frame.picker.mount(document.getElementById('nativeDeviceBadge'));
   }
 
   /**
@@ -2604,67 +2528,19 @@
     if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
   }
 
-  /// A device with a pointer of its own (`pointer`): it streams without it, so
-  /// the page draws it — it never trails the hand — and a mouse moving over
-  /// the screen moves it (hover). docs/features/mac-screen/README.md#input.
-  function mountPointer() {
-    const pointer = window.Baguette._LocalPointer.attach(sim.screenArea);
-    new window.Baguette._HoverGestureSource(sim.screen).attach(sim.screenArea);
-    const PointerShape = window.Baguette._PointerShape;
-    PointerShape.follow((shape, density) =>
-      pointer.setShape({ ...shape, cursor: PointerShape.cursor(shape, density) }));
-  }
-
-  /// A page showing a Mac shared to this device (`/mac/share`): the display
-  /// is this screen's shape, so when the device turns the display is made
-  /// again in the new shape and the page reloads onto it; leaving the page
-  /// ends the share, and the display goes. The shape is the server's.
-  function watchMacShare() {
-    // Only a share's page has one: the Mac family's role (`device.share`).
-    const share = device && device.share;
-    if (!share) return;
-    const MacShare = window.Baguette._MacShare;
-    const id = encodeURIComponent(share.id);
-    const size = () => ({ width: window.innerWidth, height: window.innerHeight });
-    let shown = size();
-    let reshaping = false;
-    let settle = null;
-    /** Ask for the display in `screen`'s shape; whether the Mac made it. */
-    const remake = async (screen) => {
-      const body = MacShare.request({
-        viewport: screen, pixelRatio: window.devicePixelRatio, userAgent: navigator.userAgent,
-        room: share.room || undefined,
-      });
-      try {
-        return (await fetch('/mac/shares/' + id, { method: 'PUT', body: JSON.stringify(body) })).ok;
-      } catch { return false; }
+  /// The page as a share's follow sees it (families/mac/share-follow.js).
+  function pageBrowser() {
+    return {
+      get width() { return window.innerWidth; },
+      get height() { return window.innerHeight; },
+      get devicePixelRatio() { return window.devicePixelRatio; },
+      userAgent: navigator.userAgent,
+      location,
+      fetch: (url, init) => fetch(url, init),
+      on: (event, fn) => window.addEventListener(event, fn),
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (t) => clearTimeout(t),
     };
-    const reshape = async () => {
-      if (reshaping) return;
-      reshaping = true;
-      try {
-        let target = size();
-        while (MacShare.turned(shown, target)) {
-          // Refused: the display keeps its shape, and so does `shown` — the next turn asks again.
-          if (!(await remake(target))) return;
-          shown = target;
-          const now = size();
-          // Turned again while it was remade: remake it once more before showing it.
-          if (!MacShare.turned(shown, now)) { MacShare.reloadKeepingShare(location); return; }
-          target = now;
-        }
-      } finally {
-        reshaping = false;
-      }
-    };
-    window.addEventListener('resize', () => {
-      clearTimeout(settle);
-      settle = setTimeout(reshape, 700);   // a turn resizes several times before it settles
-    });
-    window.addEventListener('pagehide', () => {
-      if (reshaping || !MacShare.leaving()) return;
-      try { fetch('/mac/shares/' + id, { method: 'DELETE', keepalive: true }); } catch { /* the server ends nothing */ }
-    });
   }
 
   function wireUnload() {

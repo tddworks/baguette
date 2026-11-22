@@ -7,7 +7,7 @@ export function phone(listing, { id, wire, storage }) {
   return deviceOf(listing, {
     id,
     family: 'phone',
-    frame: { definition: pickedChrome(id, { wire, storage }), offersChromePicker: true, offersMacFrames: false },
+    frame: { definition: pickedChrome(id, { wire, storage }), offersChromePicker: true },
     badge: true,
     describe: () => describeListed(id, listing, wire),
   });

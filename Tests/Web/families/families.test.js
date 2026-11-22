@@ -44,21 +44,25 @@ test('should frame an Android device as a phone is framed, as its own family', (
   const droid = device(android);
   assert.equal(droid.family, 'android');
   assert.equal(droid.frame.offersChromePicker, true);
-  assert.equal(droid.frame.offersMacFrames, false);
+  assert.equal(droid.frame.picker, undefined);
 });
 
-test('should let a Mac display pick a Mac frame, and share it only on a share\'s page', () => {
+test('should let a Mac display pick a Mac frame, draw its pointer, and share it only on a share\'s page', () => {
   const display = device(mac);
   assert.equal(display.family, 'mac');
-  assert.equal(display.frame.offersMacFrames, true);
+  assert.equal(typeof display.frame.picker.mount, 'function');
+  assert.equal(typeof display.pointer.follow, 'function');
   assert.equal(display.share, undefined);
   const shared = device(mac, { address: '?handheld=1&share=D&room=moreSpace' });
-  assert.deepEqual(shared.share, { id: 'D', room: 'moreSpace' });
+  assert.equal(shared.share.id, 'D');
+  assert.equal(shared.share.room, 'moreSpace');
+  assert.equal(typeof shared.share.follow, 'function');
 });
 
 test('should keep a family\'s roles off every other family', () => {
   for (const other of [simulated, phone, android]) assert.equal(device(other, { address: '?share=D' }).share, undefined);
-  for (const other of [simulated, phone, android]) assert.equal(device(other).frame.offersMacFrames, false);
+  for (const other of [simulated, phone, android]) assert.equal(device(other).frame.picker, undefined);
+  for (const other of [simulated, phone, android]) assert.equal(device(other).pointer, undefined);
 });
 
 test('should describe a simulator as the server lists its simulators', async () => {
