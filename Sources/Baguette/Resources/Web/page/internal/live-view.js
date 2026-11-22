@@ -262,12 +262,37 @@ export function liveView(page) {
     if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
   }
 
+  /** Stream in the format `next` (the picker's choice), when this browser
+   *  plays it: remembered — per tab on a shared Mac's page — and the session
+   *  (or the 3D view) moved onto it. */
+  function setFormat(next) {
+      // Storing an undecodable format wedges the origin (#71). The
+      // button is already disabled; this is the second lock.
+      const wanted = window.StreamFormat && window.StreamFormat.named(next);
+      if (!wanted || !wanted.isPlayable(decodeCapabilities())) return;
+      const current = currentFormat();
+      const view = document.getElementById('simNativeView');
+      if (current === wanted.id && (session ||
+          (view && view.getAttribute('data-render3d') === 'open'))) return;
+      if (sharedMac()) {
+        try { sessionStorage.setItem(SHARE_FORMAT_KEY, wanted.id); } catch { /* the tab forgets */ }
+      } else {
+        localStorage.setItem(FORMAT_KEY, wanted.id);
+      }
+      reflectFormat(wanted.id);
+      if (view && view.getAttribute('data-render3d') === 'open') {
+        if (render3DPanel) render3DPanel.setFormat(wanted.forSockets(decodeCapabilities()).id);
+      } else {
+        startSession(wanted.id);
+      }
+  }
+
   return {
     /** The stream session showing the device now, or null. */
     get session() { return session; },
     /** The live 3D panel, while 3D has been opened. */
     get render3DPanel() { return render3DPanel; },
-    FORMAT_KEY, SHARE_FORMAT_KEY, currentFormat, decodeCapabilities, reflectFormat, sharedMac, socketFormat, startSession, toggle3D, toggle3DInspector };
+    FORMAT_KEY, SHARE_FORMAT_KEY, setFormat, currentFormat, decodeCapabilities, reflectFormat, sharedMac, socketFormat, startSession, toggle3D, toggle3DInspector };
 }
 
 if (typeof window !== 'undefined') {

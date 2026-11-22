@@ -529,6 +529,7 @@
   let actionsUI = null;
   const actions = {
     on: (name, fn) => pageActionsUI().on(name, fn),
+    run: (name, arg) => pageActionsUI().run(name, arg),
   };
   function pageActionsUI() {
     if (actionsUI) return actionsUI;
@@ -562,27 +563,8 @@
       try { window.close(); } catch (_) { /* ignore */ }
       if (!window.closed) location.href = '/simulators';
     });
-    actions.on('setFormat', (next) => {
-      // Storing an undecodable format wedges the origin (#71). The
-      // button is already disabled; this is the second lock.
-      const wanted = window.StreamFormat && window.StreamFormat.named(next);
-      if (!wanted || !wanted.isPlayable(live().decodeCapabilities())) return;
-      const current = live().currentFormat();
-      const view = document.getElementById('simNativeView');
-      if (current === wanted.id && (live().session ||
-          (view && view.getAttribute('data-render3d') === 'open'))) return;
-      if (live().sharedMac()) {
-        try { sessionStorage.setItem(live().SHARE_FORMAT_KEY, wanted.id); } catch { /* the tab forgets */ }
-      } else {
-        localStorage.setItem(live().FORMAT_KEY, wanted.id);
-      }
-      live().reflectFormat(wanted.id);
-      if (view && view.getAttribute('data-render3d') === 'open') {
-        if (live().render3DPanel) live().render3DPanel.setFormat(wanted.forSockets(live().decodeCapabilities()).id);
-      } else {
-        live().startSession(wanted.id);
-      }
-    });
+    actions.on('setFormat', (next) => live().setFormat(next));
+
     actions.on('toggleTheme', () => {
       themeUI().setTheme(themeUI().currentTheme() === 'light' ? 'dark' : 'light');
     });
@@ -593,7 +575,7 @@
     actions.on('handheldAction', (action) => {
       handheldUIView().setHandheldMenu(false);
       if (action === 'exit') handheldUIView().exitHandheld();
-      else if (action === 'rotate') window.__nativeRotate();
+      else if (action === 'rotate') actions.run('rotate');
       else if (sim) sim.pressButton(action);
     });
     actions.on('toggle3DInspector', () => live().toggle3DInspector());
@@ -647,10 +629,7 @@
     // `simctl spawn notifyutil`. Unlike rotate there's no visual state
     // to mirror — the motion event lives entirely in the guest — so
     // this is a pure fire-and-forget POST.
-    actions.on('shake', () => {
-      const url = '/devices/' + encodeURIComponent(udid) + '/shake';
-      fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
-    });
+    actions.on('shake', () => serverDevices().shake(udid));
   }
 
 

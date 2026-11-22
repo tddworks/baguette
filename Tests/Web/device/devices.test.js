@@ -54,3 +54,9 @@ test('should turn a device to an orientation', async () => {
   await devices.turn('D', 'landscape-left');
   assert.deepEqual(asked, ['POST /devices/D/orientation?value=landscape-left']);
 });
+
+test('should shake a device', async () => {
+  const { asked, devices } = server();
+  await devices.shake('D');
+  assert.deepEqual(asked, ['POST /devices/D/shake']);
+});
