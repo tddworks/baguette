@@ -106,3 +106,9 @@ test('should give a phone on the cable and a Mac display no power to boot', () =
   assert.equal(device(phone).power, undefined);
   assert.equal(device(mac).power, undefined);
 });
+
+test('should turn a simulator\'s input back to portrait, and give no other family an orientation', () => {
+  const turned = device(simulated).orientation.toPortrait({ type: 'tap', x: 0, y: 0, width: 10, height: 10 }, 'portrait-upside-down');
+  assert.deepEqual([turned.x, turned.y], [10, 10]);
+  for (const other of [phone, android, mac]) assert.equal(device(other).orientation, undefined);
+});

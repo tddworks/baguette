@@ -2,6 +2,7 @@
 // server lists its simulators.
 import { deviceOf } from '../../device/device.js';
 import { bootThroughServer } from '../../device/power.js';
+import { toPortrait } from './portrait.js';
 
 /** `com.apple.CoreSimulator.SimRuntime.iOS-26-4` → `iOS 26.4`. */
 function formatRuntime(raw) {
@@ -17,6 +18,8 @@ export function simulator(listing, { id, wire }) {
     family: 'simulator',
     frame: { definition: undefined },
     power: bootThroughServer(id, wire),
+    /** It turns: input drawn turned goes back to portrait before it's sent. */
+    orientation: { toPortrait },
     /** Its name, runtime and state, from the server's list of simulators. */
     async describe() {
       try {

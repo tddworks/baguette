@@ -186,119 +186,6 @@
     layoutHandheld();
   }
 
-  // Map a normalized coord [0, 1]² from the rotated visual frame
-  // back to the device's portrait coord system. Used by the input
-  // transport so taps/swipes/touches land on the iOS element the
-  // user clicked on, even though iOS expects portrait coords.
-  // Direction must mirror the CSS transforms in page/device-page.html —
-  // landscape-right is rotate(-90deg) (CCW) on the wrapper, so the
-  // visual→portrait inverse rotates CW.
-  function visualToPortraitNorm(x, y) {
-    switch (currentOrientation) {
-      case 'landscape-right':       return { x: 1 - y,     y: x         };
-      case 'portrait-upside-down':  return { x: 1 - x,     y: 1 - y     };
-      case 'landscape-left':        return { x: y,         y: 1 - x     };
-      default:                      return { x,            y            };
-    }
-  }
-
-  // Remap a Baguette-wire envelope from the rotated visual frame
-  // to the device's portrait coord frame. The Baguette SDK's
-  // PointerInterpreter computes finger coords against screenArea's
-  // bounding rect, which after CSS rotation is the ROTATED bbox —
-  // so the chrome-pixel coords in each envelope are in the user's
-  // visual frame. iOS expects portrait coords, so we rotate them
-  // before the WebSocket send.
-  //
-  // Replaces the legacy `remapPayloadToPortrait` (operated on the
-  // SimInput `kind:` dialect) with the same logic on the new
-  // `type:` envelopes.
-  function remapEnvelopeToPortrait(p) {
-    if (!p || !p.type) return p;
-    const W = p.width || 0, H = p.height || 0;
-    const remapPx = (x, y) => {
-      if (!W || !H) return { x, y };
-      const r = visualToPortraitNorm(x / W, y / H);
-      return { x: r.x * W, y: r.y * H };
-    };
-    switch (p.type) {
-      case 'tap': {
-        const r = remapPx(p.x, p.y);
-        return { ...p, x: r.x, y: r.y };
-      }
-      case 'swipe': {
-        const a = remapPx(p.startX, p.startY);
-        const b = remapPx(p.endX,   p.endY);
-        return { ...p, startX: a.x, startY: a.y, endX: b.x, endY: b.y };
-      }
-      case 'touch1-down':
-      case 'touch1-move':
-      case 'touch1-up': {
-        const r = remapPx(p.x, p.y);
-        const env = { ...p, x: r.x, y: r.y };
-        if (p.edge) env.edge = visualToPortraitEdge(p.edge);
-        return env;
-      }
-      case 'touch2-down':
-      case 'touch2-move':
-      case 'touch2-up': {
-        const a = remapPx(p.x1, p.y1);
-        const b = remapPx(p.x2, p.y2);
-        return { ...p, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
-      }
-      default:
-        return p;
-    }
-  }
-
-  // Map a screen-edge name from the user's visual frame to the
-  // device's portrait coord frame. When the device is rotated, the
-  // user's visual bottom corresponds to a *different* physical
-  // edge in portrait coords (the frame the digitizer dispatch
-  // patches `IndigoHIDEdge` against). Without this remap, a swipe
-  // up from the visual bottom in landscape lands as portrait coords
-  // near the left/right edge but is still flagged `bottom` — iOS's
-  // gesture recognizer requires the flag to match the touch's
-  // physical edge, so the home gesture never fires.
-  //
-  //   portrait                : visual bottom → physical bottom
-  //   landscape-right         : visual bottom → physical left
-  //   portrait-upside-down    : visual bottom → physical top
-  //   landscape-left          : visual bottom → physical right
-  //
-  // Same rotation applies to all four edge names — derived from
-  // the same CSS rotate transforms the bezel uses.
-  function visualToPortraitEdge(edge) {
-    if (!edge) return edge;
-    // Empirical mapping (verified against iOS 26.4 home-indicator
-    // recognizer in our headless setup):
-    //   portrait                : bottom → bottom
-    //   landscape-left  (raw=4) : bottom → right   (rotateCW; verified)
-    //   landscape-right (raw=3) : bottom → left    (rotateCCW; recognizer not wired — known limitation)
-    //   portrait-upside-down    : bottom → right   (matches raw=4 path; verified)
-    //
-    // iOS rotates the home-indicator recognizer hot zone with
-    // orientation for raw=4 and raw=2 — both end up at
-    // portrait-right + edge=right. raw=3 *should* mirror to
-    // portrait-left + edge=left by the same logic, but iOS
-    // doesn't fire the recognizer there in our headless setup
-    // (the well-documented landscape-right gap). Sending edge=left
-    // keeps the wire envelope physically self-consistent (touch
-    // coords land on portrait-left, edge flag agrees) so the
-    // gesture isn't mis-routed to a different system region.
-    // Empirical mapping (verified):
-    //   portrait              : bottom → bottom  (✅ home fires)
-    //   landscape-left  (raw=4): bottom → right  (✅ home fires)
-    //   portrait-upside-down  : bottom → right  (✅ home fires)
-    //   landscape-right (raw=3): bottom → top    (✅ home fires)
-    switch (currentOrientation) {
-      case 'landscape-left':       return edge === 'bottom' ? 'right' : edge;
-      case 'portrait-upside-down': return edge === 'bottom' ? 'right' : edge;
-      case 'landscape-right':      return edge === 'bottom' ? 'top' : edge;
-      default:                     return edge;
-    }
-  }
-
   // --- Bootstrap ---------------------------------------------------
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot, { once: true });
@@ -829,9 +716,10 @@
       udid,
       definitionURL,
       send: (payload) => {
-        const out = currentOrientation === 'portrait'
+        // A device that turns sends its input back in portrait (its family's orientation).
+        const out = currentOrientation === 'portrait' || !device.orientation
           ? payload
-          : remapEnvelopeToPortrait(payload);
+          : device.orientation.toPortrait(payload, currentOrientation);
         const view = document.getElementById('simNativeView');
         if (view && view.getAttribute('data-render3d') === 'open' &&
             render3DPanel && render3DPanel.send(out)) return;
