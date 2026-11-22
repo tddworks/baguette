@@ -1,4 +1,5 @@
 import BaguetteDevice
+import WebRTCKit
 import CoreGraphics
 import Foundation
 import HTTPTypes
@@ -1958,6 +1959,9 @@ struct Server: Sendable {
             udid: udidParam(request),
             format: request.uri.queryParameters.get("format")
                 .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+            // `?codec=h265|auto`: an AVCC stream in HEVC when this Mac encodes it; H.264 otherwise.
+            codec: Codecs.asked(request.uri.queryParameters.get("codec").flatMap { CodecChoice(rawValue: String($0)) },
+                                encodable: Codecs.encodable),
             displayQuery: request.uri.queryParameters.get("display"),
             panelQuery: request.uri.queryParameters.get("panel").map { String($0) },
             requireExistingDisplay: requireExistingDisplay,
@@ -1971,6 +1975,7 @@ struct Server: Sendable {
     private static func streamWS(
         udid: String,
         format: StreamFormat,
+        codec: any Codec = H264Codec(),
         displayQuery: String?,
         panelQuery: String? = nil,
         requireExistingDisplay: Bool = false,
@@ -2010,7 +2015,7 @@ struct Server: Sendable {
         }
 
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
+        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5, codec: codec)
         let screen = bound.screen
         // One input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride. A device

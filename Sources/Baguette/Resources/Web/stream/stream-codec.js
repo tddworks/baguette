@@ -1,7 +1,8 @@
-// The codec a WebRTC view asks for — HEVC (H.265), falling back to H.264 when
-// this browser doesn't offer HEVC, or H.264 only — beside `StreamFormat`,
-// which picks the stream itself. The server chooses from what was asked and
-// what the browser offered (`?codec=` on /devices/:id/whep, `CodecChoice`).
+// The codec a video stream asks for — HEVC (H.265), falling back to H.264 when
+// this browser can't play HEVC, or H.264 only — beside `StreamFormat`, which
+// picks the stream itself. WebRTC asks on /devices/:id/whep and the server
+// chooses from the browser's offer (`CodecChoice`); the WebSocket stream has
+// no offer, so the page asks for HEVC only when its own decoder plays it.
 
 function codec(id, label, asked, title) {
   return {
@@ -9,10 +10,14 @@ function codec(id, label, asked, title) {
     /** What the WHEP route is asked for. */
     asked,
     title,
+    /** What a WebSocket stream is asked for, given whether this browser's decoder plays HEVC. */
+    forSocket({ decodesHEVC }) {
+      return this.asked === 'auto' && decodesHEVC ? 'auto' : 'h264';
+    },
     /** Why the stream that `arrived` isn't this codec, or null when it is. */
     note(arrived) {
       if (!arrived || arrived.id === this.id) return null;
-      return 'Streaming in ' + arrived.label + ': this browser doesn’t offer ' + this.label + '.';
+      return 'Streaming in ' + arrived.label + ': this browser can’t play ' + this.label + '.';
     },
   };
 }

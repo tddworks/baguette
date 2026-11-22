@@ -36,13 +36,13 @@ function StreamSession(opts) {
 
 StreamSession.prototype.start = function () {
   const {
-    udid, format, version, canvas, url, display,
-    onSize, onFps, onLog, onText, onOpen, onClose, onError, onPaint,
+    udid, format, version, canvas, url, display, codec,
+    onSize, onFps, onLog, onText, onOpen, onClose, onError, onPaint, onCodec,
   } = this.opts;
   const ctx = canvas.getContext('2d');
   const log = onLog || (() => {});
 
-  const wsUrl = url || buildWSUrl(udid, format, version || 'v2', display);
+  const wsUrl = url || buildWSUrl(udid, format, version || 'v2', display, codec);
   const socket = new WebSocket(wsUrl);
   socket.binaryType = 'arraybuffer';
   this.ws = socket;
@@ -69,6 +69,7 @@ StreamSession.prototype.start = function () {
       this.pending = frame;
     },
     onLog: log,
+    onCodec,
   });
 
   socket.onopen    = () => {
@@ -137,7 +138,8 @@ StreamSession.prototype.stop = function () {
   this.pending = null;
 };
 
-function buildWSUrl(udid, format, version, display) {
+/** `codec`: what the stream is asked to encode in (`auto`, `h265`, `h264`); none asks for H.264. */
+function buildWSUrl(udid, format, version, display, codec) {
   const loc = window.location;
   const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
   const base = BaguetteTarget.base;
@@ -147,6 +149,7 @@ function buildWSUrl(udid, format, version, display) {
   if (display === 'phone' || display === 'carplay') {
     url += `&display=${encodeURIComponent(display)}`;
   }
+  if (codec) url += `&codec=${encodeURIComponent(codec)}`;
   return url;
 }
 

@@ -15,8 +15,11 @@ For releases prior to this changelog, see the
 - `POST /devices/:udid/input` taps land ~35 ms sooner (no wait on the Android tools listing devices); live streams encode a changed screen at once and refresh a still one on a steady beat (~14 ms; 53 frames shown/s, was 41).
 
 - `baguette serve` prints the devices list's address (`…/devices`) when it starts. → [docs](docs/serve.md) ([#157](https://github.com/tddworks/baguette/pull/157))
-- With WebRTC on, the device page's toolbar has an **HEVC · H.264** switch, remembered by the browser: HEVC (the default) falls back to H.264 when the browser can't play it, and says so; H.264 asks for H.264 only. `?codec=` still overrides it. → [docs](docs/features/webrtc/README.md) ([#157](https://github.com/tddworks/baguette/pull/157))
+- The device page's **HEVC · H.264** switch picks the codec for WebRTC and the WebSocket stream (whose pill now reads **WebSocket**): HEVC by default, falling back to H.264 when the browser can't play it, and saying so. → [docs](docs/features/webrtc/README.md) ([#157](https://github.com/tddworks/baguette/pull/157))
 - The web page, the device farm and the JS SDK load as ES modules, one entry each; a page that embeds the SDK imports `/baguette/baguette.js` with `type="module"`, and `window.Baguette` still works once it has loaded. → [docs](docs/features/baguette-sdk/README.md) ([#157](https://github.com/tddworks/baguette/pull/157))
+
+### Fixed
+- A phone on a cable watched by two viewers (two tabs, or the Mac and a phone) no longer freezes for one when the other leaves: its viewers share the one stream the phone sends. ([#157](https://github.com/tddworks/baguette/pull/157))
 
 ### Added
 - The devices page (`/devices`) lists **This Mac** as a device to share when `serve --share-mac` is on: **Share…** makes a display for the screen you're on and opens it; `/mac/share` still works. → [docs](docs/features/web-page/design.md) ([#157](https://github.com/tddworks/baguette/pull/157))

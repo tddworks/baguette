@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CoreMedia
 @testable import Baguette
 @testable import BaguetteDevice
 
@@ -32,6 +33,18 @@ struct StreamFormatTests {
         )
         #expect(stream is MJPEGStream)
         #expect(stream.config == .default)
+    }
+
+    @Test func `should build an AVCC stream that encodes in the codec it is given`() {
+        let stream = StreamFormat.avcc.makeStream(
+            config: .default, sink: FakeFrameSink(), quality: 0.7, codec: HEVCCodec()
+        )
+        #expect((stream as? AVCCStream)?.codec.codecType == kCMVideoCodecType_HEVC)
+    }
+
+    @Test func `should build an AVCC stream that encodes in H.264 when no codec is given`() {
+        let stream = StreamFormat.avcc.makeStream(config: .default, sink: FakeFrameSink(), quality: 0.7)
+        #expect((stream as? AVCCStream)?.codec.codecType == kCMVideoCodecType_H264)
     }
 
     @Test func `should build an AVCC stream with the given settings for avcc`() {

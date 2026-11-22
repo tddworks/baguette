@@ -54,7 +54,25 @@ export function liveView(page) {
     };
   }
 
+  // Whether this browser's WebCodecs decoder plays HEVC, learned once (null
+  // until known). A WebSocket stream waits the few milliseconds for it rather
+  // than starting in H.264 and restarting: a phone on a cable sends no picture
+  // to a live screen reopened that fast.
+  let decodesHEVC = null;
+  const hevcKnown = (typeof VideoDecoder !== 'undefined' && VideoDecoder.isConfigSupported
+    ? VideoDecoder.isConfigSupported({ codec: 'hvc1.1.6.L93.B0', hardwareAcceleration: 'prefer-hardware' })
+      .then((answer) => !!(answer && answer.supported), () => false)
+    : Promise.resolve(false))
+    .then((plays) => { decodesHEVC = plays; });
+  let startsAsked = 0;
+
   function startSession(format) {
+    // The newest ask wins: a start still waiting on the HEVC answer is dropped.
+    const ask = ++startsAsked;
+    if (format === 'avcc' && decodesHEVC === null) {
+      hevcKnown.then(() => { if (ask === startsAsked) startSession(format); });
+      return;
+    }
     // A recording samples the canvas this session paints into; a
     // restart (format swap, 3D close, device re-open) leaves it blank
     // for however long the new socket takes to land its first frame.
@@ -71,8 +89,10 @@ export function liveView(page) {
       // viewer's bitrate follows the link (default: the server's choice).
       congestion: new URLSearchParams(location.search).get('congestion') || undefined,
       // The codec picker's choice; `?codec=h264|h265|auto` on the page overrides it.
-      codec: format === 'webrtc' ? currentCodec().asked : undefined,
-      onCodec: format === 'webrtc' ? (mimeType) => reflectCodec(StreamCodec.arrived(mimeType)) : undefined,
+      // The WebSocket stream asks for HEVC only when this browser's decoder plays it.
+      codec: format === 'webrtc' ? currentCodec().asked
+        : format === 'avcc' ? currentCodec().forSocket({ decodesHEVC }) : undefined,
+      onCodec: format === 'mjpeg' ? undefined : (mimeType) => reflectCodec(StreamCodec.arrived(mimeType)),
       onError: format === 'webrtc' ? () => {
         // A shared Mac's tab keeps its own choice: the socket from now on.
         const MacShare = sharedMac();
@@ -128,7 +148,7 @@ export function liveView(page) {
       b.title = playable ? b.dataset.titleDefault : fmt.whyUnplayable;
     });
     const codecs = document.getElementById('nativeCodecPicker');
-    if (codecs) codecs.hidden = format !== 'webrtc';
+    if (codecs) codecs.hidden = format !== 'webrtc' && format !== 'avcc';
     reflectCodec(null);
   }
 
@@ -166,7 +186,8 @@ export function liveView(page) {
       history.replaceState(null, '', url.href);
     }
     reflectCodec(null);
-    if (session && currentFormat() === 'webrtc') startSession('webrtc');
+    const format = currentFormat();
+    if (session && (format === 'webrtc' || format === 'avcc')) startSession(format);
   }
 
   // The format every surface in this page streams at — phone, CarPlay,

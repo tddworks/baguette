@@ -58,7 +58,7 @@ test('StreamFormat', async (t) => {
   });
 
   await t.test('should carry the label the picker shows', () => {
-    assert.equal(StreamFormat.named('avcc').label, 'H.264');
+    assert.equal(StreamFormat.named('avcc').label, 'WebSocket');
     assert.equal(StreamFormat.named('mjpeg').label, 'MJPEG');
   });
 
@@ -86,7 +86,7 @@ test('StreamFormat', async (t) => {
 
   await t.test('should say why a browser can\'t play it', () => {
     assert.equal(StreamFormat.named('avcc').whyUnplayable,
-      'H.264 needs WebCodecs, which this browser only exposes on a secure origin. '
+      'WebSocket needs WebCodecs, which this browser only exposes on a secure origin. '
       + 'Open this page over HTTPS or on localhost, or pick WebRTC.');
     assert.equal(StreamFormat.named('webrtc').whyUnplayable, 'WebRTC is not available in this browser.');
     assert.equal(StreamFormat.named('webrtc').label, 'WebRTC');

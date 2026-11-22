@@ -43,3 +43,15 @@ test('should say HEVC fell back to H.264 when the stream arrived in H.264', () =
   assert.equal(StreamCodec.named('h264').note(StreamCodec.named('h264')), null);
   assert.equal(StreamCodec.named('hevc').note(null), null);
 });
+
+test('should ask a WebSocket stream for HEVC when HEVC is chosen and this browser decodes it', () => {
+  assert.equal(StreamCodec.named('hevc').forSocket({ decodesHEVC: true }), 'auto');
+});
+
+test('should ask a WebSocket stream for H.264 when this browser cannot decode HEVC', () => {
+  assert.equal(StreamCodec.named('hevc').forSocket({ decodesHEVC: false }), 'h264');
+});
+
+test('should ask a WebSocket stream for H.264 when H.264 is chosen', () => {
+  assert.equal(StreamCodec.named('h264').forSocket({ decodesHEVC: true }), 'h264');
+});

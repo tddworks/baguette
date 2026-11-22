@@ -3123,18 +3123,19 @@
       <span id="nativeStatus"></span>
 
       <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
-        <button class="fmt-btn" data-v="avcc"  title="H.264 (hardware-decoded). Smaller, more compressed."
-                data-action="setFormat" data-arg="avcc">H.264</button>
+        <button class="fmt-btn" data-v="avcc"  title="WebSocket: HEVC or H.264 (the codec switch), hardware-decoded. Smaller, more compressed."
+                data-action="setFormat" data-arg="avcc">WebSocket</button>
         <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
                 data-action="setFormat" data-arg="mjpeg">MJPEG</button>
         <button class="fmt-btn" data-v="webrtc" title="WebRTC (WHEP). HEVC or H.264 over UDP: holds up on Wi-Fi and remote links, and plays on plain HTTP."
                 data-action="setFormat" data-arg="webrtc">WebRTC</button>
       </div>
 
-      <!-- WebRTC's codec: HEVC (falling back to H.264 when this browser
-           can't play it) or H.264 only. Shown while WebRTC streams;
-           page/internal/live-view.js lights it and says when HEVC fell back. -->
-      <div class="fmt-picker" id="nativeCodecPicker" role="group" aria-label="WebRTC codec" hidden>
+      <!-- The video codec: HEVC (falling back to H.264 when this browser
+           can't play it) or H.264 only. Shown while a video format (WebSocket,
+           WebRTC) streams; page/internal/live-view.js lights it and says when
+           HEVC fell back. -->
+      <div class="fmt-picker" id="nativeCodecPicker" role="group" aria-label="Video codec" hidden>
         <button class="fmt-btn" data-v="hevc" data-action="setCodec" data-arg="hevc">HEVC</button>
         <button class="fmt-btn" data-v="h264" data-action="setCodec" data-arg="h264">H.264</button>
       </div>

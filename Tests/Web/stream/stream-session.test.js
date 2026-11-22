@@ -49,3 +49,14 @@ test('should escape the udid and ignore an unknown display', () => {
     'ws://localhost:8421/devices/a%2Fb/stream?format=mjpeg&version=v2'
   );
 });
+
+test('should ask the stream for the codec it was given', () => {
+  globalThis.window = { location: { protocol: 'http:', host: 'localhost:8421' } };
+  const url = StreamSession.buildWSUrl('UDID-1', 'avcc', 'v2', 'phone', 'auto');
+  assert.match(url, /[?&]codec=auto(&|$)/);
+});
+
+test('should ask for no codec when it was given none', () => {
+  globalThis.window = { location: { protocol: 'http:', host: 'localhost:8421' } };
+  assert.doesNotMatch(StreamSession.buildWSUrl('UDID-1', 'avcc', 'v2', 'phone'), /codec=/);
+});

@@ -10,7 +10,8 @@
 // that only has a socket (CarPlay, the watch, the 3D panel) streams its
 // `forSockets` stand-in instead.
 const IDS = ['avcc', 'mjpeg', 'webrtc'];
-const LABELS = { avcc: 'H.264', mjpeg: 'MJPEG', webrtc: 'WebRTC' };
+// `avcc` is HEVC or H.264 over the WebSocket (the codec switch picks), so it is named for its transport.
+const LABELS = { avcc: 'WebSocket', mjpeg: 'MJPEG', webrtc: 'WebRTC' };
 
 class StreamFormat {
   /** @param {'avcc'|'mjpeg'|'webrtc'} id the wire spelling, as sent on the URL */

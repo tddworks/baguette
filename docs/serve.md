@@ -60,7 +60,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/devices/:udid/openurl?url=` *any device* | open a deep link | [deep-links](features/deep-links/README.md) |
 | `GET` | `/devices/:udid/schemes.json?q=` *any device* | URL schemes the device's apps registered | [deep-links](features/deep-links/README.md) |
 | `POST` | `/devices/:udid/notify?bundleId=` *any device* | deliver a remote notification (body: the payload) | [notifications](features/notifications/README.md) |
-| `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
+| `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`; `codec=h265\|auto` sends `avcc` in HEVC when this Mac encodes it, H.264 otherwise); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
 | `POST` | `/devices/:udid/whep` *any device* | WebRTC (WHEP) viewer of the screen: SDP offer in, `201` + `Location` + answer out | [webrtc](features/webrtc/README.md) |
 | `DELETE` | `/devices/:udid/whep/:viewer` *any device* | hang a WebRTC viewer up | [webrtc](features/webrtc/README.md) |
 | `WS` | `/devices/:udid/whep/:viewer/control` *any device* | a WebRTC viewer's gestures + stream control, no video | [webrtc](features/webrtc/README.md) |

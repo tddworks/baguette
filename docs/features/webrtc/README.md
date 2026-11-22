@@ -66,8 +66,9 @@ Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the
 device page with it (`/devices/<UDID>?congestion=remb`) to compare them by hand.
 
 The page streams **H.265 when the browser offers it** and this Mac has an HEVC
-encoder, and H.264 otherwise: it asks `codec=auto`. With WebRTC on, the toolbar's
-**HEVC · H.264** switch picks it, remembered by the browser: HEVC (the default)
+encoder, and H.264 otherwise: it asks `codec=auto`. With WebRTC or WebSocket on,
+the toolbar's **HEVC · H.264** switch picks it (the WebSocket stream asks for HEVC
+only when the browser's `VideoDecoder` plays it, as `?codec=` on `/stream`), remembered by the browser: HEVC (the default)
 falls back to H.264 when the browser can't play it, and its pill turns to an
 outline saying so; H.264 asks for H.264 only. `/devices/<UDID>?codec=h264` (or
 `codec=h265`) overrides the switch for that visit. On the `POST`,

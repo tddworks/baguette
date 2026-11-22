@@ -97,3 +97,39 @@ test('should say why the browser decoder failed', () => {
     assert.ok(logs.some((l) => l.isError && l.message.includes('Decoding error.')));
   });
 });
+
+// ── which codec a description record is ─────────────────────────────
+
+test('should name an H.264 stream from its avcC record', () => {
+  assert.equal(FrameDecoder.codecOf(new Uint8Array([0x01, 0x64, 0x00, 0x33, 0xff])), 'avc1.640033');
+});
+
+test('should name an HEVC stream from its hvcC record', () => {
+  // Main profile, compatible with Main and Main 10, constraints 0x90, level 93 (3.1).
+  const hvcC = new Uint8Array([0x01, 0x01, 0x60, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 93, 0xf0]);
+  assert.equal(FrameDecoder.codecOf(hvcC), 'hvc1.1.6.L93.90');
+});
+
+test('should name a high-tier HEVC stream with its tier', () => {
+  const hvcC = new Uint8Array([0x01, 0x21, 0x60, 0x00, 0x00, 0x00, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x00, 153, 0xf0]);
+  assert.equal(FrameDecoder.codecOf(hvcC), 'hvc1.1.6.H153.B0');
+});
+
+test('should configure the browser decoder for HEVC when the stream sends an hvcC record', () => {
+  withWebCodecs(() => {
+    const arrived = [];
+    const decoder = FrameDecoder.create('avcc', { onFrame: () => {}, onCodec: (type) => arrived.push(type) });
+    decoder.feed(message(0x01, 0x01, 0x01, 0x60, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 93, 0xf0));
+    assert.equal(FakeVideoDecoder.made[0].configs[0].codec, 'hvc1.1.6.L93.90');
+    assert.deepEqual(arrived, ['video/H265']);
+  });
+});
+
+test('should tell the page an H.264 stream arrived in H.264', () => {
+  withWebCodecs(() => {
+    const arrived = [];
+    const decoder = FrameDecoder.create('avcc', { onFrame: () => {}, onCodec: (type) => arrived.push(type) });
+    decoder.feed(description);
+    assert.deepEqual(arrived, ['video/H264']);
+  });
+});

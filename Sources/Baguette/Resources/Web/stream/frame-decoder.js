@@ -30,7 +30,7 @@ function MjpegDecoder({ onFrame, onLog }) {
   };
 }
 
-function AvccDecoder({ onFrame, onLog }) {
+function AvccDecoder({ onFrame, onLog, onCodec }) {
   let ts = 0;
   // A VideoDecoder that reports an error is closed for good: every later
   // chunk would be dropped and the page would sit on its last picture.
@@ -55,9 +55,11 @@ function AvccDecoder({ onFrame, onLog }) {
       const payload = buf.slice(1);
 
       if (type === 0x01) {
-        // avcC description — configure the decoder.
+        // The decoder configuration record (avcC, or hvcC for HEVC) — configure the decoder.
+        const codec = codecOf(payload);
+        if (onCodec) onCodec(codec.startsWith('hvc1') ? 'video/H265' : 'video/H264');
         config = {
-          codec: 'avc1.' + hex2(payload[1]) + hex2(payload[2]) + hex2(payload[3]),
+          codec,
           description: payload.buffer,
           optimizeForLatency: true,
           hardwareAcceleration: 'prefer-hardware',
@@ -137,12 +139,33 @@ function forwardJSONErrors(data, onLog) {
 
 function hex2(b) { return ('0' + b.toString(16)).slice(-2); }
 
+/** The WebCodecs codec string a decoder configuration record names: `avc1.PPCCLL`
+ *  for an avcC record, `hvc1.…` (ISO/IEC 14496-15 Annex E) for an hvcC one. Byte 1
+ *  tells them apart: an avcC profile is 66 or more, an hvcC one packs a profile
+ *  space, a tier and a profile under 32. */
+function codecOf(record) {
+  if (record[1] >= 0x40) return 'avc1.' + hex2(record[1]) + hex2(record[2]) + hex2(record[3]);
+  const space = record[1] >> 6;
+  const tier = (record[1] >> 5) & 1;
+  const profile = record[1] & 0x1f;
+  let compatible = (record[2] << 24 | record[3] << 16 | record[4] << 8 | record[5]) >>> 0;
+  let reversed = 0;
+  for (let bit = 0; bit < 32; bit++) { reversed = (reversed << 1 | (compatible & 1)) >>> 0; compatible >>>= 1; }
+  const constraints = Array.from(record.slice(6, 12));
+  while (constraints.length && constraints[constraints.length - 1] === 0) constraints.pop();
+  return ['hvc1', (space ? 'ABC'[space - 1] : '') + profile, reversed.toString(16).toUpperCase(),
+    (tier ? 'H' : 'L') + record[12]]
+    .concat(constraints.map((b) => b.toString(16).toUpperCase()))
+    .join('.');
+}
+
 const FrameDecoder = {
   create(format, callbacks) {
     return format === 'avcc'
       ? AvccDecoder(callbacks)
       : MjpegDecoder(callbacks);
   },
+  codecOf,
   /** True if the browser has WebCodecs `VideoDecoder` for AVCC. */
   isHardwareAvailable() {
     return typeof VideoDecoder !== 'undefined';
