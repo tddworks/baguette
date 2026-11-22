@@ -433,6 +433,7 @@
     wireActions();
     wireToolbarScroll();
     wireUnload();
+    watchMacShare();
     applyStoredTheme();
 
     // No flat screen to hand over (a foldable's main view is the 3D
@@ -2858,6 +2859,44 @@
       localStorage.setItem('asc.3dInspector', 'open');
     }
     if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
+  }
+
+  /// A page showing a Mac shared to this device (`/mac/share`): the display
+  /// is this screen's shape, so when the device turns the display is made
+  /// again in the new shape and the page reloads onto it; leaving the page
+  /// ends the share, and the display goes. The shape is the server's.
+  function watchMacShare() {
+    const MacShare = window.Baguette && window.Baguette._MacShare;
+    const share = MacShare && MacShare.fromAddress(location.search);
+    if (!share) return;
+    const id = encodeURIComponent(share.id);
+    const size = () => ({ width: window.innerWidth, height: window.innerHeight });
+    let shown = size();
+    let reshaping = false;
+    let settle = null;
+    const reshape = async () => {
+      const now = size();
+      if (reshaping || !MacShare.turned(shown, now)) return;
+      reshaping = true;
+      const body = MacShare.request({
+        viewport: now, pixelRatio: window.devicePixelRatio, userAgent: navigator.userAgent,
+        room: share.room || undefined,
+      });
+      try {
+        const response = await fetch('/mac/shares/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        if (response.ok) { location.reload(); return; }
+      } catch { /* keep the display as it is */ }
+      shown = now;
+      reshaping = false;
+    };
+    window.addEventListener('resize', () => {
+      clearTimeout(settle);
+      settle = setTimeout(reshape, 700);   // a turn resizes several times before it settles
+    });
+    window.addEventListener('pagehide', () => {
+      if (reshaping) return;
+      try { fetch('/mac/shares/' + id, { method: 'DELETE', keepalive: true }); } catch { /* the server ends nothing */ }
+    });
   }
 
   function wireUnload() {

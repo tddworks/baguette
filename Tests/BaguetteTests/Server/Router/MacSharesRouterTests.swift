@@ -61,10 +61,24 @@ struct MacSharesRouterTests {
         }
     }
 
+    @Test func `should offer the page that shares this Mac to the device it's opened on`() async throws {
+        try await InProcessServer(screenShares: Self.shares().0).test { client in
+            let page = try await client.execute(uri: "/mac/share", method: .get)
+            // The web root may be out of a test binary's reach: the route
+            // answers what serving the page answers, as the other pages' do.
+            let served = Server.staticAsset("mac-share.html")
+            #expect(page.status == served.status)
+            #expect(page.headers[.contentType] == served.headers[.contentType])
+        }
+    }
+
     @Test func `should not share the Mac when serve wasn't asked to`() async throws {
         try await InProcessServer().test { client in
             let response = try await client.execute(uri: "/mac/shares", method: .post, body: Self.body)
+            let page = try await client.execute(uri: "/mac/share", method: .get)
             #expect(response.status == .notFound)
+            #expect(page.status == .notFound)
+            #expect(!String(buffer: page.body).contains("mac-share.html"))
         }
     }
 }

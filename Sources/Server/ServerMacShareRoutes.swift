@@ -16,6 +16,12 @@ extension Server {
     ) {
         guard let shares = screenShares else { return }
 
+        // The page a viewer opens on its device to share this Mac to it.
+        router.get("/mac/share") { r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            return Self.staticAsset("mac-share.html")
+        }
+
         router.post("/mac/shares") { r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             let request: ShareRequest
