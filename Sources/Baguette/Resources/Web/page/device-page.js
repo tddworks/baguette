@@ -46,8 +46,6 @@
   let sim = null;           // Baguette SDK Simulator
   // The page's panels and their sheet rule (page/page-panels.js); made at boot.
   let panels = null;
-  let axInspector = null;
-  let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
   let deviceName = '';
 
   // The device frame drawn turned (page/internal/rotation-view.js), made on
@@ -344,15 +342,15 @@
       get device() { return device; },
       get sim() { return sim; },
       get foldable() { return foldable; },
-      get axInspector() { return axInspector; },
-      get pluginPanels() { return pluginPanels; },
+      get axInspector() { return axView().inspector; },
+      get pluginPanels() { return pluginsView().panels; },
       get companionsUI() { return companionsUI; },
       capture: (...args) => capture(...args),
       power: (...args) => power(...args),
       rotation: (...args) => rotation(...args),
       themeUI: (...args) => themeUI(...args),
-      mountAxInspector: (...args) => mountAxInspector(...args),
-      mountPlugins: (...args) => mountPlugins(...args),
+      mountAxInspector: (...args) => axView().mountAxInspector(...args),
+      mountPlugins: (...args) => pluginsView().mountPlugins(...args),
     }));
   }
 
@@ -432,107 +430,29 @@
     live().startSession(live().currentFormat());
   }
 
-  // Lazy-mounts the AXInspector once a surface + session are ready.
-  // Re-runs on `remountFrame()` because the screen DOM and the
-  // session both change underneath it.
-  //
-  // Focus-mode UX:
-  //   - The inspector has no inline UI host. Enable/disable is
-  //     driven by the `nativeAxToggle` toolbar button.
-  //   - Selection details surface in the `nativeAxHost` floating
-  //     panel, which is hidden until the user clicks an element.
-  function mountAxInspector() {
-    if (axInspector) {
-      try { axInspector.detach(); } catch (_) { /* ignore */ }
-      axInspector = null;
-    }
-    if (!window.AXInspector || !sim) return;
-    const panel = document.getElementById('nativeAxHost');
-    axInspector = new window.AXInspector({
-      // No `host` — toolbar drives enable/disable, panel surfaces selection.
-      screenArea: sim.screenArea,
-      send: (payload) => live().session && live().session.send(payload),
-      // AX inspector reads `{w, h}`; SDK Screen exposes `{width, height}`.
-      getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
-      onSelect: (node) => renderAxPanel(panel, node),
-      onEnableChange: (enabled) => {
-        const btn = document.getElementById('nativeAxToggle');
-        if (btn) btn.classList.toggle('active', enabled);
-        if (!enabled && panel) {
-          panel.removeAttribute('data-open');
-          panel.innerHTML = '';
-        }
-      },
-    });
+  // axView (page/internal/ax-view.js), made on first use — after the modules have loaded — over
+  // the page's port.
+  let axViewUI = null;
+  function axView() {
+    return axViewUI || (axViewUI = window.Baguette._AxView.axView({
+      get sim() { return sim; },
+      live: (...args) => live(...args),
+    }));
   }
 
-  // Plugin contributions — a separate rail on the right edge, drawn by
-  // the host from /plugins.json. Kept apart from the device toolbar on
-  // purpose: baguette ships the toolbar, plugins are code you
-  // installed, and the split is a trust signal. `onHighlight` converts
-  // a row's device-point frame into a box over the live screen; the
-  // frame arrives in the same units as gesture coordinates, so the
-  // only maths is the display scale.
-  function mountPlugins() {
-    if (!window.PluginPanels || !sim) return;
-    pluginPanels = new window.PluginPanels({
-      udid,
-      // The shared right-edge stack, below baguette's own screens rail —
-      // two rails claiming the same centred slot would sit on top of
-      // each other. The panel and flyout inside stay `position: fixed`
-      // and are unaffected by the stack; see `.right-rails`.
-      mount: rightRails(),
-      // The add-a-bakery modal covers the page, so it hangs off the
-      // view root instead. `.right-rails` is `position: fixed` and so a
-      // stacking context of its own whatever its `z-index` says —
-      // anything mounted in there composites at the rail's level, which
-      // is below the device.
-      modalMount: document.getElementById('simNativeView') || document.body,
-      isBooted: () => true,
-      onHighlight: (frame) => paintPluginHighlight(frame),
-      onTap: (point) => tapForPlugin(point),
-      log: (msg) => console.log('[plugin]', msg),
-    });
-    pluginPanels.load();
+
+  // pluginsView (page/internal/plugins-view.js), made on first use — after the modules have loaded — over
+  // the page's port.
+  let pluginsViewUI = null;
+  function pluginsView() {
+    return pluginsViewUI || (pluginsViewUI = window.Baguette._PluginsView.pluginsView({
+      get udid() { return udid; },
+      get sim() { return sim; },
+      live: (...args) => live(...args),
+      rightRails: (...args) => rightRails(...args),
+    }));
   }
 
-  // A `rowAction: "tap"` row, dispatched down the same socket every
-  // other gesture uses. Wire shape matches GestureRegistry's `tap`:
-  // device-point coordinates plus the device-point screen size — the
-  // row's frame already arrives in that space, so there's nothing to
-  // convert.
-  function tapForPlugin(point) {
-    if (!live().session || !sim || !sim.screen || !sim.screen.size) return;
-    const size = sim.screen.size;
-    live().session.send({
-      type: 'tap',
-      x: point.x, y: point.y,
-      width: size.width, height: size.height,
-    });
-  }
-
-  function paintPluginHighlight(frame) {
-    let box = document.getElementById('nativePluginHighlight');
-    if (!frame) { if (box) box.remove(); return; }
-    if (!sim || !sim.screenArea) return;
-
-    const area = sim.screenArea;
-    const device = sim.screen.size;
-    if (!device || !device.width || !device.height) return;
-    const scaleX = area.clientWidth / device.width;
-    const scaleY = area.clientHeight / device.height;
-
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'nativePluginHighlight';
-      box.className = 'plugin-highlight';
-      area.appendChild(box);
-    }
-    box.style.left   = (frame.x * scaleX) + 'px';
-    box.style.top    = (frame.y * scaleY) + 'px';
-    box.style.width  = (frame.width * scaleX) + 'px';
-    box.style.height = (frame.height * scaleY) + 'px';
-  }
 
   // --- Helpers -----------------------------------------------------
   /** Reload this page — on a shared Mac's, keeping its share. */
@@ -765,9 +685,7 @@
       if (companionsUI) companionsUI.pressWatch(name);
     });
     actions.on('toggleAx', () => {
-      if (!axInspector) return;
-      if (axInspector.isEnabled()) axInspector.disable();
-      else axInspector.enable();
+      axView().toggleAx();
     });
     // Sidebar-view jump — bounce out of focus mode and into the
     // inline `startStream` layout on `/simulators`. The hash is
@@ -814,37 +732,6 @@
     });
   }
 
-  // Surface a selected AX node in the floating `#nativeAxHost`
-  // panel. Wraps the inspector's static selection renderer with a
-  // header (title + close) so the panel can be dismissed without
-  // disabling the inspector itself.
-  function renderAxPanel(panel, node) {
-    if (!panel) return;
-    if (!node) {
-      panel.removeAttribute('data-open');
-      panel.innerHTML = '';
-      return;
-    }
-    panel.setAttribute('data-open', 'true');
-    panel.innerHTML =
-        '<div class="ax-host-head">' +
-        '<span>Element</span>' +
-        '<button class="ax-host-close" data-role="ax-close" aria-label="Dismiss">×</button>' +
-        '</div>' +
-        '<div data-role="ax-body"></div>';
-    panel.querySelector('[data-role="ax-close"]').addEventListener('click', () => {
-      panel.removeAttribute('data-open');
-      panel.innerHTML = '';
-    });
-    window.AXInspector.renderSelectionInto(
-        panel.querySelector('[data-role="ax-body"]'),
-        node,
-        {
-          send: (payload) => live().session && live().session.send(payload),
-          getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
-        }
-    );
-  }
 
   /// The page as a share's follow sees it (families/mac/internal/share-follow.js).
   function pageBrowser() {
@@ -869,7 +756,7 @@
       try { if (live().session) live().session.stop(); } catch (_) { /* ignore */ }
       try { if (companionsUI) companionsUI.detach(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
-      try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
+      try { axView().detachAx(); } catch (_) { /* ignore */ }
       try { panels.detach(); } catch (_) { /* ignore */ }
       try { if (live().render3DPanel) live().render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
