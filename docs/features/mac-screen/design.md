@@ -54,14 +54,24 @@ posts them at `.cghidEventTap` and sleeps on each pause.
   `KeyModifier.allCases` order and up in reverse, each event flagged with what
   is held.
 - **Typing.** `CGEventKeyboardSetUnicodeString`, in pieces of at most 20
-  UTF-16 units (what one event carries), never splitting a character — so,
-  unlike a simulator's `type`, any script works.
+  UTF-16 units (what one event carries), never splitting a character. The
+  role would type any script, but `TypeText.parse` still holds the wire to
+  US-ASCII for every device; lifting that for the Mac is a change to that law,
+  not to this family.
 - **Scroll.** Pixel units, deltas negated: a browser's positive `deltaY` moves
   the view down, the window server's scrolls content up.
 - **Trust.** `AXIsProcessTrustedWithOptions` with the prompt; untrusted, the
   window server would drop the events silently, so nothing is posted and the
   gesture answers false. The prompt key is spelled out because Swift 6 won't
   read the `kAXTrustedCheckOptionPrompt` global.
+
+## Measured
+
+On a 2560 × 1440 display at 1× (an external Dell beside a portrait one, so at
+global x 1440, y 595): MJPEG ~55 frames / 4 s over the stream socket, AVCC
+streaming without encoder errors at 1440 × 2560; a tap landed in a TextEdit
+window; `type`, a held key and ⌘A + Delete reached it; a browser `deltaY` of
++400 scrolled ~29 lines down — the negation is right.
 
 ## Decided against
 
