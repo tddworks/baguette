@@ -1,6 +1,6 @@
 // WhepSession — the phone plane over WebRTC (WHEP, draft-ietf-wish-whep), with the same
 // face as StreamSession (start / stop / send), so the page swaps one for the
-// other by format. The picture arrives as H.264 in a hidden <video> and is
+// other by format. The picture arrives as H.264 (or H.265, `codec: 'h265'`) in a hidden <video> and is
 // painted onto the session's canvas frame by frame, so everything that reads
 // the canvas (recording, the inspector, sizing) keeps working. Input and
 // stream control ride the viewer's control socket, as they ride the stream
@@ -28,12 +28,14 @@
   }
 
   /** The device's WHEP route, as the page's tree spells it, with the display
-   *  plane and the congestion control (`transport-cc`, `remb`, `off`) asked for. */
-  WhepSession.whepPath = function (udid, display, congestion) {
+   *  plane, the congestion control (`transport-cc`, `remb`, `off`) and the
+   *  codec (`h265`, `h264`, `auto`) asked for. */
+  WhepSession.whepPath = function (udid, display, congestion, codec) {
     const base = (window.BaguetteTarget && window.BaguetteTarget.base) || 'simulators';
     const params = [];
     if (display === 'phone' || display === 'carplay') params.push('display=' + encodeURIComponent(display));
     if (congestion) params.push('congestion=' + encodeURIComponent(congestion));
+    if (codec) params.push('codec=' + encodeURIComponent(codec));
     return '/' + base + '/' + encodeURIComponent(udid) + '/whep' + (params.length ? '?' + params.join('&') : '');
   };
 
@@ -64,7 +66,7 @@
   };
 
   WhepSession.prototype.start = async function () {
-    const { udid, canvas, display, congestion, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
+    const { udid, canvas, display, congestion, codec, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
     const log = onLog || (() => {});
     this.alive = true;
 
@@ -75,10 +77,12 @@
     this.peer = peer;
     const transceiver = peer.addTransceiver('video', { direction: 'recvonly' });
     try {
+      // H.264 first — or H.265, then H.264, when H.265 was asked for; the server chooses.
       const codecs = window.RTCRtpReceiver.getCapabilities('video').codecs;
-      const h264 = codecs.filter((c) => c.mimeType.toLowerCase() === 'video/h264');
-      transceiver.setCodecPreferences(h264.concat(codecs.filter((c) => h264.indexOf(c) < 0)));
-    } catch (_) { /* the browser picks; the server answers H.264 or refuses */ }
+      const named = (type) => codecs.filter((c) => c.mimeType.toLowerCase() === type);
+      const first = (codec === 'h265' || codec === 'auto' ? named('video/h265') : []).concat(named('video/h264'));
+      transceiver.setCodecPreferences(first.concat(codecs.filter((c) => first.indexOf(c) < 0)));
+    } catch (_) { /* the browser picks; the server answers what it can send or refuses */ }
 
     // Hidden but in the document: some browsers won't decode a detached video.
     const video = window.document.createElement('video');
@@ -121,7 +125,7 @@
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
     await WhepSession.gathered(peer, 2000);
-    const response = await window.fetch(WhepSession.whepPath(udid, display, congestion), {
+    const response = await window.fetch(WhepSession.whepPath(udid, display, congestion, codec), {
       method: 'POST', headers: { 'Content-Type': 'application/sdp' },
       body: (peer.localDescription || offer).sdp,
     });

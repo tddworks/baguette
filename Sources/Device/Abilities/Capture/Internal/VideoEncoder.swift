@@ -45,7 +45,7 @@ public final class VideoEncoder: @unchecked Sendable {
     private var bitrate: Int
     private let tuning: H264Tuning
     /// What makes this encoder H.264 or H.265: everything else here is codec-blind.
-    private let codec: any Codec
+    let codec: any Codec
     private var referenceChain = H264ReferenceChain()
     private var timeline = H264Timeline()
 

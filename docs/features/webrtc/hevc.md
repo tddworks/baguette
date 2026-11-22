@@ -4,11 +4,14 @@ description: Design for sending H.265 (HEVC) to a WebRTC viewer — why and when
 
 # HEVC over WebRTC — "the same picture in fewer bits, when the viewer can take it"
 
-**Status:** the kit's part is BUILT (K1–K3: packetizer, codec choice, offer
-and answer), and baguette's encoder is codec-blind (4a: `Codec`, `H264Codec`,
-`VideoEncoder`); H.265 itself isn't (4b–7), so every viewer still gets
-High-profile H.264. H.265 stays **opt-in** (`?codec=h265`) until slice 6
-measures it winning; if it doesn't, the default never changes.
+**Status:** BUILT behind `?codec=h265` (K1–K3 in the kit; 4a–4d and 5 in
+baguette): the encoder is codec-blind (`Codec`, `H264Codec`, `HEVCCodec`,
+`VideoEncoder`), a viewer's stream and sender take the codec its session was
+answered with (`Codecs.of(kind)`), and `?codec=` reaches it from the WHEP
+request or the device page. Checked end to end (2026-11-22): headless Chrome 157
+with `?codec=h265` decoded a 2560×1440 Mac display as `video/H265` (299 frames
+in 6 s). Nothing asked stays High-profile H.264. H.265 stays **opt-in** until
+slice 6 measures it winning; if it doesn't, the default never changes.
 
 This document owns **why baguette would send H.265, how the live view asks for
 it and encodes it, and how it is decided**. The codec choice, the SDP and the
@@ -187,10 +190,10 @@ then:
 | Slice | What | Pins |
 |---|---|---|
 | 4a | `Codec` and `H264Codec`; the encoder goes codec-blind (`VideoEncoder`), taking `avcC` from the format description | the encoder's tests unchanged in behaviour; a `.system` test that VideoToolbox's own `avcC` gives the same parameter sets as the hand-built one did — before that dies |
-| 4b | `HEVCCodec` and `HVCCParameterSets` | byte for byte against the 98-byte `hvcC` VideoToolbox makes: VPS, SPS, PPS in order |
-| 4c | the viewer takes its session's codec: `Codecs.of(kind)` for its encoder and its parameter sets | the viewer's tests: an H.265 keyframe leaves after VPS, SPS, PPS |
-| 4d | `VideoToolboxSession` opens the codec it's told | a `.system` test against the real encoder: an HEVC frame and its `hvcC` |
-| 5 | wiring: `?codec=` from the WHEP request through `WebRTCViewers` to the viewer's stream and sender | through `InProcessServer`: `?codec=h265` with an H.265 offer answers `H265/90000`; without it, `H264/90000` |
+| 4b | `HEVCCodec` and `HVCCParameterSets` | BUILT: a hand-made `hvcC` read byte for byte (SEI skipped, any array order), and a `.system` test that VideoToolbox's own `hvcC` gives VPS, SPS, PPS (NAL types 32, 33, 34) |
+| 4c | the viewer takes its session's codec: `Codecs.of(kind)` for its encoder and its parameter sets | BUILT: the viewer's tests — an H.265 keyframe leaves after VPS, SPS, PPS, in one aggregation packet at the answered payload type. Its stream's encoder takes the codec in 5 |
+| 4d | `VideoToolboxSession` opens the codec it's told | BUILT with 4a/4b: the session has opened `codec.codecType` since 4a; 4b's `.system` test runs the real HEVC encoder and reads its `hvcC` |
+| 5 | wiring: `?codec=` from the WHEP request through `WebRTCViewers` to the viewer's stream and sender | BUILT: the route's tests (`?codec=h265` answers `H265/90000`, nothing asked `H264/90000`, an unknown codec refused), `WebRTCViewers`' (H.264 when this Mac can't encode H.265), the viewer's (its stream made in its codec), the page's (`codec=` asked, H.265 preferred); and headless Chrome decoding it |
 | 6 | **measure**: the same scene, H.264 vs H.265 — the LAN, then a phone on cellular over Tailscale | the bitrate congestion control settles on, text sharpness at it, glass-to-glass latency, recovery after induced loss |
 | 7 | only if 6 wins: `auto` prefers H.265, the page asks `auto`; docs + CHANGELOG | — |
 

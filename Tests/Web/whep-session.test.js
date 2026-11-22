@@ -54,7 +54,7 @@ function fakeBrowser({
     BaguetteTarget: { base: 'devices' },
     WebSocket: FakeSocket,
     RTCPeerConnection: FakePeer,
-    RTCRtpReceiver: { getCapabilities: () => ({ codecs: [{ mimeType: 'video/VP8' }, { mimeType: 'video/H264' }] }) },
+    RTCRtpReceiver: { getCapabilities: () => ({ codecs: [{ mimeType: 'video/VP8' }, { mimeType: 'video/H264' }, { mimeType: 'video/H265' }] }) },
     document: {
       createElement: () => video,
       body: { appendChild(node) { seen.appended.push(node); } },
@@ -97,7 +97,7 @@ test('should post its offer to the device\'s WHEP route and take the answer', as
     { url: '/devices/U/whep', method: 'POST', body: 'v=0\r\noffer\r\n', type: 'application/sdp' });
   assert.equal(whep.peer.remote.sdp, 'v=0\r\nanswer\r\n');
   assert.equal(whep.peer.transceiver.init.direction, 'recvonly');
-  assert.deepEqual(whep.peer.transceiver.codecs.map((c) => c.mimeType), ['video/H264', 'video/VP8']);
+  assert.deepEqual(whep.peer.transceiver.codecs.map((c) => c.mimeType), ['video/H264', 'video/VP8', 'video/H265']);
 });
 
 test('should send input over the viewer\'s control socket once it is open', async () => {
@@ -171,6 +171,24 @@ test('should ask for the congestion control it was given, beside the display', a
   await whep.start();
 
   assert.equal(browser.seen.requests.find((r) => r.method === 'POST').url, '/devices/U/whep?display=phone&congestion=remb');
+});
+
+test('should ask for the codec it was given, beside the display', async () => {
+  const browser = fakeBrowser();
+  const whep = session(browser, { display: 'phone', codec: 'h265' });
+
+  await whep.start();
+
+  assert.equal(browser.seen.requests.find((r) => r.method === 'POST').url, '/devices/U/whep?display=phone&codec=h265');
+});
+
+test('should prefer H.265, then H.264, when it was given h265', async () => {
+  const browser = fakeBrowser();
+  const whep = session(browser, { codec: 'h265' });
+
+  await whep.start();
+
+  assert.deepEqual(whep.peer.transceiver.codecs.map((c) => c.mimeType), ['video/H265', 'video/H264', 'video/VP8']);
 });
 
 test('should hang up when stopped, closing its socket, peer and video', async () => {

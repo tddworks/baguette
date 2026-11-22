@@ -16,6 +16,7 @@ For releases prior to this changelog, see the
 ### Added
 - `baguette serve --share-mac` and `list --mac` show this Mac's displays as devices: streamed, recorded, screenshotted and driven (click, drag, scroll, keys, typing) like a simulator, through ScreenCaptureKit and CGEvent. → [docs](docs/features/mac-screen/README.md)
 - A Mac display's page has a **Frame** button: show it in a MacBook Pro 14" or iMac 27" frame that fits its shape, or none (the default); `scripts/install-mac-frames.sh` installs them. `screenshot-bezel.png?chrome=` frames a still in the pick. → [docs](docs/features/mac-screen/README.md#frames)
+- WebRTC viewers can take H.265: `?codec=h265` on the WHEP `POST` or the device page answers with Main-profile H.265 when the browser offers it and this Mac encodes it, H.264 otherwise (opt-in; the default stays H.264). → [docs](docs/features/webrtc/hevc.md)
 - Open `/mac/share` on a phone or tablet to share this Mac to it: a display the shape of its screen, main or extended, sharp over WebRTC, turning with it. The pointer is drawn locally in the Mac's real shape, keeps up, and hovers. → [docs](docs/features/mac-screen/README.md#share-to-your-device)
 
 ---

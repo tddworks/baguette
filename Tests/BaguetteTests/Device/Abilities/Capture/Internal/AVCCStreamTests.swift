@@ -1,3 +1,4 @@
+import CoreMedia
 import CoreVideo
 import Foundation
 import IOSurface
@@ -61,6 +62,11 @@ struct AVCCStreamTests {
 
     private func tags(_ sink: RecordingSink) -> [UInt8] {
         sink.writes.compactMap { AVCCEnvelope.unwrap($0)?.tag }
+    }
+
+    @Test func `should encode in the codec it is made in, and H.264 when none is named`() {
+        #expect(AVCCStream(config: .default, sink: RecordingSink(), codec: HEVCCodec()).codec.codecType == kCMVideoCodecType_HEVC)
+        #expect(AVCCStream(config: .default, sink: RecordingSink()).codec.codecType == kCMVideoCodecType_H264)
     }
 
     @Test func `should paint a JPEG seed, then the avcC record, before the first keyframe`() throws {

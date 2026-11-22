@@ -64,6 +64,11 @@ Each viewer has its own H.264 encoder, starting at the stream socket's defaults
 
 Ask for one on the `POST` (`/devices/<UDID>/whep?congestion=remb`), or open the
 device page with it (`/devices/<UDID>?congestion=remb`) to compare them by hand.
+
+H.265 is opt-in: `codec=h265` (on the `POST`, or the device page
+`/devices/<UDID>?codec=h265`) answers with Main-profile H.265 when the browser
+offers it and this Mac has an HEVC encoder, and H.264 otherwise; nothing asked
+is H.264. It stays opt-in until it is measured to win → [hevc](hevc.md).
 A method the browser didn't offer falls back to `off`. With REMB, a still screen
 in desktop Chrome drops to 300 kbps until the screen moves (the browser's estimate
 follows what arrives); `transport-cc` doesn't. The server log shows each change:

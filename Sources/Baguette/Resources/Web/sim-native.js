@@ -965,6 +965,8 @@
       // `?congestion=remb|transport-cc|off` on the page picks how a WebRTC
       // viewer's bitrate follows the link (default: the server's choice).
       congestion: new URLSearchParams(location.search).get('congestion') || undefined,
+      // `?codec=h265` on the page asks for H.265 (opt-in until measured).
+      codec: new URLSearchParams(location.search).get('codec') || undefined,
       onError: format === 'webrtc' ? () => {
         localStorage.removeItem(FORMAT_KEY);
         startSession(currentFormat());

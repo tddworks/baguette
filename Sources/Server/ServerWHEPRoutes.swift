@@ -64,7 +64,8 @@ extension Server {
     }
 
     /// A viewer for the device the path names, on the display plane the query
-    /// asks for, with the congestion control it asks for (`CongestionChoice`).
+    /// asks for, with the congestion control it asks for (`CongestionChoice`)
+    /// and the codec (`CodecChoice`).
     static func admit(offer: String, request: Request, devices: any Devices, viewers: WebRTCViewers) -> Response {
         var congestion: CongestionChoice?
         if let asked = request.uri.queryParameters.get("congestion").map({ String($0) }) {
@@ -72,6 +73,14 @@ extension Server {
                 return pluginError("unknown congestion control: \(asked) (transport-cc, remb or off)", status: .badRequest)
             }
             congestion = choice
+        }
+        // `?codec=h265`: H.265 when the offer carries it and this Mac encodes it.
+        var codec: CodecChoice?
+        if let asked = request.uri.queryParameters.get("codec").map({ String($0) }) {
+            guard let choice = CodecChoice(rawValue: asked) else {
+                return pluginError("unknown codec: \(asked) (h265, h264 or auto)", status: .badRequest)
+            }
+            codec = choice
         }
         // `?pacing=off`: the bench's baseline, the same sender without its pacer.
         var pacing = true
@@ -100,7 +109,7 @@ extension Server {
         do {
             let bound = try plan.bind(to: device)
             let (id, answer) = try viewers.admit(
-                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing, rtx: rtx)
+                offer: offer, on: bound.screen, of: DeviceID(udid), input: bound.input, congestion: congestion, pacing: pacing, rtx: rtx, codec: codec)
             return Response(
                 status: .created,
                 headers: Self.answerHeaders(location: "/devices/\(udid)/whep/\(id)", iceServers: viewers.iceServers),

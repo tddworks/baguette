@@ -22,7 +22,9 @@ public final class WebRTCViewers: @unchecked Sendable {
     }
     private var admitted: [String: Admitted] = [:]
     private let connect: Connect
-    private let makeStream: (any FrameSink) -> any Stream
+    private let makeStream: (any FrameSink, any Codec) -> any Stream
+    /// The codecs this Mac can encode: what a browser may be answered with.
+    private let encodable: Set<VideoCodec.Kind>
     /// Asked, per viewer and through its own socket, for the address the world
     /// sees it at — offered to the browser beside the Mac's own.
     private let stun: STUNServer?
@@ -48,18 +50,21 @@ public final class WebRTCViewers: @unchecked Sendable {
 
     /// `ticking`: how often consent and DTLS retransmission are checked; nil
     /// leaves it to whoever calls `tick(now:)`. `stream`: what a viewer is
-    /// shown — H.264 at the stream socket's defaults.
+    /// shown, in the codec its session was answered with, at the stream
+    /// socket's defaults. `encodable`: the codecs this Mac can encode.
     public init(
         ticking interval: TimeInterval? = 1,
         connect: @escaping Connect = WebRTCViewers.onThisMac(),
-        stream: @escaping (any FrameSink) -> any Stream = { sink in
-            StreamFormat.avcc.makeStream(config: .default, sink: sink, quality: 0.5)
+        stream: @escaping (any FrameSink, any Codec) -> any Stream = { sink, codec in
+            AVCCStream(config: .default, sink: sink, quality: 0.5, codec: codec)
         },
+        encodable: Set<VideoCodec.Kind> = Codecs.encodable,
         stun: STUNServer? = nil,
         turn: TURNServer? = nil
     ) {
         self.connect = connect
         self.makeStream = stream
+        self.encodable = encodable
         self.stun = stun
         self.turn = turn
         guard let interval else { return }
@@ -92,12 +97,13 @@ public final class WebRTCViewers: @unchecked Sendable {
     /// panel), kept for the viewer's control socket. `congestion`: the method
     /// asked for (`?congestion=`), or nil for the default. `pacing`: off only
     /// for the bench's baseline (`?pacing=off`). `rtx`: off only for the
-    /// bench's baseline (`?rtx=off`), resending as sent.
+    /// bench's baseline (`?rtx=off`), resending as sent. `codec`: the codec
+    /// asked for (`?codec=`), within what this Mac can encode; nil for H.264.
     public func admit(
         offer: String, on screen: any Screen, of device: DeviceID? = nil, input: Abilities? = nil,
-        congestion: CongestionChoice? = nil, pacing: Bool = true, rtx: Bool = true
+        congestion: CongestionChoice? = nil, pacing: Bool = true, rtx: Bool = true, codec: CodecChoice? = nil
     ) throws -> (id: String, answer: String) {
-        let description = try SessionDescription(offer: offer, rtx: rtx)
+        let description = try SessionDescription(offer: offer, rtx: rtx, asked: codec, sendable: encodable)
         let (datagrams, handshake) = try connect(description.browserFingerprint)
         let id = UUID().uuidString.lowercased()
         let reflexive = stun?.publicAddress(through: datagrams)
