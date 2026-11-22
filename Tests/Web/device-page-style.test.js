@@ -67,7 +67,7 @@ function customProperties(css) {
   return { used, defined };
 }
 
-test('every CSS comment in page/device-page.html is closed', () => {
+test('should close every CSS comment in the device page\'s template', () => {
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   assert.equal(
     unbalancedCommentLine(css), 0,
@@ -76,7 +76,7 @@ test('every CSS comment in page/device-page.html is closed', () => {
   );
 });
 
-test('unbalancedCommentLine finds a comment closed twice', () => {
+test('should find a CSS comment closed twice', () => {
   // The exact shape that broke it: prose left outside the comment after
   // an early `*/`, with a stray `*/` of its own at the end.
   const broken = [
@@ -88,11 +88,11 @@ test('unbalancedCommentLine finds a comment closed twice', () => {
   assert.equal(unbalancedCommentLine(broken), 3);
 });
 
-test('unbalancedCommentLine finds a comment never closed', () => {
+test('should find a CSS comment never closed', () => {
   assert.equal(unbalancedCommentLine('/* opened\nand never closed\n'), 3);
 });
 
-test('every --nv-* read without a fallback is defined in the same stylesheet', () => {
+test('should define every --nv-* token the stylesheet reads without a fallback', () => {
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   const { used, defined } = customProperties(css);
   const missing = [...used].filter((name) => !defined.has(name));
@@ -104,7 +104,7 @@ test('every --nv-* read without a fallback is defined in the same stylesheet', (
   );
 });
 
-test('the size budget defines every variable the device and panes size from', () => {
+test('should define in the size budget every variable the device and panes size from', () => {
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   const { defined } = customProperties(css);
   for (const name of [
@@ -128,7 +128,7 @@ test('the size budget defines every variable the device and panes size from', ()
 /** Panel modules that render into `#simNativeView` and must not carry CSS. */
 const PANEL_MODULES = ['page/plugins/plugins-rail.js', 'families/simulator/screens-rail.js'];
 
-test('panel modules inject no stylesheet of their own', () => {
+test('should leave styling to the template when a panel module renders into the view', () => {
   for (const name of PANEL_MODULES) {
     const src = fs.readFileSync(path.join(path.dirname(TEMPLATE), '..', name), 'utf8');
     assert.ok(
@@ -139,7 +139,7 @@ test('panel modules inject no stylesheet of their own', () => {
   }
 });
 
-test('the focus-mode stylesheet reads no token from outside the --nv-* set', () => {
+test('should read no token from outside the --nv-* set in the focus-mode stylesheet', () => {
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   // `--bg` / `--text` are the standalone-preview :root in <head>, which
   // only applies under file://; `--swatch` is written per-element from
@@ -172,7 +172,7 @@ function markup(html) {
   return html.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '');
 }
 
-test('the toolbar mounts the capture-size picker', () => {
+test('should mount the capture-size picker in the toolbar', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   assert.match(
     html, /id="nativeCaptureSize"/,
@@ -180,7 +180,7 @@ test('the toolbar mounts the capture-size picker', () => {
   );
 });
 
-test('the capture-size host sits outside the scrolling icon strip', () => {
+test('should keep the capture-size host outside the scrolling icon strip', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const strip =
     /<div class="tb-scroll" id="nativeToolScroll">([\s\S]*?)<!-- \/\.tb-scroll -->/
@@ -193,7 +193,7 @@ test('the capture-size host sits outside the scrolling icon strip', () => {
   );
 });
 
-test('the toolbar carries a Record button wired to __nativeRecord', () => {
+test('should carry a Record button wired to __nativeRecord in the toolbar', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const button = /<button[^>]*id="nativeRecordBtn"[\s\S]*?<\/button>/.exec(html);
   assert.ok(button, 'no #nativeRecordBtn in the toolbar');
@@ -202,7 +202,7 @@ test('the toolbar carries a Record button wired to __nativeRecord', () => {
   assert.match(button[0], /class="ico-btn/);
 });
 
-test('the Record button lives in the action group beside Screenshot', () => {
+test('should place the Record button in the action group beside Screenshot', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const actions =
     /<div class="tb-actions">([\s\S]*?)<!-- \/\.tb-scroll -->/.exec(html);
@@ -211,7 +211,7 @@ test('the Record button lives in the action group beside Screenshot', () => {
   assert.match(actions[1], /__nativeScreenshot/);
 });
 
-test('the recording state is styled from the focus-mode palette', () => {
+test('should style the recording state from the focus-mode palette', () => {
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   assert.match(
     css, /#nativeRecordBtn\.recording/,
@@ -220,8 +220,8 @@ test('the recording state is styled from the focus-mode palette', () => {
   );
 });
 
-test('page/device-page.js loads the capture vocabulary and the recorder', () => {
-  const src = fs.readFileSync(SCRIPT, 'utf8');
+test('should load the capture vocabulary and the recorder when the capture controls mount', () => {
+  const src = fs.readFileSync(path.join(WEB_ROOT, 'capture', 'capture-controls.js'), 'utf8');
   for (const module of [
     '/capture/capture-size.js',
     '/capture/capture-settings.js',
@@ -237,7 +237,7 @@ test('page/device-page.js loads the capture vocabulary and the recorder', () => 
   }
 });
 
-test('page/device-page.js answers every toolbar indirection the template calls', () => {
+test('should answer every toolbar indirection the template calls', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const src = fs.readFileSync(SCRIPT, 'utf8');
   const called = new Set(
