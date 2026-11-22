@@ -85,3 +85,23 @@ test('should answer what the device can do from the abilities it is listed with'
   assert.equal(device(mac).can('orientation'), false);
   assert.equal(device(null).can('screen'), false);
 });
+
+test('should boot a simulator through the server, saying why when it can\'t', async () => {
+  const posted = [];
+  const answers = [{ ok: true, status: 200 }, { ok: false, status: 409, json: async () => ({ error: 'already booted' }) }];
+  const booting = { ...wire, post: async (url) => { posted.push(url); return answers.shift(); } };
+  const sim = Families.device(simulated, { id: 'D', wire: booting, storage: storage() });
+  assert.deepEqual(await sim.power.boot(), { ok: true, error: null });
+  assert.deepEqual(await sim.power.boot(), { ok: false, error: 'already booted' });
+  assert.deepEqual(posted, ['/devices/D/boot', '/devices/D/boot']);
+});
+
+test('should boot an Android device only when the server lists it as one that can', () => {
+  assert.equal(typeof device({ ...android, abilities: ['screen', 'power'] }).power.boot, 'function');
+  assert.equal(device(android).power, undefined);
+});
+
+test('should give a phone on the cable and a Mac display no power to boot', () => {
+  assert.equal(device(phone).power, undefined);
+  assert.equal(device(mac).power, undefined);
+});

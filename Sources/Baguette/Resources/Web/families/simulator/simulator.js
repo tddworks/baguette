@@ -1,6 +1,7 @@
 // Simulator — an Apple simulator: framed by its own bezel, described as the
 // server lists its simulators.
 import { deviceOf } from '../../device/device.js';
+import { bootThroughServer } from '../../device/power.js';
 
 /** `com.apple.CoreSimulator.SimRuntime.iOS-26-4` → `iOS 26.4`. */
 function formatRuntime(raw) {
@@ -15,6 +16,7 @@ export function simulator(listing, { id, wire }) {
     id,
     family: 'simulator',
     frame: { definition: undefined, offersChromePicker: false },
+    power: bootThroughServer(id, wire),
     /** Its name, runtime and state, from the server's list of simulators. */
     async describe() {
       try {

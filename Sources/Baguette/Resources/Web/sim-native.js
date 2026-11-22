@@ -339,6 +339,7 @@
         path: (id, suffix) => window.BaguetteTarget.path(id, suffix),
         listing: (id) => fetchDeviceListing(id),
         json: async (url) => (await fetch(url, { cache: 'no-store' })).json(),
+        post: (url) => fetch(url, { method: 'POST' }),
         simulators: async () => {
           const r = await fetch('/simulators.json', { cache: 'no-store' });
           if (!r.ok) throw new Error(String(r.status));
@@ -1412,7 +1413,9 @@
     if (view) view.setAttribute('data-power', phase);
 
     const copy = {
-      off:      { title: 'Not booted',  sub: deviceName || 'This simulator', btn: 'Boot' },
+      // Only a device whose family boots it (its `power`) offers to.
+      off:      { title: device.power ? 'Not booted' : 'Not ready', sub: deviceName || 'This device',
+                  btn: device.power ? 'Boot' : null },
       booting:  { title: 'Booting…',    sub: 'Waiting for CoreSimulator',    btn: null },
       starting: { title: 'Starting…',   sub: 'Waiting for the first frame',  btn: null },
       gone:     { title: 'Unavailable', sub: 'This simulator is no longer in the device set.', btn: null },
@@ -1469,16 +1472,14 @@
   async function requestBoot() {
     renderPowerCard('booting');
     try {
-      const r = await fetch('/devices/' + encodeURIComponent(udid) + '/boot',
-          { method: 'POST' });
-      if (!r.ok) {
+      const booted = await device.power.boot();
+      if (!booted.ok) {
         // CoreSimulator refuses a boot when the device is already
         // booted. If that's why this failed, the user got what they
         // wanted — go live instead of reporting an error.
         const meta = await device.describe();
         if (isBooted(meta.state)) { onBooted(); return; }
-        const body = await r.json().catch(() => null);
-        renderPowerCard('off', (body && body.error) || ('boot failed (HTTP ' + r.status + ')'));
+        renderPowerCard('off', booted.error);
         return;
       }
     } catch (e) {
