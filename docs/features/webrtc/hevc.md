@@ -197,19 +197,50 @@ then:
 | 6 | **measure**: the same scene, H.264 vs H.265 — the LAN, then a phone on cellular over Tailscale | the bitrate congestion control settles on, text sharpness at it, glass-to-glass latency, recovery after induced loss |
 | 7 | only if 6 wins: `auto` prefers H.265, the page asks `auto`; docs + CHANGELOG | — |
 
+### Slice 6, measured so far
+
+On this Mac (2026-11-22, release build, iPhone 15 Pro simulator at 1180×2556,
+headless Chrome 157 on loopback, no impairment; each codec run twice in
+alternating order, `scripts/bench-live-view` with `codec=`):
+
+| | H.264 | H.265 |
+|---|---|---|
+| tap → shown, p50 / p95 (100 taps) | 59.5–73.4 / 83–85 ms | 60.5–60.9 / 77–80 ms |
+| tap → first packet, p50 | 44–52 ms | 40.6 ms |
+| decode, p50 | 2.0–2.2 ms | 1.3 ms |
+| animated list, 30 s: bitrate / fps | 7.96–7.97 Mbit/s / 46–51 | 7.94–7.97 Mbit/s / 51–55 |
+| lost, dropped, keyframes asked | 0 | 0 |
+
+The same on a phone over Tailscale (2026-11-22, iPhone Safari, one 30 s
+animated-list run each):
+
+| | H.264 | H.265 |
+|---|---|---|
+| bitrate / fps | 7.93 Mbit/s / 56.7 | 7.95 Mbit/s / 56.4 |
+| first frame | 835 ms | 790 ms |
+| freezes, lost, dropped | 0 | 0 |
+| NACKs (all repaired) / keyframes asked | 127 / 1 | 43 / 0 |
+| jitter buffer | 32 ms | 33 ms |
+
+So H.265 costs nothing here: latency is the same or a little lower, and frame
+rate the same or higher. It saves nothing here either. On an unconstrained
+link, congestion control takes both to the 8 Mbit/s ceiling, so the same bits
+buy H.265 a better picture but not a smaller stream. Its case can only show on a
+link that can't carry 8 Mbit/s. That run (`impair.sh` with a bandwidth cap, then
+a phone on cellular) is still to do, and slice 7 waits on it.
+
 ## 6 · Open questions
 
+- **Does H.265 hold up as well as H.264 on a slow, lossy link?** Both wait for
+  a keyframe after a lost reference. Slice 6's capped run (`impair.sh`) and a
+  phone on cellular will tell, and slice 7 waits on the answer.
 - ~~**Does iPhone Safari offer and decode H.265 over WebRTC?**~~ Yes. An
-  iPhone sharing this Mac (`/mac/share?codec=h265`, 2026-11-22) offered
-  `H265/90000 profile-id=1` first, beside High H.264 (`640c1f`) and
-  Constrained Baseline (`42e01f`), and was sent H.265 — the server's
-  `[webrtc] viewer … sends …` line. Chrome 157 offers it too (captured).
-- **Does H.265 recover from loss as well as H.264?** Both wait for a keyframe
-  after a lost reference. The repo's note that HEVC "mosaics under motion" is
-  about Apple's own phone stream, not this encoder — slice 6 drops packets on
-  purpose to find out.
-- **Is it worth it on the LAN at all?** Probably not (1.3 Mbit/s of 8) — the
-  case is slow links only, which is why it is opt-in until measured.
-- **Cheaper alternatives first?** A higher bitrate ceiling on a fast LAN, or
-  trading frame rate for sharpness on a slow one (a still page of text needs
-  detail, not 60 fps) — [design §6c](design.md#6c--future-work--whats-left-what-each-is-for-and-when-its-needed).
+  iPhone sharing this Mac offered `H265/90000 profile-id=1` first and was sent
+  H.265 (2026-11-22). Chrome 157 offers it too.
+- ~~**Is it worth it on the LAN?**~~ It costs nothing there: latency and frame
+  rate match H.264 or beat it (slice 6, measured). It saves no bits either,
+  since both fill the 8 Mbit/s ceiling; the gain is a sharper picture at the
+  same bitrate.
+- ~~**Cheaper alternatives first?**~~ H.265 turned out cheap: one `Codec` type
+  and a switch. The other levers (the bitrate ceiling, frame rate traded for
+  sharpness) stay open in [design §6c](design.md#6c--future-work--whats-left-what-each-is-for-and-when-its-needed).
