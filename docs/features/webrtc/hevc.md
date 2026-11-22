@@ -79,44 +79,97 @@ H.264 unless the viewer, the browser and the Mac all say H.265.**
 |---|---|---|
 | **H.265 / HEVC** | one codec, two names; the SDP says `H265/90000` | HEIC, the still-image format built on it |
 | **asked** | the codec a page requests on its WHEP request: `?codec=h265`, `h264`, `auto`, or nothing | what the browser *offers* (the kit's word) |
+| **codec** (baguette's `Codec`) | one type per codec answering the four questions of §2: encoder type and profile, its record, its parameter sets | the kit's `VideoCodec`, an *offered* codec as a value — `Codecs.of(kind)` joins the two |
+| **decoder configuration record** | what a decoder needs before the first picture, as the encoder made it: `avcC` (H.264), `hvcC` (H.265) | the parameter sets inside it |
 | **what this Mac encodes** | the codecs VideoToolbox makes in hardware here — what baguette hands the kit as *sendable* | what a browser can decode |
 | **measured to win** | slice 6's result: a lower bitrate or a sharper picture at the target congestion control settles on, with no worse latency or recovery | a codec being newer |
 
 Codec, parameter sets, packetizer: [the kit's language](../webrtc-kit/design.md#1--ubiquitous-language).
 
-## 2 · What changes in baguette
+## 2 · What changes in baguette — the codec, from first principles
+
+Only four things differ between codecs, and each codec answers all four in
+one place:
 
 ```
-WebRTCViewers ◆ ★          reads ?codec= off the WHEP request; hands the kit asked + sendable
-└── WebRTCViewer ◆         one browser, one stream, one sender — unchanged
-    └── Stream (per viewer)
-        └── VideoEncoder ◆ ★        today's H264Encoder, told its codec at start
-            └── CompressionSession ◆ (System: VideoToolboxSession ★ — HEVC Main, realtime,
-                                     parameter sets from CMVideoFormatDescriptionGetHEVCParameterSetAtIndex)
-StreamFormat.avcc (sockets)         stays H.264 — the WebSocket path is untouched
-whep-session.js                     passes ?codec= when the page asks (slice 7: `auto`)
+ 1. which encoder to open         codec type (kCMVideoCodecType_H264 / _HEVC) + its profile (High / Main, auto level)
+ 2. its decoder configuration     the record VideoToolbox hands back, as is: "avcC" / "hvcC"
+ 3. its parameter sets            read out of that record — what RTP sends ahead of a keyframe
+ 4. how it travels over RTP       VideoCodec + RTPPacketizer — the kit's (K1–K3)
 ```
 
-VideoToolbox frames both codecs' NAL units with a 4-byte length, so the
-encoder's output reads the same way; only the codec type and the
-parameter-set call differ.
+Everything else — sessions, reopening, the reference chain, forced keyframes,
+rate and frame-rate tuning, the stream's envelopes, the sender — is the same
+for every codec, so it never knows which one it carries (SRP); a new codec is
+one new type, nothing else edited (OCP).
+
+Measured (2026-11-22, one real frame each): VideoToolbox's keyframe format
+description already carries the codec's decoder configuration record —
+`avcC` (29 bytes, 2 parameter sets) for H.264, `hvcC` (98 bytes, 3) for HEVC —
+under `kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms`. So no
+record is built and no SPS is parsed.
+
+```
+                 baguette (Device/Abilities/Capture)                                      WebRTCKit
+ ┌────────────────────────────────────────────────────────────────────────────┐    ┌────────────────────┐
+ │  Codec ◆ (role) — one type per codec, each answers 1–3:                    │    │ VideoCodec ◇       │
+ │    codecType · profile: CompressionProperty · recordAtom: "avcC"|"hvcC"    │    │ RTPPacketizer ◆    │
+ │    parameterSets(record:) → [Data]                                         │    │  H264 / H265       │
+ │      ├── H264Codec  (High, avcC; reads it with AVCCParameterSets)          │    │ CodecChoice ◇      │
+ │      └── HEVCCodec  (Main, hvcC; reads it with HVCCParameterSets ◇)        │    │   (K1–K3)          │
+ │      … AV1 later = one new type                                            │    └─────────▲──────────┘
+ │                                                                            │              │ kind ↔ Codec
+ │  VideoEncoder ◆ (today's H264Encoder) — codec-blind:                       │              │ (Codecs.of(kind))
+ │    opens the session with codec.codecType, sets codec.profile + tuning;    │              │
+ │    on a keyframe takes the format description's codec.recordAtom as is     │              │
+ │    → Encoded { description: record, kind, avcc }                           │              │
+ │        │                                                                   │              │
+ │  the stream's description envelope — unchanged: "the decoder              │              │
+ │    configuration record" (avcC on sockets, which stay H.264)               │              │
+ │        │                                                                   │              │
+ │  WebRTCViewer — codec-blind: sets = codec.parameterSets(record:) ─────────────────────────┘
+ │    → EncodedFrame(avcc:, isKeyframe:, parameterSets:) → WebRTCSender       │
+ └────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Type | Its one job | Knows nothing of |
+|---|---|---|
+| `Codec` — `H264Codec`, `HEVCCodec` | what this codec looks like: encoder type and profile, its record, its parameter sets | sessions, keyframes, sockets, RTP |
+| `VideoEncoder` | driving a compression session: open, tune, reopen, keyframes, the reference chain | which codec it runs |
+| `AVCCParameterSets` · `HVCCParameterSets` | reading one record format | anything else |
+| `WebRTCViewer` | feeding its sender frames and parameter sets | how a codec stores them |
+| the kit — `VideoCodec`, the packetizers | how a codec travels over RTP | how it was encoded |
+
+**What dies:** `AVCDecoderConfigurationRecord.bytes(sps:pps:)` — baguette
+hand-building `avcC`, replaced by VideoToolbox's own record; `CompressedFrame`'s
+`sps` / `pps`, replaced by `configuration` (the record, on a keyframe); the name
+`H264Encoder`, and `.highProfileAutoLevel` as a fixed tuning step — the profile
+is the codec's. **Stays:** `AVCCParameterSets` (now `H264Codec`'s reader, and
+still `VTH264Decoder`'s, which decodes a phone's stream); the socket path, H.264.
 
 ## 3 · The tells
 
 ```swift
 // baguette says what it can send and what was asked; the kit chooses.
-let sendable = VideoCodec.encodable(by: VideoToolboxSession.self)   // H.264 always, H.265 where hardware has it
-let viewer = try viewers.admit(offer, asked: query.codec, sendable: sendable, …)
+let viewer = try viewers.admit(offer, asked: query.codec, sendable: Codecs.encodable, …)
 
-// The stream is told its codec, once.
-let stream = StreamFormat.avcc.makeStream(config: .default, sink: sink, codec: viewer.codec)
+// The encoder is told its codec once, and never asks which it is.
+let encoder = VideoEncoder(codec: Codecs.of(viewer.codec.kind), fps: fps, …)
+session.open(width: w, height: h, codec: codec.codecType, …)
+session.set(codec.profile)
+
+// A keyframe carries the record the encoder made; the codec reads it.
+let sets = codec.parameterSets(record: description)
+sender.send(EncodedFrame(avcc: payload, isKeyframe: true, parameterSets: sets))
 ```
 
 ## 4 · Invariants — each law, one owner
 
 | Law | Owner |
 |---|---|
-| what this Mac can encode is asked of VideoToolbox, never assumed | `VideoCodec.encodable` (baguette's side) |
+| what this Mac can encode is asked of VideoToolbox, never assumed | `Codecs.encodable` |
+| a codec's decoder configuration is the record its encoder made, never one baguette builds | each `Codec` (`recordAtom`) |
+| everything that isn't one of a codec's four answers is codec-blind | `VideoEncoder` · `WebRTCViewer` |
 | a viewer's encoder makes exactly the codec its sender was answered with | `WebRTCViewer` (one `VideoCodec`, given to both) |
 | the WebSocket (AVCC) path stays H.264 | `StreamFormat.avcc` for sockets |
 | H.265 is the default only once measured to win (slice 6) | this doc — a decision, not code |
@@ -132,28 +185,13 @@ then:
 
 | Slice | What | Pins |
 |---|---|---|
-| 4a | `CompressedFrame` carries `parameterSets` (2 or 3) instead of `sps` / `pps`, read for its codec from the format description (`…GetHEVCParameterSetAtIndex` for H.265) | the encoder's tests, unchanged in behaviour for H.264 |
-| 4b | the keyframe's parameter sets reach the viewer for H.265 — see *Found while building* below | the viewer's tests: an H.265 keyframe leaves after VPS, SPS, PPS |
-| 4c | the encoder told its codec: `open(codec:)`, and its profile per codec (H.264 High / HEVC Main, auto level) in the tuning; the viewer passes the session's codec to its stream | the encoder's tests against `MockCompressionSession` |
-| 4d | `VideoToolboxSession` makes an HEVC session | a `.system`-tagged test against the real encoder: a frame, three parameter sets |
+| 4a | `Codec` and `H264Codec`; the encoder goes codec-blind (`VideoEncoder`), taking `avcC` from the format description | the encoder's tests unchanged in behaviour; a `.system` test that VideoToolbox's own `avcC` gives the same parameter sets as the hand-built one did — before that dies |
+| 4b | `HEVCCodec` and `HVCCParameterSets` | byte for byte against the 98-byte `hvcC` VideoToolbox makes: VPS, SPS, PPS in order |
+| 4c | the viewer takes its session's codec: `Codecs.of(kind)` for its encoder and its parameter sets | the viewer's tests: an H.265 keyframe leaves after VPS, SPS, PPS |
+| 4d | `VideoToolboxSession` opens the codec it's told | a `.system` test against the real encoder: an HEVC frame and its `hvcC` |
 | 5 | wiring: `?codec=` from the WHEP request through `WebRTCViewers` to the viewer's stream and sender | through `InProcessServer`: `?codec=h265` with an H.265 offer answers `H265/90000`; without it, `H264/90000` |
 | 6 | **measure**: the same scene, H.264 vs H.265 — the LAN, then a phone on cellular over Tailscale | the bitrate congestion control settles on, text sharpness at it, glass-to-glass latency, recovery after induced loss |
 | 7 | only if 6 wins: `auto` prefers H.265, the page asks `auto`; docs + CHANGELOG | — |
-
-### Found while building (2026-11-22)
-
-H.264 runs deeper than the session's codec type. The encoder packs a
-keyframe's SPS / PPS into an **AVC decoder configuration record** (`avcC`) for
-the stream's description envelope, and the WebRTC viewer unpacks that record
-to hand the kit its parameter sets (`AVCCParameterSets.parse(avcC:)`). For
-H.265 the description must carry VPS / SPS / PPS — two ways:
-
-| | How | Cost |
-|---|---|---|
-| **(a)** an `hvcC` record (ISO/IEC 14496-15 §8.3.3) | symmetric with `avcC` | its header needs the SPS's profile / tier / level, read out of the bitstream — real parsing, for a record only baguette itself reads |
-| **(b)** the parameter sets to the viewer as they are, for H.265 | no record round trip; the socket path stays H.264, so no client outside baguette ever sees it | the viewer's stream hands over parameter sets, not a record, when its codec is H.265 |
-
-Leaning (b); decided before slice 4b.
 
 ## 6 · Open questions
 
