@@ -14,12 +14,19 @@ devices page, with `/mac/share` and `/mac/shares` kept. Every file sits in its
 layer (`device/`, `families/`, `panels/`, `stream/`, `capture/`, `page/`); no
 `sim-*` script is left (`sim.html` keeps its name: the routes serve it).
 
-**Not yet:** the page script (`page/device-page.js`) is 1,265 lines (was
-3,472): the capture controls, toolbar, power card, handheld mode and the
-simulator's `companions` and `orientation` roles are out of it, each behind
-a port. What is left is boot, the session and its formats, 3D, the action
-wiring and unload — mostly composition. Most views are still classic
-scripts on `window`; the new code is ES modules.
+**The page script** (`page/device-page.js`) is 683 lines, about 440 of them
+code (was 3,472): what's left is its composition — the boot order, one
+narrow port per concern, the action registrations, unload. Each concern is
+its own module behind a port: the live view (session, formats, 3D), the
+capture controls, the toolbar view and its layout, the power card, handheld
+mode, the rotation view, the theme, the accessibility inspector, the plugins
+rail, the actions registry (controls name their verb, concerns register
+it); the simulator's `companions` and `orientation` are its family's. The
+server's devices are one role, `Devices` (`device/devices.js`), never routes.
+
+**Not yet:** most views are still classic scripts on `window` (the panels'
+views, the SDK); the new code is ES modules reached through
+`window.Baguette._…` while the page script itself is classic.
 
 | For | Read |
 |---|---|
@@ -230,7 +237,7 @@ same module) and `/mac/shares` (the API).
 | 7 BUILT | each family's role code moves into its folder: `families/mac/` (share, frames, pointer), `families/simulator/` (companions, power card, hinge, bezel), `phone/`, `android/` | each family's tests through its roles |
 | 8 BUILT | `stream/` (was `wire/`): StreamSession, WhepSession, transport, device.json; `capture/` gathered | — |
 | 9 BUILT | the share on the devices page: offered as a device row (This Mac · Share…), not a card; from `families/mac/share.js`; `/mac/share` kept as a thin page over it | sharing from the devices page lands on the shared display, as `/mac/share` did |
-| 10 PART | what is left of `sim-native.js` is `page/device-page.js`'s composition; `sim-` names gone; `sim.html` loads one module | `sim-native.js` is deleted |
+| 10 BUILT | what is left of `sim-native.js` is `page/device-page.js`'s composition; `sim-` names gone; `sim.html` loads one module | `sim-native.js` is deleted |
 
 Each slice is its own commit; slices 1–3 (the stable domain) are one PR, the rest can follow.
 
