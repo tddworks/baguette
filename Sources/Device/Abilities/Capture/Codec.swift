@@ -31,3 +31,16 @@ public struct H264Codec: Codec {
         AVCCParameterSets.parse(avcC: record).map { $0.sps + $0.pps }
     }
 }
+
+/// H.265, Main profile: the `hvcC` record, VPS then SPS then PPS.
+public struct HEVCCodec: Codec {
+    public let codecType: CMVideoCodecType = kCMVideoCodecType_HEVC
+    public let profile: CompressionProperty = .hevcMainAutoLevel
+    public let recordAtom = "hvcC"
+
+    public init() {}
+
+    public func parameterSets(record: Data) -> [Data]? {
+        HVCCParameterSets.parse(hvcC: record)?.inSendingOrder
+    }
+}

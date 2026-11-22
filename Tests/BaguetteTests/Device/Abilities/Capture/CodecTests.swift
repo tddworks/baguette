@@ -26,3 +26,21 @@ struct H264CodecTests {
         #expect(H264Codec().parameterSets(record: Data([0x02])) == nil)
     }
 }
+
+@Suite("HEVCCodec")
+struct HEVCCodecTests {
+    @Test func `should open an HEVC encoder, in Main profile`() {
+        #expect(HEVCCodec().codecType == kCMVideoCodecType_HEVC)
+        #expect(HEVCCodec().profile == .hevcMainAutoLevel)
+    }
+
+    @Test func `should find its decoder configuration in the hvcC record`() {
+        #expect(HEVCCodec().recordAtom == "hvcC")
+    }
+
+    @Test func `should read its parameter sets, VPS then SPS then PPS, out of its record`() {
+        let sets = HVCCParameterSetsTests.self
+        #expect(HEVCCodec().parameterSets(record: sets.hvcC) == [sets.vps, sets.sps, sets.pps])
+        #expect(HEVCCodec().parameterSets(record: Data([0x02])) == nil)
+    }
+}

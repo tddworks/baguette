@@ -62,6 +62,7 @@ final class VideoToolboxSession: CompressionSession, @unchecked Sendable {
         switch property {
         case .realTime(let on): (kVTCompressionPropertyKey_RealTime, on ? kCFBooleanTrue : kCFBooleanFalse)
         case .highProfileAutoLevel: (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel)
+        case .hevcMainAutoLevel: (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_HEVC_Main_AutoLevel)
         case .allowFrameReordering(let on):
             (kVTCompressionPropertyKey_AllowFrameReordering, on ? kCFBooleanTrue : kCFBooleanFalse)
         case .averageBitRate(let bps): (kVTCompressionPropertyKey_AverageBitRate, NSNumber(value: bps))

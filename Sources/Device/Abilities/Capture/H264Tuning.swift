@@ -65,6 +65,8 @@ public enum CompressionProperty: Equatable, Sendable {
     case realTime(Bool)
     /// High profile, the level chosen by the encoder.
     case highProfileAutoLevel
+    /// HEVC Main profile, the level chosen by the encoder.
+    case hevcMainAutoLevel
     case allowFrameReordering(Bool)
     case averageBitRate(Int)
     case expectedFrameRate(Int32)

@@ -53,6 +53,29 @@ struct VideoToolboxSessionTests {
         #expect(sets.map { $0.first.map { $0 & 0x1F } } == [7, 8])   // SPS, PPS
         session.close()
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func `should hand back the HEVC encoder's own hvcC record, holding one VPS, SPS and PPS`() throws {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 64, 64, kCVPixelFormatType_32BGRA, nil, &buffer)
+        let picture = try #require(buffer)
+        let session = VideoToolboxSession()
+        #expect(session.open(width: 64, height: 64, codec: kCMVideoCodecType_HEVC, lowLatencyRateControl: false) == 0)
+        #expect(session.set(.hevcMainAutoLevel) == 0)
+        #expect(session.prepare() == 0)
+        let answered = DispatchSemaphore(value: 0)
+        let box = FrameBox()
+        _ = session.submit(picture, at: .zero, keyframe: true) { result in
+            box.frame = result.frame
+            answered.signal()
+        }
+        #expect(answered.wait(timeout: .now() + 10) == .success)
+        let frame = try #require(box.frame)
+        let record = try #require(frame.records["hvcC"])
+        let sets = try #require(HEVCCodec().parameterSets(record: record))
+        #expect(sets.map { $0.first.map { ($0 >> 1) & 0x3F } } == [32, 33, 34])   // VPS, SPS, PPS
+        session.close()
+    }
 }
 
 private final class Box: @unchecked Sendable {
