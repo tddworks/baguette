@@ -38,6 +38,9 @@ struct ServeCommand: AsyncParsableCommand {
     @Flag(name: .customLong("share-mac"), help: "Also show this Mac's displays as devices, watched and driven from the page. Anyone who can reach --host:--port sees and controls this Mac.")
     var shareMac: Bool = false
 
+    @Option(name: .customLong("mac-frames"), help: "The folder Mac frame pictures are installed in, as <frame name>.png (default ~/Library/Application Support/baguette/Frames).")
+    var macFrames: String?
+
     @Flag(name: .customLong("no-plugins"), help: "Ignore every installed plugin, including bundled ones.")
     var noPlugins = false
 

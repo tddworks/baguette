@@ -129,6 +129,11 @@ struct CommandParsingTests {
         #expect(try ListCommand.parse(["--mac"]).mac == true)
     }
 
+    @Test func `should read Mac frames from the folder serve is given, else the standard one`() throws {
+        #expect(try ServeCommand.parse([]).macFrames == nil)
+        #expect(try ServeCommand.parse(["--mac-frames", "/tmp/frames"]).macFrames == "/tmp/frames")
+    }
+
     @Test func `should share this Mac's displays only when serve is asked with --share-mac`() throws {
         #expect(try ServeCommand.parse([]).shareMac == false)
         #expect(try ServeCommand.parse(["--share-mac"]).shareMac == true)

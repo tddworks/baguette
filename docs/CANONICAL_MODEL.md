@@ -218,6 +218,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
 | this Mac's displays are reached only when asked for — `serve --share-mac`, `list --mac`, or a display's UUID given to `--udid` — and listing them asks for no permission; only watching one asks for Screen Recording | `MacDisplays` · `DeviceKinds` |
 | a Mac display's feed hands on complete pictures only, at most 4096 pixels on the long side; an unchanged one repeats the last | `MacScreen` · `DisplayCaptureSize` |
+| a Mac frame fits a display only of its screen's shape, within 2%; a display shows with no frame until one is picked | `MacFrame.fits` · `MacDisplayLooks` |
 | a gesture on a Mac display lands at the same fraction of where it sits on the desktop; a key's modifiers are held around it and released in reverse; a second finger sends nothing | `DisplayEvents` |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
 | a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
@@ -292,7 +293,7 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Hinge** | *how far open is the fold?* | ◆ `Hinge` · `HingeMotor` · ◇ `HingeAngle` `HingeCommand` |
 | **Orientation** | *which way is it turned?* | ◆ `Orientation` |
 | **Accessibility** | *what is on screen?* | ◆ `Accessibility` · ◇ `AXNode` `AXScreen` |
-| **Chrome** · **Render** · **Capture** | *what does the device look like, and how is it framed?* | ◆ `Chromes` · `DeviceModels` · ◇ `CaptureSize` |
+| **Chrome** · **Render** · **Capture** | *what does the device look like, and how is it framed?* | ◆ `Chromes` (DeviceKit's, then `MacFrames`) · `DeviceModels` · ◇ `CaptureSize` `MacFrame` |
 | **Stream** · **Recording** | *how do frames leave?* | ◆ `Stream` · `Reel` · `WebRTCViewers` → `WebRTCViewer` · ◇ `EncoderRetune` (when the encoder follows a viewer's target) |
 | **WebRTCKit** (`Sources/WebRTCKit`, its own module; depends on nothing of baguette's) | *how does a stream reach a browser over WebRTC?* | ◆ `WebRTCSender` (one browser's session: `EncodedFrame` in, `SenderEvents` out — keyframe needed, the bitrate the link can take, hung up) · ◇ `SessionDescription` `ICECredentials` `MediaPorts` (signaling) · `STUNMessage` `Datagrams` `Handshake` `SRTPContext` (transport) · `RTPPacket` `H264Packetizer` `Pacer` `RTCPFeedback` (media; `RTPPacket` shared with CoreDevice) · `CongestionControl` `BandwidthEstimate` `TransportWideControl` (congestion) |
 | **Location** · **Motion** · **Network** · **Interface** · **StatusBar** · **Shake** · **Camera** | *what conditions does the app run under?* | one ◆ role each |

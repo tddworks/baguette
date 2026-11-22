@@ -65,6 +65,27 @@ posts them at `.cghidEventTap` and sleeps on each pause.
   gesture answers false. The prompt key is spelled out because Swift 6 won't
   read the `kAXTrustedCheckOptionPrompt` global.
 
+## Frames
+
+`MacFrame` (`Sources/Device/Chrome/`) is a picture's size and its screen's
+opening, measured once from each frame's picture: scanning out from inside the
+screen for the first opaque pixel, horizontally through the middle and
+vertically at a quarter of the width — the middle column runs into a
+MacBook's notch. Each opening matches its panel within a pixel of
+anti-aliasing (MacBook Pro 14" measures 3022 × 1962 of 3024 × 1964).
+Centring the screen in the picture would be wrong for a MacBook (the base
+below) and an iMac (chin and stand), so each opening is measured, not computed.
+
+`MacFrames` is a `Chromes` that answers a measured name with the picture from
+the frames folder; `CombinedChromes` asks DeviceKit first, then it, then — with
+`--share-mac` — `MacDisplayLooks`, each display's own look: a clear PNG its
+size in points, the screen filling it. So with no pick the page draws the
+stream alone at the display's shape through the same bezel path, and a pick
+rides `?chrome=` exactly as a phone's borrowed DeviceKit chrome does. Two
+pictures ship in `scripts/mac-frames/` (MacBook Pro 14-inch (M4), iMac
+27-inch; ~4.4 MB each) and `scripts/install-mac-frames.sh` copies them into the
+folder; the rest of the measured frames are known by geometry only.
+
 ## Measured
 
 On a 2560 × 1440 display at 1× (an external Dell beside a portrait one, so at
@@ -75,6 +96,8 @@ window; `type`, a held key and ⌘A + Delete reached it; a browser `deltaY` of
 
 ## Decided against
 
+- **Guessing a frame** — a built-in panel's size names its MacBook, but no
+  frame is shown until picked, as for a phone.
 - **Windows as devices** — window ids change across launches; later, with an
   id scheme of their own.
 - **Listed by default** — a display shows and drives the Mac itself; it's

@@ -57,6 +57,33 @@ none; `CGDisplayBounds` has them) or the stream's frame size both work.
 {"type":"tap","x":640,"y":360,"width":2560,"height":1440}
 ```
 
+## Frames
+
+A display shows with **no frame** until you pick one: the page's **Frame**
+button, beside the device badge, offers the Mac frames that fit it, and No
+frame. The pick is remembered per display.
+
+A frame fits only a display of its screen's shape (within 2%), so the picture
+is never stretched: a 16:9 display fits the iMacs, a MacBook's built-in panel
+its MacBooks, a portrait display none. Install the frames that come with
+baguette once — **MacBook Pro 14-inch (M4)** and **iMac 27-inch**:
+
+```bash
+scripts/install-mac-frames.sh                    # into ~/Library/Application Support/baguette/Frames
+baguette serve --share-mac                       # reads that folder
+baguette serve --share-mac --mac-frames ~/frames # or another folder, as <frame name>.png
+```
+
+Every frame baguette knows where the screen sits in is listed in
+`MacFrame.measured`; a picture for any of them, named `<frame name>.png`, can be
+dropped into the folder by hand.
+
+```
+GET /mac-frames.json?width=2560&height=1440          → {"frames":["iMac 24-inch","iMac 27-inch"]}
+GET /devices/<UUID>/definition.json?chrome=iMac%2027-inch
+GET /devices/<UUID>/screenshot-bezel.png?chrome=iMac%2027-inch   → the screen in the frame, as PNG
+```
+
 ## Gotchas
 
 - **Anyone who reaches the port controls this Mac.** `serve` binds

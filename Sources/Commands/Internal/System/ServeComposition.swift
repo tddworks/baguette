@@ -21,12 +21,16 @@ extension ServeCommand {
             companions: CompanionDevices(phones: companions, screens: twinScreens),
             macs: shareMac ? MacDisplays.onThisMac() : nil
         )
+        // DeviceKit's chrome first, then the Mac frames installed here, then —
+        // when shared — each Mac display's own look: no frame.
+        let frames = MacFrames(folder: macFrames.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? MacFrames.standardFolder)
         let server = Server(
             simulators: simulators,
-            chromes: LiveChromes(
-                store: FileSystemChromeStore(),
-                rasterizer: CoreGraphicsPDFRasterizer()
-            ),
+            chromes: CombinedChromes([
+                LiveChromes(store: FileSystemChromeStore(), rasterizer: CoreGraphicsPDFRasterizer()),
+                frames,
+            ] + (shareMac ? [MacDisplayLooks(displays: { HostDisplayList.all() })] : [])),
+            macFrames: frames,
             models: models,
             deviceRenderer: RealityKitDeviceRenderer(),
             plugins: plugins,

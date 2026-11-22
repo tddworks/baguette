@@ -15,6 +15,7 @@ For releases prior to this changelog, see the
 
 ### Added
 - `baguette serve --share-mac` and `list --mac` show this Mac's displays as devices: streamed, recorded, screenshotted and driven (click, drag, scroll, keys, typing) like a simulator, through ScreenCaptureKit and CGEvent. → [docs](docs/features/mac-screen/README.md)
+- A Mac display's page has a **Frame** button: show it in a MacBook Pro 14" or iMac 27" frame that fits its shape, or none (the default); `scripts/install-mac-frames.sh` installs them. `screenshot-bezel.png?chrome=` frames a still in the pick. → [docs](docs/features/mac-screen/README.md#frames)
 
 ---
 

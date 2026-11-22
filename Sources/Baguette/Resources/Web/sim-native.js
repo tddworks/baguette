@@ -37,6 +37,8 @@
   // URL's tree decides neither.
   let deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
   let deviceAbilities = null;
+  // The listed platform: a Mac display (`macOS`) picks its frame from the Mac frames.
+  let devicePlatform = '';
   const can = (ability) => deviceAbilities === null
       || window.Baguette._DeviceAbilities.has(deviceAbilities, ability);
 
@@ -342,6 +344,7 @@
     if (listing) {
       deviceAbilities = listing.abilities || [];
       deviceMode = !!(listing.kind && listing.kind.reality !== 'simulated');
+      devicePlatform = (listing.kind && listing.kind.platform) || '';
     }
     const meta = await fetchDeviceMeta(udid, listing);
     deviceName = meta.name;
@@ -2227,6 +2230,79 @@
         'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
       osEl.insertAdjacentElement('afterend', badge);
     }
+    if (devicePlatform === 'macOS') mountMacFrameButton();
+  }
+
+  /// A Mac display shows with no frame until one is picked; this button
+  /// beside its badge picks one of the Mac frames it fits, or none.
+  function mountMacFrameButton() {
+    const badge = document.getElementById('nativeDeviceBadge');
+    if (!badge || document.getElementById('nativeMacFrameButton')) return;
+    const button = document.createElement('button');
+    button.id = 'nativeMacFrameButton';
+    button.type = 'button';
+    button.textContent = 'Frame';
+    button.title = 'Show this display in a Mac frame, or none';
+    button.style.cssText =
+        'margin-left:6px;padding:2px 10px;border:1px solid #dbeafe;border-radius:99px;' +
+        'background:#eff6ff;color:#2563eb;font-size:10.5px;font-weight:700;cursor:pointer';
+    button.addEventListener('click', () => { void showMacFramePicker(button); });
+    badge.insertAdjacentElement('afterend', button);
+  }
+
+  /// The frames this display fits — asked of the server by the display's own
+  /// size (its frameless definition's screen) — and no frame. A pick is
+  /// remembered per device, as a phone's borrowed chrome is, and reloads.
+  async function showMacFramePicker(anchor) {
+    const open = document.getElementById('nativeMacFramePicker');
+    if (open) { open.remove(); return; }
+    const key = 'baguette.twin.chrome.' + udid;
+    let picked = null;
+    try { picked = localStorage.getItem(key); } catch { /* no storage: nothing picked */ }
+    let frames = [];
+    try {
+      const own = await (await fetch(window.BaguetteTarget.path(udid, '/definition.json'),
+          { cache: 'no-store' })).json();
+      const rect = own && own.screen && own.screen.rect;
+      if (rect) {
+        const fit = await (await fetch('/mac-frames.json?width=' + rect.width + '&height=' + rect.height,
+            { cache: 'no-store' })).json();
+        frames = fit.frames || [];
+      }
+    } catch { /* no frames to offer: "No frame" still is */ }
+    const choices = window.Baguette._MacFrameChoices.of(frames, picked);
+    const pop = document.createElement('div');
+    pop.id = 'nativeMacFramePicker';
+    pop.style.cssText =
+        'position:absolute;z-index:70;display:flex;flex-direction:column;gap:4px;min-width:220px;' +
+        'padding:8px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;' +
+        'box-shadow:0 12px 32px rgba(15,23,42,.14);font:400 12.5px/1.4 -apple-system,Inter,sans-serif';
+    choices.forEach((choice) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.textContent = (choice.chosen ? '✓ ' : '') + choice.label;
+      item.style.cssText =
+          'text-align:left;padding:6px 10px;border:0;border-radius:7px;cursor:pointer;' +
+          'background:' + (choice.chosen ? '#eff6ff' : 'transparent') + ';color:#1f2937;font:inherit';
+      item.addEventListener('click', () => {
+        try {
+          if (choice.pick) localStorage.setItem(key, choice.pick);
+          else localStorage.removeItem(key);
+        } catch { /* nothing remembered: the page keeps its look */ }
+        location.reload();
+      });
+      pop.appendChild(item);
+    });
+    if (choices.length === 1) {
+      const hint = document.createElement('span');
+      hint.style.cssText = 'padding:4px 10px;color:#94a3b8;font-size:11.5px';
+      hint.textContent = 'No Mac frame fits this display, or none is installed — see docs/features/mac-screen.';
+      pop.appendChild(hint);
+    }
+    const box = anchor.getBoundingClientRect();
+    pop.style.left = (box.left + window.scrollX) + 'px';
+    pop.style.top = (box.bottom + window.scrollY + 6) + 'px';
+    document.body.appendChild(pop);
   }
 
   /**
