@@ -78,6 +78,9 @@ WS  /devices/<udid>/stream?format=mjpeg|avcc → frames down; stream controls an
   (install, a single location point); a phone registers an ability only when
   it can do all of it.
 - **Two receivers for the live screen.** By default baguette receives and decodes it (H.264); `BAGUETTE_PHONE_SCREEN=avconference` has AVConference do it (HEVC), in baguette's own process. Compared in [screen-routes.md](screen-routes.md).
+- **Every viewer of a phone shares one stream.** The phone streams its screen
+  to one receiver, so two tabs, or the Mac and a phone, watch the same stream,
+  and it ends when the last one leaves → [screen-routes.md](screen-routes.md#many-viewers-one-stream--sharedscreen-deviceabilitiesscreen).
 - **The first frame takes a second or two** while CoreDevice brings the tunnel up and the phone sends its first keyframe. While a stream runs, the phone shows that the Mac is viewing its screen.
 
 ## See also
