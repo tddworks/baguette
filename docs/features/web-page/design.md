@@ -14,12 +14,12 @@ devices page, with `/mac/share` and `/mac/shares` kept. Every file sits in its
 layer (`device/`, `families/`, `panels/`, `wire/`, `capture/`, `page/`); no
 `sim-*` script is left (`sim.html` keeps its name: the routes serve it).
 
-**Not yet:** the page script (`page/device-page.js`, 2,980 lines, was 3,472)
-still holds the session, handheld mode, 3D, the capture UI, and the
-simulator's companions (CarPlay, the watch), hinge and orientation — those
-roles (`companions`, `orientation`) are §6's remaining work. Most views are
-still classic scripts on `window` (the panels' `*-view.js`, the SDK); the
-new code is ES modules, reached by the old through `window.Baguette._…`.
+**Not yet:** the page script (`page/device-page.js`) is 1,265 lines (was
+3,472): the capture controls, toolbar, power card, handheld mode and the
+simulator's `companions` and `orientation` roles are out of it, each behind
+a port. What is left is boot, the session and its formats, 3D, the action
+wiring and unload — mostly composition. Most views are still classic
+scripts on `window`; the new code is ES modules.
 
 | For | Read |
 |---|---|
@@ -221,7 +221,7 @@ stay as they are; the old page becomes a thin page over the same module.
 | 4 BUILT | `Panel` and `Panels` (registry, sheet rule); **logs** moves to `panels/logs-panel.js`; `toggleLogs` and its `NEEDS` entry die | Panels' tests: opens in its sheet, mounted once, control marked |
 | 5 BUILT | the other panels, one per slice: camera, network, defaults, notify, location, status bar, accessibility, 3D, plugins | each: its toggle and `NEEDS` entry die |
 | 6 BUILT | `Toolbar` built from `Panels` filtered by `Device.abilities`; `DeviceAbilities` dies | a phone shows no logs control; a Mac display no rotate |
-| 7 PART | each family's role code moves into its folder: `families/mac/` (share, frames, pointer), `families/simulator/` (companions, power card, hinge, bezel), `phone/`, `android/` | each family's tests through its roles |
+| 7 BUILT | each family's role code moves into its folder: `families/mac/` (share, frames, pointer), `families/simulator/` (companions, power card, hinge, bezel), `phone/`, `android/` | each family's tests through its roles |
 | 8 BUILT | `wire/`: StreamSession, WhepSession, transport, device.json; `capture/` gathered | — |
 | 9 BUILT | the share on the devices page: a **Share this Mac here** card on the list, from `families/mac/share.js`; `/mac/share` kept as a thin page over it | sharing from the devices page lands on the shared display, as `/mac/share` did |
 | 10 PART | what is left of `sim-native.js` is `page/device-page.js`'s composition; `sim-` names gone; `sim.html` loads one module | `sim-native.js` is deleted |
