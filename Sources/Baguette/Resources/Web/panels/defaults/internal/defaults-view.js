@@ -14,7 +14,6 @@
 // See `docs/features/defaults/README.md`.
 import { PreferenceRows } from './preference-rows.js';
 
-
 const OTHER = '__other__';
 
 function esc(text) {
@@ -615,7 +614,5 @@ class DefaultsPanel {
     }
   }
 }
-
-if (typeof window !== 'undefined') window.DefaultsPanel = DefaultsPanel;
 
 export { DefaultsPanel };

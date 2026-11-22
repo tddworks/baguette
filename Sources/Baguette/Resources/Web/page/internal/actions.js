@@ -32,7 +32,3 @@ export function pageActions() {
   return actions;
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._PageActions = { pageActions };
-}

@@ -17,7 +17,6 @@
 // `/devices/<udid>/camera-source`), then Start. The Mac side decodes
 // and fits it into the same shared buffer, so the dylib is unchanged.
 
-
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -428,7 +427,5 @@ class CameraPanel {
     this._startCurrent();
   }
 }
-
-if (typeof window !== 'undefined') window.CameraPanel = CameraPanel;
 
 export { CameraPanel };

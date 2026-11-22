@@ -69,7 +69,3 @@ export function rotationView({ frame, cycle, laidOut }) {
   };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._RotationView = { rotationView };
-}

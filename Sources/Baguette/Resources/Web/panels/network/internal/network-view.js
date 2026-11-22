@@ -15,7 +15,6 @@
 // See `docs/features/network/README.md`.
 import { NetworkConditionForm } from './network-condition-form.js';
 
-
 const PROFILE_LABELS = {
   wifi: 'Wi-Fi', dsl: 'DSL', lte: 'LTE', '3g': '3G', edge: 'Edge',
   'very-bad-network': 'Very bad', '100-loss': '100% loss',
@@ -310,7 +309,5 @@ function escapeAttr(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
-
-if (typeof window !== 'undefined') window.NetworkPanel = NetworkPanel;
 
 export { NetworkPanel };

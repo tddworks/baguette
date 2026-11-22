@@ -11,7 +11,8 @@ answered with (`Codecs.of(kind)`), and `?codec=` reaches it from the WHEP
 request or the device page. Checked end to end (2026-11-22): headless Chrome 157
 with `?codec=h265` decoded a 2560×1440 Mac display as `video/H265` (299 frames
 in 6 s). **The page asks `auto` by default** (slice 7): a viewer gets H.265 when
-its browser offers it and H.264 otherwise; `?codec=h264` opts out. A WHEP client
+its browser offers it and H.264 otherwise; the toolbar's **HEVC · H.264** switch
+(or `?codec=h264`) opts out. A WHEP client
 that asks nothing still gets High-profile H.264.
 
 This document owns **why baguette would send H.265, how the live view asks for

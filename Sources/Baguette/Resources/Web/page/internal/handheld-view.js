@@ -5,6 +5,8 @@
 // paints it. What it needs of the page is its port:
 // { currentOrientation, device, foldable, sim, refreshToolbarScroll(), toggle3D() }.
 // Out of page/device-page.js (design §4). docs/features/handheld/README.md.
+import { HandheldMode } from '../../handheld/handheld-mode.js';
+import { HandheldButton } from '../../handheld/handheld-button.js';
 
 export function handheldView(page) {
   let handheld = false;       // the stream held in the hand — see enterHandheld
@@ -23,7 +25,7 @@ export function handheldView(page) {
   // docs/features/handheld/README.md.
 
   function handheldMode() {
-    return window.Baguette && window.Baguette._HandheldMode;
+    return HandheldMode;
   }
 
   /** Launched from a Home Screen icon — no browser bars around the page. */
@@ -258,7 +260,7 @@ export function handheldView(page) {
 
   function placeHandheldButton() {
     const fab = document.getElementById('nativeHandheldFab');
-    const button = window.Baguette && window.Baguette._HandheldButton;
+    const button = HandheldButton;
     if (!handheld || !fab || !button) return;
     const at = button.place(Object.assign({}, storedHandheldSpot(), handheldButtonGeometry()));
     fab.style.left = at.left + 'px';
@@ -282,7 +284,7 @@ export function handheldView(page) {
    */
   function wireHandheldButton() {
     const fab = document.getElementById('nativeHandheldFab');
-    const button = window.Baguette && window.Baguette._HandheldButton;
+    const button = HandheldButton;
     if (handheldButtonWired || !fab || !button) return;
     handheldButtonWired = true;
     let press = null;
@@ -356,7 +358,3 @@ export function handheldView(page) {
   return { coverViewport, enterHandheld, exitHandheld, handheldWanted, hideHomeScreenHint, launchedStandalone, layoutHandheld, setHandheldMenu };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._HandheldView = { handheldView };
-}

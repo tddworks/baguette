@@ -7,6 +7,14 @@
 // rotation(), themeUI(), mountAxInspector(), mountPlugins() }.
 // Out of page/device-page.js (design §4).
 
+import { Sim3DPanel } from './device-3d.js';
+import { StreamSession } from '../../stream/stream-session.js';
+import { WhepSession } from '../../stream/whep-session.js';
+import { StreamFormat } from '../../stream/stream-format.js';
+import { StreamCodec } from '../../stream/stream-codec.js';
+import { FrameDecoder } from '../../stream/frame-decoder.js';
+import { MacShare } from '../../families/mac/share.js';
+
 export function liveView(page) {
   let session = null;
   let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
@@ -54,7 +62,7 @@ export function liveView(page) {
     if (session) { try { session.stop(); } catch (_) {} session = null; }
     // WebRTC is the phone plane only; a refused offer falls back to the
     // best socket format, as an undecodable one does below.
-    const Session = format === 'webrtc' && window.WhepSession ? window.WhepSession : window.StreamSession;
+    const Session = format === 'webrtc' ? WhepSession : StreamSession;
     session = new Session(Object.assign({
       udid: page.udid, format, version: 'v2',
       display: 'phone',
@@ -62,8 +70,9 @@ export function liveView(page) {
       // `?congestion=remb|transport-cc|off` on the page picks how a WebRTC
       // viewer's bitrate follows the link (default: the server's choice).
       congestion: new URLSearchParams(location.search).get('congestion') || undefined,
-      // `?codec=h264|h265|auto` on the page picks the codec (default: auto, H.265 when offered).
-      codec: new URLSearchParams(location.search).get('codec') || undefined,
+      // The codec picker's choice; `?codec=h264|h265|auto` on the page overrides it.
+      codec: format === 'webrtc' ? currentCodec().asked : undefined,
+      onCodec: format === 'webrtc' ? (mimeType) => reflectCodec(StreamCodec.arrived(mimeType)) : undefined,
       onError: format === 'webrtc' ? () => {
         // A shared Mac's tab keeps its own choice: the socket from now on.
         const MacShare = sharedMac();
@@ -72,7 +81,7 @@ export function liveView(page) {
         } else {
           localStorage.removeItem(FORMAT_KEY);
         }
-        startSession(MacShare ? window.StreamFormat.pick(MacShare.afterRefusal, decodeCapabilities()).id : currentFormat());
+        startSession(MacShare ? StreamFormat.pick(MacShare.afterRefusal, decodeCapabilities()).id : currentFormat());
       } : undefined,
     }, sessionCallbacks()));
     // `boot()` runs this before wiring the toolbar and unload handler,
@@ -110,7 +119,7 @@ export function liveView(page) {
     const caps = decodeCapabilities();
     document.querySelectorAll('#nativeFormatPicker .fmt-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.v === format);
-      const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
+      const fmt = StreamFormat.named(b.dataset.v);
       const playable = !fmt || fmt.isPlayable(caps);
       if (b.dataset.titleDefault == null) {
         b.dataset.titleDefault = b.getAttribute('title') || '';
@@ -118,6 +127,46 @@ export function liveView(page) {
       b.disabled = !playable;
       b.title = playable ? b.dataset.titleDefault : fmt.whyUnplayable;
     });
+    const codecs = document.getElementById('nativeCodecPicker');
+    if (codecs) codecs.hidden = format !== 'webrtc';
+    reflectCodec(null);
+  }
+
+  // The codec WebRTC asks for, remembered by this browser; the page
+  // address's `?codec=` overrides it.
+  const CODEC_KEY = 'asc.simCodec';
+  function currentCodec() {
+    let stored = null;
+    try { stored = localStorage.getItem(CODEC_KEY); } catch { /* none stored */ }
+    return StreamCodec.pick(new URLSearchParams(location.search).get('codec'), stored);
+  }
+
+  /** Lights the chosen codec; once the stream has `arrived`, says when HEVC fell back to H.264. */
+  function reflectCodec(arrived) {
+    const chosen = currentCodec();
+    const note = chosen.note(arrived);
+    document.querySelectorAll('#nativeCodecPicker .fmt-btn').forEach((b) => {
+      const codec = StreamCodec.named(b.dataset.v);
+      const isChosen = b.dataset.v === chosen.id;
+      b.classList.toggle('active', isChosen);
+      b.toggleAttribute('data-fell-back', isChosen && !!note);
+      b.title = isChosen && note ? note : codec.title;
+    });
+  }
+
+  /** Ask for codec `next` from now on: remembered, and a WebRTC stream restarted in it. */
+  function setCodec(next) {
+    const wanted = StreamCodec.named(next);
+    if (!wanted) return;
+    try { localStorage.setItem(CODEC_KEY, wanted.id); } catch { /* this session only */ }
+    if (new URLSearchParams(location.search).has('codec')) {
+      // The address's `?codec=` would win; drop it so the choice holds.
+      const url = new URL(location.href);
+      url.searchParams.delete('codec');
+      history.replaceState(null, '', url.href);
+    }
+    reflectCodec(null);
+    if (session && currentFormat() === 'webrtc') startSession('webrtc');
   }
 
   // The format every surface in this page streams at — phone, CarPlay,
@@ -133,7 +182,7 @@ export function liveView(page) {
   const FORMAT_KEY = 'asc.simFormat';
   const SHARE_FORMAT_KEY = 'asc.shareFormat';
   function sharedMac() {
-    return page.device && page.device.share ? window.Baguette._MacShare : null;
+    return page.device && page.device.share ? MacShare : null;
   }
 
   function storedFormat() {
@@ -145,8 +194,7 @@ export function liveView(page) {
   }
 
   function currentFormat() {
-    if (!window.StreamFormat) return 'mjpeg';
-    return window.StreamFormat
+    return StreamFormat
         .pick(storedFormat(), decodeCapabilities()).id;
   }
 
@@ -154,8 +202,7 @@ export function liveView(page) {
    *  the 3D panel — streams at: the page's format, or for WebRTC the best
    *  socket format. */
   function socketFormat() {
-    if (!window.StreamFormat) return 'mjpeg';
-    return window.StreamFormat
+    return StreamFormat
         .pick(storedFormat(), decodeCapabilities())
         .forSockets(decodeCapabilities()).id;
   }
@@ -163,9 +210,8 @@ export function liveView(page) {
   /** What this browser can play, as `StreamFormat` wants to be told it. */
   function decodeCapabilities() {
     return {
-      hardwareDecoder: !!(window.FrameDecoder
-          && window.FrameDecoder.isHardwareAvailable()),
-      webrtc: typeof window.RTCPeerConnection === 'function' && !!window.WhepSession,
+      hardwareDecoder: FrameDecoder.isHardwareAvailable(),
+      webrtc: typeof window.RTCPeerConnection === 'function',
     };
   }
 
@@ -224,8 +270,8 @@ export function liveView(page) {
       if (render3DPanel && typeof render3DPanel.setCaptureSettings === 'function') {
         render3DPanel.setCaptureSettings(page.capture().captureSettings());
       }
-      if (!render3DPanel && window.Sim3DPanel && page.udid) {
-        render3DPanel = new window.Sim3DPanel();
+      if (!render3DPanel && page.udid) {
+        render3DPanel = new Sim3DPanel();
         render3DPanel.setCaptureSettings(page.capture().captureSettings());
         render3DPanel.attach(host, stage, page.udid, {
           deviceSize: { width: page.sim.screen.size.width, height: page.sim.screen.size.height },
@@ -268,7 +314,7 @@ export function liveView(page) {
   function setFormat(next) {
       // Storing an undecodable format wedges the origin (#71). The
       // button is already disabled; this is the second lock.
-      const wanted = window.StreamFormat && window.StreamFormat.named(next);
+      const wanted = StreamFormat.named(next);
       if (!wanted || !wanted.isPlayable(decodeCapabilities())) return;
       const current = currentFormat();
       const view = document.getElementById('simNativeView');
@@ -292,10 +338,6 @@ export function liveView(page) {
     get session() { return session; },
     /** The live 3D panel, while 3D has been opened. */
     get render3DPanel() { return render3DPanel; },
-    FORMAT_KEY, SHARE_FORMAT_KEY, setFormat, currentFormat, decodeCapabilities, reflectFormat, sharedMac, socketFormat, startSession, toggle3D, toggle3DInspector };
+    FORMAT_KEY, SHARE_FORMAT_KEY, setFormat, setCodec, currentCodec, currentFormat, decodeCapabilities, reflectFormat, sharedMac, socketFormat, startSession, toggle3D, toggle3DInspector };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._LiveView = { liveView };
-}

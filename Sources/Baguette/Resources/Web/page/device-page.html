@@ -642,7 +642,8 @@
   #simNativeView[data-power] #nativeToolScroll,
   #simNativeView[data-power] .tb-cluster,
   #simNativeView[data-power] .tb-fold,
-  #simNativeView[data-power] #nativeFormatPicker {
+  #simNativeView[data-power] #nativeFormatPicker,
+  #simNativeView[data-power] #nativeCodecPicker {
     opacity: 0.35;
     pointer-events: none;
   }
@@ -921,6 +922,13 @@
     opacity: 0.35; cursor: not-allowed;
   }
   #simNativeView .fmt-btn:disabled:hover { color: var(--nv-fmt-btn-text); }
+  #simNativeView .fmt-picker[hidden],
+  #simNativeView .tb-choice:has(> .fmt-picker[hidden]) { display: none; }
+  /* HEVC chosen, H.264 arrived: the browser can't play HEVC. The `title` says so. */
+  #simNativeView .fmt-btn.active[data-fell-back] {
+    background: transparent; color: var(--nv-text);
+    box-shadow: inset 0 0 0 1px var(--nv-accent);
+  }
 
   /* Action buttons — Home / Screenshot / App-switcher. */
   #simNativeView .tb-actions {
@@ -3119,8 +3127,16 @@
                 data-action="setFormat" data-arg="avcc">H.264</button>
         <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
                 data-action="setFormat" data-arg="mjpeg">MJPEG</button>
-        <button class="fmt-btn" data-v="webrtc" title="WebRTC (WHEP). H.264 over UDP: holds up on Wi-Fi and remote links, and plays on plain HTTP."
+        <button class="fmt-btn" data-v="webrtc" title="WebRTC (WHEP). HEVC or H.264 over UDP: holds up on Wi-Fi and remote links, and plays on plain HTTP."
                 data-action="setFormat" data-arg="webrtc">WebRTC</button>
+      </div>
+
+      <!-- WebRTC's codec: HEVC (falling back to H.264 when this browser
+           can't play it) or H.264 only. Shown while WebRTC streams;
+           page/internal/live-view.js lights it and says when HEVC fell back. -->
+      <div class="fmt-picker" id="nativeCodecPicker" role="group" aria-label="WebRTC codec" hidden>
+        <button class="fmt-btn" data-v="hevc" data-action="setCodec" data-arg="hevc">HEVC</button>
+        <button class="fmt-btn" data-v="h264" data-action="setCodec" data-arg="h264">H.264</button>
       </div>
 
       <!-- Scroll-left chevron — shown only when the icon strip overflows

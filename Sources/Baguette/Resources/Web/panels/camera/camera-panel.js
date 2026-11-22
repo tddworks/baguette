@@ -20,3 +20,6 @@ export function cameraPanelWith(View) {
 
 export const cameraPanel = cameraPanelWith(CameraPanel);
 
+
+// The view itself, for a page that shows the camera outside a sheet (the sidebar view).
+export { CameraPanel };

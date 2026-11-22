@@ -4,6 +4,8 @@
 // page is its port: { udid, sim, live(), rightRails() }.
 // Out of page/device-page.js (design §4).
 
+import { PluginPanels } from './plugins/plugins-rail.js';
+
 export function pluginsView(page) {
   let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
   // Plugin contributions — a separate rail on the right edge, drawn by
@@ -14,8 +16,8 @@ export function pluginsView(page) {
   // frame arrives in the same units as gesture coordinates, so the
   // only maths is the display scale.
   function mountPlugins() {
-    if (!window.PluginPanels || !page.sim) return;
-    pluginPanels = new window.PluginPanels({
+    if (!page.sim) return;
+    pluginPanels = new PluginPanels({
       udid: page.udid,
       // The shared right-edge stack, below baguette's own screens rail —
       // two rails claiming the same centred slot would sit on top of
@@ -80,7 +82,3 @@ export function pluginsView(page) {
   };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._PluginsView = { pluginsView };
-}

@@ -1,28 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { macPointer } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/pointer.js';
+import { macPointerWith } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/pointer.js';
 import { framesThatFit, rememberFrame } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/frame-picker.js';
 
 // A Mac display's own roles: the page draws its pointer, in the Mac's shape,
 // and offers the Mac frames that fit it.
 
 test('should draw the Mac\'s pointer over the screen, in its real shape, and hover with the mouse', () => {
-  const saved = globalThis.window;
   const did = [];
   let follow;
-  globalThis.window = { Baguette: {
-    _LocalPointer: { attach: (area) => { did.push(['pointer', area]); return { setShape: (s) => did.push(['shape', s.cursor]) }; } },
-    _HoverGestureSource: class { constructor(screen) { did.push(['hover', screen]); } attach(area) { did.push(['hover-on', area]); } },
-    _PointerShape: { follow: (fn) => { follow = fn; }, cursor: (shape, density) => shape.id + '@' + density },
-  } };
-  try {
-    const view = { screenArea: 'AREA', screen: 'SCREEN' };
-    macPointer.follow(view);
-    follow({ id: 'ibeam' }, 2);
-    assert.deepEqual(did, [['pointer', 'AREA'], ['hover', 'SCREEN'], ['hover-on', 'AREA'], ['shape', 'ibeam@2']]);
-  } finally {
-    globalThis.window = saved;
-  }
+  const macPointer = macPointerWith({
+    LocalPointer: { attach: (area) => { did.push(['pointer', area]); return { setShape: (s) => did.push(['shape', s.cursor]) }; } },
+    HoverGestureSource: class { constructor(screen) { did.push(['hover', screen]); } attach(area) { did.push(['hover-on', area]); } },
+    PointerShape: { follow: (fn) => { follow = fn; }, cursor: (shape, density) => shape.id + '@' + density },
+  });
+  const view = { screenArea: 'AREA', screen: 'SCREEN' };
+  macPointer.follow(view);
+  follow({ id: 'ibeam' }, 2);
+  assert.deepEqual(did, [['pointer', 'AREA'], ['hover', 'SCREEN'], ['hover-on', 'AREA'], ['shape', 'ibeam@2']]);
 });
 
 test('should offer the Mac frames that fit the display\'s own screen', async () => {

@@ -7,6 +7,11 @@
 //
 // Out of page/device-page.js (docs/features/web-page/design.md §4, capture/).
 
+import { CaptureSettings } from './capture-settings.js';
+import { CaptureComposer } from './capture-composer.js';
+import { CaptureSizeMenu } from './capture-size-menu.js';
+import { BrowserRecorder } from './recorder.js';
+
 export function captureControls(page) {
   // --- Capture: one picked size, two verbs, two modes ---------------
   //
@@ -21,21 +26,6 @@ export function captureControls(page) {
   // server-side from settings handed to Sim3DPanel, and a recording is
   // sized by BrowserRecorder's own compose canvas — which is why the
   // recording's filename carries no size slug.
-  //
-  // Those modules are pulled in at runtime rather than with a <script>
-  // tag, because this page has no <head> of its own: sim.html carries
-  // the page's script tags, and `fetchTemplate` deliberately drops the
-  // ones inside page/device-page.html. Anything already on the page (sim.html
-  // loads /recorder.js today) is left alone — the guard is the global
-  // the module hangs itself on, not the URL, so this stays correct
-  // whichever page happens to have loaded it first.
-  const CAPTURE_MODULES = [
-    ['/capture/capture-size.js', () => window.Baguette && window.Baguette._CaptureSize],
-    ['/capture/capture-settings.js', () => window.Baguette && window.Baguette._CaptureSettings],
-    ['/capture/capture-composer.js', () => window.Baguette && window.Baguette._CaptureComposer],
-    ['/capture/capture-size-menu.js', () => window.CaptureSizeMenu],
-    ['/capture/recorder.js', () => window.BrowserRecorder],
-  ];
 
   let captureMenu = null;   // CaptureSizeMenu — the size chip in the toolbar
 
@@ -50,34 +40,16 @@ export function captureControls(page) {
     notice: '',   // why the last take ended without producing a file
   };
 
-  let _captureModulesPromise = null;
+  // The capture vocabulary is imported, so it is always here; the page
+  // still awaits this before mounting the chip.
   function ensureCaptureModules() {
-    if (_captureModulesPromise) return _captureModulesPromise;
-    _captureModulesPromise = (async () => {
-      for (const [src, present] of CAPTURE_MODULES) {
-        if (present()) continue;
-        await loadScript(src);
-      }
-    })();
-    return _captureModulesPromise;
-  }
-
-  function loadScript(src) {
-    return new Promise((resolve) => {
-      const el = document.createElement('script');
-      el.src = src;
-      el.onload = () => resolve(true);
-      el.onerror = () => { console.warn('[native] failed to load', src); resolve(false); };
-      document.head.appendChild(el);
-    });
+    return Promise.resolve();
   }
 
   function mountCaptureUI() {
     const host = document.getElementById('nativeCaptureSize');
-    // The menu reads the size and settings vocabulary as it's made: all three, or no menu.
-    const B = window.Baguette || {};
-    if (host && window.CaptureSizeMenu && B._CaptureSettings && B._CaptureSize && !captureMenu) {
-      captureMenu = new window.CaptureSizeMenu({
+    if (host && !captureMenu) {
+      captureMenu = new CaptureSizeMenu({
         storageKey: 'asc.capture.native',
         // Three controls that only make sense in 2D — see
         // `reflect3DCaptureControls` for why. `toggle3D` flips them.
@@ -103,7 +75,7 @@ export function captureControls(page) {
     // A Record button that can't record is worse than no Record button.
     const btn = document.getElementById('nativeRecordBtn');
     if (btn) {
-      btn.hidden = !(window.BrowserRecorder && window.BrowserRecorder.isAvailable());
+      btn.hidden = !BrowserRecorder.isAvailable();
     }
     page.refreshToolbarScroll();
   }
@@ -137,13 +109,7 @@ export function captureControls(page) {
 
   function captureSettings() {
     if (captureMenu) return captureMenu.settings;
-    const B = window.Baguette;
-    // `new CaptureSettings()` dereferences `_CaptureSize` in its own
-    // constructor, and `loadScript` resolves rather than rejects on a
-    // 404 — so a half-loaded vocabulary is reachable, and checking only
-    // the one global would throw right past the fallback below.
-    if (!B || !B._CaptureSettings || !B._CaptureSize) return null;
-    return new B._CaptureSettings();
+    return new CaptureSettings();
   }
 
   /**
@@ -186,8 +152,8 @@ export function captureControls(page) {
    */
   function activeComposite() {
     const source = activeCaptureSource();
-    const Composer = window.Baguette && window.Baguette._CaptureComposer;
-    if (!source || !Composer) return null;
+    const Composer = CaptureComposer;
+    if (!source) return null;
     return Composer.composite(source.frameImg, source.screen, source.canvas);
   }
 
@@ -223,15 +189,7 @@ export function captureControls(page) {
     const source = activeCaptureSource();
     if (!source) return;
     const settings = captureSettings();
-    const Composer = window.Baguette && window.Baguette._CaptureComposer;
-    // The capture modules failed to load: still hand over the frame at
-    // native size rather than doing nothing at all.
-    if (!settings || !Composer) {
-      source.canvas.toBlob((blob) => {
-        if (blob) saveBlob(blob, `${deviceSlug()}-${captureStamp()}.png`);
-      }, 'image/png');
-      return;
-    }
+    const Composer = CaptureComposer;
 
     const composite = Composer.composite(source.frameImg, source.screen, source.canvas);
     if (!composite.width || !composite.height) return;
@@ -281,9 +239,8 @@ export function captureControls(page) {
   function recordingSettings(source) {
     const settings = captureSettings();
     if (!settings || !source || source.mode !== '3d') return settings;
-    const Panel = window.Sim3DPanel;
-    if (!Panel || typeof Panel.recordingFit !== 'function') return settings;
-    const fit = Panel.recordingFit(settings, source.canvas);
+    if (typeof page.recordingFit !== 'function') return settings;
+    const fit = page.recordingFit(settings, source.canvas);
     return fit === settings.fit ? settings : settings.with({ fit });
   }
 
@@ -293,11 +250,11 @@ export function captureControls(page) {
   }
 
   function startRecording() {
-    if (!window.BrowserRecorder || !window.BrowserRecorder.isAvailable()) return;
+    if (!BrowserRecorder.isAvailable()) return;
     const source = activeCaptureSource();
     if (!source) return;
     try {
-      const rec = new window.BrowserRecorder({
+      const rec = new BrowserRecorder({
         canvas: source.canvas,
         // In 3D both of these are null, which BrowserRecorder already
         // reads as "record the bare canvas" — the same result a
@@ -499,7 +456,3 @@ export function captureControls(page) {
   return { ensureCaptureModules, mountCaptureUI, reflect3DCaptureControls, captureSettings, downloadSnapshot, toggleRecording, cancelRecording, clearRecordings, hideRecordings };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._CaptureControls = { captureControls };
-}

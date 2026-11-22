@@ -1,18 +1,13 @@
 // The device list — every device of every family, real or virtual, iOS or
 // Android, from `/devices.json`; what each row offers comes from the
 // device's abilities, never from which family it is.
-(function() {
-  'use strict';
+import { DeviceFilter } from './internal/device-filter.js';
 
-  // page/device-page.js owns the page when the URL is `/devices/<udid>`
-  // and sets this flag synchronously at script-eval time. Bail out so
-  // we don't paint the list shell underneath the focus-mode chrome.
-  if (window.__baguetteNativeMode) {
-    console.log('[ASC Pro] page/devices-list.js suspended (native mode)');
-    return;
-  }
-
-  const escapeHTML = window.escapeHTML || (value => String(value ?? '').replace(/[&<>"']/g, c => ({
+/** The devices list. `offers()`: what families offer beyond the server's
+ *  list (a display this Mac can make for this screen), each a device listing
+ *  with its own action. Answers `reload`, for when the list has changed. */
+export function devicesList({ offers = () => [] } = {}) {
+  const escapeHTML = (value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c])));
 
@@ -193,7 +188,6 @@
     document.head.appendChild(style);
   }
 
-  const DeviceFilter = window.Baguette._DeviceFilter;
 
   const PLATFORMS = { iOS: 'iOS', watchOS: 'watchOS', tvOS: 'tvOS', visionOS: 'visionOS', android: 'Android', macOS: 'macOS' };
 
@@ -214,11 +208,6 @@
     };
   }
 
-  /** What families offer beyond the server's list (a display this Mac can
-   *  make for this screen): each a device listing, with its own action. */
-  function offers() {
-    return (window.Baguette && window.Baguette._ListOffers) || [];
-  }
 
   /** What a device is, in a few words: "Simulator", "Emulator", or its model on a real one. */
   function kindLabel(device) {
@@ -464,9 +453,6 @@
     handleAction(button.dataset.simAction, button.dataset.simId);
   });
 
-  window.loadSimDeviceList = loadSimDeviceList;
-  // A family's offers can arrive after the list did.
-  window.addEventListener('baguette:offers', () => loadSimDeviceList());
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loadSimDeviceList, { once: true });
@@ -475,4 +461,5 @@
   }
 
   console.log('[baguette] device list loaded');
-})();
+  return { reload: loadSimDeviceList };
+}

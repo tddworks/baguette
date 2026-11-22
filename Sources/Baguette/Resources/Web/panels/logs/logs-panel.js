@@ -14,3 +14,6 @@ export function logsPanelWith(View) {
 }
 
 export const logsPanel = logsPanelWith(LogPanel);
+
+// The view itself, for a page that shows the log outside a sheet (the sidebar view).
+export { LogPanel };

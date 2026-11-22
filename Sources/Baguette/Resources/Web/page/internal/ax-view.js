@@ -3,6 +3,8 @@
 // server. What it needs of the page is its port: { sim, live() }.
 // Out of page/device-page.js (design §4).
 
+import { AXInspector } from './accessibility-inspector.js';
+
 export function axView(page) {
   let axInspector = null;
   // Lazy-mounts the AXInspector once a surface + session are ready.
@@ -19,9 +21,9 @@ export function axView(page) {
       try { axInspector.detach(); } catch (_) { /* ignore */ }
       axInspector = null;
     }
-    if (!window.AXInspector || !page.sim) return;
+    if (!page.sim) return;
     const panel = document.getElementById('nativeAxHost');
-    axInspector = new window.AXInspector({
+    axInspector = new AXInspector({
       // No `host` — toolbar drives enable/disable, panel surfaces selection.
       screenArea: page.sim.screenArea,
       send: (payload) => page.live().session && page.live().session.send(payload),
@@ -61,7 +63,7 @@ export function axView(page) {
       panel.removeAttribute('data-open');
       panel.innerHTML = '';
     });
-    window.AXInspector.renderSelectionInto(
+    AXInspector.renderSelectionInto(
         panel.querySelector('[data-role="ax-body"]'),
         node,
         {
@@ -88,7 +90,3 @@ export function axView(page) {
   };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._AxView = { axView };
-}

@@ -29,8 +29,9 @@ export function kindReads(source) {
 
 /** Every module under the layered folders, with the files it imports (web-root relative). */
 function imports() {
-  const layered = ['device', 'families', 'panels', 'wire', 'page', 'capture']
-    .map((folder) => join(WEB, folder)).filter((dir) => { try { return statSync(dir).isDirectory(); } catch { return false; } });
+  // Every folder of ours: all of them are ES modules now. vendor/ is someone else's.
+  const layered = readdirSync(WEB).filter((name) => name !== 'vendor')
+    .map((folder) => join(WEB, folder)).filter((dir) => statSync(dir).isDirectory());
   return layered.flatMap(modules).map((file) => ({
     file: relative(WEB, file),
     imports: dependencies(readFileSync(file, 'utf8')).map((spec) => relative(WEB, resolve(dirname(file), spec))),

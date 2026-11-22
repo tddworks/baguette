@@ -44,7 +44,3 @@ export function serverDevices(fetch) {
   };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._Devices = { serverDevices };
-}

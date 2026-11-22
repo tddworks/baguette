@@ -199,7 +199,3 @@ export function powerCard(page) {
   return { isBooted, showPowerCard, hidePowerCard };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._PowerCard = { powerCard };
-}

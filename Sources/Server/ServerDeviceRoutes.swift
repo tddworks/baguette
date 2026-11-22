@@ -41,6 +41,12 @@ extension Server {
         CaptureImageFormat.allCases.flatMap { deviceRoutes("screenshot.\($0.pathExtension)") }
     }
 
+    /// Where the devices list is, on the host and port `serve` binds —
+    /// what it prints when it starts.
+    static func devicesPage(host: String, port: Int) -> String {
+        "http://\(host):\(port)/devices"
+    }
+
     /// The `/devices/:udid/…` route that replaces an old
     /// `/simulators/:udid/<leaf>` one, or nil for a path that isn't one —
     /// the list page, `/simulators.json`, a device's page, anything on the

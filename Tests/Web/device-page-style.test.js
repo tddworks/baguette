@@ -220,19 +220,17 @@ test('should style the recording state from the focus-mode palette', () => {
   );
 });
 
-test('should load the capture vocabulary and the recorder when the capture controls mount', () => {
+test('should import the capture vocabulary and the recorder into the capture controls', () => {
   const src = fs.readFileSync(path.join(WEB_ROOT, 'capture', 'capture-controls.js'), 'utf8');
   for (const module of [
-    '/capture/capture-size.js',
-    '/capture/capture-settings.js',
-    '/capture/capture-composer.js',
-    '/capture/capture-size-menu.js',
-    '/capture/recorder.js',
+    './capture-settings.js',
+    './capture-composer.js',
+    './capture-size-menu.js',
+    './recorder.js',
   ]) {
     assert.ok(
-      src.includes(module),
-      `${module} is never loaded — focus mode can't reach it, because ` +
-      'the template\'s own <script> tags are dropped by fetchTemplate'
+      new RegExp(`^import .* from '${module.replace(/\./g, '\\.')}';$`, 'm').test(src),
+      `${module} is never imported — focus mode can't reach it`
     );
   }
 });

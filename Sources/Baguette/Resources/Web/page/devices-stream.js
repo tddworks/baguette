@@ -12,8 +12,19 @@
 // the sidebar callbacks. Adding a new format / new device shape /
 // new capture mode lands in its dedicated module; this file rarely
 // changes.
-(function () {
-  'use strict';
+import { StreamSession } from '../stream/stream-session.js';
+import { StreamFormat } from '../stream/stream-format.js';
+import { FrameDecoder } from '../stream/frame-decoder.js';
+import { CaptureGallery } from '../capture/capture-gallery.js';
+import { CaptureSizeMenu } from '../capture/capture-size-menu.js';
+import { BrowserRecorder } from '../capture/recorder.js';
+import { Baguette } from '../baguette/baguette.js';
+import { LogPanel } from '../panels/logs/logs-panel.js';
+import { CameraPanel } from '../panels/camera/camera-panel.js';
+import { AXInspector } from './internal/accessibility-inspector.js';
+
+/** The list page's inline stream view; `reloadList` repaints the devices list. */
+export function devicesStream({ reloadList }) {
 
   // --- Live stream state ---
   let session = null;       // StreamSession
@@ -87,7 +98,7 @@
   }
 
   // --- Helpers ---
-  const escapeHTML = window.escapeHTML || ((s) => String(s).replace(/[&<>"']/g,
+  const escapeHTML = ((s) => String(s).replace(/[&<>"']/g,
     (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])));
 
   function log(msg, isErr) {
@@ -134,16 +145,14 @@
 
   // Same filtered pick the focus view makes — see stream-format.js.
   function pickFormat() {
-    if (!window.StreamFormat) return 'mjpeg';
-    return window.StreamFormat
+    return StreamFormat
         .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities()).id;
   }
 
   /** What this browser can play, as `StreamFormat` wants to be told it. */
   function decodeCapabilities() {
     return {
-      hardwareDecoder: !!(window.FrameDecoder
-          && window.FrameDecoder.isHardwareAvailable()),
+      hardwareDecoder: FrameDecoder.isHardwareAvailable(),
     };
   }
 
@@ -152,7 +161,7 @@
     const caps = decodeCapabilities();
     document.querySelectorAll('#simFormatRow .simFmt').forEach((b) => {
       b.classList.toggle('btn-primary', b.dataset.v === format);
-      const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
+      const fmt = StreamFormat.named(b.dataset.v);
       const playable = !fmt || fmt.isPlayable(caps);
       b.disabled = !playable;
       if (!playable) {
@@ -177,7 +186,7 @@
     // Boot the SDK: the page hands it a `send` closure that defers
     // to the StreamSession's WebSocket. Pre-open gestures (rare —
     // the user can't interact until the page renders) get dropped.
-    sim = await window.Baguette.use({
+    sim = await Baguette.use({
       host: location.origin,
       udid,
       send: (payload) => { if (session) session.send(payload); },
@@ -206,7 +215,7 @@
 
     // False when the decoder wouldn't construct; `session` stays null.
     const openSession = (fmt) => {
-      session = new window.StreamSession({
+      session = new StreamSession({
         udid, format: fmt, version: 'v2',
         canvas: sim.canvas,
         onSize: (w, h) => {
@@ -246,7 +255,7 @@
     // After the attempt — `format` may have fallen back.
     requestAnimationFrame(() => reflectFormatPicker(format));
 
-    gallery = new window.CaptureGallery({
+    gallery = new CaptureGallery({
       udid, screen: sim.screen.def, frameImg: sim._bezel.frameImg,
     });
     gallery.clear();
@@ -257,9 +266,9 @@
     // Independent of the stream socket so logs survive even when the
     // user pauses the frame stream, and vice-versa.
     const logHost = document.getElementById('simLogPanel');
-    if (logHost && window.LogPanel) {
+    if (logHost) {
       logHost.innerHTML = '';
-      logPanel = new window.LogPanel(logHost, { udid, level: 'info' });
+      logPanel = new LogPanel(logHost, { udid, level: 'info' });
     }
 
     // Accessibility inspector — toggle in sidebar, overlay over the
@@ -267,9 +276,9 @@
     // every fresh hover (mouseenter) it fetches a new tree, so the
     // user always inspects current state without paying for polling.
     const axHost = document.getElementById('simAxInspector');
-    if (axHost && window.AXInspector) {
+    if (axHost) {
       axHost.innerHTML = '';
-      axInspector = new window.AXInspector({
+      axInspector = new AXInspector({
         host: axHost,
         screenArea: sim.screenArea,
         send: (payload) => session && session.send(payload),
@@ -286,9 +295,9 @@
     // of the stream socket and the logs socket — closing the page
     // tears all three down.
     const cameraHost = document.getElementById('simCameraPanel');
-    if (cameraHost && window.CameraPanel) {
+    if (cameraHost) {
       cameraHost.innerHTML = '';
-      cameraPanel = new window.CameraPanel();
+      cameraPanel = new CameraPanel();
       cameraPanel.attach(cameraHost, udid);
     }
   }
@@ -312,7 +321,7 @@
     if (view) { view.style.display = 'none'; view.innerHTML = ''; }
     const list = document.getElementById('simListView');
     if (list) list.style.display = '';
-    if (window.loadSimDeviceList) window.loadSimDeviceList();
+    reloadList();
   }
 
   // --- Capture size ---------------------------------------------------
@@ -362,10 +371,10 @@
 
   function mountCaptureSizeMenu() {
     const host = document.getElementById('simCaptureSizeHost');
-    if (!host || !window.CaptureSizeMenu) return;
+    if (!host) return;
     if (sizeMenu) { sizeMenu.detach(); sizeMenu = null; }
     host.innerHTML = '';
-    sizeMenu = new window.CaptureSizeMenu({
+    sizeMenu = new CaptureSizeMenu({
       storageKey: CAPTURE_STORAGE_KEY,
       showFrameToggle: true,
       sourceSize: captureSourceSize,
@@ -459,7 +468,7 @@
   window._simSetFormat = (btn) => {
     if (!btn) return;
     // Storing an undecodable format wedges the origin (#71).
-    const wanted = window.StreamFormat && window.StreamFormat.named(btn.dataset.v);
+    const wanted = StreamFormat.named(btn.dataset.v);
     if (!wanted || !wanted.isPlayable(decodeCapabilities())) return;
     const fmt = wanted.id;
     if (localStorage.getItem(FORMAT_KEY) === fmt && btn.classList.contains('btn-primary')) return;
@@ -540,7 +549,7 @@
       return;
     }
 
-    if (!window.BrowserRecorder || !window.BrowserRecorder.isAvailable()) {
+    if (!BrowserRecorder.isAvailable()) {
       log('Recording: MediaRecorder not available in this browser', true);
       return;
     }
@@ -562,7 +571,7 @@
       // canvas / frameImg / screen / overlayHost / fps quartet is what
       // today's recorder.js reads. Both shapes ship together so this
       // call site is correct whichever version is loaded.
-      const rec = new window.BrowserRecorder({
+      const rec = new BrowserRecorder({
         settings:    captureSettings(),
         canvas:      sim.canvas,
         frameImg:    captureWithFrame ? sim._bezel.frameImg     : null,
@@ -719,5 +728,5 @@
     openFromHash();
   }
 
-  console.log('[ASC Pro] page/devices-stream.js loaded (modular)');
-})();
+  console.log('[baguette] page/devices-stream.js loaded');
+}

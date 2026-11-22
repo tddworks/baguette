@@ -5,12 +5,9 @@
 // offer's own action — it knows nothing about Macs.
 import { isDevicesList, sharingOn, shareOffer, pageBrowser } from '../families/mac/share-card.js';
 
-async function offerSharing() {
-  if (!isDevicesList(location.pathname)) return;
-  if (!(await sharingOn(pageBrowser()))) return;
-  window.Baguette = window.Baguette || {};
-  (window.Baguette._ListOffers = window.Baguette._ListOffers || []).push(shareOffer());
-  window.dispatchEvent(new Event('baguette:offers'));
+/** The offers for this page: the Mac's share when the server shares it, else none. */
+export async function shareOffers() {
+  if (!isDevicesList(location.pathname)) return [];
+  if (!(await sharingOn(pageBrowser()))) return [];
+  return [shareOffer()];
 }
-
-void offerSharing();

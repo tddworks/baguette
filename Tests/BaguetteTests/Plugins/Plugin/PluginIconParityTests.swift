@@ -30,7 +30,7 @@ struct PluginIconParityTests {
     static func iconsDeclaredInJS() throws -> Set<String> {
         let source = try String(contentsOf: simPluginsJS, encoding: .utf8)
         guard let start = source.range(of: "const ICONS = {"),
-              let end = source.range(of: "\n  };", range: start.upperBound..<source.endIndex)
+              let end = source.range(of: "\n};", range: start.upperBound..<source.endIndex)
         else {
             Issue.record("could not find the ICONS literal in page/internal/plugins/plugins-rail.js")
             return []

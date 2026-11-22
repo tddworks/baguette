@@ -61,7 +61,3 @@ export function theme(page) {
   return { applyStoredTheme, currentTheme, live3DBackground, setTheme };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._Theme = { theme };
-}

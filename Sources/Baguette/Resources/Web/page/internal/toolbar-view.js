@@ -4,6 +4,7 @@
 // needs of the page is its port: { abilities } (the device's, or null when
 // none are listed). Out of page/device-page.js (design §4, page/).
 import { toolbarOf } from '../page-panels.js';
+import { ToolbarFold } from '../../toolbar/toolbar-fold.js';
 
 export function toolbarView(page) {
   // ── Toolbar clusters ─────────────────────────────────────────────
@@ -39,7 +40,8 @@ export function toolbarView(page) {
       id: 'stream', label: 'Stream', fold: 3, icon: 'film',
       members: [
         { id: 'nativeStatus', label: 'Frame rate', role: 'readout' },
-        { id: 'nativeFormatPicker', label: 'Codec', role: 'choice' },
+        { id: 'nativeFormatPicker', label: 'Format', role: 'choice' },
+        { id: 'nativeCodecPicker', label: 'Codec', role: 'choice' },
       ],
     },
     {
@@ -118,7 +120,7 @@ export function toolbarView(page) {
   function buildToolbarClusters() {
     const controls = document.querySelector('#simNativeView .tb-controls');
     const strip = document.getElementById('nativeToolScroll');
-    if (!controls || !strip || !window.Baguette || !window.Baguette._ToolbarFold) {
+    if (!controls || !strip) {
       return false;
     }
 
@@ -167,7 +169,7 @@ export function toolbarView(page) {
         captureSep || captureHost || null);
     strip.remove();
 
-    toolbarFold = new window.Baguette._ToolbarFold(TOOLBAR_CLUSTERS);
+    toolbarFold = new ToolbarFold(TOOLBAR_CLUSTERS);
     return true;
   }
 
@@ -386,7 +388,3 @@ export function toolbarView(page) {
   return { buildToolbarClusters, closeFoldMenus, layoutToolbar, refreshFoldMenus };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._ToolbarView = { toolbarView };
-}

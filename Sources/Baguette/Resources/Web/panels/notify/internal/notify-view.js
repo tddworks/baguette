@@ -12,7 +12,6 @@
 // in localStorage so a repeated manual check is one click. See
 // `docs/features/notifications/README.md`.
 
-
 const STORE = 'baguette.notify';
 const EXAMPLE = JSON.stringify({
   aps: {
@@ -115,7 +114,5 @@ function escapeAttr(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
-
-if (typeof window !== 'undefined') window.NotifyPanel = NotifyPanel;
 
 export { NotifyPanel };

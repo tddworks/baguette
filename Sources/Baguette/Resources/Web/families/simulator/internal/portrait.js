@@ -69,7 +69,3 @@ export function toPortrait(envelope, orientation) {
   }
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._Portrait = { toPortrait };
-}

@@ -40,7 +40,6 @@
 //   • The Walk pin's dead reckoning — the device is the authority, but
 //     it can't be polled, so the pin shows where we believe it is.
 
-
 // Apple Park — a friendly default centre when the device has no pin yet.
 const DEFAULT_CENTER = [37.3349, -122.0090];
 const DEFAULT_ZOOM = 13;
@@ -1167,7 +1166,5 @@ class LocationPanel {
     this._reset();
   }
 }
-
-if (typeof window !== 'undefined') window.LocationPanel = LocationPanel;
 
 export { LocationPanel };

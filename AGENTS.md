@@ -57,7 +57,7 @@ Every other target (`make`, `make docs`, `make check-docs`, …) and the toolcha
 
 ## Architecture
 
-Imports flow inward, outside in: `Sources/Commands/` (the CLI) and `Sources/Server/` (`baguette serve`) → `Devices/{Simulator,iPhone,CompanionPhone}` + `Plugins/{Plugin,Bakery}` → `Device/` (`BaguetteDevice`: id, kind, power, `Chrome/`, `Abilities/<ability>/`), which imports nothing of ours. Each folder's public face is at its top, its implementations in `Internal/`. Device families never import each other → [devices](docs/features/devices/design.md). `Tests/BaguetteTests/` mirrors `Sources/`. `Sources/Baguette/` holds `@main` and `Resources/Web/`, the page's vanilla IIFE modules.
+Imports flow inward, outside in: `Sources/Commands/` (the CLI) and `Sources/Server/` (`baguette serve`) → `Devices/{Simulator,iPhone,CompanionPhone}` + `Plugins/{Plugin,Bakery}` → `Device/` (`BaguetteDevice`: id, kind, power, `Chrome/`, `Abilities/<ability>/`), which imports nothing of ours. Each folder's public face is at its top, its implementations in `Internal/`. Device families never import each other → [devices](docs/features/devices/design.md). `Tests/BaguetteTests/` mirrors `Sources/`. `Sources/Baguette/` holds `@main` and `Resources/Web/`, the page's ES modules.
 
 **Two consumers, one pipeline.** Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → the gesture's role (`Touch`, `Key`, …) → `IndigoHIDInput`. The only difference is the App-layer entry point.
 

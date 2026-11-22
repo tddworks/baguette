@@ -4,6 +4,8 @@
 // abilities badge, its frame picker). What it needs of the page is its port:
 // { device, deviceAbilities, toolbar() }. Out of page/device-page.js (§4).
 
+import { DeviceBadge } from '../../device/device-badge.js';
+
 export function toolbarLayout(page) {
   /** Until the toolbar is wired, there is nothing to lay out. */
   let refreshing = () => {};
@@ -19,7 +21,7 @@ export function toolbarLayout(page) {
     if (osEl && !document.getElementById('nativeDeviceBadge')) {
       const badge = document.createElement('span');
       badge.id = 'nativeDeviceBadge';
-      const words = window.Baguette._DeviceBadge.of(page.deviceAbilities || []);
+      const words = DeviceBadge.of(page.deviceAbilities || []);
       badge.textContent = words.text;
       badge.title = words.title;
       badge.style.cssText =
@@ -104,7 +106,3 @@ export function toolbarLayout(page) {
   return { wireToolbarScroll, refresh };
 }
 
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._ToolbarLayout = { toolbarLayout };
-}

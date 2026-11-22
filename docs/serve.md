@@ -5,7 +5,7 @@ description: Every HTTP and WebSocket route `baguette serve` answers, one row ea
 # `baguette serve`
 
 ```bash
-baguette serve                  # http://127.0.0.1:8421/simulators
+baguette serve                  # http://127.0.0.1:8421/devices
 ```
 
 Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/devices` lists every device with Boot / Shutdown (`/simulators` is its old spelling, still served); `/devices/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).

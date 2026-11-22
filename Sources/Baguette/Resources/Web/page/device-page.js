@@ -7,11 +7,27 @@
 // modules as page/devices-stream.js — DeviceFrame, FrameDecoder, StreamSession,
 // SimInput, MouseGestureSource, PinchOverlay — without the sidebar.
 //
-// Sets `window.__baguetteNativeMode = true` *synchronously* so
-// page/devices-list.js (loaded later) can early-return and not paint the list
-// underneath us.
-(function () {
-  'use strict';
+// `devicePage()` answers whether it took the page, so page/page.js shows
+// the devices list only when it didn't.
+import { serverDevices as serverDevicesOf } from '../device/devices.js';
+import { Families } from '../families/families.js';
+import { panelsOn } from './page-panels.js';
+import { captureControls } from '../capture/capture-controls.js';
+import { Baguette } from '../baguette/baguette.js';
+import { SimFileDrop } from './internal/file-drop.js';
+import { Sim3DPanel } from './internal/device-3d.js';
+import { rotationView } from './internal/rotation-view.js';
+import { handheldView } from './internal/handheld-view.js';
+import { theme } from './internal/theme.js';
+import { liveView } from './internal/live-view.js';
+import { powerCard } from './internal/power-card.js';
+import { axView as axViewOf } from './internal/ax-view.js';
+import { pluginsView as pluginsViewOf } from './internal/plugins-view.js';
+import { toolbarView } from './internal/toolbar-view.js';
+import { toolbarLayout as toolbarLayoutOf } from './internal/toolbar-layout.js';
+import { pageActions } from './internal/actions.js';
+
+export function devicePage() {
 
   // --- Activation gate ---------------------------------------------
   // Match `/devices/<udid>`; reject `/simulators` and
@@ -27,8 +43,7 @@
   }
 
   const udid = deepLinkUdid();
-  if (!udid) return; // not deep-link mode; let the devices list (page/devices-list.js) run.
-  window.__baguetteNativeMode = true;
+  if (!udid) return false; // not deep-link mode; page/page.js shows the devices list.
   // One page for every device. What it shows follows the device: each
   // control only when the device has the ability it drives
   // (`deviceAbilities`, from /devices/<id>/device.json), and how it is
@@ -38,7 +53,7 @@
   let device = null;
   /** This server's devices (device/devices.js), made on first use. */
   let devicesUI = null;
-  const serverDevices = () => devicesUI || (devicesUI = window.Baguette._Devices.serverDevices((u, i) => fetch(u, i)));
+  const serverDevices = () => devicesUI || (devicesUI = serverDevicesOf((u, i) => fetch(u, i)));
   let deviceAbilities = null;
   const can = (ability) => deviceAbilities === null || deviceAbilities.includes(ability);
 
@@ -53,18 +68,11 @@
   // family's (`device.orientation.turn`).
   let rotationUI = null;
   function rotation() {
-    return rotationUI || (rotationUI = window.Baguette._RotationView.rotationView({
+    return rotationUI || (rotationUI = rotationView({
       frame: () => document.getElementById('nativeDeviceFrame'),
       cycle: (device && device.orientation && device.orientation.cycle) || ['portrait'],
       laidOut: () => handheldUIView().layoutHandheld(),
     }));
-  }
-
-  // --- Bootstrap ---------------------------------------------------
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
   }
 
   async function boot() {
@@ -104,7 +112,7 @@
       return;
     }
     deviceAbilities = listing.abilities || [];
-    device = window.Baguette._Families.device(listing, {
+    device = Families.device(listing, {
       id: udid,
       devices: serverDevices(),
       storage: localStorage,
@@ -112,7 +120,7 @@
       // `params` (a pick the browser may not store) ride the reload in the address.
       reload: (params) => reloadPage(params),
     });
-    panels = window.Baguette._PagePanels.on({ element: (id) => document.getElementById(id) });
+    panels = panelsOn({ element: (id) => document.getElementById(id) });
     const meta = await device.describe();
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
@@ -234,9 +242,8 @@
     // Swift side routes by extension. The drop zone + highlight are
     // scoped to the device frame so the overlay traces the phone, not
     // the whole page. See docs/features/file-upload/README.md.
-    if (window.SimFileDrop && (can('apps') || can('photos'))) {
-      window.__fileDrop =
-          window.SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
+    if (can('apps') || can('photos')) {
+      SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
     }
 
     // Reset iOS to portrait on page boot. Without this, a page
@@ -273,7 +280,7 @@
   // the page's port.
   let handheldUIViewUI = null;
   function handheldUIView() {
-    return handheldUIViewUI || (handheldUIViewUI = window.Baguette._HandheldView.handheldView({
+    return handheldUIViewUI || (handheldUIViewUI = handheldView({
       get currentOrientation() { return rotation().current; },
       get device() { return device; },
       get foldable() { return foldable; },
@@ -287,7 +294,7 @@
   // transport: the phone at boot, and a foldable's other panel when the
   // hinge brings it in.
   function useSimulator(definitionURL) {
-    return window.Baguette.use({
+    return Baguette.use({
       host: location.origin,
       udid,
       definitionURL,
@@ -328,7 +335,7 @@
   // the page's port.
   let themeUIUI = null;
   function themeUI() {
-    return themeUIUI || (themeUIUI = window.Baguette._Theme.theme({
+    return themeUIUI || (themeUIUI = theme({
       get render3DPanel() { return live().render3DPanel; },
     }));
   }
@@ -337,7 +344,7 @@
   // the page's port.
   let liveUI = null;
   function live() {
-    return liveUI || (liveUI = window.Baguette._LiveView.liveView({
+    return liveUI || (liveUI = liveView({
       get udid() { return udid; },
       get device() { return device; },
       get sim() { return sim; },
@@ -406,7 +413,7 @@
   // the page's port.
   let powerUI = null;
   function power() {
-    return powerUI || (powerUI = window.Baguette._PowerCard.powerCard({
+    return powerUI || (powerUI = powerCard({
       get device() { return device; },
       get deviceName() { return deviceName; },
       get sim() { return sim; },
@@ -434,7 +441,7 @@
   // the page's port.
   let axViewUI = null;
   function axView() {
-    return axViewUI || (axViewUI = window.Baguette._AxView.axView({
+    return axViewUI || (axViewUI = axViewOf({
       get sim() { return sim; },
       live: (...args) => live(...args),
     }));
@@ -445,7 +452,7 @@
   // the page's port.
   let pluginsViewUI = null;
   function pluginsView() {
-    return pluginsViewUI || (pluginsViewUI = window.Baguette._PluginsView.pluginsView({
+    return pluginsViewUI || (pluginsViewUI = pluginsViewOf({
       get udid() { return udid; },
       get sim() { return sim; },
       live: (...args) => live(...args),
@@ -508,7 +515,7 @@
   // first use — after the modules have loaded — over the page's port.
   let toolbarUI = null;
   function toolbar() {
-    return toolbarUI || (toolbarUI = window.Baguette._ToolbarView.toolbarView({
+    return toolbarUI || (toolbarUI = toolbarView({
       get abilities() { return deviceAbilities; },
     }));
   }
@@ -517,7 +524,7 @@
   // the page's port.
   let toolbarLayoutUI = null;
   function toolbarLayout() {
-    return toolbarLayoutUI || (toolbarLayoutUI = window.Baguette._ToolbarLayout.toolbarLayout({
+    return toolbarLayoutUI || (toolbarLayoutUI = toolbarLayoutOf({
       get device() { return device; },
       get deviceAbilities() { return deviceAbilities; },
       toolbar: (...args) => toolbar(...args),
@@ -533,7 +540,7 @@
   };
   function pageActionsUI() {
     if (actionsUI) return actionsUI;
-    actionsUI = window.Baguette._PageActions.pageActions();
+    actionsUI = pageActions();
     actionsUI.listen(document);
     return actionsUI;
   }
@@ -564,6 +571,7 @@
       if (!window.closed) location.href = '/devices';
     });
     actions.on('setFormat', (next) => live().setFormat(next));
+    actions.on('setCodec', (next) => live().setCodec(next));
 
     actions.on('toggleTheme', () => {
       themeUI().setTheme(themeUI().currentTheme() === 'light' ? 'dark' : 'light');
@@ -667,7 +675,7 @@
   // after the modules have loaded — over the page's port.
   let captureUI = null;
   function capture() {
-    return captureUI || (captureUI = window.Baguette._CaptureControls.captureControls({
+    return captureUI || (captureUI = captureControls({
       can: (ability) => can(ability),
       get device() { return device; },
       get deviceName() { return deviceName; },
@@ -675,9 +683,18 @@
       get sim() { return sim; },
       get render3DPanel() { return live().render3DPanel; },
       toggle3D: (opts) => live().toggle3D(opts),
+      recordingFit: (settings, stage) => Sim3DPanel.recordingFit(settings, stage),
       refreshToolbarScroll: () => refreshToolbarScroll(),
     }));
   }
 
+  // --- Bootstrap: last, once every binding above is initialised. ---
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+
   console.log('[Baguette] page/device-page.js active for', udid);
-})();
+  return true;
+}

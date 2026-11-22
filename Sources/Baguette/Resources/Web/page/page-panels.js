@@ -24,7 +24,3 @@ export function toolbarOf(clusters, abilities) {
 }
 
 // The old scripts reach it here until they're modules too (design §6).
-if (typeof window !== 'undefined') {
-  window.Baguette = window.Baguette || {};
-  window.Baguette._PagePanels = { on: panelsOn, toolbar: toolbarOf };
-}

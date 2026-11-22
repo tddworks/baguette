@@ -23,8 +23,8 @@ focused at a time. The whole server-side delta is two routes (`/farm`,
 (`farm/farm.html`) so the bundle's directory structure matches the served URL
 structure, with no rewriting or flat-file aliasing.
 
-The page follows the single-device page's IIFE-on-`window` pattern: no bundler,
-`<script>` tags in dependency order. `FarmApp` is the only stateful module; the
+The page is ES modules, no bundler: `farm.html` loads `farm-app.js`, which
+imports the rest. `FarmApp` is the only stateful module; the
 view renderers take a host element + a `ctx` and write DOM (no fetches, no
 listeners, no global state), so they are re-runnable whenever filter, view,
 sort or selection changes. `FarmFilter.apply(devices)` is a pure predicate and

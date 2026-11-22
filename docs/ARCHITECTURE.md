@@ -61,7 +61,7 @@ standalone web UI it serves itself).
                 ───────────────────                 ────────────────
    Host plugin      JSON                Browser           text/binary WS
    (asc-pro etc.)  ──────► baguette     (sim.html)       ──────► baguette
-                    stdin    input                         /simulators       serve
+                    stdin    input                         /devices          serve
                                   │                              │
                                   ▼                              ▼
                           GestureDispatcher              GestureDispatcher
@@ -273,7 +273,7 @@ All wire-level coordinates — `x`, `y`, `startX`, `endX`, `x1`, `x2`,
 divides by `size.width` / `size.height` to produce the normalized
 [0, 1] CGPoint the C function expects.
 
-The browser-side IIFE (`SimInput`) speaks normalized [0, 1] internally
+The browser's gesture sources (`baguette/gestures/`) speak normalized [0, 1] internally
 and multiplies by `width` / `height` in `page/devices-stream.js`'s translator
 before serialising. Documenting this once: **the wire is in points,
 not normalized**.
@@ -361,8 +361,9 @@ The shape of the route tree; the complete, current table is
 [`serve.md`](serve.md).
 
 ```
-GET  /                                      302 → /simulators
-GET  /simulators                            sim.html
+GET  /                                      302 → /devices
+GET  /devices                               sim.html (every device)
+GET  /simulators                            sim.html (old spelling)
 GET  /simulators.json                       Simulators.listJSON
 GET  /simulators/:udid                      sim.html (same shell)
 POST /devices/:udid/boot                    device.require(.power).turnOn()
@@ -415,21 +416,23 @@ UI-shaped lives in `Resources/Web/`.
 
 ## Web UI internals
 
-`Resources/Web/` ships seven self-contained IIFE modules; each owns
-one responsibility:
+`Resources/Web/` is ES modules, no bundler: `sim.html` loads one,
+`page/page.js`, which imports the device page or the devices list, and they
+import what they use; the farm (`farm/farm.html` → `farm/farm-app.js`) and
+the SDK (`baguette/baguette.js`) are entries the same way. The folders, their
+public faces and `internal/` rule are in
+[web-page](features/web-page/design.md); `Tests/Web/boundaries.test.js`
+holds them.
 
-| File | Job |
+| Folder | Job |
 |---|---|
-| `sim.html` | entry — loads the IIFEs in dependency order |
-| `sim-input.js` | `SimInput` / `MouseGestureSource` / `PinchOverlay` / `TouchGestureSource` |
-| `frame-decoder.js` | `FrameDecoder.create(format, callbacks)` — MJPEG / AVCC strategy |
-| `device-frame.js` | `DeviceFrame` — bezel + screen-area DOM construction |
-| `capture-gallery.js` | `CaptureGallery` — screenshot fetch + composite + thumbs |
-| `stream-session.js` | `StreamSession` — WS lifetime + paint loop |
-| `page/devices-list.js` | list page renderer + boot/shutdown buttons |
-| `page/devices-stream.js` | orchestrator — wires the above on Stream click |
-| `page/internal/plugins/plugins-rail.js` | `PluginPanels` — the plugins rail, flyout, panels and add-a-bakery modal, drawn entirely with host markup |
-| `page/internal/plugins/plugin-row-action.js` | `PluginRowAction` — what clicking a plugin row means (highlight / tap / copy), split out so it's testable without a DOM |
+| `page/` | the page roots: the device page, the devices list and its inline stream view |
+| `device/` | what every device page shares: the device's roles, panels, toolbar |
+| `families/` | each family's roles (simulator, phone, Android, Mac) |
+| `panels/` | one folder per panel, its view in `internal/` |
+| `stream/` | MJPEG / AVCC sessions over the WebSocket, WHEP for WebRTC |
+| `capture/` | capture sizes, screenshots, recordings |
+| `baguette/` | the JS SDK: transport, gestures, bezel, screen, buttons, keyboard |
 
 Nothing a plugin ships reaches this page — no plugin script, CSS or
 markup. A manifest names an icon from a host-owned set and every string
@@ -437,12 +440,6 @@ from `/plugins.json` goes through `escapeHTML` or `textContent`. That
 constraint is what keeps the server's Origin / `Sec-Fetch-Site` /
 DNS-rebind checks meaningful: a same-origin plugin script would make
 all of them moot.
-
-Each file is a single-purpose IIFE that exposes one class or factory
-on `window`. Adding a new format is one new file in
-`frame-decoder.js`'s strategy and one entry in the factory; adding a
-new sidebar action is one orchestrator binding. No bundler, no module
-graph; vanilla `<script>` tags loaded in order.
 
 ## Testing
 

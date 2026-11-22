@@ -24,9 +24,10 @@ rail, the actions registry (controls name their verb, concerns register
 it); the simulator's `companions` and `orientation` are its family's. The
 server's devices are one role, `Devices` (`device/devices.js`), never routes.
 
-**Not yet:** most views are still classic scripts on `window` (the panels'
-views, the SDK); the new code is ES modules reached through
-`window.Baguette._…` while the page script itself is classic.
+Every file is an ES module: `sim.html` loads `page/page.js` alone, which
+imports the device page or the devices list; nothing reaches another file
+through `window` (the SDK still puts `Baguette` there for a page that loads
+it, and the sidebar's inline handlers still call `window._sim…`).
 
 | For | Read |
 |---|---|
@@ -192,9 +193,7 @@ against the disk).
 replaces the 67 tags: imports *are* the dependency graph, a file's private
 functions are private, and `internal/` means something. No bundler — every
 browser the page supports loads modules natively, and `node --test` imports
-them directly (no `vm` loader). During the move, a module may still read an
-old `window.X`, and an old IIFE may be given a module's export through
-`window` — so the page works at every slice.
+them directly (no `vm` loader).
 
 ### Sharing this Mac, from the devices page
 

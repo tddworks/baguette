@@ -16,7 +16,7 @@ description: |
 `SimulatorHID` (the path Xcode uses internally): faster and more reliable
 than `idb` / `AXe` / `simctl io` for input. Agents drive the CLI; a human who
 wants to watch or play along should be pointed at `baguette serve` and
-`http://localhost:8421/simulators/<udid>`.
+`http://localhost:8421/devices/<udid>`.
 
 ## The loop
 
@@ -125,7 +125,7 @@ position: find the element with `baguette describe-ui` and tap its centre.
 When editing a SwiftUI app: build and run → `press --button home` and `tap`
 to the changed screen → `screenshot` and `Read` it → confirm the pixels
 match intent. To let the human follow along, start `baguette serve` and give
-them `http://localhost:8421/simulators/<udid>`; it also takes keyboard
+them `http://localhost:8421/devices/<udid>`; it also takes keyboard
 typing, drag-and-drop installs and the feature cards. `baguette plugin` and
 `baguette bakery` extend that page (see `commands.md`).
 

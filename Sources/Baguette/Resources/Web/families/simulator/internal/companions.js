@@ -4,6 +4,13 @@
 // `companions` role (families/simulator/simulator.js). What it needs of the
 // page is its port: { udid, socketFormat(), refreshToolbarScroll(), rightRails() }.
 
+import { ScreensRail } from './screens-rail.js';
+import { StreamSession } from '../../../stream/stream-session.js';
+import { Transport } from '../../../baguette/transport.js';
+import { Screen } from '../../../baguette/parts/screen.js';
+import { CarPlayFrameRegistry } from '../../../baguette/carplay/frame-registry.js';
+import { CarPlayFrame } from '../../../baguette/carplay/carplay-frame.js';
+
 export function companionScreens(page) {
   let carplaySession = null;
   let carplayScreen = null;
@@ -21,8 +28,7 @@ export function companionScreens(page) {
   let screensRail = null;   // ScreensRail — which companion screens are shown
   const openCompanions = new Set();
   function mountScreensRail() {
-    if (!window.ScreensRail || !window.Baguette || !window.Baguette._CompanionScreens) return;
-    screensRail = new window.ScreensRail({
+    screensRail = new ScreensRail({
       udid: page.udid,
       mount: page.rightRails(),
       onOpen: (entry) => openCompanion(entry),
@@ -31,7 +37,6 @@ export function companionScreens(page) {
     });
     screensRail.load();
   }
-
 
   function openCompanion(entry) {
     if (entry.id === 'external') {
@@ -101,11 +106,10 @@ export function companionScreens(page) {
   async function ensureCarPlayFrameMounted(generation) {
     const anchor = document.getElementById('nativeCarPlayFrame');
     if (!anchor) return null;
-    const B = window.Baguette;
     // Prefer plain rect until brand chrome is proven with live frames —
     // async Cupra mount was racing the stream onto a detached canvas.
     const brand = resolveCarPlayBrand();
-    if (brand === 'plain' || !B || !B._CarPlayFrameRegistry || !B._CarPlayFrame) {
+    if (brand === 'plain') {
       const canvas = document.getElementById('nativeCarPlayCanvas');
       return canvas ? { screenArea: anchor, canvas } : null;
     }
@@ -113,11 +117,11 @@ export function companionScreens(page) {
       return carplayFrame.ports();
     }
     try {
-      const packed = await B._CarPlayFrameRegistry.load(resolveCarPlayBrand());
+      const packed = await CarPlayFrameRegistry.load(resolveCarPlayBrand());
       // A newer start (or a close) came while the chrome loaded: its frame stays.
       if (generation !== carplayGeneration) return null;
       if (carplayFrame) carplayFrame.detach();
-      carplayFrame = new B._CarPlayFrame(packed.definition, {
+      carplayFrame = new CarPlayFrame(packed.definition, {
         assetBaseUrl: packed.assetBaseUrl,
       });
       return carplayFrame.mount(anchor);
@@ -131,7 +135,6 @@ export function companionScreens(page) {
   async function startCarPlaySession(format = page.socketFormat()) {
     const generation = ++carplayGeneration;
     if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
-    if (!window.StreamSession) return;
 
     const ports = await ensureCarPlayFrameMounted(generation);
     // A newer start (or a pane close) overtook us while the chrome
@@ -163,7 +166,7 @@ export function companionScreens(page) {
     ensureCarPlayInput(ports.screenArea, ports.canvas);
 
     clearCompanionFault('nativeCarPlayColumn');
-    carplaySession = new window.StreamSession({
+    carplaySession = new StreamSession({
       udid: page.udid, format, version: 'v2',
       display: 'carplay',
       canvas: ports.canvas,
@@ -243,12 +246,12 @@ export function companionScreens(page) {
   }
 
   function ensureCarPlayInput(screenArea, canvas) {
-    if (carplayScreen || !window.Baguette || !window.Baguette._Screen) return;
-    const transport = new window.Baguette._Transport({
+    if (carplayScreen) return;
+    const transport = new Transport({
       send: (payload) => carplaySession && carplaySession.send(payload),
       log: (msg) => console.log('[native:carplay]', msg),
     });
-    carplayScreen = new window.Baguette._Screen(
+    carplayScreen = new Screen(
       { rect: { width: CARPLAY_DEFAULT_SIZE.width, height: CARPLAY_DEFAULT_SIZE.height } },
       transport,
       { getOrientation: () => 'landscape-right', log: (msg) => console.log('[native:carplay]', msg) }
@@ -266,7 +269,7 @@ export function companionScreens(page) {
 
   async function startWatchSession(nextUdid) {
     if (nextUdid) watchUdid = nextUdid;
-    if (!watchUdid || !window.StreamSession) return;
+    if (!watchUdid) return;
     stopWatchSession();
 
     const screenArea = document.getElementById('nativeWatchFrame');
@@ -275,7 +278,7 @@ export function companionScreens(page) {
 
     ensureWatchInput(screenArea, canvas);
     clearCompanionFault('nativeWatchColumn');
-    watchSession = new window.StreamSession({
+    watchSession = new StreamSession({
       udid: watchUdid, format: page.socketFormat(), version: 'v2',
       display: 'phone',
       canvas,
@@ -308,12 +311,12 @@ export function companionScreens(page) {
   }
 
   function ensureWatchInput(screenArea, canvas) {
-    if (watchScreen || !window.Baguette || !window.Baguette._Screen) return;
-    const transport = new window.Baguette._Transport({
+    if (watchScreen) return;
+    const transport = new Transport({
       send: (payload) => watchSession && watchSession.send(payload),
       log: (msg) => console.log('[native:watch]', msg),
     });
-    watchScreen = new window.Baguette._Screen(
+    watchScreen = new Screen(
       { rect: { width: WATCH_DEFAULT_SIZE.width, height: WATCH_DEFAULT_SIZE.height } },
       transport,
       { getOrientation: () => 'portrait', log: (msg) => console.log('[native:watch]', msg) }

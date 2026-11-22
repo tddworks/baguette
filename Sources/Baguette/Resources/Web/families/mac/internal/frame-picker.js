@@ -3,6 +3,8 @@
 // server by the display's own size — and no frame. A pick is remembered per
 // display, as a phone's borrowed chrome is, and the page reloads into it.
 
+import { MacFrameChoices } from './mac-frame-choices.js';
+
 const KEY = (id) => 'baguette.twin.chrome.' + id;
 
 /** The frames that fit display `id`, by its frameless definition's screen; none when it can't say. */
@@ -29,7 +31,7 @@ export function macFramePicker(id, { devices, storage, reload }) {
     if (open) { open.remove(); return; }
     let picked = null;
     try { picked = storage.getItem(KEY(id)); } catch { /* nothing picked */ }
-    const choices = window.Baguette._MacFrameChoices.of(await framesThatFit(id, devices), picked);
+    const choices = MacFrameChoices.of(await framesThatFit(id, devices), picked);
     const pop = document.createElement('div');
     pop.id = 'nativeMacFramePicker';
     pop.style.cssText =

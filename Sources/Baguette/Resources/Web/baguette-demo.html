@@ -30,16 +30,9 @@
   <div id="host"></div>
   <div id="log"></div>
 
-  <script src="/baguette/transport.js"></script>
-  <script src="/baguette/gestures/pinch-overlay.js"></script>
-  <script src="/baguette/gestures/pointer-interpreter.js"></script>
-  <script src="/baguette/parts/bezel.js"></script>
-  <script src="/baguette/parts/screen.js"></script>
-  <script src="/baguette/parts/button.js"></script>
-  <script src="/baguette/parts/keyboard.js"></script>
-  <script src="/baguette/simulator.js"></script>
-  <script src="/baguette/baguette.js"></script>
-  <script>
+  <script type="module">
+    import { Baguette } from '/baguette/baguette.js';
+
     const logEl = document.getElementById('log');
     const log = (m, isErr) => {
       const ts = new Date().toLocaleTimeString();

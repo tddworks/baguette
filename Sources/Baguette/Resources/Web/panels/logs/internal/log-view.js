@@ -34,7 +34,6 @@
 //   - Hidden hosts skip rendering entirely; on reveal we do one
 //     full rebuild to catch up.
 
-
 const MAX_LINES = 1500;
 
 function escapeHTML(s) {
@@ -373,7 +372,5 @@ class LogPanel {
     if (stick) list.scrollTop = list.scrollHeight;
   }
 }
-
-if (typeof window !== 'undefined') window.LogPanel = LogPanel;
 
 export { LogPanel };

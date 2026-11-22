@@ -11,7 +11,6 @@
 // clamping). The live device stream shows the result — no client-side
 // preview. See `docs/features/status-bar/README.md`.
 
-
 // Signal-bars SVG, `n` of `max` filled. Shared by the segmented
 // pickers; mirrors the toolbar glyph so the card reads as a set.
 function barsSVG(n, max) {
@@ -285,7 +284,5 @@ function escapeAttr(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
-
-if (typeof window !== 'undefined') window.StatusBarPanel = StatusBarPanel;
 
 export { StatusBarPanel };
