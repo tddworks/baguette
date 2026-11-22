@@ -70,6 +70,7 @@ export function toolbarLayout(page) {
         const open = btn.getAttribute('aria-expanded') === 'true';
         page.toolbar().closeFoldMenus();
         if (!open) {
+          page.toolbar().refreshFoldMenus();   // as the controls are now, not as they were laid out
           pop.hidden = false;
           btn.setAttribute('aria-expanded', 'true');
         }

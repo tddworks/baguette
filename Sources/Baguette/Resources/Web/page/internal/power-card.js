@@ -9,6 +9,8 @@ export function powerCard(page) {
   let powerCard = null;      // boot affordance shown on an unbooted device's screen
   let bootPollTimer = null;  // /simulators.json poll while a boot is in flight
   let firstFrameTimer = null; // fallback so the card can't outlive a live stream
+  /** Bumped by every change of the card: a poll answered after one stands down. */
+  let cardChanges = 0;
   const BOOT_POLL_MS = 1000;
   const BOOT_TIMEOUT_MS = 180000;   // cold boots on a busy Mac are slow
   const FIRST_FRAME_TIMEOUT_MS = 15000;
@@ -19,6 +21,7 @@ export function powerCard(page) {
   }
 
   function showPowerCard(state) {
+    cardChanges += 1;
     hidePowerCard();
 
     // Normally the card goes on the device's own glass. With no
@@ -50,6 +53,7 @@ export function powerCard(page) {
   }
 
   function hidePowerCard() {
+    cardChanges += 1;
     if (!powerCard && !bootPollTimer && !firstFrameTimer) return;
     if (bootPollTimer)   { clearTimeout(bootPollTimer);   bootPollTimer = null; }
     if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
@@ -70,6 +74,7 @@ export function powerCard(page) {
   // subtitle — used to surface a boot failure verbatim instead of a
   // generic "try again".
   function renderPowerCard(phase, detail) {
+    cardChanges += 1;
     if (!powerCard) return;
     // Whatever poll belonged to the previous phase is done with.
     if (bootPollTimer) { clearTimeout(bootPollTimer); bootPollTimer = null; }
@@ -124,8 +129,9 @@ export function powerCard(page) {
     bootPollTimer = setTimeout(async () => {
       bootPollTimer = null;
       if (!powerCard || powerCard.getAttribute('data-phase') !== 'off') return;
+      const mine = cardChanges;
       const meta = await page.device.describe();
-      if (!powerCard) return;
+      if (!powerCard || mine !== cardChanges) return;
       if (isBooted(meta.state)) onBooted();
       else watchForExternalBoot();
     }, IDLE_POLL_MS);
@@ -160,7 +166,9 @@ export function powerCard(page) {
     const until = deadline || (Date.now() + BOOT_TIMEOUT_MS);
     bootPollTimer = setTimeout(async () => {
       if (!powerCard) return;            // card dismissed underneath us
+      const mine = cardChanges;
       const meta = await page.device.describe();
+      if (!powerCard || mine !== cardChanges) return;   // the card changed while it was asked
       if (isBooted(meta.state)) {
         onBooted();
         return;

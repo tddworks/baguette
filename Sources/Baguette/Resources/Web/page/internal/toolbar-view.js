@@ -323,6 +323,18 @@ export function toolbarView(page) {
    * every row now closes the menu, because every row reveals something
    * the menu is standing on top of.
    */
+  /** A fold menu as it opens: its readouts and on/off dots as the real controls are now. */
+  function refreshFoldMenus() {
+    document.querySelectorAll('#simNativeView .tb-read[data-source]').forEach((row) => {
+      const source = document.getElementById(row.dataset.source);
+      if (source) row.querySelector('.tb-val').textContent = source.textContent || '—';
+    });
+    document.querySelectorAll('#simNativeView .tb-row[data-source]').forEach((row) => {
+      const source = document.getElementById(row.dataset.source);
+      if (source) row.classList.toggle('on', source.classList.contains('active'));
+    });
+  }
+
   function menuRow(member) {
     const source = document.getElementById(member.id);
     if (!source) return null;
@@ -331,6 +343,7 @@ export function toolbarView(page) {
     if (member.role === 'readout') {
       const row = document.createElement('div');
       row.className = 'tb-read';
+      row.dataset.source = member.id;
       row.innerHTML = clusterSvg('gauge') + '<span>' + label + '</span>' +
           '<span class="tb-val"></span>';
       row.querySelector('.tb-val').textContent = source.textContent || '—';
@@ -351,6 +364,7 @@ export function toolbarView(page) {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'tb-row' + (source.classList.contains('active') ? ' on' : '');
+    row.dataset.source = member.id;
     const glyph = source.querySelector('svg');
     row.innerHTML = (glyph ? glyph.outerHTML : clusterSvg('more')) +
         '<span>' + label + '</span>' +
@@ -369,7 +383,7 @@ export function toolbarView(page) {
         .forEach((n) => n.setAttribute('aria-expanded', 'false'));
   }
 
-  return { buildToolbarClusters, closeFoldMenus, layoutToolbar };
+  return { buildToolbarClusters, closeFoldMenus, layoutToolbar, refreshFoldMenus };
 }
 
 if (typeof window !== 'undefined') {

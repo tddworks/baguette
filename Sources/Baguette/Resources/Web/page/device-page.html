@@ -637,7 +637,11 @@
      disable them until the stream is up. The back link, theme
      toggle and sidebar-view toggle stay reachable: those are how the
      user leaves a device that won't boot. */
+  /* The controls live in the toolbar's clusters and fold menus once it is
+     built (the strip they started in is gone), so the gate is theirs. */
   #simNativeView[data-power] #nativeToolScroll,
+  #simNativeView[data-power] .tb-cluster,
+  #simNativeView[data-power] .tb-fold,
   #simNativeView[data-power] #nativeFormatPicker {
     opacity: 0.35;
     pointer-events: none;
@@ -1044,8 +1048,9 @@
     #simNativeView #nativeStatus { display: none; }
     #simNativeView .top-bar { gap: 8px; }
   }
+  /* The codec picker stays: where it goes when the row is narrow (inline,
+     or in the folded Stream menu) is the toolbar planner's call. */
   @media (max-width: 420px) {
-    #simNativeView .fmt-picker { display: none; }
     #simNativeView .tb-label .tb-name { max-width: 16ch; }
   }
 
@@ -3489,7 +3494,7 @@
         <span>App Switcher</span>
       </button>
       <button class="hh-item" type="button" role="menuitem"
-              data-action="handheldAction" data-arg="rotate">
+              data-action="handheldAction" data-arg="rotate" data-needs="orientation">
         <!-- A plain clockwise arrow: at this size the toolbar's
              phone-over-arc glyph reads as a microphone. -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"

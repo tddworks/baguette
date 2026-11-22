@@ -197,11 +197,16 @@ export function handheldView(page) {
    * acting like the simulator. The browser drops the lock whenever the
    * page is hidden, so it is taken again each time the page comes back.
    */
+  let wakeLockAsked = false;
   async function holdScreenAwake() {
-    if (!handheld || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    if (!handheld || wakeLock || wakeLockAsked || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    wakeLockAsked = true;
     try {
-      wakeLock = await navigator.wakeLock.request('screen');
+      const lock = await navigator.wakeLock.request('screen');
+      // Handheld ended while the lock was being granted: it isn't ours to keep.
+      if (handheld) wakeLock = lock; else lock.release().catch(() => {});
     } catch (_) { /* refused (low battery, no gesture yet) — the screen may dim */ }
+    wakeLockAsked = false;
   }
 
   function releaseScreenAwake() {
@@ -281,6 +286,14 @@ export function handheldView(page) {
     if (handheldButtonWired || !fab || !button) return;
     handheldButtonWired = true;
     let press = null;
+    // A drag ends in a click too; that one isn't a press of the button.
+    let swallowClick = false;
+    // Activation — a tap, the keyboard, assistive tech — opens the menu.
+    fab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (swallowClick) { swallowClick = false; return; }
+      setHandheldMenu(true);
+    });
     fab.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -303,10 +316,8 @@ export function handheldView(page) {
       const was = press;
       press = null;
       fab.removeAttribute('data-dragging');
-      if (!was.dragging) {
-        setHandheldMenu(true);
-        return;
-      }
+      if (!was.dragging) return;   // a tap: its click opens the menu
+      swallowClick = true;
       const geometry = handheldButtonGeometry();
       const spot = button.rest({
         x: e.clientX - was.dx + HANDHELD_BUTTON_SIZE / 2,
@@ -318,11 +329,22 @@ export function handheldView(page) {
       wakeHandheldButton();
     };
     fab.addEventListener('pointerup', lift);
-    fab.addEventListener('pointercancel', lift);
+    // The browser took the press away: nothing was pressed, and the button
+    // goes back where it was.
+    fab.addEventListener('pointercancel', (e) => {
+      if (!press || e.pointerId !== press.id) return;
+      press = null;
+      fab.removeAttribute('data-dragging');
+      placeHandheldButton();
+    });
   }
 
-  /** Open (or close) the menu over its scrim. */
+  /** Open (or close) the menu over its scrim — offering only what the
+   *  device can do (an item's `data-needs`: a Mac share doesn't turn). */
   function setHandheldMenu(open) {
+    document.querySelectorAll('#nativeHandheldUI [data-needs]').forEach((item) => {
+      item.hidden = !page.device.can(item.dataset.needs);
+    });
     const ui = document.getElementById('nativeHandheldUI');
     if (!ui) return;
     ui.setAttribute('data-open', open ? 'true' : 'false');

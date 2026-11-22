@@ -74,7 +74,9 @@ export function captureControls(page) {
 
   function mountCaptureUI() {
     const host = document.getElementById('nativeCaptureSize');
-    if (host && window.CaptureSizeMenu && !captureMenu) {
+    // The menu reads the size and settings vocabulary as it's made: all three, or no menu.
+    const B = window.Baguette || {};
+    if (host && window.CaptureSizeMenu && B._CaptureSettings && B._CaptureSize && !captureMenu) {
       captureMenu = new window.CaptureSizeMenu({
         storageKey: 'asc.capture.native',
         // Three controls that only make sense in 2D — see

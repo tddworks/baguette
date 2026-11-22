@@ -98,7 +98,7 @@ export function companionScreens(page) {
     return (el && el.dataset.frameBrand) || 'plain';
   }
 
-  async function ensureCarPlayFrameMounted() {
+  async function ensureCarPlayFrameMounted(generation) {
     const anchor = document.getElementById('nativeCarPlayFrame');
     if (!anchor) return null;
     const B = window.Baguette;
@@ -114,6 +114,8 @@ export function companionScreens(page) {
     }
     try {
       const packed = await B._CarPlayFrameRegistry.load(resolveCarPlayBrand());
+      // A newer start (or a close) came while the chrome loaded: its frame stays.
+      if (generation !== carplayGeneration) return null;
       if (carplayFrame) carplayFrame.detach();
       carplayFrame = new B._CarPlayFrame(packed.definition, {
         assetBaseUrl: packed.assetBaseUrl,
@@ -131,7 +133,7 @@ export function companionScreens(page) {
     if (carplaySession) { try { carplaySession.stop(); } catch (_) {} carplaySession = null; }
     if (!window.StreamSession) return;
 
-    const ports = await ensureCarPlayFrameMounted();
+    const ports = await ensureCarPlayFrameMounted(generation);
     // A newer start (or a pane close) overtook us while the chrome
     // loaded; it owns the canvas and the session now, so stand down.
     if (generation !== carplayGeneration) return;
@@ -334,8 +336,8 @@ export function companionScreens(page) {
 
   /// The page is going: every companion lets go.
   function detach() {
-    try { if (carplaySession) carplaySession.stop(); } catch (_) { /* ignore */ }
-    try { if (carplayScreen) carplayScreen.detach(); } catch (_) { /* ignore */ }
+    // Retires a start still waiting on its chrome, and stops what's running.
+    try { stopCarPlaySession(); } catch (_) { /* ignore */ }
     try { if (carplayFrame) carplayFrame.detach(); } catch (_) { /* ignore */ }
     carplayFrame = null;
     try { if (watchSession) watchSession.stop(); } catch (_) { /* ignore */ }
