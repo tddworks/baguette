@@ -8,8 +8,10 @@ enum HostEvent: Equatable, Sendable {
     case mouseDragged(Point)
     case mouseUp(Point)
     /// Content scrolls by `deltaX` / `deltaY` points; positive is up / left,
-    /// the window server's sense.
-    case scroll(deltaX: Double, deltaY: Double)
+    /// the window server's sense. At a point the scroll lands on the window
+    /// there (and the pointer moves there, as for a click); with none, on the
+    /// window under the pointer.
+    case scroll(at: Point?, deltaX: Double, deltaY: Double)
     /// A virtual key code going down or up, with the modifiers held as it does.
     case key(code: UInt16, down: Bool, held: Set<KeyModifier>)
     /// Text typed as it is, whatever its script.
@@ -20,8 +22,8 @@ enum HostEvent: Equatable, Sendable {
 /// What a gesture on one Mac display becomes: the events it is, placed on the
 /// display at `bounds` (global points). A point arrives in device points
 /// beside the size it was measured in, and lands at the same fraction of the
-/// display. The Mac has one pointer: a finger is the mouse, and there is no
-/// second one.
+/// display. The Mac has one pointer: a finger is the mouse. Two fingers are
+/// a trackpad's: moving together they scroll.
 struct DisplayEvents: Equatable, Sendable {
     /// The longest a piece of typed text a keyboard event carries, in UTF-16.
     static let textPiece = 20
@@ -58,7 +60,22 @@ struct DisplayEvents: Equatable, Sendable {
     /// A browser's wheel moves the view down for a positive `deltaY`; the
     /// window server scrolls content up for a positive one.
     func scroll(deltaX: Double, deltaY: Double) -> [HostEvent] {
-        [.scroll(deltaX: -deltaX, deltaY: -deltaY)]
+        [.scroll(at: nil, deltaX: -deltaX, deltaY: -deltaY)]
+    }
+
+    /// Two fingers moving together scroll the content under them, by how far
+    /// their midpoint moved on the display, as on a trackpad — at where the
+    /// midpoint is now. A pinch — the fingers spreading about a still
+    /// midpoint — scrolls nothing.
+    func twoFingerScroll(from: (Point, Point), to: (Point, Point), size: Size) -> [HostEvent] {
+        let start = midpoint(from), end = midpoint(to)
+        let dx = (end.x - start.x) / size.width * bounds.size.width
+        let dy = (end.y - start.y) / size.height * bounds.size.height
+        return dx == 0 && dy == 0 ? [] : [.scroll(at: place(end, size), deltaX: dx, deltaY: dy)]
+    }
+
+    private func midpoint(_ fingers: (Point, Point)) -> Point {
+        Point(x: (fingers.0.x + fingers.1.x) / 2, y: (fingers.0.y + fingers.1.y) / 2)
     }
 
     /// Each modifier down, the key down, held, up, then each modifier up in

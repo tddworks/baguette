@@ -14,6 +14,11 @@ set -eu
 src=$(cd "$(dirname "$0")/mac-frames" && pwd)
 dest=${1:-"$HOME/Library/Application Support/baguette/Frames"}
 mkdir -p "$dest"
+if [ "$(cd "$dest" && pwd)" = "$src" ]; then
+    echo "the argument is where to install the frames, not where they come from;" >&2
+    echo "run it with none to install into ~/Library/Application Support/baguette/Frames" >&2
+    exit 64
+fi
 
 for picture in "$src"/*.png; do
     cp "$picture" "$dest/"

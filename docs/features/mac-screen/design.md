@@ -59,7 +59,14 @@ posts them at `.cghidEventTap` and sleeps on each pause.
   US-ASCII for every device; lifting that for the Mac is a change to that law,
   not to this family.
 - **Scroll.** Pixel units, deltas negated: a browser's positive `deltaY` moves
-  the view down, the window server's scrolls content up.
+  the view down, the window server's scrolls content up. A scroll event has no
+  target of its own: the window server gives it to the window under the
+  pointer. A two-finger move (`touch2-*`, a pan path — what the page turns the
+  wheel into) scrolls by its midpoint's travel and carries the midpoint as the
+  event's `location`, which routes it there and moves the pointer there, as a
+  click does. Measured: posted with a location at `.cghidEventTap`, the
+  pointer jumped from (649, 1003) to the location. A wire `scroll` has no
+  point and lands under the pointer.
 - **Trust.** `AXIsProcessTrustedWithOptions` with the prompt; untrusted, the
   window server would drop the events silently, so nothing is posted and the
   gesture answers false. The prompt key is spelled out because Swift 6 won't
@@ -102,5 +109,5 @@ window; `type`, a held key and ⌘A + Delete reached it; a browser `deltaY` of
   id scheme of their own.
 - **Listed by default** — a display shows and drives the Mac itself; it's
   reached only through `serve --share-mac`, `list --mac` or its UUID.
-- **Pinch as magnify** — `CGEvent` has no public gesture events; two-finger
-  gestures answer false.
+- **Pinch as magnify** — `CGEvent` has no public gesture events; a pinch
+  (fingers spreading about a still midpoint) scrolls nothing.

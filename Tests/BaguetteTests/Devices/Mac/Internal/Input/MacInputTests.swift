@@ -39,13 +39,34 @@ struct MacInputTests {
         #expect(!input(on: Desktop(accepts: false)).tap(at: Point(x: 5, y: 6), size: size, duration: 0, edge: nil))
     }
 
-    @Test func `should send nothing for a second finger the Mac has no pointer for`() {
+    @Test func `should scroll the Mac as two fingers move together`() {
         let desktop = Desktop()
         let mac = input(on: desktop)
-        #expect(!mac.touch2(phase: .down, first: Point(x: 1, y: 1), second: Point(x: 2, y: 2), size: size))
-        #expect(!mac.twoFingerPath(start1: Point(x: 1, y: 1), end1: Point(x: 2, y: 2),
-                                   start2: Point(x: 3, y: 3), end2: Point(x: 4, y: 4), size: size, duration: 0))
-        #expect(desktop.posted.isEmpty)
+        #expect(mac.touch2(phase: .down, first: Point(x: 100, y: 500), second: Point(x: 300, y: 500), size: size))
+        #expect(mac.touch2(phase: .move, first: Point(x: 100, y: 480), second: Point(x: 300, y: 480), size: size))
+        #expect(mac.touch2(phase: .move, first: Point(x: 100, y: 470), second: Point(x: 300, y: 470), size: size))
+        #expect(mac.touch2(phase: .up, first: Point(x: 100, y: 470), second: Point(x: 300, y: 470), size: size))
+        #expect(desktop.posted == [.scroll(at: Point(x: 200, y: 480), deltaX: 0, deltaY: -20),
+                                   .scroll(at: Point(x: 200, y: 470), deltaX: 0, deltaY: -10)])
+    }
+
+    @Test func `should start each two-finger scroll afresh after the fingers lift`() {
+        let desktop = Desktop()
+        let mac = input(on: desktop)
+        _ = mac.touch2(phase: .down, first: Point(x: 0, y: 0), second: Point(x: 10, y: 0), size: size)
+        _ = mac.touch2(phase: .up, first: Point(x: 0, y: 0), second: Point(x: 10, y: 0), size: size)
+        // A quarter of the way down: a point the display's scale keeps exact.
+        _ = mac.touch2(phase: .down, first: Point(x: 0, y: 0), second: Point(x: 10, y: 0), size: size)
+        _ = mac.touch2(phase: .move, first: Point(x: 0, y: 270), second: Point(x: 10, y: 270), size: size)
+        #expect(desktop.posted == [.scroll(at: Point(x: 5, y: 270), deltaX: 0, deltaY: 270)])
+    }
+
+    @Test func `should scroll the Mac along a two-finger path`() {
+        let desktop = Desktop()
+        #expect(input(on: desktop).twoFingerPath(
+            start1: Point(x: 0, y: 100), end1: Point(x: 0, y: 40),
+            start2: Point(x: 50, y: 100), end2: Point(x: 50, y: 40), size: size, duration: 0.2))
+        #expect(desktop.posted == [.scroll(at: Point(x: 25, y: 40), deltaX: 0, deltaY: -60)])
     }
 
     @Test func `should press a key on the Mac's keyboard`() {
@@ -66,6 +87,6 @@ struct MacInputTests {
         let mac = input(on: desktop)
         #expect(mac.scroll(deltaX: 0, deltaY: 10))
         #expect(mac.type("ok"))
-        #expect(desktop.posted == [.scroll(deltaX: 0, deltaY: -10), .text("ok")])
+        #expect(desktop.posted == [.scroll(at: nil, deltaX: 0, deltaY: -10), .text("ok")])
     }
 }

@@ -17,9 +17,11 @@ struct CGEventHostEvents: HostEvents {
             case let .mouseDown(at): mouse(.leftMouseDown, at, source)
             case let .mouseDragged(at): mouse(.leftMouseDragged, at, source)
             case let .mouseUp(at): mouse(.leftMouseUp, at, source)
-            case let .scroll(dx, dy):
-                CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                        wheel1: Int32(dy.rounded()), wheel2: Int32(dx.rounded()), wheel3: 0)?.post(tap: .cghidEventTap)
+            case let .scroll(at, dx, dy):
+                let scroll = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
+                                     wheel1: Int32(dy.rounded()), wheel2: Int32(dx.rounded()), wheel3: 0)
+                if let at { scroll?.location = CGPoint(x: at.x, y: at.y) }
+                scroll?.post(tap: .cghidEventTap)
             case let .key(code, down, held):
                 let key = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
                 key?.flags = flags(held)

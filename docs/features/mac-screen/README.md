@@ -47,10 +47,10 @@ none; `CGDisplayBounds` has them) or the stream's frame size both work.
 | Gesture | On the Mac |
 |---|---|
 | `tap` · `swipe` · `touch1-*` | a left click · a drag · press / drag / release |
-| `scroll` | the scroll wheel, in pixels |
+| `scroll` | the scroll wheel, in pixels, on the window under the pointer (the envelope has no point) |
 | `key` | the Mac's key, with its modifiers held around it |
 | `type` | the text, typed as it is; the wire takes US-ASCII only, as on every device ([keyboard](../keyboard/design.md)) |
-| `touch2-*` · `pinch` · two-finger paths | `ok: false`: the Mac has one pointer |
+| `touch2-*` · `pan` · two-finger paths | a trackpad's two-finger scroll, on the window under the fingers — what the page's mouse wheel sends; a pinch scrolls nothing |
 | `button` | refused: a display has no buttons |
 
 ```json
