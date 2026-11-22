@@ -2,26 +2,29 @@
 // (`serve --share-mac`, /mac/shares): what it asks for, where the shared
 // display opens, and when the device has turned enough to remake it. The
 // shape itself is the server's (`SharedScreenShape`); this only reports the
-// screen.
-(function (root) {
-  'use strict';
+// screen. The Mac family's (docs/features/web-page/design.md).
 
-  /** How far a side may change, as a browser bar comes and goes, and still be the same screen. */
-  const WOBBLE = 0.08;
+/** How far a side may change, as a browser bar comes and goes, and still be the same screen. */
+const WOBBLE = 0.08;
 
-  function viewerName(userAgent) {
-    const ua = String(userAgent || '');
-    if (/iPad/.test(ua)) return 'iPad';
-    if (/iPhone/.test(ua)) return 'iPhone';
-    if (/Android/.test(ua)) return 'Android';
-    if (/Macintosh/.test(ua)) return 'Mac';
-    return 'browser';
-  }
+function viewerName(userAgent) {
+  const ua = String(userAgent || '');
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Macintosh/.test(ua)) return 'Mac';
+  return 'browser';
+}
 
+/**
+ * A page's share: the requests it makes, and whether it is leaving or only
+ * reloading itself — which is that page's own state, so each page makes one.
+ */
+export function pageShare() {
   /** Set while the page reloads itself, so that reload doesn't end the share. */
   let keeping = false;
 
-  const MacShare = {
+  return {
     /** A shared page's format once its WebRTC offer is refused: the socket's
      *  H.264, which `StreamFormat` swaps for MJPEG where it can't decode. */
     afterRefusal: 'avcc',
@@ -82,7 +85,13 @@
       return change(before.width, now.width) > WOBBLE || change(before.height, now.height) > WOBBLE;
     },
   };
+}
 
-  root.Baguette = root.Baguette || {};
-  root.Baguette._MacShare = MacShare;
-})(window);
+/** This page's share. */
+export const MacShare = pageShare();
+
+// The old scripts reach it here until they're modules too (design §6).
+if (typeof window !== 'undefined') {
+  window.Baguette = window.Baguette || {};
+  window.Baguette._MacShare = MacShare;
+}

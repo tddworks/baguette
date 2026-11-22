@@ -282,7 +282,7 @@ Devices/Mac/    roles the server holds: ScreenShares · PointerShapes
                      · CoreGraphicsDisplayConfiguration · PointerShapeWatch · ClearPicture
 Device/         Abilities/Pointer (Pointer role, Hover) · Abilities/Touch/PendingGestures · Chrome/MacFrame
 Resources/Web/  local-pointer.js · pointer-shape.js · baguette/gestures/hover-gesture-source.js
-                · mac-share.js + mac-share.html · mac-frame-choices.js
+                · families/mac/share.js (an ES module) + mac-share.html · mac-frame-choices.js
 ```
 
 ---

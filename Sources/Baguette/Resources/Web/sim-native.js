@@ -31,14 +31,12 @@
   window.__baguetteNativeMode = true;
   // One page for every device. What it shows follows the device: each
   // control only when the device has the ability it drives
-  // (`deviceAbilities`, from /devices/<id>/device.json), and a borrowed
-  // bezel plus a badge for anything but a simulator (`deviceMode`) — a
-  // phone, an emulator — whose model has no DeviceKit chrome of its own. Both are read at boot; the
-  // URL's tree decides neither.
-  let deviceMode = !!(window.BaguetteTarget && window.BaguetteTarget.isDevice);
+  // (`deviceAbilities`, from /devices/<id>/device.json), and how it is
+  // framed, described, badged and shared by its family's roles (`device`,
+  // from `Families` — families/families.js, the one place that reads a
+  // device's kind). Both are read at boot; the URL's tree decides neither.
+  let device = null;
   let deviceAbilities = null;
-  // The listed platform: a Mac display (`macOS`) picks its frame from the Mac frames.
-  let devicePlatform = '';
   const can = (ability) => deviceAbilities === null
       || window.Baguette._DeviceAbilities.has(deviceAbilities, ability);
 
@@ -341,12 +339,22 @@
     //    The SDK definition gives us the bezel; /simulators.json gives
     //    us the human-readable identity that sits above it.
     const listing = await fetchDeviceListing(udid);
-    if (listing) {
-      deviceAbilities = listing.abilities || [];
-      deviceMode = !!(listing.kind && listing.kind.reality !== 'simulated');
-      devicePlatform = (listing.kind && listing.kind.platform) || '';
-    }
-    const meta = await fetchDeviceMeta(udid, listing);
+    if (listing) deviceAbilities = listing.abilities || [];
+    device = window.Baguette._Families.device(listing, {
+      id: udid,
+      wire: {
+        path: (id, suffix) => window.BaguetteTarget.path(id, suffix),
+        listing: (id) => fetchDeviceListing(id),
+        simulators: async () => {
+          const r = await fetch('/simulators.json', { cache: 'no-store' });
+          if (!r.ok) throw new Error(String(r.status));
+          return r.json();
+        },
+      },
+      storage: localStorage,
+      address: location.search,
+    });
+    const meta = await device.describe();
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
     const osEl = document.getElementById('nativeDeviceOS');
@@ -368,15 +376,9 @@
     //    the model has no DeviceKit chrome. Without the catch the whole
     //    bootstrap unwinds and the tab sits blank; the power card says
     //    so instead.
-    // A physical device borrows a user-picked DeviceKit chrome; the
-    // pick is remembered per device and rides `?chrome=` into the
-    // definition route.
-    const chromePick = deviceMode
-        ? localStorage.getItem('baguette.twin.chrome.' + udid) : null;
-    const deviceDefinitionURL = deviceMode
-        ? window.BaguetteTarget.path(udid, '/definition.json')
-            + (chromePick ? '?chrome=' + encodeURIComponent(chromePick) : '')
-        : undefined;
+    // How it is framed is its family's: a simulator's own bezel, or the
+    // chrome its user picked, riding `?chrome=` into the definition route.
+    const deviceDefinitionURL = device.frame.definition;
     // A foldable is a book, and its book is Apple's own 3D model
     // (`V68.usdz`, the one Device Hub draws) posed by the hinge, with
     // both panels on its screens. Its main view is the live 3D stream
@@ -397,7 +399,7 @@
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
-      if (deviceMode) {
+      if (device.frame.offersChromePicker) {
         // No chrome picked yet (or the pick stopped resolving) — offer
         // the choices instead of a dead end. The stream needs the
         // SDK's canvas, so nothing else can start until a pick lands.
@@ -1454,7 +1456,7 @@
     bootPollTimer = setTimeout(async () => {
       bootPollTimer = null;
       if (!powerCard || powerCard.getAttribute('data-phase') !== 'off') return;
-      const meta = await fetchDeviceMeta(udid);
+      const meta = await device.describe();
       if (!powerCard) return;
       if (isBooted(meta.state)) onBooted();
       else watchForExternalBoot();
@@ -1475,7 +1477,7 @@
         // CoreSimulator refuses a boot when the device is already
         // booted. If that's why this failed, the user got what they
         // wanted — go live instead of reporting an error.
-        const meta = await fetchDeviceMeta(udid);
+        const meta = await device.describe();
         if (isBooted(meta.state)) { onBooted(); return; }
         const body = await r.json().catch(() => null);
         renderPowerCard('off', (body && body.error) || ('boot failed (HTTP ' + r.status + ')'));
@@ -1492,7 +1494,7 @@
     const until = deadline || (Date.now() + BOOT_TIMEOUT_MS);
     bootPollTimer = setTimeout(async () => {
       if (!powerCard) return;            // card dismissed underneath us
-      const meta = await fetchDeviceMeta(udid);
+      const meta = await device.describe();
       if (isBooted(meta.state)) {
         onBooted();
         return;
@@ -1683,46 +1685,6 @@
     }
   }
 
-  async function fetchDeviceMeta(targetUdid, known) {
-    // Anything but a simulator is described by its own listing — read
-    // fresh unless just read: its name, its OS (or model) and whether it
-    // is running, as 'Booted' / 'Shutdown', the words the power card reads.
-    const listing = known || await fetchDeviceListing(targetUdid);
-    if (listing && listing.kind && listing.kind.reality !== 'simulated') {
-      return {
-        name: listing.name || 'Device',
-        runtime: listing.kind.os || listing.kind.model || '',
-        state: listing.state === 'ready' ? 'Booted' : 'Shutdown',
-      };
-    }
-    try {
-      const r = await fetch('/simulators.json', { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const json = await r.json();
-      const all = (json.running || []).concat(json.available || []);
-      const hit = all.find((d) => (d.id || d.udid) === targetUdid);
-      if (hit) {
-        return {
-          name: hit.name || 'Simulator',
-          runtime: hit.displayRuntime
-              || formatRuntime(hit.runtime || hit.os || ''),
-          // `SimulatorState.description` — "Booted" / "Shutdown" /
-          // "Booting" / "ShuttingDown" / "Creating". Absent only if
-          // the device vanished between page load and this fetch.
-          state: hit.state || '',
-        };
-      }
-    } catch (_) { /* fall through */ }
-    return { name: 'Simulator', runtime: '', state: '' };
-  }
-
-  function formatRuntime(raw) {
-    return String(raw || '')
-        .replace('com.apple.CoreSimulator.SimRuntime.', '')
-        .replace(/^iOS-/, 'iOS ')
-        .replace(/-/g, '.');
-  }
-
   // The format every surface in this page streams at — phone, CarPlay,
   // watch and the 3D panel alike. Companions used to be pinned to MJPEG
   // independently of the phone, which meant a session the user had set to
@@ -1734,8 +1696,7 @@
   /// does, leaving the saved choice for every other device alone.
   const SHARE_FORMAT_KEY = 'asc.shareFormat';
   function sharedMac() {
-    const MacShare = window.Baguette && window.Baguette._MacShare;
-    return MacShare && MacShare.fromAddress(location.search) ? MacShare : null;
+    return device && device.share ? window.Baguette._MacShare : null;
   }
   /** Reload this page — on a shared Mac's, keeping its share. */
   function reloadPage() {
@@ -2247,7 +2208,7 @@
   /// the server lists for it. The controls themselves already follow
   /// those abilities (`buildToolbarClusters`), for every device.
   function applyDeviceModeChrome() {
-    if (!deviceMode) return;
+    if (!device.badge) return;
     const osEl = document.getElementById('nativeDeviceOS');
     if (osEl && !document.getElementById('nativeDeviceBadge')) {
       const badge = document.createElement('span');
@@ -2261,7 +2222,7 @@
         'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
       osEl.insertAdjacentElement('afterend', badge);
     }
-    if (devicePlatform === 'macOS') mountMacFrameButton();
+    if (device.frame.offersMacFrames) mountMacFrameButton();
   }
 
   /// A Mac display shows with no frame until one is picked; this button
@@ -2911,9 +2872,10 @@
   /// again in the new shape and the page reloads onto it; leaving the page
   /// ends the share, and the display goes. The shape is the server's.
   function watchMacShare() {
-    const MacShare = window.Baguette && window.Baguette._MacShare;
-    const share = MacShare && MacShare.fromAddress(location.search);
+    // Only a share's page has one: the Mac family's role (`device.share`).
+    const share = device && device.share;
     if (!share) return;
+    const MacShare = window.Baguette._MacShare;
     const id = encodeURIComponent(share.id);
     const size = () => ({ width: window.innerWidth, height: window.innerHeight });
     let shown = size();

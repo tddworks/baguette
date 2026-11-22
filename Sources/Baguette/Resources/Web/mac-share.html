@@ -52,11 +52,10 @@
   </form>
   <p id="error" role="alert"></p>
 </main>
-<script src="/mac-share.js"></script>
-<script>
+<script type="module">
+  import { MacShare } from '/families/mac/share.js';
   (function () {
     'use strict';
-    const MacShare = window.Baguette._MacShare;
     const form = document.getElementById('share');
     const error = document.getElementById('error');
     form.addEventListener('submit', async (e) => {

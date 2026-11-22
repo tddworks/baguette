@@ -1,0 +1,83 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { Families } from '../../../Sources/Baguette/Resources/Web/families/families.js';
+
+// Each family builds the Device for its kind, with the roles its devices have
+// and no others; the page asks Families once and never reads the kind itself.
+
+const listing = (kind, extra = {}) => ({ id: 'D', name: 'Device', state: 'ready', abilities: ['screen'], kind, ...extra });
+const simulated = listing({ platform: 'iOS', reality: 'simulated', model: 'iPhone 17' });
+const phone = listing({ platform: 'iOS', reality: 'physical', model: 'iPhone 15 Pro', os: 'iOS 26.1' });
+const android = listing({ platform: 'android', reality: 'emulated', model: 'Pixel 9' });
+const mac = listing({ platform: 'macOS', reality: 'physical', model: 'Studio Display' }, { name: 'Studio Display' });
+
+/** The wire, played by the test: device paths, and the simulators the server lists. */
+const wire = {
+  path: (id, suffix) => '/devices/' + id + suffix,
+  simulators: async () => ({ running: [{ udid: 'D', name: 'iPhone 17', displayRuntime: 'iOS 26.4', state: 'Booted' }], available: [] }),
+};
+const storage = (picked = {}) => ({ getItem: (key) => picked[key] ?? null });
+const device = (l, opts = {}) => Families.device(l, { id: 'D', wire, storage: storage(opts.picked), address: opts.address || '' });
+
+test('should make a simulated device a simulator, framed by its own bezel', () => {
+  const sim = device(simulated);
+  assert.equal(sim.family, 'simulator');
+  assert.equal(sim.frame.definition, undefined);
+  assert.equal(sim.frame.offersChromePicker, false);
+  assert.equal(sim.badge, undefined);
+});
+
+test('should make the device a simulator when the server lists nothing for it', () => {
+  assert.equal(device(null).family, 'simulator');
+});
+
+test('should frame a phone on the cable in the chrome its user picked, offering the choice when there is none', () => {
+  const picked = device(phone, { picked: { 'baguette.twin.chrome.D': 'iPhone 15 Pro' } });
+  assert.equal(picked.family, 'phone');
+  assert.equal(picked.frame.definition, '/devices/D/definition.json?chrome=iPhone%2015%20Pro');
+  assert.equal(device(phone).frame.definition, '/devices/D/definition.json');
+  assert.equal(picked.frame.offersChromePicker, true);
+  assert.equal(picked.badge, true);
+});
+
+test('should frame an Android device as a phone is framed, as its own family', () => {
+  const droid = device(android);
+  assert.equal(droid.family, 'android');
+  assert.equal(droid.frame.offersChromePicker, true);
+  assert.equal(droid.frame.offersMacFrames, false);
+});
+
+test('should let a Mac display pick a Mac frame, and share it only on a share\'s page', () => {
+  const display = device(mac);
+  assert.equal(display.family, 'mac');
+  assert.equal(display.frame.offersMacFrames, true);
+  assert.equal(display.share, undefined);
+  const shared = device(mac, { address: '?handheld=1&share=D&room=moreSpace' });
+  assert.deepEqual(shared.share, { id: 'D', room: 'moreSpace' });
+});
+
+test('should keep a family\'s roles off every other family', () => {
+  for (const other of [simulated, phone, android]) assert.equal(device(other, { address: '?share=D' }).share, undefined);
+  for (const other of [simulated, phone, android]) assert.equal(device(other).frame.offersMacFrames, false);
+});
+
+test('should describe a simulator as the server lists its simulators', async () => {
+  assert.deepEqual(await device(simulated).describe(), { name: 'iPhone 17', runtime: 'iOS 26.4', state: 'Booted' });
+});
+
+test('should describe any other device by its own listing', async () => {
+  assert.deepEqual(await device(phone).describe(), { name: 'Device', runtime: 'iOS 26.1', state: 'Booted' });
+  assert.deepEqual(await device(mac).describe(), { name: 'Studio Display', runtime: 'Studio Display', state: 'Booted' });
+});
+
+test('should describe a device as it is listed now, not as it was when the page opened', async () => {
+  const fresh = { ...wire, listing: async () => ({ ...phone, state: 'unavailable' }) };
+  const now = Families.device(phone, { id: 'D', wire: fresh, storage: storage() });
+  assert.equal((await now.describe()).state, 'Shutdown');
+});
+
+test('should answer what the device can do from the abilities it is listed with', () => {
+  assert.equal(device(mac).can('screen'), true);
+  assert.equal(device(mac).can('orientation'), false);
+  assert.equal(device(null).can('screen'), false);
+});
