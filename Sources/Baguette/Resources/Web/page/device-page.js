@@ -198,7 +198,7 @@
     }
 
     wireActions();
-    wireToolbarScroll();
+    toolbarLayout().wireToolbarScroll();
     wireUnload();
     // A share's page follows its viewer: the Mac family's role.
     if (device.share) device.share.follow(pageBrowser());
@@ -501,7 +501,7 @@
   // stayed hidden over a strip that had just started overflowing —
   // leaving a mouse user no way to reach the icons that had scrolled
   // out of it.
-  let refreshToolbarScroll = () => {};
+  const refreshToolbarScroll = () => toolbarLayout().refresh();
 
   // ── Toolbar ──────────────────────────────────────────────────────
   // The toolbar's clusters and fold menus (page/internal/toolbar-view.js), made on
@@ -513,94 +513,15 @@
     }));
   }
 
-  /// A device that isn't a simulator has a badge saying what it can do, from the abilities
-  /// the server lists for it. The controls themselves already follow
-  /// those abilities (`buildToolbarClusters`), for every device.
-  function applyDeviceModeChrome() {
-    if (!device.badge) return;
-    const osEl = document.getElementById('nativeDeviceOS');
-    if (osEl && !document.getElementById('nativeDeviceBadge')) {
-      const badge = document.createElement('span');
-      badge.id = 'nativeDeviceBadge';
-      const words = window.Baguette._DeviceBadge.of(deviceAbilities || []);
-      badge.textContent = words.text;
-      badge.title = words.title;
-      badge.style.cssText =
-        'margin-left:8px;padding:2px 8px;border:1px solid #fde68a;' +
-        'border-radius:99px;background:#fef3c7;color:#92400e;' +
-        'font-size:10.5px;font-weight:700;letter-spacing:.03em;white-space:nowrap';
-      osEl.insertAdjacentElement('afterend', badge);
-    }
-    if (device.frame.picker) device.frame.picker.mount(document.getElementById('nativeDeviceBadge'));
-  }
-
-  /**
-   * Start the floating panels (status bar, network, defaults, …) below
-   * the toolbar wherever it actually is.
-   *
-   * The toolbar rides the device's vertically centred column, so a
-   * window taller than the device needs pushes it down past the panels'
-   * old fixed `top: 84px` and the bar covered each panel's first row.
-   * Watching the view as well as the bar catches a window resize that
-   * re-centres the column without changing the bar's own size.
-   */
-  function placeFloatingPanels() {
-    const view = document.getElementById('simNativeView');
-    const bar = document.querySelector('#simNativeView .top-bar');
-    if (!view || !bar || typeof ResizeObserver === 'undefined') return;
-    const place = () => {
-      const below = Math.round(bar.getBoundingClientRect().bottom) + 24;
-      view.style.setProperty('--nv-panel-top', Math.max(84, below) + 'px');
-    };
-    const observer = new ResizeObserver(place);
-    observer.observe(view);
-    observer.observe(bar);
-    // The device frame settling (bezel image, rotation) moves the bar
-    // without resizing either element.
-    const frame = document.getElementById('nativeDeviceFrame');
-    if (frame) observer.observe(frame);
-    place();
-  }
-
-  function wireToolbarScroll() {
-    if (!toolbar().buildToolbarClusters()) return;
-    applyDeviceModeChrome();
-
-    document.addEventListener('click', (event) => {
-      const btn = event.target.closest('#simNativeView .tb-fold-btn');
-      if (btn) {
-        const pop = btn.parentElement.querySelector('.tb-fold-pop');
-        const open = btn.getAttribute('aria-expanded') === 'true';
-        toolbar().closeFoldMenus();
-        if (!open) {
-          pop.hidden = false;
-          btn.setAttribute('aria-expanded', 'true');
-        }
-        return;
-      }
-      const summary = event.target.closest('#simNativeView .tb-acc > summary');
-      if (summary) {
-        // `name=` handles this in Chrome 120+/Safari 17.4+; do it by
-        // hand so older engines behave the same.
-        const self = summary.parentElement;
-        setTimeout(() => {
-          if (!self.open) return;
-          self.parentElement.querySelectorAll('.tb-acc').forEach((d) => {
-            if (d !== self) d.open = false;
-          });
-        }, 0);
-        return;
-      }
-      if (!event.target.closest('#simNativeView .tb-fold')) toolbar().closeFoldMenus();
-    });
-
-    const layoutToolbar = () => toolbar().layoutToolbar();
-    refreshToolbarScroll = layoutToolbar;
-    window.addEventListener('resize', layoutToolbar);
-    placeFloatingPanels();
-    // Re-measure once layout settles (fonts, device frame, format pills).
-    requestAnimationFrame(layoutToolbar);
-    setTimeout(layoutToolbar, 400);
+  // toolbarLayout (page/internal/toolbar-layout.js), made on first use — after the modules have loaded — over
+  // the page's port.
+  let toolbarLayoutUI = null;
+  function toolbarLayout() {
+    return toolbarLayoutUI || (toolbarLayoutUI = window.Baguette._ToolbarLayout.toolbarLayout({
+      get device() { return device; },
+      get deviceAbilities() { return deviceAbilities; },
+      toolbar: (...args) => toolbar(...args),
+    }));
   }
 
   // The page's actions (page/internal/actions.js): each control names its
