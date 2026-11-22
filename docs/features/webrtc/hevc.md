@@ -132,10 +132,28 @@ then:
 
 | Slice | What | Pins |
 |---|---|---|
-| 4 | `VideoToolboxSession` makes an HEVC session; `VideoEncoder` told its codec; parameter sets from the format description | a `.system`-tagged test against the real encoder: a frame, three parameter sets |
+| 4a | `CompressedFrame` carries `parameterSets` (2 or 3) instead of `sps` / `pps`, read for its codec from the format description (`…GetHEVCParameterSetAtIndex` for H.265) | the encoder's tests, unchanged in behaviour for H.264 |
+| 4b | the keyframe's parameter sets reach the viewer for H.265 — see *Found while building* below | the viewer's tests: an H.265 keyframe leaves after VPS, SPS, PPS |
+| 4c | the encoder told its codec: `open(codec:)`, and its profile per codec (H.264 High / HEVC Main, auto level) in the tuning; the viewer passes the session's codec to its stream | the encoder's tests against `MockCompressionSession` |
+| 4d | `VideoToolboxSession` makes an HEVC session | a `.system`-tagged test against the real encoder: a frame, three parameter sets |
 | 5 | wiring: `?codec=` from the WHEP request through `WebRTCViewers` to the viewer's stream and sender | through `InProcessServer`: `?codec=h265` with an H.265 offer answers `H265/90000`; without it, `H264/90000` |
 | 6 | **measure**: the same scene, H.264 vs H.265 — the LAN, then a phone on cellular over Tailscale | the bitrate congestion control settles on, text sharpness at it, glass-to-glass latency, recovery after induced loss |
 | 7 | only if 6 wins: `auto` prefers H.265, the page asks `auto`; docs + CHANGELOG | — |
+
+### Found while building (2026-11-22)
+
+H.264 runs deeper than the session's codec type. The encoder packs a
+keyframe's SPS / PPS into an **AVC decoder configuration record** (`avcC`) for
+the stream's description envelope, and the WebRTC viewer unpacks that record
+to hand the kit its parameter sets (`AVCCParameterSets.parse(avcC:)`). For
+H.265 the description must carry VPS / SPS / PPS — two ways:
+
+| | How | Cost |
+|---|---|---|
+| **(a)** an `hvcC` record (ISO/IEC 14496-15 §8.3.3) | symmetric with `avcC` | its header needs the SPS's profile / tier / level, read out of the bitstream — real parsing, for a record only baguette itself reads |
+| **(b)** the parameter sets to the viewer as they are, for H.265 | no record round trip; the socket path stays H.264, so no client outside baguette ever sees it | the viewer's stream hands over parameter sets, not a record, when its codec is H.265 |
+
+Leaning (b); decided before slice 4b.
 
 ## 6 · Open questions
 
