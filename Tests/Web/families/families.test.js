@@ -119,3 +119,11 @@ test('should give a simulator its companion screens, and no other family any', (
   assert.equal(typeof device(simulated).companions.mount, 'function');
   for (const other of [phone, android, mac]) assert.equal(device(other).companions, undefined);
 });
+
+test('should turn a simulator through the server, a quarter clockwise each step of its cycle', async () => {
+  const turned = [];
+  const sim = Families.device(simulated, { id: 'D', devices: { ...devices, turn: async (id, value) => turned.push([id, value]) }, storage: storage() });
+  assert.deepEqual(sim.orientation.cycle, ['portrait', 'landscape-left', 'portrait-upside-down', 'landscape-right']);
+  await sim.orientation.turn('landscape-left');
+  assert.deepEqual(turned, [['D', 'landscape-left']]);
+});

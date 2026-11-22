@@ -18,8 +18,13 @@ export function simulator(listing, { id, devices }) {
     family: 'simulator',
     frame: { definition: undefined },
     power: { boot: () => devices.boot(id) },
-    /** It turns: input drawn turned goes back to portrait before it's sent. */
-    orientation: { toPortrait },
+    /** It turns: a quarter clockwise each step of its cycle, on the server;
+     *  input drawn turned goes back to portrait before it's sent. */
+    orientation: {
+      cycle: ['portrait', 'landscape-left', 'portrait-upside-down', 'landscape-right'],
+      turn: (value) => devices.turn(id, value),
+      toPortrait,
+    },
     /** Its other screens: the CarPlay display and the paired watch, beside it. */
     companions: { mount: (page) => companionScreens(page) },
     /** Its name, runtime and state, from the server's list of simulators. */

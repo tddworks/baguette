@@ -6,6 +6,7 @@
 //   definition(id)           → its definition (bezel, screen)
 //   definitionURL(id, chrome)→ where its definition is, in a borrowed chrome
 //   boot(id)                 → { ok, error }
+//   turn(id, value)          → turned to an orientation
 //   simulators()             → the simulators the server lists
 //   framesFitting(w, h)      → the Mac frames that fit a screen of that size
 
@@ -30,6 +31,8 @@ export function serverDevices(fetch) {
       const body = await r.json().catch(() => null);
       return { ok: false, error: (body && body.error) || ('boot failed (HTTP ' + r.status + ')') };
     },
+    /** Turn the device to `value` (a `DeviceOrientation` wire name); best-effort. */
+    turn: (id, value) => fetch(path(id, '/orientation?value=' + encodeURIComponent(value)), { method: 'POST' }).catch(() => {}),
     simulators: () => json('/simulators.json'),
     async framesFitting(width, height) {
       const fit = await json('/mac-frames.json?width=' + width + '&height=' + height);

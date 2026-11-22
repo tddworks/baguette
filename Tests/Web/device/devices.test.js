@@ -48,3 +48,9 @@ test('should read a device\'s definition', async () => {
   const { devices } = server({ '/devices/D/definition.json': { ok: true, body: { screen: { rect: { width: 1 } } } } });
   assert.deepEqual(await devices.definition('D'), { screen: { rect: { width: 1 } } });
 });
+
+test('should turn a device to an orientation', async () => {
+  const { asked, devices } = server();
+  await devices.turn('D', 'landscape-left');
+  assert.deepEqual(asked, ['POST /devices/D/orientation?value=landscape-left']);
+});

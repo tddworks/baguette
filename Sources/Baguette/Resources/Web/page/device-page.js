@@ -53,115 +53,16 @@
   let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
 
-  // CW rotation cycle. Two flavours — iPhone UIKit refuses
-  // `portrait-upside-down` for apps that don't opt in (which is
-  // basically every Apple-shipped iPhone app), so the cycle skips
-  // it on phones to keep every click visibly productive. iPads
-  // and other tablet-class devices honour all four. The Domain /
-  // CLI / HTTP layers still accept `portrait-upside-down`
-  // unconditionally — this trim is UI ergonomics only.
-  // Starting index is `0` (portrait); we don't probe the guest
-  // because the GSEvent path is write-only.
-  // Every wire-name `DeviceOrientation` accepts is reachable from
-  // the rotate-button cycle, on phones and tablets alike. The
-  // order matches a true 90°-clockwise visual rotation per click:
-  //   portrait              (CSS rotate(0))
-  //   landscape-left        (CSS rotate(90deg)   — home on left of visual)
-  //   portrait-upside-down  (CSS rotate(180deg))
-  //   landscape-right       (CSS rotate(-90deg)  — home on right of visual)
-  // Names refer to *home-button position* on the rotated bezel
-  // (Apple's UIDeviceOrientation convention), not direction of
-  // rotation — which is why `landscape-left` comes first in a
-  // clockwise cycle. iPhone UIKit silently ignores
-  // `portrait-upside-down` for apps that don't declare the
-  // interface orientation; the cycle still exposes it so apps
-  // that *do* honour it are reachable.
-  const ORIENTATION_CYCLE = [
-    'portrait', 'landscape-left', 'portrait-upside-down', 'landscape-right',
-  ];
-  let orientationIndex = 0;
-  let currentOrientation = 'portrait';
-
-  // Debug knobs for landscape-right edge-gesture exploration —
-  // iOS in raw=3 doesn't fire the home recognizer on any of the
-  // recipes that work for landscape-left / upside-down, so we
-  // expose runtime overrides so the next drag uses a different
-  // (edge, coord) combination without a rebuild.
-  //   window.__edgeOverride('top'|'right'|'bottom'|'left'|null)
-  //   window.__mirrorX(true|false)         — flip portrait_x via {x: y, y: x}
-  //   window.__lrConfig()                  — print current state
-  //   window.__lrReset()                   — restore defaults
-  let lrEdgeOverride = null;     // null → use the default mapping
-  let lrMirrorX      = false;    // false → strict CSS-rotation inverse
-
-
-
-  if (typeof window !== 'undefined') {
-    window.__edgeOverride = (e) => { lrEdgeOverride = e || null; console.log('[lr] edge override =', lrEdgeOverride); };
-    window.__mirrorX      = (b) => { lrMirrorX = !!b;             console.log('[lr] mirror-X =', lrMirrorX); };
-    window.__lrReset      = ()  => { lrEdgeOverride = null; lrMirrorX = false; console.log('[lr] reset'); };
-    window.__lrConfig     = ()  => { console.log('[lr]', { edgeOverride: lrEdgeOverride, mirrorX: lrMirrorX }); };
-  }
-  // Absolute rotation degrees, monotonically increasing — each
-  // rotate-button click adds 90. Applied inline so CSS transitions
-  // interpolate the *short* way (always +90° forward) instead of
-  // the long way around when the wire-name's canonical angle
-  // would have decreased (e.g. 180° → -90° = -270° animation
-  // would be visibly weird). Modulo 360 just keeps the number
-  // tidy; the transition driver doesn't care about absolute size.
-  let rotationDegrees = 0;
-
-  function orientationCycle() {
-    return ORIENTATION_CYCLE;
-  }
-
-  // Apply orientation visually: set the inline `transform` on the
-  // device-frame wrapper, plus a `data-orientation` attribute on
-  // the container so non-rotation CSS (max-height caps in
-  // landscape) and the input/overlay coord transforms can read
-  // `currentOrientation`.
-  function applyOrientation(value) {
-    const previous = currentOrientation;
-    currentOrientation = value;
-    const root = document.getElementById('nativeDeviceFrame');
-    if (root) {
-      if (value === 'portrait') root.removeAttribute('data-orientation');
-      else                      root.setAttribute('data-orientation', value);
-      // Advance the rotation by one cycle step (90° CW) when we
-      // move forward in the cycle. If the caller asked for the
-      // same orientation we already display (e.g. session restart
-      // after format swap), keep the existing degrees so the
-      // bezel doesn't re-animate.
-      if (value !== previous) {
-        rotationDegrees += 90;
-      }
-      for (const wrapper of root.querySelectorAll(':scope > div')) {
-        wrapper.style.transform = 'rotate(' + rotationDegrees + 'deg)';
-      }
-    }
-    handheldUIView().layoutHandheld();
-  }
-
-  // Set an orientation outright, no cycle step and no animation —
-  // for a panel that arrives already turned (a foldable's unfolded
-  // panel is landscape by the guest's choice; its cover is portrait).
-  function snapOrientation(value) {
-    const canonical = { 'portrait': 0, 'landscape-left': 90, 'portrait-upside-down': 180, 'landscape-right': 270 };
-    currentOrientation = value;
-    rotationDegrees = canonical[value] || 0;
-    orientationIndex = Math.max(0, orientationCycle().indexOf(value));
-    const root = document.getElementById('nativeDeviceFrame');
-    if (!root) return;
-    if (value === 'portrait') root.removeAttribute('data-orientation');
-    else                      root.setAttribute('data-orientation', value);
-    for (const wrapper of root.querySelectorAll(':scope > div')) {
-      const t = wrapper.style.transition;
-      wrapper.style.transition = 'none';
-      wrapper.style.transform = 'rotate(' + rotationDegrees + 'deg)';
-      void wrapper.offsetWidth;
-      wrapper.style.transition = t;
-    }
-    handheldUIView().layoutHandheld();
+  // The device frame drawn turned (page/internal/rotation-view.js), made on
+  // first use over its device's cycle; the device's own turning is its
+  // family's (`device.orientation.turn`).
+  let rotationUI = null;
+  function rotation() {
+    return rotationUI || (rotationUI = window.Baguette._RotationView.rotationView({
+      frame: () => document.getElementById('nativeDeviceFrame'),
+      cycle: (device && device.orientation && device.orientation.cycle) || ['portrait'],
+      laidOut: () => handheldUIView().layoutHandheld(),
+    }));
   }
 
   // --- Bootstrap ---------------------------------------------------
@@ -344,8 +245,8 @@
     }
 
     // Reset iOS to portrait on page boot. Without this, a page
-    // reload would leave our JS state at `currentOrientation =
-    // 'portrait'` (rotation degrees 0) while iOS still holds
+    // reload would leave the drawn orientation at portrait
+    // (rotation degrees 0) while iOS still holds
     // whatever orientation it was set to in a previous session
     // — the bezel renders un-rotated but the iOS framebuffer
     // shows UI from the stale orientation, which looks upside
@@ -378,7 +279,7 @@
   let handheldUIViewUI = null;
   function handheldUIView() {
     return handheldUIViewUI || (handheldUIViewUI = window.Baguette._HandheldView.handheldView({
-      get currentOrientation() { return currentOrientation; },
+      get currentOrientation() { return rotation().current; },
       get device() { return device; },
       get foldable() { return foldable; },
       get sim() { return sim; },
@@ -397,15 +298,15 @@
       definitionURL,
       send: (payload) => {
         // A device that turns sends its input back in portrait (its family's orientation).
-        const out = currentOrientation === 'portrait' || !device.orientation
+        const out = rotation().current === 'portrait' || !device.orientation
           ? payload
-          : device.orientation.toPortrait(payload, currentOrientation);
+          : device.orientation.toPortrait(payload, rotation().current);
         const view = document.getElementById('simNativeView');
         if (view && view.getAttribute('data-render3d') === 'open' &&
             render3DPanel && render3DPanel.send(out)) return;
         if (session) session.send(out);
       },
-      getOrientation: () => currentOrientation,
+      getOrientation: () => rotation().current,
       log: (msg) => console.log('[native]', msg),
     });
   }
@@ -424,9 +325,8 @@
   let currentLitPanel = 'primary';
 
   function resetToPortrait() {
-    if (!can('orientation')) return; // a physical phone rotates itself
-    fetch(window.BaguetteTarget.path(udid, '/orientation?value=portrait'),
-        { method: 'POST' }).catch(() => { /* best-effort */ });
+    // Only a device whose family turns it (a physical phone turns itself).
+    if (can('orientation') && device.orientation) device.orientation.turn('portrait');
   }
 
   // Theme toggle. Three logical states — "auto" (no manual pin,
@@ -571,7 +471,7 @@
     // Restore the cached orientation across format-swap remounts,
     // so reopening the session doesn't snap the device back to
     // portrait while the simulator is still landscape.
-    if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
+    if (rotation().current !== 'portrait') rotation().apply(rotation().current);
     mountAxInspector();
     // Once only — `startSession` re-runs on every format swap, and
     // re-mounting would append a second copy of every rail button.
@@ -646,8 +546,7 @@
       // The unfolded panel is landscape-left by the guest's choice and
       // the cover portrait; the rotate button cycles from there.
       const start = currentLitPanel === 'secondary' ? 'landscape-left' : 'portrait';
-      currentOrientation = start;
-      orientationIndex = Math.max(0, orientationCycle().indexOf(start));
+      rotation().startAt(start);
       return;
     }
     startSession(currentFormat());
@@ -1058,16 +957,13 @@
     // server delegates to `simulator.orientation().set(...)`, which
     // dispatches a device orientation change through the appropriate backend.
     window.__nativeRotate = () => {
-      const cycle = orientationCycle();
-      orientationIndex = (orientationIndex + 1) % cycle.length;
-      const value = cycle[orientationIndex];
+      if (!device.orientation) return;
+      const value = rotation().next();
       // A foldable's book turns in 3D, as the flat chrome would.
       if (foldable) {
-        currentOrientation = value;
+        rotation().startAt(value);
         if (render3DPanel) render3DPanel.setInterfaceOrientation(value);
-        const url = '/devices/' + encodeURIComponent(udid)
-            + '/orientation?value=' + encodeURIComponent(value);
-        fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
+        device.orientation.turn(value);
         return;
       }
       // Mirror the rotation in the UI immediately. The CSS
@@ -1075,10 +971,8 @@
       // + canvas as one unit, while the input + overlay wrappers
       // remap coords back to portrait so taps still land on the
       // iOS element under the cursor.
-      applyOrientation(value);
-      const url = '/devices/' + encodeURIComponent(udid)
-          + '/orientation?value=' + encodeURIComponent(value);
-      fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
+      rotation().apply(value);
+      device.orientation.turn(value);
     };
 
     // Shake — fires a UIKit motionShake on the frontmost app
