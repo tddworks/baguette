@@ -14,11 +14,11 @@ export function chromeChoices(simulators) {
 }
 
 /** The picker for device `id`: `show(host)` covers the view with the choices. */
-export function chromePicker(id, { wire, storage, reload }) {
+export function chromePicker(id, { devices, storage, reload }) {
   return {
     async show(host) {
       let simulators = null;
-      try { simulators = await wire.simulators(); } catch { /* the current iPhones still show */ }
+      try { simulators = await devices.simulators(); } catch { /* the current iPhones still show */ }
       const choices = chromeChoices(simulators);
       const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

@@ -27,17 +27,17 @@ test('should draw the Mac\'s pointer over the screen, in its real shape, and hov
 
 test('should offer the Mac frames that fit the display\'s own screen', async () => {
   const asked = [];
-  const wire = {
-    path: (id, suffix) => '/devices/' + id + suffix,
-    json: async (url) => { asked.push(url); return url.startsWith('/devices/') ? { screen: { rect: { width: 2560, height: 1440 } } } : { frames: ['iMac'] }; },
+  const devices = {
+    definition: async (id) => { asked.push('definition ' + id); return { screen: { rect: { width: 2560, height: 1440 } } }; },
+    framesFitting: async (w, h) => { asked.push('frames ' + w + 'x' + h); return ['iMac']; },
   };
-  assert.deepEqual(await framesThatFit('D', wire), ['iMac']);
-  assert.deepEqual(asked, ['/devices/D/definition.json', '/mac-frames.json?width=2560&height=1440']);
+  assert.deepEqual(await framesThatFit('D', devices), ['iMac']);
+  assert.deepEqual(asked, ['definition D', 'frames 2560x1440']);
 });
 
 test('should offer no frame when the display can\'t say its size, or the server answers nothing', async () => {
-  assert.deepEqual(await framesThatFit('D', { path: () => '/x', json: async () => ({}) }), []);
-  assert.deepEqual(await framesThatFit('D', { path: () => '/x', json: async () => { throw new Error('offline'); } }), []);
+  assert.deepEqual(await framesThatFit('D', { definition: async () => ({}) }), []);
+  assert.deepEqual(await framesThatFit('D', { definition: async () => { throw new Error('offline'); } }), []);
 });
 
 test('should remember a picked frame for its display, and forget it on no frame', () => {

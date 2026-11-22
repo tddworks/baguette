@@ -36,6 +36,9 @@
   // from `Families` — families/families.js, the one place that reads a
   // device's kind). Both are read at boot; the URL's tree decides neither.
   let device = null;
+  /** This server's devices (device/devices.js), made on first use. */
+  let devicesUI = null;
+  const serverDevices = () => devicesUI || (devicesUI = window.Baguette._Devices.serverDevices((u, i) => fetch(u, i)));
   let deviceAbilities = null;
   const can = (ability) => deviceAbilities === null || deviceAbilities.includes(ability);
 
@@ -195,7 +198,7 @@
     //    us the human-readable identity that sits above it.
     // What the device is decides its family, so a read that fails once is
     // read again; failing twice, the page says so rather than guess a family.
-    const listing = (await fetchDeviceListing(udid)) || (await fetchDeviceListing(udid));
+    const listing = (await serverDevices().listing(udid)) || (await serverDevices().listing(udid));
     if (!listing) {
       const view = document.getElementById('simNativeView');
       if (view) view.remove();
@@ -207,17 +210,7 @@
     deviceAbilities = listing.abilities || [];
     device = window.Baguette._Families.device(listing, {
       id: udid,
-      wire: {
-        path: (id, suffix) => window.BaguetteTarget.path(id, suffix),
-        listing: (id) => fetchDeviceListing(id),
-        json: async (url) => (await fetch(url, { cache: 'no-store' })).json(),
-        post: (url) => fetch(url, { method: 'POST' }),
-        simulators: async () => {
-          const r = await fetch('/simulators.json', { cache: 'no-store' });
-          if (!r.ok) throw new Error(String(r.status));
-          return r.json();
-        },
-      },
+      devices: serverDevices(),
       storage: localStorage,
       address: location.search,
       // `params` (a pick the browser may not store) ride the reload in the address.
@@ -798,15 +791,6 @@
     return _templatePromise;
   }
 
-  /** The device as the server lists it — kind and abilities — or null. */
-  async function fetchDeviceListing(targetUdid) {
-    try {
-      const r = await fetch(window.BaguetteTarget.path(targetUdid, '/device.json'), { cache: 'no-store' });
-      return r.ok ? await r.json() : null;
-    } catch (_) {
-      return null;
-    }
-  }
 
   // The format every surface in this page streams at — phone, CarPlay,
   // watch and the 3D panel alike. Companions used to be pinned to MJPEG

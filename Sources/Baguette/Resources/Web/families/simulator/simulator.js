@@ -1,7 +1,6 @@
 // Simulator — an Apple simulator: framed by its own bezel, described as the
 // server lists its simulators.
 import { deviceOf } from '../../device/device.js';
-import { bootThroughServer } from '../../device/power.js';
 import { toPortrait } from './internal/portrait.js';
 import { companionScreens } from './internal/companions.js';
 
@@ -13,12 +12,12 @@ function formatRuntime(raw) {
     .replace(/-/g, '.');
 }
 
-export function simulator(listing, { id, wire }) {
+export function simulator(listing, { id, devices }) {
   return deviceOf(listing, {
     id,
     family: 'simulator',
     frame: { definition: undefined },
-    power: bootThroughServer(id, wire),
+    power: { boot: () => devices.boot(id) },
     /** It turns: input drawn turned goes back to portrait before it's sent. */
     orientation: { toPortrait },
     /** Its other screens: the CarPlay display and the paired watch, beside it. */
@@ -26,7 +25,7 @@ export function simulator(listing, { id, wire }) {
     /** Its name, runtime and state, from the server's list of simulators. */
     async describe() {
       try {
-        const json = await wire.simulators();
+        const json = await devices.simulators();
         const all = (json.running || []).concat(json.available || []);
         const hit = all.find((d) => (d.id || d.udid) === id);
         if (hit) {

@@ -6,7 +6,7 @@ const path = require('node:path');
 const { loadBrowserModules } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'wire', 'whep-session.js'
+  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'stream', 'whep-session.js'
 );
 
 /** A browser just big enough for a WHEP session: what it posted, opened and drew. */

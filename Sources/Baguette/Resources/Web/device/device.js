@@ -19,11 +19,11 @@ export function deviceOf(listing, { id, family, ...roles }) {
 }
 
 /** A device described by its own listing as the server gives it now (the
- *  one it was made with when the wire can't say): its name, its OS (or
+ *  one it was made with when the server can't say): its name, its OS (or
  *  model), and whether it is running, in the words the power card reads. */
-export async function describeListed(id, listing, wire) {
+export async function describeListed(id, listing, devices) {
   let now = null;
-  try { now = wire.listing ? await wire.listing(id) : null; } catch { /* as it was */ }
+  try { now = devices.listing ? await devices.listing(id) : null; } catch { /* as it was */ }
   return listedDescription(now || listing);
 }
 

@@ -6,13 +6,11 @@
 const KEY = (id) => 'baguette.twin.chrome.' + id;
 
 /** The frames that fit display `id`, by its frameless definition's screen; none when it can't say. */
-export async function framesThatFit(id, wire) {
+export async function framesThatFit(id, devices) {
   try {
-    const own = await wire.json(wire.path(id, '/definition.json'));
+    const own = await devices.definition(id);
     const rect = own && own.screen && own.screen.rect;
-    if (!rect) return [];
-    const fit = await wire.json('/mac-frames.json?width=' + rect.width + '&height=' + rect.height);
-    return (fit && fit.frames) || [];
+    return rect ? await devices.framesFitting(rect.width, rect.height) : [];
   } catch { return []; }
 }
 
@@ -25,13 +23,13 @@ export function rememberFrame(storage, id, pick) {
 }
 
 /** The picker for display `id`: `mount(badge)` puts its button beside the badge. */
-export function macFramePicker(id, { wire, storage, reload }) {
+export function macFramePicker(id, { devices, storage, reload }) {
   async function show(anchor) {
     const open = document.getElementById('nativeMacFramePicker');
     if (open) { open.remove(); return; }
     let picked = null;
     try { picked = storage.getItem(KEY(id)); } catch { /* nothing picked */ }
-    const choices = window.Baguette._MacFrameChoices.of(await framesThatFit(id, wire), picked);
+    const choices = window.Baguette._MacFrameChoices.of(await framesThatFit(id, devices), picked);
     const pop = document.createElement('div');
     pop.id = 'nativeMacFramePicker';
     pop.style.cssText =

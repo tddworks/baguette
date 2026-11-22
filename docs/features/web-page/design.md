@@ -11,7 +11,7 @@ Mac's `picker`), `badge`, `describe`, `power`, `pointer`, `share` — and the
 device page never reads a device's kind (a test holds it). Panels are roles
 opened by one sheet rule; the toolbar is built from them. The share is on the
 devices page, with `/mac/share` and `/mac/shares` kept. Every file sits in its
-layer (`device/`, `families/`, `panels/`, `wire/`, `capture/`, `page/`); no
+layer (`device/`, `families/`, `panels/`, `stream/`, `capture/`, `page/`); no
 `sim-*` script is left (`sim.html` keeps its name: the routes serve it).
 
 **Not yet:** the page script (`page/device-page.js`) is 1,265 lines (was
@@ -66,6 +66,8 @@ the bare outside call. The page should read the same way.
 Page ◆ (page/device-page.js — composition root, the only file that knows them all)
 ├── Device ◆                 built by its Family from device.json; the page only talks to its roles
 │   ├── id · name · kind · abilities ◇
+│   ├── (asks) Devices ◆      the server's devices: listing · definition · boot · simulators · frames
+│   │                          (device/devices.js — a family is handed this role, never routes)
 │   ├── frame ◆              how it is framed: bezel · picked chrome · Mac frame · none
 │   ├── power ◆?             booting it — only a family whose devices boot has one
 │   ├── orientation ◆?       turning it — the device turns, or follows the viewer, or has none
@@ -154,7 +156,7 @@ Resources/Web/
 │   ├── panel.js           the Panel role and Panels (registry + sheet rules)
 │   ├── gestures/  parts/  the SDK's interpreter and parts (today's baguette/), unchanged inside
 │   └── internal/          implementations (sheet, fold, …) — imported only from device/
-├── wire/                  ≈ the server's routes: transport, StreamSession, WhepSession, device.json
+├── stream/                ≈ how a device's picture arrives: transport, StreamSession, WhepSession, device.json
 │   └── internal/
 ├── families/              ≈ Devices/<Family>: each builds its Device; never import each other
 │   ├── families.js        the one list of families: listing → Device
@@ -169,7 +171,7 @@ Resources/Web/
 ```
 
 **Imports flow inward**, as in Swift: `page/` → `panels/`, `families/*` →
-`wire/`, `capture/` → `device/`. `device/` imports nothing of ours; families
+`stream/`, `capture/` → `device/`. `device/` imports nothing of ours; families
 never import each other; a folder's `internal/` is imported only from inside
 that folder (a test enforces it, as `scripts/check-boundaries.py` does for
 Swift).
@@ -222,7 +224,7 @@ stay as they are; the old page becomes a thin page over the same module.
 | 5 BUILT | the other panels, one per slice: camera, network, defaults, notify, location, status bar, accessibility, 3D, plugins | each: its toggle and `NEEDS` entry die |
 | 6 BUILT | `Toolbar` built from `Panels` filtered by `Device.abilities`; `DeviceAbilities` dies | a phone shows no logs control; a Mac display no rotate |
 | 7 BUILT | each family's role code moves into its folder: `families/mac/` (share, frames, pointer), `families/simulator/` (companions, power card, hinge, bezel), `phone/`, `android/` | each family's tests through its roles |
-| 8 BUILT | `wire/`: StreamSession, WhepSession, transport, device.json; `capture/` gathered | — |
+| 8 BUILT | `stream/` (was `wire/`): StreamSession, WhepSession, transport, device.json; `capture/` gathered | — |
 | 9 BUILT | the share on the devices page: a **Share this Mac here** card on the list, from `families/mac/share.js`; `/mac/share` kept as a thin page over it | sharing from the devices page lands on the shared display, as `/mac/share` did |
 | 10 PART | what is left of `sim-native.js` is `page/device-page.js`'s composition; `sim-` names gone; `sim.html` loads one module | `sim-native.js` is deleted |
 
@@ -245,7 +247,7 @@ Each slice is its own commit; slices 1–3 (the stable domain) are one PR, the r
 
 - **The farm page** (`farm/`) and the list (`sim-list.js`) — same layers, later
   slices, or left as they are? They're second roots on the same `device/` and
-  `wire/`.
+  `stream/`.
 - **`sim-stream.js`** (the sidebar page): still reached, or dead? To check
   before slice 8.
 - **The template** (`sim-native.html`, 3,800 lines of markup and CSS fetched

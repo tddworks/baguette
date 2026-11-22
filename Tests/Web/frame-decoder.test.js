@@ -7,7 +7,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'wire', 'frame-decoder.js'
+  'stream', 'frame-decoder.js'
 );
 
 // WebCodecs' VideoDecoder as the browser behaves: once it reports an error

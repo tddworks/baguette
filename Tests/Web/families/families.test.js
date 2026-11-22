@@ -11,13 +11,13 @@ const phone = listing({ platform: 'iOS', reality: 'physical', model: 'iPhone 15 
 const android = listing({ platform: 'android', reality: 'emulated', model: 'Pixel 9' });
 const mac = listing({ platform: 'macOS', reality: 'physical', model: 'Studio Display' }, { name: 'Studio Display' });
 
-/** The wire, played by the test: device paths, and the simulators the server lists. */
-const wire = {
-  path: (id, suffix) => '/devices/' + id + suffix,
+/** The server's devices, played by the test: where a definition is, and the simulators it lists. */
+const devices = {
+  definitionURL: (id, chrome) => '/devices/' + id + '/definition.json' + (chrome ? '?chrome=' + encodeURIComponent(chrome) : ''),
   simulators: async () => ({ running: [{ udid: 'D', name: 'iPhone 17', displayRuntime: 'iOS 26.4', state: 'Booted' }], available: [] }),
 };
 const storage = (picked = {}) => ({ getItem: (key) => picked[key] ?? null });
-const device = (l, opts = {}) => Families.device(l, { id: 'D', wire, storage: storage(opts.picked), address: opts.address || '' });
+const device = (l, opts = {}) => Families.device(l, { id: 'D', devices, storage: storage(opts.picked), address: opts.address || '' });
 
 test('should make a simulated device a simulator, framed by its own bezel', () => {
   const sim = device(simulated);
@@ -76,8 +76,8 @@ test('should describe any other device by its own listing', async () => {
 });
 
 test('should describe a device as it is listed now, not as it was when the page opened', async () => {
-  const fresh = { ...wire, listing: async () => ({ ...phone, state: 'unavailable' }) };
-  const now = Families.device(phone, { id: 'D', wire: fresh, storage: storage() });
+  const fresh = { ...devices, listing: async () => ({ ...phone, state: 'unavailable' }) };
+  const now = Families.device(phone, { id: 'D', devices: fresh, storage: storage() });
   assert.equal((await now.describe()).state, 'Shutdown');
 });
 
@@ -91,14 +91,12 @@ test('should allow everything when the server lists nothing for the device, as t
   assert.equal(device(null).can('network'), true);
 });
 
-test('should boot a simulator through the server, saying why when it can\'t', async () => {
-  const posted = [];
-  const answers = [{ ok: true, status: 200 }, { ok: false, status: 409, json: async () => ({ error: 'already booted' }) }];
-  const booting = { ...wire, post: async (url) => { posted.push(url); return answers.shift(); } };
-  const sim = Families.device(simulated, { id: 'D', wire: booting, storage: storage() });
-  assert.deepEqual(await sim.power.boot(), { ok: true, error: null });
+test('should boot a simulator through the server\'s devices', async () => {
+  const booted = [];
+  const booting = { ...devices, boot: async (id) => { booted.push(id); return { ok: false, error: 'already booted' }; } };
+  const sim = Families.device(simulated, { id: 'D', devices: booting, storage: storage() });
   assert.deepEqual(await sim.power.boot(), { ok: false, error: 'already booted' });
-  assert.deepEqual(posted, ['/devices/D/boot', '/devices/D/boot']);
+  assert.deepEqual(booted, ['D']);
 });
 
 test('should boot an Android device only when the server lists it as one that can', () => {

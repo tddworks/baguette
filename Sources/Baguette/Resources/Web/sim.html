@@ -63,9 +63,10 @@
      as JS and throw `Unexpected token '<'`. -->
 <!-- The base-path seam: simulators vs physical devices. Must load
      before every module that builds a resource URL. -->
-<script src="/wire/target.js"></script>
+<script src="/device/target.js"></script>
 <script src="/device/device-badge.js"></script>
 <script src="/families/mac/internal/mac-frame-choices.js"></script>
+<script type="module" src="/device/devices.js"></script>
 <script type="module" src="/families/families.js"></script>
 <script type="module" src="/page/page-panels.js"></script>
 <script type="module" src="/page/devices-list-share.js"></script>
@@ -75,10 +76,10 @@
 <script type="module" src="/page/internal/handheld-view.js"></script>
 <script src="/families/mac/internal/local-pointer.js"></script>
 <script src="/families/mac/internal/pointer-shape.js"></script>
-<script src="/wire/frame-decoder.js"></script>
+<script src="/stream/frame-decoder.js"></script>
 <!-- Filters the stored format against frame-decoder.js's capability
      probe; must load before page/devices-stream.js / page/device-page.js. -->
-<script src="/wire/stream-format.js"></script>
+<script src="/stream/stream-format.js"></script>
 <!-- Shared capture-size vocabulary (Resources/Web/capture/). These must
      load BEFORE capture-gallery.js / recorder.js / page/devices-stream.js: the
      picker and both capture surfaces read `window.Baguette._CaptureSize`
@@ -96,8 +97,8 @@
 <script src="/handheld/handheld-button.js"></script>
 <script src="/capture/capture-gallery.js"></script>
 <script src="/capture/recorder.js"></script>
-<script src="/wire/stream-session.js"></script>
-<script src="/wire/whep-session.js"></script>
+<script src="/stream/stream-session.js"></script>
+<script src="/stream/whep-session.js"></script>
 <script src="/panels/logs/internal/log-view.js"></script>
 <script src="/page/internal/accessibility-inspector.js"></script>
 <script src="/panels/camera/internal/camera-view.js"></script>

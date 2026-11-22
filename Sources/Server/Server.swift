@@ -549,9 +549,9 @@ struct Server: Sendable {
         "panels/notify/internal",
         "panels/status-bar",
         "panels/status-bar/internal",
+        "stream",
         "toolbar",
         "vendor/leaflet",
-        "wire",
     ]
 
     static func staticAsset(_ name: String) -> Response {

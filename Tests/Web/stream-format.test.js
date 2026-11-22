@@ -8,7 +8,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 const WEB = path.join(__dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web');
 
 function load() {
-  return loadBrowserModule(path.join(WEB, 'wire', 'stream-format.js')).StreamFormat;
+  return loadBrowserModule(path.join(WEB, 'stream', 'stream-format.js')).StreamFormat;
 }
 
 test('StreamFormat', async (t) => {

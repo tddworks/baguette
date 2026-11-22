@@ -17,12 +17,12 @@ function familyOf(listing) {
 export const Families = {
   /**
    * The Device `listing` names (nil: a simulator the server lists nothing
-   * for). `id`: its id; `wire`: the server's paths and lists; `storage`: what
+   * for). `id`: its id; `devices`: the server's devices (device/devices.js); `storage`: what
    * the page remembers; `address`: the page's query string; `reload`: how
    * the page reloads itself (a share's keeps its share).
    */
-  device(listing, { id, wire, storage, address = '', reload = () => {} }) {
-    return familyOf(listing)(listing, { id, wire, storage, address, reload });
+  device(listing, { id, devices, storage, address = '', reload = () => {} }) {
+    return familyOf(listing)(listing, { id, devices, storage, address, reload });
   },
 };
 

@@ -7,18 +7,18 @@ import { followShare } from './internal/share-follow.js';
 import { macPointer } from './internal/pointer.js';
 import { macFramePicker } from './internal/frame-picker.js';
 
-export function macDisplay(listing, { id, wire, storage, address, reload }) {
+export function macDisplay(listing, { id, devices, storage, address, reload }) {
   const shared = MacShare.fromAddress(address);
   return deviceOf(listing, {
     id,
     family: 'mac',
     frame: {
-      definition: pickedChrome(id, { wire, storage, address }),
-      picker: macFramePicker(id, { wire, storage, reload }),
+      definition: pickedChrome(id, { devices, storage, address }),
+      picker: macFramePicker(id, { devices, storage, reload }),
     },
     badge: true,
     pointer: macPointer,
-    describe: () => describeListed(id, listing, wire),
+    describe: () => describeListed(id, listing, devices),
     ...(shared ? { share: { ...shared, follow: (browser) => followShare(shared, MacShare, browser) } } : {}),
   });
 }
