@@ -193,11 +193,11 @@ test('should keep the capture-size host outside the scrolling icon strip', () =>
   );
 });
 
-test('should carry a Record button wired to __nativeRecord in the toolbar', () => {
+test('should carry a Record button wired to the record action in the toolbar', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const button = /<button[^>]*id="nativeRecordBtn"[\s\S]*?<\/button>/.exec(html);
   assert.ok(button, 'no #nativeRecordBtn in the toolbar');
-  assert.match(button[0], /window\.__nativeRecord/);
+  assert.match(button[0], /data-action="record"/);
   assert.match(button[0], /aria-label=/);
   assert.match(button[0], /class="ico-btn/);
 });
@@ -208,7 +208,7 @@ test('should place the Record button in the action group beside Screenshot', () 
     /<div class="tb-actions">([\s\S]*?)<!-- \/\.tb-scroll -->/.exec(html);
   assert.ok(actions, 'the .tb-actions group is no longer delimited as expected');
   assert.match(actions[1], /id="nativeRecordBtn"/);
-  assert.match(actions[1], /__nativeScreenshot/);
+  assert.match(actions[1], /data-action="screenshot"/);
 });
 
 test('should style the recording state from the focus-mode palette', () => {
@@ -237,16 +237,17 @@ test('should load the capture vocabulary and the recorder when the capture contr
   }
 });
 
-test('should answer every toolbar indirection the template calls', () => {
+test('should register every action the template\'s controls name', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const src = fs.readFileSync(SCRIPT, 'utf8');
-  const called = new Set(
-    [...html.matchAll(/window\.(__native[A-Za-z0-9]+)/g)].map((m) => m[1])
-  );
-  const missing = [...called].filter((name) => !src.includes(`window.${name} =`));
-  assert.deepEqual(
-    missing, [],
-    'the template calls these but page/device-page.js never assigns them, so ' +
-    'the button is inert'
-  );
+  const named = new Set([...html.matchAll(/data-action="([A-Za-z0-9]+)"/g)].map((m) => m[1]));
+  // A panel's toggle is registered by Panels, as `toggle<slot>` from its own file.
+  const panelDir = path.join(WEB_ROOT, 'panels');
+  const toggles = new Set(fs.readdirSync(panelDir, { withFileTypes: true }).filter((d) => d.isDirectory())
+    .flatMap((d) => fs.readdirSync(path.join(panelDir, d.name)).filter((f) => f.endsWith('-panel.js'))
+      .map((f) => fs.readFileSync(path.join(panelDir, d.name, f), 'utf8').match(/slot: '(\w+)'/))
+      .filter(Boolean).map((m) => 'toggle' + m[1])));
+  const missing = [...named].filter((name) => !toggles.has(name) && !src.includes(`actions.on('${name}'`));
+  assert.deepEqual(missing, [], 'the template names these actions but nothing registers them, so the button is inert');
+  assert.ok(named.size > 20, "the scan found the template's controls");
 });

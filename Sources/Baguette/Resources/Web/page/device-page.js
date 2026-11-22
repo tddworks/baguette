@@ -864,8 +864,23 @@
     setTimeout(layoutToolbar, 400);
   }
 
+  // The page's actions (page/internal/actions.js): each control names its
+  // verb (`data-action`); each concern registers its own; one listener runs them.
+  let actionsUI = null;
+  const actions = {
+    on: (name, fn) => pageActionsUI().on(name, fn),
+  };
+  function pageActionsUI() {
+    if (actionsUI) return actionsUI;
+    actionsUI = window.Baguette._PageActions.pageActions();
+    actionsUI.listen(document);
+    return actionsUI;
+  }
+
   function wireActions() {
-    window.__nativeHome = () => sim && sim.pressButton('home');
+    // Each panel's toggle, as its panel names it.
+    for (const [name, fn] of Object.entries(panels.actions(device))) actions.on(name, fn);
+    actions.on('home', () => sim && sim.pressButton('home'));
     // App switcher — fires the new `app-switcher` virtual button
     // on the server side. The Swift `IndigoHIDInput` decomposes it
     // into two consecutive home `IndigoHIDMessageForButton` presses
@@ -873,21 +888,21 @@
     // (works on Face ID iPhones with no physical home button). No
     // gesture coordinates involved, so device rotation is a non-
     // issue here.
-    window.__nativeAppSwitcher = () => sim && sim.pressButton('app-switcher');
-    window.__nativeScreenshot = () => capture().downloadSnapshot();
+    actions.on('appSwitcher', () => sim && sim.pressButton('app-switcher'));
+    actions.on('screenshot', () => capture().downloadSnapshot());
     // Record is Screenshot's moving-picture sibling: same source, same
     // picked size, one toggle instead of a one-shot.
-    window.__nativeRecord = () => { void capture().toggleRecording(); };
-    window.__nativeClearRecordings = () => capture().clearRecordings();
-    window.__nativeHideRecordings = () => capture().hideRecordings();
-    window.__nativeClose = () => {
+    actions.on('record', () => { void capture().toggleRecording(); });
+    actions.on('clearRecordings', () => capture().clearRecordings());
+    actions.on('hideRecordings', () => capture().hideRecordings());
+    actions.on('close', () => {
       // Shutting the window from inside a popup-style URL: try
       // window.close (only works for script-opened tabs) then fall
       // back to navigating to the list.
       try { window.close(); } catch (_) { /* ignore */ }
       if (!window.closed) location.href = '/simulators';
-    };
-    window.__nativeSetFormat = (next) => {
+    });
+    actions.on('setFormat', (next) => {
       // Storing an undecodable format wedges the origin (#71). The
       // button is already disabled; this is the second lock.
       const wanted = window.StreamFormat && window.StreamFormat.named(next);
@@ -907,48 +922,41 @@
       } else {
         startSession(wanted.id);
       }
-    };
-    window.__nativeToggleTheme = () => {
+    });
+    actions.on('toggleTheme', () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
-    };
-    window.__nativeToggleLogs = () => panels.toggle('logs', device);
-    window.__nativeToggleCamera = () => panels.toggle('camera', device);
-    window.__nativeToggleStatusBar = () => panels.toggle('statusBar', device);
-    window.__nativeToggleLocation = () => panels.toggle('location', device);
-    window.__nativeToggleNetwork = () => panels.toggle('network', device);
-    window.__nativeToggleDefaults = () => panels.toggle('defaults', device);
-    window.__nativeToggleNotify = () => panels.toggle('notify', device);
-    window.__nativeToggle3D = () => toggle3D();
-    window.__nativeEnterHandheld = () => handheldUIView().enterHandheld();
-    window.__nativeHandheldMenu = (open) => handheldUIView().setHandheldMenu(!!open);
-    window.__nativeHandheldHintClose = () => handheldUIView().hideHomeScreenHint();
-    window.__nativeHandheldAction = (action) => {
+    });
+    actions.on('toggle3D', () => toggle3D());
+    actions.on('enterHandheld', () => handheldUIView().enterHandheld());
+    actions.on('handheldMenu', (open) => handheldUIView().setHandheldMenu(!!open));
+    actions.on('handheldHintClose', () => handheldUIView().hideHomeScreenHint());
+    actions.on('handheldAction', (action) => {
       handheldUIView().setHandheldMenu(false);
       if (action === 'exit') handheldUIView().exitHandheld();
       else if (action === 'rotate') window.__nativeRotate();
       else if (sim) sim.pressButton(action);
-    };
-    window.__nativeToggle3DInspector = () => toggle3DInspector();
+    });
+    actions.on('toggle3DInspector', () => toggle3DInspector());
     // The watch's hardware buttons. Same `button` envelope the phone's
     // bezel buttons use, but down the watch's own socket — the press
     // has to reach the watch's HID, not the phone we happen to be
     // looking at beside it. Silently no-ops when the pane is closed;
     // there is no button row on screen to press in that case.
-    window.__nativeWatchButton = (name) => {
+    actions.on('watchButton', (name) => {
       if (companionsUI) companionsUI.pressWatch(name);
-    };
-    window.__nativeToggleAx = () => {
+    });
+    actions.on('toggleAx', () => {
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
       else axInspector.enable();
-    };
+    });
     // Sidebar-view jump — bounce out of focus mode and into the
     // inline `startStream` layout on `/simulators`. The hash is
     // the cue page/devices-stream.js reads on load to auto-open the same
     // device's stream view without an extra click.
-    window.__nativeOpenSidebarView = () => {
+    actions.on('openSidebarView', () => {
       location.href = '/simulators#stream=' + encodeURIComponent(udid);
-    };
+    });
 
     // Orientation cycle — one click advances 90° CW. Cycle length
     // varies by device class: 3 on iPhone (skips upside-down,
@@ -956,7 +964,7 @@
     // through the `/devices/<udid>/orientation?value=...` route;
     // server delegates to `simulator.orientation().set(...)`, which
     // dispatches a device orientation change through the appropriate backend.
-    window.__nativeRotate = () => {
+    actions.on('rotate', () => {
       if (!device.orientation) return;
       const value = rotation().next();
       // A foldable's book turns in 3D, as the flat chrome would.
@@ -973,7 +981,7 @@
       // iOS element under the cursor.
       rotation().apply(value);
       device.orientation.turn(value);
-    };
+    });
 
     // Shake — fires a UIKit motionShake on the frontmost app
     // (shake-to-undo etc). POSTs to `/devices/<udid>/shake`; the
@@ -981,10 +989,10 @@
     // `simctl spawn notifyutil`. Unlike rotate there's no visual state
     // to mirror — the motion event lives entirely in the guest — so
     // this is a pure fire-and-forget POST.
-    window.__nativeShake = () => {
+    actions.on('shake', () => {
       const url = '/devices/' + encodeURIComponent(udid) + '/shake';
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
-    };
+    });
   }
 
   // Surface a selected AX node in the floating `#nativeAxHost`

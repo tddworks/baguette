@@ -53,6 +53,12 @@ export class Panels {
     return !!(panel && view && view.getAttribute('data-' + panel.attribute) === 'open');
   }
 
+  /** Each panel's toggle action (`toggle<Slot>`), opening it for `device`. */
+  actions(device) {
+    return Object.fromEntries([...this.panels.values()].map((panel) =>
+      ['toggle' + panel.slot, () => this.toggle(panel.name, device)]));
+  }
+
   /** Start every panel that watches its device — when the device can do what it needs — whether or not it ever opens. */
   watch(device) {
     for (const panel of this.panels.values()) {

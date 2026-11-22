@@ -111,3 +111,13 @@ test('should leave a panel unwatched when its device can\'t do what it needs', (
   new Panels(page(), [network]).watch({ id: 'D', can: (a) => a !== 'network' });
   assert.equal(watching.length, 0);
 });
+
+test('should name a toggle action for each panel, which opens it for the device', () => {
+  const at = page('nativeLogsHost');
+  const mounted = [];
+  const panels = new Panels(at, [logsPanel(mounted)]);
+  const actions = panels.actions(device);
+  assert.deepEqual(Object.keys(actions), ['toggleLogs']);
+  actions.toggleLogs();
+  assert.equal(panels.isOpen('logs'), true);
+});

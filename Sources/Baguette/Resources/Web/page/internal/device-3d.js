@@ -163,7 +163,7 @@
         '</div>' +
         '<button type="button" class="r3d-inspector-toggle" ' +
           'title="Show 3D inspector" aria-label="Show 3D inspector" ' +
-          'onclick="window.__nativeToggle3DInspector && window.__nativeToggle3DInspector()">' +
+          'data-action="toggle3DInspector">' +
           '<span aria-hidden="true">☷</span></button>' +
         '<div class="r3d-live-state" data-role="live-state">' +
           '<span class="r3d-spinner"></span><span>Loading model…</span>' +

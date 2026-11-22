@@ -3111,11 +3111,11 @@
 
       <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
         <button class="fmt-btn" data-v="avcc"  title="H.264 (hardware-decoded). Smaller, more compressed."
-                onclick="window.__nativeSetFormat && window.__nativeSetFormat('avcc')">H.264</button>
+                data-action="setFormat" data-arg="avcc">H.264</button>
         <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
-                onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
+                data-action="setFormat" data-arg="mjpeg">MJPEG</button>
         <button class="fmt-btn" data-v="webrtc" title="WebRTC (WHEP). H.264 over UDP: holds up on Wi-Fi and remote links, and plays on plain HTTP."
-                onclick="window.__nativeSetFormat && window.__nativeSetFormat('webrtc')">WebRTC</button>
+                data-action="setFormat" data-arg="webrtc">WebRTC</button>
       </div>
 
       <!-- Scroll-left chevron — shown only when the icon strip overflows
@@ -3140,7 +3140,7 @@
       <button class="ico-btn" id="nativeRotate"
               title="Rotate device 90° clockwise"
               aria-label="Rotate device"
-              onclick="window.__nativeRotate && window.__nativeRotate()">
+              data-action="rotate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
           <!-- circular arrow over a phone glyph: device + rotation hint -->
@@ -3155,7 +3155,7 @@
       <button class="ico-btn" id="native3DToggle"
               title="Toggle live 3D simulator"
               aria-label="Toggle live 3D simulator"
-              onclick="window.__nativeToggle3D && window.__nativeToggle3D()">
+              data-action="toggle3D">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.6" stroke-linejoin="round" width="17" height="17">
           <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
@@ -3170,7 +3170,7 @@
       <button class="ico-btn" id="nativeHandheldToggle"
               title="Handheld — fill this screen with the simulator"
               aria-label="Enter handheld mode"
-              onclick="window.__nativeEnterHandheld && window.__nativeEnterHandheld()">
+              data-action="enterHandheld">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
           <!-- four corners pulled outward: "fill the screen" -->
@@ -3188,7 +3188,7 @@
       <button class="ico-btn" id="nativeAxToggle"
               title="Toggle accessibility inspector"
               aria-label="Toggle accessibility inspector"
-              onclick="window.__nativeToggleAx && window.__nativeToggleAx()">
+              data-action="toggleAx">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
           <!-- crosshair-on-target glyph: outer ring + inner dot + axes -->
@@ -3209,7 +3209,7 @@
       <button class="ico-btn" id="nativeStatusBarToggle"
               title="Status bar overrides"
               aria-label="Toggle status bar overrides"
-              onclick="window.__nativeToggleStatusBar && window.__nativeToggleStatusBar()">
+              data-action="toggleStatusBar">
         <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
           <rect x="3"  y="13" width="3" height="6"  rx="1"/>
           <rect x="8"  y="10" width="3" height="9"  rx="1"/>
@@ -3226,7 +3226,7 @@
       <button class="ico-btn" id="nativeNetworkToggle"
               title="Network conditioning"
               aria-label="Toggle network conditioning"
-              onclick="window.__nativeToggleNetwork && window.__nativeToggleNetwork()">
+              data-action="toggleNetwork">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
           <!-- Globe with a meridian — "the network", not "the signal". -->
@@ -3243,7 +3243,7 @@
       <button class="ico-btn" id="nativeDefaultsToggle"
               title="App defaults"
               aria-label="Toggle app defaults"
-              onclick="window.__nativeToggleDefaults && window.__nativeToggleDefaults()">
+              data-action="toggleDefaults">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
           <rect x="2.5" y="7" width="19" height="10" rx="5"/>
@@ -3254,7 +3254,7 @@
       <button class="ico-btn" id="nativeLocationToggle"
               title="Simulated location"
               aria-label="Toggle simulated location"
-              onclick="window.__nativeToggleLocation && window.__nativeToggleLocation()">
+              data-action="toggleLocation">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
           <!-- Map-pin glyph. -->
@@ -3268,7 +3268,7 @@
       <button class="ico-btn" id="nativeNotifyToggle"
               title="Remote notification"
               aria-label="Toggle remote notification"
-              onclick="window.__nativeToggleNotify && window.__nativeToggleNotify()">
+              data-action="toggleNotify">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
           <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/>
@@ -3285,7 +3285,7 @@
              opening the sheet. -->
         <button class="ico-btn" id="nativeCameraToggle" title="Toggle camera control"
                 aria-label="Toggle camera control"
-                onclick="window.__nativeToggleCamera && window.__nativeToggleCamera()">
+                data-action="toggleCamera">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <!-- Video-camera glyph: rectangle body + triangular lens flare. -->
@@ -3295,7 +3295,7 @@
         </button>
         <button class="ico-btn" id="nativeLogsToggle" title="Toggle live log sheet"
                 aria-label="Toggle live log sheet"
-                onclick="window.__nativeToggleLogs && window.__nativeToggleLogs()">
+                data-action="toggleLogs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <!-- "console / lines" glyph: a panel with three text rows. -->
@@ -3305,14 +3305,14 @@
             <line x1="6.5" y1="17" x2="11"  y2="17"/>
           </svg>
         </button>
-        <button class="ico-btn" id="nativeHome" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
+        <button class="ico-btn" id="nativeHome" title="Home" data-action="home">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <path d="M3 11.2 12 4l9 7.2"/>
             <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
           </svg>
         </button>
-        <button class="ico-btn" id="nativeScreenshot" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
+        <button class="ico-btn" id="nativeScreenshot" title="Screenshot" data-action="screenshot">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
@@ -3329,7 +3329,7 @@
              button that can't record is worse than none. -->
         <button class="ico-btn" id="nativeRecordBtn" title="Record video"
                 aria-label="Start recording" aria-pressed="false"
-                onclick="window.__nativeRecord && window.__nativeRecord()">
+                data-action="record">
           <!-- Ring around a filled dot — the universal record glyph.
                The whole mark pulses while a recording is running. -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
@@ -3341,7 +3341,7 @@
         </button>
         <button class="ico-btn" id="nativeAppSwitcher" title="App switcher"
                 aria-label="Open app switcher"
-                onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
+                data-action="appSwitcher">
           <!-- "App-switcher" glyph mirroring the native Simulator
                toolbar's third icon — two overlapping rounded squares.
                The click fires the `app-switcher` virtual button,
@@ -3364,7 +3364,7 @@
              `simctl spawn notifyutil`. -->
         <button class="ico-btn" id="nativeShake" title="Shake device"
                 aria-label="Shake device"
-                onclick="window.__nativeShake && window.__nativeShake()">
+                data-action="shake">
           <!-- Phone glyph flanked by motion arcs — reads as a device
                shaking side to side. -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
@@ -3428,7 +3428,7 @@
     <div class="watch-buttons" role="group" aria-label="Apple Watch buttons">
       <button type="button" class="watch-btn"
               title="Digital Crown — press for the watch face, again for the app grid. Hold for Siri."
-              onclick="window.__nativeWatchButton && window.__nativeWatchButton('digital-crown')">
+              data-action="watchButton" data-arg="digital-crown">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" width="14" height="14" aria-hidden="true">
           <circle cx="12" cy="12" r="5.5"/>
@@ -3439,7 +3439,7 @@
       </button>
       <button type="button" class="watch-btn"
               title="Side button — opens Control Centre. Double-press for Wallet, hold for the power menu."
-              onclick="window.__nativeWatchButton && window.__nativeWatchButton('side-button')">
+              data-action="watchButton" data-arg="side-button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
           <rect x="9.5" y="4" width="5" height="16" rx="2.5"/>
@@ -3466,12 +3466,12 @@
        the root; page/device-page.js places it and wires the drag. -->
   <div class="handheld-ui" id="nativeHandheldUI" data-open="false">
     <div class="hh-scrim"
-         onclick="window.__nativeHandheldMenu && window.__nativeHandheldMenu(false)"></div>
+         data-action="handheldMenu" data-arg="false"></div>
     <button class="hh-fab" id="nativeHandheldFab" type="button"
             aria-label="Handheld controls" aria-haspopup="menu" aria-expanded="false"><span></span></button>
     <div class="hh-menu" role="menu" aria-label="Handheld controls">
       <button class="hh-item" type="button" role="menuitem"
-              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('home')">
+              data-action="handheldAction" data-arg="home">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
           <path d="M3 11.2 12 4l9 7.2"/>
@@ -3480,7 +3480,7 @@
         <span>Home</span>
       </button>
       <button class="hh-item" type="button" role="menuitem"
-              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('app-switcher')">
+              data-action="handheldAction" data-arg="app-switcher">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
           <rect x="3" y="6" width="8" height="12" rx="1.6"/>
@@ -3489,7 +3489,7 @@
         <span>App Switcher</span>
       </button>
       <button class="hh-item" type="button" role="menuitem"
-              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('rotate')">
+              data-action="handheldAction" data-arg="rotate">
         <!-- A plain clockwise arrow: at this size the toolbar's
              phone-over-arc glyph reads as a microphone. -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
@@ -3500,7 +3500,7 @@
         <span>Rotate</span>
       </button>
       <button class="hh-item" type="button" role="menuitem"
-              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('exit')">
+              data-action="handheldAction" data-arg="exit">
         <!-- four corners pulled inward: "back to the window" -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
@@ -3518,7 +3518,7 @@
   <div class="handheld-hint" id="nativeHandheldHint" role="status" hidden>
     <span>For full screen, tap <b>Share</b> → <b>Add to Home Screen</b>.</span>
     <button type="button" aria-label="Dismiss"
-            onclick="window.__nativeHandheldHintClose && window.__nativeHandheldHintClose()">✕</button>
+            data-action="handheldHintClose">✕</button>
   </div>
 
   <div class="right-rails" id="nativeRightRails"></div>
@@ -3540,7 +3540,7 @@
       </span>
       <button class="ico-btn" title="Hide 3D inspector"
               aria-label="Hide 3D inspector"
-              onclick="window.__nativeToggle3DInspector && window.__nativeToggle3DInspector()">
+              data-action="toggle3DInspector">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.8" stroke-linecap="round" width="14" height="14">
           <rect x="4" y="4" width="16" height="16" rx="2"/>
@@ -3554,7 +3554,7 @@
   <button class="sidebar-view-toggle" id="nativeSidebarViewToggle"
           title="Open sidebar view"
           aria-label="Open sidebar view"
-          onclick="window.__nativeOpenSidebarView && window.__nativeOpenSidebarView()">
+          data-action="openSidebarView">
     <!-- Layout-with-sidebar glyph: a panel split by a vertical
          divider, signalling "device + sidebar" inline view. -->
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -3566,7 +3566,7 @@
 
   <button class="theme-toggle" id="nativeThemeToggle" title="Toggle theme"
           aria-label="Toggle light or dark theme"
-          onclick="window.__nativeToggleTheme && window.__nativeToggleTheme()">
+          data-action="toggleTheme">
     <!-- Sun (visible in light theme). -->
     <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
@@ -3591,7 +3591,7 @@
       <strong>Live logs</strong>
       <button class="ico-btn logs-sheet-close" title="Close logs"
               aria-label="Close logs"
-              onclick="window.__nativeToggleLogs && window.__nativeToggleLogs()">
+              data-action="toggleLogs">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3613,7 +3613,7 @@
       <span>Camera</span>
       <button class="ico-btn camera-host-close" title="Close camera"
               aria-label="Close camera"
-              onclick="window.__nativeToggleCamera && window.__nativeToggleCamera()">
+              data-action="toggleCamera">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3639,7 +3639,7 @@
       </span>
       <button class="ico-btn status-bar-host-close" title="Close status bar overrides"
               aria-label="Close status bar overrides"
-              onclick="window.__nativeToggleStatusBar && window.__nativeToggleStatusBar()">
+              data-action="toggleStatusBar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3666,7 +3666,7 @@
       </span>
       <button class="ico-btn network-host-close" title="Close network conditioning"
               aria-label="Close network conditioning"
-              onclick="window.__nativeToggleNetwork && window.__nativeToggleNetwork()">
+              data-action="toggleNetwork">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3691,7 +3691,7 @@
       </span>
       <button class="ico-btn defaults-host-close" title="Close app defaults"
               aria-label="Close app defaults"
-              onclick="window.__nativeToggleDefaults && window.__nativeToggleDefaults()">
+              data-action="toggleDefaults">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3715,7 +3715,7 @@
       </span>
       <button class="ico-btn notify-host-close" title="Close remote notification"
               aria-label="Close remote notification"
-              onclick="window.__nativeToggleNotify && window.__nativeToggleNotify()">
+              data-action="toggleNotify">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3741,7 +3741,7 @@
       </span>
       <button class="ico-btn location-host-close" title="Close simulated location"
               aria-label="Close simulated location"
-              onclick="window.__nativeToggleLocation && window.__nativeToggleLocation()">
+              data-action="toggleLocation">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
@@ -3767,10 +3767,10 @@
            dismiss glyph people click without reading. -->
       <button class="rec-dock-clear" title="Discard these recordings and free the memory they hold"
               aria-label="Discard recordings"
-              onclick="window.__nativeClearRecordings && window.__nativeClearRecordings()">Clear</button>
+              data-action="clearRecordings">Clear</button>
       <button class="ico-btn rec-dock-close" title="Hide recordings"
               aria-label="Hide recordings"
-              onclick="window.__nativeHideRecordings && window.__nativeHideRecordings()">
+              data-action="hideRecordings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
           <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
