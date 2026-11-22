@@ -75,7 +75,7 @@
         const response = await fetch('/mac/shares', { method: 'POST', body: JSON.stringify(body) });
         const answer = await response.json().catch(() => ({}));
         if (!response.ok || !answer.id) throw new Error(answer.error || 'The Mac didn’t make the display');
-        location.replace(MacShare.pageAddress(answer.id, body.room));
+        location.replace(MacShare.pageAddress(answer.id, body.room, new URLSearchParams(location.search).get('codec')));
       } catch (failure) {
         error.textContent = failure.message;
         button.disabled = false;

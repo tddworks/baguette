@@ -199,9 +199,11 @@ then:
 
 ## 6 · Open questions
 
-- **Does iPhone Safari offer and decode H.265 over WebRTC?** Chrome 157's offer
-  carries it (captured); an iPhone's is still to capture — the first thing
-  slice 5 does, on the device.
+- ~~**Does iPhone Safari offer and decode H.265 over WebRTC?**~~ Yes. An
+  iPhone sharing this Mac (`/mac/share?codec=h265`, 2026-11-22) offered
+  `H265/90000 profile-id=1` first, beside High H.264 (`640c1f`) and
+  Constrained Baseline (`42e01f`), and was sent H.265 — the server's
+  `[webrtc] viewer … sends …` line. Chrome 157 offers it too (captured).
 - **Does H.265 recover from loss as well as H.264?** Both wait for a keyframe
   after a lost reference. The repo's note that HEVC "mosaics under motion" is
   about Apple's own phone stream, not this encoder — slice 6 drops packets on

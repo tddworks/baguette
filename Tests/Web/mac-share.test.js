@@ -45,6 +45,12 @@ test('should remember the room asked for, so a turn keeps it', () => {
     '/devices/454C-UUID?handheld=1&share=454C-UUID&room=moreSpace');
 });
 
+test('should carry the codec asked for on the share page to the shared display', () => {
+  assert.equal(MacShare().pageAddress('454C-UUID', 'moreSpace', 'h265'),
+    '/devices/454C-UUID?handheld=1&share=454C-UUID&room=moreSpace&codec=h265');
+  assert.equal(MacShare().pageAddress('454C-UUID', '', 'h265'), '/devices/454C-UUID?handheld=1&share=454C-UUID&codec=h265');
+});
+
 test('should read the share a page shows, and its room, from its address', () => {
   assert.deepEqual(MacShare().fromAddress('?handheld=1&share=454C-UUID&room=moreSpace'),
     { id: '454C-UUID', room: 'moreSpace' });

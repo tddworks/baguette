@@ -62,6 +62,16 @@ public final class WebRTCViewer: @unchecked Sendable {
             events: events, clock: clock, schedule: schedule, reflexive: reflexive, relay: relay, pacing: pacing, id: id)
         events.viewer = self
         sink.attach(self)
+        // Which codec it sends, of those the browser offered: how a browser's
+        // H.265 support shows up in the server's log.
+        diagnose("[webrtc] viewer \(id) sends \(Self.named(offer.codec)) (offered: \(offer.offered.map(Self.named).joined(separator: ", ")))")
+    }
+
+    private static func named(_ codec: VideoCodec) -> String {
+        switch codec {
+        case let .h264(_, profileLevelID): "\(codec.rtpmap) profile-level-id=\(profileLevelID)"
+        case let .h265(_, profileID, _, _): "\(codec.rtpmap) profile-id=\(profileID)"
+        }
     }
 
     /// The SDP answer to the browser's offer.

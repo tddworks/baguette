@@ -36,10 +36,12 @@
       return body;
     },
 
-    /** The shared display's page: in the hand, knowing its share and the room it asked for. */
-    pageAddress(id, room) {
+    /** The shared display's page: in the hand, knowing its share, the room it
+     *  asked for and the codec (`?codec=h265` on the share page) it streams in. */
+    pageAddress(id, room, codec) {
       const enc = encodeURIComponent(id);
-      return '/devices/' + enc + '?handheld=1&share=' + enc + (room ? '&room=' + encodeURIComponent(room) : '');
+      return '/devices/' + enc + '?handheld=1&share=' + enc + (room ? '&room=' + encodeURIComponent(room) : '')
+        + (codec ? '&codec=' + encodeURIComponent(codec) : '');
     },
 
     /** The share a page's address names, and its room; null on any other page. */

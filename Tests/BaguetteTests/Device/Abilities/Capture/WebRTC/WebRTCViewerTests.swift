@@ -227,6 +227,13 @@ struct WebRTCViewerTests {
         #expect(packets.map(\.payload.count) == [14 + 10, 4 + 10])
     }
 
+    @Test func `should say which codec it sends, and which the browser offered`() {
+        let rig = Rig(offer: hevcOffer)
+
+        #expect(rig.diagnostics.value.contains("[webrtc] viewer test-viewer sends H265/90000 profile-id=1 (offered: H265/90000 profile-id=1)"))
+        #expect(Rig().diagnostics.value.contains("[webrtc] viewer test-viewer sends H264/90000 profile-level-id=64001f (offered: H264/90000 profile-level-id=64001f)"))
+    }
+
     @Test func `should make its stream in the codec its session was answered with`() {
         #expect(Rig().madeIn.value?.codecType == kCMVideoCodecType_H264)
         #expect(Rig(offer: hevcOffer).madeIn.value?.codecType == kCMVideoCodecType_HEVC)

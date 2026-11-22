@@ -83,6 +83,10 @@ the page removes it. From a Home Screen icon the page has no browser bars, so
 the display is the whole screen. Every display is 2× (HiDPI), at most 4096
 pixels on its long side.
 
+Open **/mac/share?codec=h265** to stream it in H.265 when the device's browser
+offers it (H.264 otherwise); the server's log says which each viewer got and
+what its browser offered (`[webrtc] viewer … sends …`) → [hevc](../webrtc/hevc.md).
+
 ```
 POST   /mac/shares        {"viewer":"iPhone","width":440,"height":956,"scale":3,"room":"standard","use":"main"} → 201 {"id"}
 PUT    /mac/shares/<id>   {"width":956,"height":440,"scale":3}   ← the device turned
