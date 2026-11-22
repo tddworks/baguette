@@ -21,7 +21,7 @@ const FILES = [
   path.join(WEB, 'capture', 'capture-size.js'),
   path.join(WEB, 'capture', 'capture-settings.js'),
   path.join(WEB, 'capture', 'capture-composer.js'),
-  path.join(WEB, 'recorder.js'),
+  path.join(WEB, 'capture', 'recorder.js'),
 ];
 
 // ── the fake browser ─────────────────────────────────────────
@@ -548,7 +548,7 @@ test('a ratio size stays filesystem-safe in the filename (CaptureSettings.slug)'
 function loadBare(overrides) {
   FakeMediaRecorder.instances = [];
   const win = fakeWindow(overrides);
-  loadBrowserModules([path.join(WEB, 'recorder.js')], win);
+  loadBrowserModules([path.join(WEB, 'capture', 'recorder.js')], win);
   return win;
 }
 

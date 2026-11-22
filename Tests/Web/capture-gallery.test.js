@@ -125,7 +125,7 @@ function galleryFor({
       path.join(WEB, 'capture', 'capture-settings.js'),
       path.join(WEB, 'capture', 'capture-composer.js'),
     ] : []),
-    path.join(WEB, 'capture-gallery.js'),
+    path.join(WEB, 'capture', 'capture-gallery.js'),
   ], window);
   const CaptureSettings = window.Baguette && window.Baguette._CaptureSettings;
   const gallery = new window.CaptureGallery({ udid: 'UD-1', screen, frameImg });

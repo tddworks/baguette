@@ -541,6 +541,7 @@ struct Server: Sendable {
         "panels/status-bar",
         "screens",
         "toolbar",
+        "wire",
         "vendor/leaflet",
     ]
 

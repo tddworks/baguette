@@ -6,7 +6,7 @@ const path = require('node:path');
 const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'device-badge.js'
+  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'device', 'device-badge.js'
 );
 
 function DeviceBadge() {

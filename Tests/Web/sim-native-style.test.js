@@ -226,7 +226,7 @@ test('sim-native.js loads the capture vocabulary and the recorder', () => {
     '/capture/capture-settings.js',
     '/capture/capture-composer.js',
     '/capture/capture-size-menu.js',
-    '/recorder.js',
+    '/capture/recorder.js',
   ]) {
     assert.ok(
       src.includes(module),

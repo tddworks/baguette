@@ -7,7 +7,7 @@ const { loadBrowserModules } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'stream-session.js'
+  'wire', 'stream-session.js'
 );
 
 function loadStreamSession(seed) {

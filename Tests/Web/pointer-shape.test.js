@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
-const MODULE_PATH = path.join(__dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'pointer-shape.js');
+const MODULE_PATH = path.join(__dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'families', 'mac', 'pointer-shape.js');
 
 function PointerShape() {
   return loadBrowserModule(MODULE_PATH).Baguette._PointerShape;

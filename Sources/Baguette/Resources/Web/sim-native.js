@@ -2516,7 +2516,7 @@
     ['/capture/capture-settings.js', () => window.Baguette && window.Baguette._CaptureSettings],
     ['/capture/capture-composer.js', () => window.Baguette && window.Baguette._CaptureComposer],
     ['/capture/capture-size-menu.js', () => window.CaptureSizeMenu],
-    ['/recorder.js', () => window.BrowserRecorder],
+    ['/capture/recorder.js', () => window.BrowserRecorder],
   ];
 
   let captureMenu = null;   // CaptureSizeMenu — the size chip in the toolbar

@@ -63,18 +63,18 @@
      as JS and throw `Unexpected token '<'`. -->
 <!-- The base-path seam: simulators vs physical devices. Must load
      before every module that builds a resource URL. -->
-<script src="/target.js"></script>
-<script src="/device-badge.js"></script>
-<script src="/mac-frame-choices.js"></script>
+<script src="/wire/target.js"></script>
+<script src="/device/device-badge.js"></script>
+<script src="/families/mac/mac-frame-choices.js"></script>
 <script type="module" src="/families/families.js"></script>
 <script type="module" src="/page/page-panels.js"></script>
 <script type="module" src="/page/device-list.js"></script>
-<script src="/local-pointer.js"></script>
-<script src="/pointer-shape.js"></script>
-<script src="/frame-decoder.js"></script>
+<script src="/families/mac/local-pointer.js"></script>
+<script src="/families/mac/pointer-shape.js"></script>
+<script src="/wire/frame-decoder.js"></script>
 <!-- Filters the stored format against frame-decoder.js's capability
      probe; must load before sim-stream.js / sim-native.js. -->
-<script src="/stream-format.js"></script>
+<script src="/wire/stream-format.js"></script>
 <!-- Shared capture-size vocabulary (Resources/Web/capture/). These must
      load BEFORE capture-gallery.js / recorder.js / sim-stream.js: the
      picker and both capture surfaces read `window.Baguette._CaptureSize`
@@ -90,10 +90,10 @@
 <script src="/toolbar/toolbar-fold.js"></script>
 <script src="/handheld/handheld-mode.js"></script>
 <script src="/handheld/handheld-button.js"></script>
-<script src="/capture-gallery.js"></script>
-<script src="/recorder.js"></script>
-<script src="/stream-session.js"></script>
-<script src="/whep-session.js"></script>
+<script src="/capture/capture-gallery.js"></script>
+<script src="/capture/recorder.js"></script>
+<script src="/wire/stream-session.js"></script>
+<script src="/wire/whep-session.js"></script>
 <script src="/panels/logs/log-view.js"></script>
 <script src="/sim-ax-inspector.js"></script>
 <script src="/panels/camera/camera-view.js"></script>
