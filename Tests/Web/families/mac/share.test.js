@@ -76,3 +76,17 @@ test('should fall back to the socket stream when a shared page\'s WebRTC offer i
   assert.equal(MacShare.format('avcc'), 'avcc');
   assert.equal(MacShare.afterRefusal, 'avcc');
 });
+
+test('should end a share page\'s share when the page is left, as soon as its address names one', () => {
+  const listeners = {}, requests = [];
+  const browser = { on: (event, fn) => { listeners[event] = fn; }, fetch: (url, init) => { requests.push([url, init.method]); } };
+  pageShare().endOnLeave('?share=SHARED&room=standard', browser);
+  listeners.pagehide();
+  assert.deepEqual(requests, [['/mac/shares/SHARED', 'DELETE']]);
+});
+
+test('should end nothing when the page is not a share\'s', () => {
+  const listeners = {};
+  pageShare().endOnLeave('?handheld=1', { on: (event, fn) => { listeners[event] = fn; }, fetch: () => {} });
+  assert.equal(listeners.pagehide, undefined);
+});

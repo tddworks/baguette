@@ -3,6 +3,7 @@
 // display opens, and when the device has turned enough to remake it. The
 // shape itself is the server's (`SharedScreenShape`); this only reports the
 // screen. The Mac family's (docs/features/web-page/design.md).
+import { endOnLeave } from './internal/share-follow.js';
 
 /** How far a side may change, as a browser bar comes and goes, and still be the same screen. */
 const WOBBLE = 0.08;
@@ -70,6 +71,13 @@ export function pageShare() {
       const query = new URLSearchParams(search || '');
       const id = query.get('share');
       return id ? { id, room: query.get('room') } : null;
+    },
+
+    /** On a share's page (`search` names one), leaving the page ends that
+     *  share — set up before the page knows its device (`endOnLeave`). */
+    endOnLeave(search, browser) {
+      const shared = this.fromAddress(search);
+      if (shared) endOnLeave(shared, this, browser);
     },
 
     /** A shared Mac streams over WebRTC — paced, hardware-decoded, smooth on a

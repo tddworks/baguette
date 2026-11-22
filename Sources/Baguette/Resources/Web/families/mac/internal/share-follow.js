@@ -50,8 +50,14 @@ export function followShare(share, macShare, browser) {
     browser.clearTimeout(settle);
     settle = browser.setTimeout(reshape, SETTLE_MS);
   });
-  // Leaving ends the share, even mid-turn: the server ends it after the turn
-  // it is making. A reload of the page's own (a turn done) keeps it.
+}
+
+/** Leaving the page ends the share, even mid-turn: the server ends it after
+ *  the turn it is making. A reload of the page's own (a turn done) keeps it.
+ *  Registered as soon as the page knows it shows a share — before it knows the
+ *  device — so a page closed while that read is pending, or failed, still ends it. */
+export function endOnLeave(share, macShare, browser) {
+  const id = encodeURIComponent(share.id);
   browser.on('pagehide', () => {
     if (!macShare.leaving()) return;
     try { browser.fetch('/mac/shares/' + id, { method: 'DELETE', keepalive: true }); } catch { /* the server ends nothing */ }

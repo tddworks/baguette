@@ -6,6 +6,7 @@
 // foldable, axInspector, pluginPanels, companionsUI, capture(), power(),
 // rotation(), themeUI(), mountAxInspector(), mountPlugins() }.
 // Out of page/device-page.js (design §4).
+import { pageStorage } from '../../device/page-storage.js';
 
 import { Sim3DPanel } from './device-3d.js';
 import { StreamSession } from '../../stream/stream-session.js';
@@ -16,6 +17,8 @@ import { FrameDecoder } from '../../stream/frame-decoder.js';
 import { MacShare } from '../../families/mac/share.js';
 
 export function liveView(page) {
+  // The browser's storage, or one that remembers nothing when it's refused.
+  const store = pageStorage(window);
   let session = null;
   let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
   let lastPaintedSize = { w: 0, h: 0 };
@@ -93,28 +96,32 @@ export function liveView(page) {
       codec: format === 'webrtc' ? currentCodec().asked
         : format === 'avcc' ? currentCodec().forSocket({ decodesHEVC }) : undefined,
       onCodec: format === 'mjpeg' ? undefined : (mimeType) => reflectCodec(StreamCodec.arrived(mimeType)),
-      onError: format === 'webrtc' ? () => {
-        // A shared Mac's tab keeps its own choice: the socket from now on.
-        const MacShare = sharedMac();
-        if (MacShare) {
-          try { sessionStorage.setItem(SHARE_FORMAT_KEY, MacShare.afterRefusal); } catch { /* the socket this once */ }
-        } else {
-          localStorage.removeItem(FORMAT_KEY);
-        }
-        startSession(MacShare ? StreamFormat.pick(MacShare.afterRefusal, decodeCapabilities()).id : currentFormat());
-      } : undefined,
+      onError: format === 'webrtc' ? () => fallBackFromWebRTC() : undefined,
     }, sessionCallbacks()));
     // `boot()` runs this before wiring the toolbar and unload handler,
     // so a throw here killed the whole page, not just the canvas (#71).
     try {
-      session.start();
+      const started = session.start();
+      // WebRTC starts asynchronously: an offer or WHEP request that fails
+      // rejects, and nothing else would say so. This session, if still the
+      // page's, stops and the socket takes over, as for a refused offer.
+      if (started && typeof started.then === 'function') {
+        const mine = session;
+        started.catch((err) => {
+          if (session !== mine) return;
+          console.warn('[native] ' + format + ' stream failed to start:', (err && err.message) || err);
+          try { mine.stop(); } catch (_) { /* ignore */ }
+          session = null;
+          fallBackFromWebRTC();
+        });
+      }
     } catch (err) {
       console.warn('[native] ' + format + ' stream failed to start:',
           (err && err.message) || err);
       try { session.stop(); } catch (_) { /* ignore */ }
       session = null;
       if (format !== 'mjpeg') {
-        localStorage.removeItem(FORMAT_KEY);
+        store.removeItem(FORMAT_KEY);
         startSession('mjpeg');
       }
       return;
@@ -132,6 +139,18 @@ export function liveView(page) {
     // Once only — `startSession` re-runs on every format swap, and
     // re-mounting would append a second copy of every rail button.
     if (!page.pluginPanels) page.mountPlugins();
+  }
+
+  /** WebRTC refused or failed: the best socket format from now on — a shared
+   *  Mac's tab keeps that choice to itself. */
+  function fallBackFromWebRTC() {
+    const MacShare = sharedMac();
+    if (MacShare) {
+      try { sessionStorage.setItem(SHARE_FORMAT_KEY, MacShare.afterRefusal); } catch { /* the socket this once */ }
+    } else {
+      store.removeItem(FORMAT_KEY);
+    }
+    startSession(MacShare ? StreamFormat.pick(MacShare.afterRefusal, decodeCapabilities()).id : currentFormat());
   }
 
   // Which pill is lit, and which isn't offerable at all.
@@ -157,7 +176,7 @@ export function liveView(page) {
   const CODEC_KEY = 'asc.simCodec';
   function currentCodec() {
     let stored = null;
-    try { stored = localStorage.getItem(CODEC_KEY); } catch { /* none stored */ }
+    try { stored = store.getItem(CODEC_KEY); } catch { /* none stored */ }
     return StreamCodec.pick(new URLSearchParams(location.search).get('codec'), stored);
   }
 
@@ -178,7 +197,7 @@ export function liveView(page) {
   function setCodec(next) {
     const wanted = StreamCodec.named(next);
     if (!wanted) return;
-    try { localStorage.setItem(CODEC_KEY, wanted.id); } catch { /* this session only */ }
+    try { store.setItem(CODEC_KEY, wanted.id); } catch { /* this session only */ }
     if (new URLSearchParams(location.search).has('codec')) {
       // The address's `?codec=` would win; drop it so the choice holds.
       const url = new URL(location.href);
@@ -208,7 +227,7 @@ export function liveView(page) {
 
   function storedFormat() {
     const MacShare = sharedMac();
-    if (!MacShare) return localStorage.getItem(FORMAT_KEY);
+    if (!MacShare) return store.getItem(FORMAT_KEY);
     let picked = null;
     try { picked = sessionStorage.getItem(SHARE_FORMAT_KEY); } catch { /* none picked */ }
     return MacShare.format(picked);
@@ -252,7 +271,7 @@ export function liveView(page) {
     if (open && page.foldable && render3DPanel && !fixed) {
       render3DPanel.setFixed(!render3DPanel.fixed);
       if (btn) btn.classList.toggle('active', !render3DPanel.fixed);
-      const inspector = !render3DPanel.fixed && localStorage.getItem('asc.3dInspector') !== 'closed';
+      const inspector = !render3DPanel.fixed && store.getItem('asc.3dInspector') !== 'closed';
       if (inspector) view.setAttribute('data-render3d-inspector', 'open');
       else view.removeAttribute('data-render3d-inspector');
       const sheet = document.getElementById('native3DSheet');
@@ -276,7 +295,7 @@ export function liveView(page) {
         session = null;
       }
       view.setAttribute('data-render3d', 'open');
-      const inspectorOpen = !fixed && localStorage.getItem('asc.3dInspector') !== 'closed';
+      const inspectorOpen = !fixed && store.getItem('asc.3dInspector') !== 'closed';
       if (inspectorOpen) {
         view.setAttribute('data-render3d-inspector', 'open');
       }
@@ -321,10 +340,10 @@ export function liveView(page) {
     const open = view.getAttribute('data-render3d-inspector') === 'open';
     if (open) {
       view.removeAttribute('data-render3d-inspector');
-      localStorage.setItem('asc.3dInspector', 'closed');
+      store.setItem('asc.3dInspector', 'closed');
     } else {
       view.setAttribute('data-render3d-inspector', 'open');
-      localStorage.setItem('asc.3dInspector', 'open');
+      store.setItem('asc.3dInspector', 'open');
     }
     if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
   }
@@ -333,6 +352,8 @@ export function liveView(page) {
    *  plays it: remembered — per tab on a shared Mac's page — and the session
    *  (or the 3D view) moved onto it. */
   function setFormat(next) {
+      // No live surface (the device's definition failed): nothing to stream into.
+      if (!page.sim) return;
       // Storing an undecodable format wedges the origin (#71). The
       // button is already disabled; this is the second lock.
       const wanted = StreamFormat.named(next);
@@ -344,7 +365,7 @@ export function liveView(page) {
       if (sharedMac()) {
         try { sessionStorage.setItem(SHARE_FORMAT_KEY, wanted.id); } catch { /* the tab forgets */ }
       } else {
-        localStorage.setItem(FORMAT_KEY, wanted.id);
+        store.setItem(FORMAT_KEY, wanted.id);
       }
       reflectFormat(wanted.id);
       if (view && view.getAttribute('data-render3d') === 'open') {

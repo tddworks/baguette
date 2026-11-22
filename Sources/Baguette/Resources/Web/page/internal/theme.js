@@ -2,8 +2,11 @@
 // remembered, else following the OS; the live 3D view's background follows
 // it. What it needs of the page is its port: { render3DPanel }.
 // Out of page/device-page.js (design §4).
+import { pageStorage } from '../../device/page-storage.js';
 
 export function theme(page) {
+  // The browser's storage, or one that remembers nothing when it's refused.
+  const store = pageStorage(window);
   // Theme toggle. Three logical states — "auto" (no manual pin,
   // follow OS via prefers-color-scheme), "light", "dark". The pill
   // in the bottom-right corner cycles light ↔ dark; we don't
@@ -13,7 +16,7 @@ export function theme(page) {
   const THEME_KEY = 'baguette.simTheme';
 
   function applyStoredTheme() {
-    const stored = localStorage.getItem(THEME_KEY);
+    const stored = store.getItem(THEME_KEY);
     if (stored === 'light' || stored === 'dark') {
       setTheme(stored);
     }
@@ -41,10 +44,10 @@ export function theme(page) {
     if (!root) return;
     if (theme === 'light' || theme === 'dark') {
       root.setAttribute('data-theme', theme);
-      localStorage.setItem(THEME_KEY, theme);
+      store.setItem(THEME_KEY, theme);
     } else {
       root.removeAttribute('data-theme');
-      localStorage.removeItem(THEME_KEY);
+      store.removeItem(THEME_KEY);
     }
     if (page.render3DPanel && root.getAttribute('data-render3d') === 'open') {
       page.render3DPanel.setBackground(live3DBackground());

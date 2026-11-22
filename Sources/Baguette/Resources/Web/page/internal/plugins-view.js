@@ -44,9 +44,10 @@ export function pluginsView(page) {
   // row's frame already arrives in that space, so there's nothing to
   // convert.
   function tapForPlugin(point) {
-    if (!page.live().session || !page.sim || !page.sim.screen || !page.sim.screen.size) return;
+    if (!page.sim || !page.sim.screen || !page.sim.screen.size) return;
     const size = page.sim.screen.size;
-    page.live().session.send({
+    // The page's input route: the 3D view's stream while it's open, else the 2D session's.
+    page.send({
       type: 'tap',
       x: point.x, y: point.y,
       width: size.width, height: size.height,

@@ -10,7 +10,9 @@
 // `devicePage()` answers whether it took the page, so page/page.js shows
 // the devices list only when it didn't.
 import { serverDevices as serverDevicesOf } from '../device/devices.js';
+import { pageStorage } from '../device/page-storage.js';
 import { Families } from '../families/families.js';
+import { MacShare } from '../families/mac/share.js';
 import { panelsOn } from './page-panels.js';
 import { captureControls } from '../capture/capture-controls.js';
 import { Baguette } from '../baguette/baguette.js';
@@ -76,6 +78,9 @@ export function devicePage() {
   }
 
   async function boot() {
+    // A share's page ends its share when it is left — set up before anything
+    // below can wait or fail, so a page closed meanwhile still ends it.
+    MacShare.endOnLeave(location.search, pageBrowser());
     // Reset whatever sim.html landed with. Body gets `margin:0;
     // overflow:hidden;` so the focus-mode UI fills the viewport,
     // but the *background* is left to the focus-mode stylesheet —
@@ -115,7 +120,7 @@ export function devicePage() {
     device = Families.device(listing, {
       id: udid,
       devices: serverDevices(),
-      storage: localStorage,
+      storage: pageStorage(window),
       address: location.search,
       // `params` (a pick the browser may not store) ride the reload in the address.
       reload: (params) => reloadPage(params),
@@ -303,14 +308,19 @@ export function devicePage() {
         const out = rotation().current === 'portrait' || !device.orientation
           ? payload
           : device.orientation.toPortrait(payload, rotation().current);
-        const view = document.getElementById('simNativeView');
-        if (view && view.getAttribute('data-render3d') === 'open' &&
-            live().render3DPanel && live().render3DPanel.send(out)) return;
-        if (live().session) live().session.send(out);
+        sendToDevice(out);
       },
       getOrientation: () => rotation().current,
       log: (msg) => console.log('[native]', msg),
     });
+  }
+
+  /** Input to the device, down whichever stream shows it: the live 3D view's while it's open, else the 2D session's. */
+  function sendToDevice(payload) {
+    const view = document.getElementById('simNativeView');
+    if (view && view.getAttribute('data-render3d') === 'open' &&
+        live().render3DPanel && live().render3DPanel.send(payload)) return true;
+    return !!(live().session && live().session.send(payload));
   }
 
   async function readHinge() {
@@ -455,7 +465,7 @@ export function devicePage() {
     return pluginsViewUI || (pluginsViewUI = pluginsViewOf({
       get udid() { return udid; },
       get sim() { return sim; },
-      live: (...args) => live(...args),
+      send: (payload) => sendToDevice(payload),
       rightRails: (...args) => rightRails(...args),
     }));
   }

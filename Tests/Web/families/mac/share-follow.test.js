@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { followShare } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/share-follow.js';
+import { followShare, endOnLeave } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/share-follow.js';
 import { pageShare } from '../../../../Sources/Baguette/Resources/Web/families/mac/share.js';
 
 // A share's page follows its viewer: when the device turns, the display is
@@ -72,15 +72,17 @@ test('should make it once more when the device turned again while it was being m
   assert.equal(b.reloads, 1);
 });
 
+// Registered before the page knows the device: a page that closes while it
+// still reads what the device is (or fails to) ends its share all the same.
 test('should end the share when the page is left, and keep it when the page reloads itself', () => {
   const left = browser();
-  followShare(share, pageShare(), left);
+  endOnLeave(share, pageShare(), left);
   left.fire('pagehide');
   assert.deepEqual(left.requests.map((r) => [r.url, r.method]), [['/mac/shares/SHARED', 'DELETE']]);
 
   const reloading = browser();
   const own = pageShare();
-  followShare(share, own, reloading);
+  endOnLeave(share, own, reloading);
   own.reloadKeepingShare(reloading.location);
   reloading.fire('pagehide');
   assert.equal(reloading.requests.length, 0);
@@ -94,7 +96,9 @@ test('should end the share when the page is left while a turn is still being mad
     if (init.method === 'PUT') await new Promise((r) => { answer = r; });
     return { ok: true };
   };
-  followShare(share, pageShare(), b);
+  const own = pageShare();
+  endOnLeave(share, own, b);
+  followShare(share, own, b);
   Object.assign(b, { width: 874, height: 402 });
   b.fire('resize');
   const turning = b.settle();
@@ -103,4 +107,11 @@ test('should end the share when the page is left while a turn is still being mad
   assert.deepEqual(b.requests.map((r) => r.method), ['PUT', 'DELETE']);
   answer();
   await turning;
+});
+
+test('should leave ending the share to its page, not to following the viewer', () => {
+  const b = browser();
+  followShare(share, pageShare(), b);
+  assert.throws(() => b.fire('pagehide'));
+  assert.equal(b.requests.length, 0);
 });

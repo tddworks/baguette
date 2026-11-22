@@ -3,6 +3,7 @@
 // server by the display's own size — and no frame. A pick is remembered per
 // display, as a phone's borrowed chrome is, and the page reloads into it.
 
+import { chromeInAddress } from '../../../device/picked-chrome.js';
 import { MacFrameChoices } from './mac-frame-choices.js';
 
 const KEY = (id) => 'baguette.twin.chrome.' + id;
@@ -46,7 +47,7 @@ export function macFramePicker(id, { devices, storage, reload }) {
           'text-align:left;padding:6px 10px;border:0;border-radius:7px;cursor:pointer;' +
           'background:' + (choice.chosen ? '#eff6ff' : 'transparent') + ';color:#1f2937;font:inherit';
       // The pick rides the reload too, in case the browser wouldn't store it.
-      item.addEventListener('click', () => { rememberFrame(storage, id, choice.pick); reload({ chrome: choice.pick || null }); });
+      item.addEventListener('click', () => { rememberFrame(storage, id, choice.pick); reload({ chrome: chromeInAddress(choice.pick) }); });
       pop.appendChild(item);
     });
     if (choices.length === 1) {
