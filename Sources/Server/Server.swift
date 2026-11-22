@@ -48,6 +48,8 @@ struct Server: Sendable {
     let chromes: any Chromes
     /// The Mac frames installed on this Mac, which a Mac display's page offers.
     let macFrames: MacFrames
+    /// This Mac shared to viewers' devices, with `--share-mac`; nil otherwise.
+    let screenShares: ScreenShares?
     let models: any DeviceModels
     let deviceRenderer: any DeviceRenderer
     let plugins: any Plugins
@@ -92,6 +94,7 @@ struct Server: Sendable {
         simulators: any Simulators,
         chromes: any Chromes,
         macFrames: MacFrames = MacFrames(),
+        screenShares: ScreenShares? = nil,
         models: any DeviceModels = DeviceModelCatalog.empty,
         deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
         plugins: any Plugins = FileSystemPlugins(roots: []),
@@ -117,6 +120,7 @@ struct Server: Sendable {
         self.allDevices = allDevices
         self.chromes = chromes
         self.macFrames = macFrames
+        self.screenShares = screenShares
         self.models = models
         self.deviceRenderer = deviceRenderer
         self.plugins = plugins
@@ -201,6 +205,7 @@ struct Server: Sendable {
         registerPowerRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerDeviceListingRoute(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerPlaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerMacShareRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerFileRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerHingeRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)

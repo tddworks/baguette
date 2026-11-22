@@ -51,6 +51,8 @@ struct Baguette: AsyncParsableCommand {
             DiagDigitizerTrackpadCommand.self,
             HealCommand.self,
             DefaultsCommand.self,
+            VirtualDisplayCommand.self,
+            MainDisplayCommand.self,
         ]
     )
 }

@@ -14,6 +14,18 @@ enum HostDisplayList {
         return ids.prefix(Int(count)).compactMap(info)
     }
 
+    /// The main display now: where the menu bar, the Dock and new windows are.
+    @Sendable static func main() -> UInt32 { CGMainDisplayID() }
+
+    /// Whether the Mac lists the display `id` now.
+    @Sendable static func isListed(_ id: UInt32) -> Bool {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success else { return false }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return false }
+        return ids.prefix(Int(count)).contains(id)
+    }
+
     private static func info(_ id: CGDirectDisplayID) -> MacDisplayInfo? {
         guard let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
               let text = CFUUIDCreateString(nil, uuid) as String?
