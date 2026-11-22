@@ -63,7 +63,8 @@ Devices  ◆                                  EVERY DEVICE — one list from eve
                                             parse(dict); execute(on:) its role, refused by name without it
         sources (one per device family):    SimulatorDevices (the tree below) · CompanionDevices ·
                                             CoreDevicePhones (screen, touch, accessibility, pasteboard) ·
-                                            AndroidDevices (listed through adb; no abilities yet)
+                                            AndroidDevices (listed through adb; no abilities yet) ·
+                                            MacDisplays (screen, touch, scroll, key, type; only when asked for)
 
 Simulators  ◆                               THE SIMULATOR FAMILY — a device set (default or --device-set)
 └── Simulator  ◆                            ONE SIMULATOR — udid, name, state, runtime, device type;
@@ -215,6 +216,9 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a viewer retunes its encoder when the target moves by more than 10%. A decrease applies immediately. An increase waits at least a second after the last retune | `EncoderRetune` |
 | a phone streams H.264, never HEVC: offered both it picks HEVC, whose pictures mosaic under motion though every packet arrives | `MediaStreamOffer` |
 | a phone's frames are its screen: the stream pads the picture (1320 × 2868 in 1328 × 2896) without saying so, and it is cropped once, where it is decoded, to the size the phone reports — never by a page, a bezel or a consumer | `CleanAperture` (applied by `VTStreamDecoder`) |
+| this Mac's displays are reached only when asked for — `serve --share-mac`, `list --mac`, or a display's UUID given to `--udid` — and listing them asks for no permission; only watching one asks for Screen Recording | `MacDisplays` · `DeviceKinds` |
+| a Mac display's feed hands on complete pictures only, at most 4096 pixels on the long side; an unchanged one repeats the last | `MacScreen` · `DisplayCaptureSize` |
+| a gesture on a Mac display lands at the same fraction of where it sits on the desktop; a key's modifiers are held around it and released in reverse; a second finger sends nothing | `DisplayEvents` |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
 | a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
 | a phone's tree takes its screen from the app at its root, which fills it | `AXNode.onItsAppsScreen` |
@@ -296,6 +300,7 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
 | **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
+| **Mac** | *what is this Mac's display, and how is it watched and driven?* | ◇ `MacDisplayInfo` `DisplayCaptureSize` `DisplayEvents` `HostEvent` · ◆ `DisplayFeed` `HostEvents` · `MacDisplays` (its source of `Devices`) |
 | **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `VideoDepacketizer` (its screen; `RTPPacket` is WebRTCKit's) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind

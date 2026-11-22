@@ -18,7 +18,8 @@ extension ServeCommand {
         let twinScreens = TwinScreens()
         let kinds = DeviceKinds(
             simulators: simulators,
-            companions: CompanionDevices(phones: companions, screens: twinScreens)
+            companions: CompanionDevices(phones: companions, screens: twinScreens),
+            macs: shareMac ? MacDisplays.onThisMac() : nil
         )
         let server = Server(
             simulators: simulators,

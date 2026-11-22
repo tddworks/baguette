@@ -124,6 +124,16 @@ struct CommandParsingTests {
         #expect(cmd.json == true)
     }
 
+    @Test func `should list this Mac's displays only when list is asked with --mac`() throws {
+        #expect(try ListCommand.parse([]).mac == false)
+        #expect(try ListCommand.parse(["--mac"]).mac == true)
+    }
+
+    @Test func `should share this Mac's displays only when serve is asked with --share-mac`() throws {
+        #expect(try ServeCommand.parse([]).shareMac == false)
+        #expect(try ServeCommand.parse(["--share-mac"]).shareMac == true)
+    }
+
     // MARK: - boot / shutdown share DeviceOption
 
     @Test func `should take the simulator to boot from --udid`() throws {

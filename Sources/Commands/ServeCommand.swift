@@ -35,6 +35,9 @@ struct ServeCommand: AsyncParsableCommand {
     )
     var pluginDirs: [String] = []
 
+    @Flag(name: .customLong("share-mac"), help: "Also show this Mac's displays as devices, watched and driven from the page. Anyone who can reach --host:--port sees and controls this Mac.")
+    var shareMac: Bool = false
+
     @Flag(name: .customLong("no-plugins"), help: "Ignore every installed plugin, including bundled ones.")
     var noPlugins = false
 

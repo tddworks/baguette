@@ -31,8 +31,11 @@ extension DeviceOption {
 
     /// The device `--udid` names, from every family this host can reach —
     /// or exit 1 saying no source knows it.
+    /// A Mac display's UUID given here is itself the ask to reach it.
     func device() throws -> any Device {
-        try orExit { try devices.device(DeviceID(udid)) }
+        var kinds = Self.kinds(deviceSet: deviceSet)
+        if Self.reachable == nil { kinds.macs = MacDisplays.onThisMac() }
+        return try orExit { try kinds.devices.device(DeviceID(udid)) }
     }
 
     /// Every device this run can see, from every family.

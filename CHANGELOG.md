@@ -13,6 +13,9 @@ For releases prior to this changelog, see the
 ### Changed
 - `POST /devices/:udid/input` taps land ~35 ms sooner (no wait on the Android tools listing devices); live streams encode a changed screen at once and refresh a still one on a steady beat (~14 ms; 53 frames shown/s, was 41).
 
+### Added
+- `baguette serve --share-mac` and `list --mac` show this Mac's displays as devices: streamed, recorded, screenshotted and driven (click, drag, scroll, keys, any-script typing) like a simulator, through ScreenCaptureKit and CGEvent. → [docs](docs/features/mac-screen/README.md)
+
 ---
 
 ## [0.3.1] - 2026-11-21

@@ -15,12 +15,13 @@ Every `baguette` command and flag, generated from the binary. For how to use a f
 List simulators in the default or a custom device set, then connected physical devices
 
 ```
-baguette list [--json]
+baguette list [--json] [--mac]
 ```
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
 | `--json` |  |  | Emit one running/available JSON envelope (matches /simulators.json) |
+| `--mac` |  |  | Also list this Mac's displays, which `stream`, `record` and `serve --share-mac` can show and drive |
 
 ## baguette boot
 
@@ -451,7 +452,7 @@ baguette logs --udid <udid> [--level <level>] [--style <style>] [--predicate <pr
 Start the standalone simulator UI server
 
 ```
-baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> …] [--plugin-dir <plugin-dir> …] [--no-plugins] [--webrtc-ports <webrtc-ports>] [--stun <stun>] [--turn <turn>] [--turn-user <turn-user>] [--turn-pass <turn-pass>]
+baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> …] [--plugin-dir <plugin-dir> …] [--share-mac] [--no-plugins] [--webrtc-ports <webrtc-ports>] [--stun <stun>] [--turn <turn>] [--turn-user <turn-user>] [--turn-pass <turn-pass>]
 ```
 
 | Flag | Required | Default | Description |
@@ -460,6 +461,7 @@ baguette serve [--port <port>] [--host <host>] [--allowed-hosts <allowed-hosts> 
 | `--host` |  | `127.0.0.1` | Host / interface to bind to |
 | `--allowed-hosts` |  |  | Additional Host/Origin value to trust (repeatable; "*.example.com" matches subdomains) |
 | `--plugin-dir` |  |  | Extra directory of plugins; repeatable. Shadows installed plugins of the same name. |
+| `--share-mac` |  |  | Also show this Mac's displays as devices, watched and driven from the page. Anyone who can reach --host:--port sees and controls this Mac. |
 | `--no-plugins` |  |  | Ignore every installed plugin, including bundled ones. |
 | `--webrtc-ports` |  |  | UDP ports WebRTC viewers' media may use, e.g. 8190-8194 (default: any free port). |
 | `--stun` |  |  | A STUN server to learn each WebRTC viewer's public address from, e.g. stun:stun.l.google.com:19302. |
