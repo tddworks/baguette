@@ -51,6 +51,27 @@ struct MacDisplaysTests {
     @Test func `should land a display's touches on its own place on the desktop`() throws {
         let display = devices([Self.studio]).all[0]
         let input = try #require(try display.abilities.require(.touch) as? MacInput)
-        #expect(input.display == DisplayEvents(bounds: Self.studio.bounds))
+        #expect(input.display() == DisplayEvents(bounds: Self.studio.bounds))
+    }
+
+    @Test func `should land a display's touches where it is now when the displays were rearranged since`() throws {
+        let moved = MacDisplayInfo(
+            id: 2, uuid: Self.studio.uuid, name: "Studio Display", isMain: true,
+            bounds: Rect(origin: Point(x: 0, y: 0), size: Size(width: 2560, height: 1440)))
+        let listed = Listed([Self.builtIn, Self.studio])
+        let mac = MacDisplays(displays: { listed.now }, feed: { MockDisplayFeed() }, events: MockHostEvents())
+        let input = try #require(try mac.find(id: DeviceID(Self.studio.uuid))?.abilities.require(.touch) as? MacInput)
+        listed.now = [moved, Self.builtIn]   // the studio made main: every origin moves
+        #expect(input.display() == DisplayEvents(bounds: moved.bounds))
+    }
+
+    final class Listed: @unchecked Sendable {
+        private let lock = NSLock()
+        private var displays: [MacDisplayInfo]
+        init(_ displays: [MacDisplayInfo]) { self.displays = displays }
+        var now: [MacDisplayInfo] {
+            get { lock.withLock { displays } }
+            set { lock.withLock { displays = newValue } }
+        }
     }
 }

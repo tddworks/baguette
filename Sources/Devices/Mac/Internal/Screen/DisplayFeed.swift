@@ -10,6 +10,13 @@ struct FeedPicture: @unchecked Sendable {
     let complete: Bool
 }
 
+/// Why a feed ended: the person stopped sharing from macOS itself, or it
+/// failed (sleep, the display gone, an error) and may start again.
+enum FeedEnd: Equatable, Sendable {
+    case stoppedByUser
+    case failed
+}
+
 /// ScreenCaptureKit's feed of one display's pictures: started, many pictures,
 /// an end (sleep, the display gone, an error) — or stopped. Its pictures are
 /// the size `sizing` gives for the display as ScreenCaptureKit sees it when
@@ -22,6 +29,6 @@ struct FeedPicture: @unchecked Sendable {
 protocol DisplayFeed: AnyObject, Sendable {
     func start(display: UInt32, sizing: @escaping @Sendable (Size, Double) -> Size,
                onPicture: @escaping @Sendable (FeedPicture) -> Void,
-               onEnd: @escaping @Sendable () -> Void) throws
+               onEnd: @escaping @Sendable (FeedEnd) -> Void) throws
     func stop()
 }

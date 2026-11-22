@@ -17,6 +17,6 @@ struct MainDisplayCommand: ParsableCommand {
     @Option(name: .long) var display: UInt32
 
     func run() throws {
-        guard MainDisplayMove.makeMain(display) else { throw ExitCode.failure }
+        guard MainDisplayMove(configuration: CoreGraphicsDisplayConfiguration()).makeMain(display) else { throw ExitCode.failure }
     }
 }

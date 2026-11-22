@@ -34,11 +34,14 @@
     follow(apply) {
       const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
       const socket = new WebSocket(scheme + location.host + '/mac/pointer');
+      let newest = 0;
       socket.onmessage = (e) => {
         const shape = PointerShape.fromMessage(e.data);
         if (!shape) return;
+        const mine = ++newest;
         const image = new Image();
-        image.onload = () => apply(shape, PointerShape.density(image.naturalWidth, shape.size));
+        // An older shape's image loading late never covers a newer shape.
+        image.onload = () => { if (mine === newest) apply(shape, PointerShape.density(image.naturalWidth, shape.size)); };
         image.src = shape.image;
       };
       return { stop() { socket.close(); } };

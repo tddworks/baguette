@@ -11,23 +11,30 @@ import Testing
 /// its shape — started, reshaped and ended through the real router.
 @Suite("MacSharesRouter")
 struct MacSharesRouterTests {
-    static func shares(makes: Bool = true) -> (ScreenShares, MockVirtualDisplay) {
-        let made = MockVirtualDisplay()
-        given(made).uuid.willReturn("VIRTUAL-UUID")
-        given(made).id.willReturn(7)
-        given(made).remove().willReturn()
+    /// Shares whose Mac makes `made` first and `turned` when the viewer turns
+    /// — one device id, two displays.
+    static func shares(makes: Bool = true) -> (VirtualDisplayShares, made: MockVirtualDisplay, turned: MockVirtualDisplay) {
+        let (made, turned) = (MockVirtualDisplay(), MockVirtualDisplay())
+        for (display, id) in [(made, UInt32(7)), (turned, 8)] {
+            given(display).uuid.willReturn("VIRTUAL-UUID")
+            given(display).id.willReturn(id)
+            given(display).remove().willReturn()
+        }
+        var next = [made, turned]
         let displays = MockVirtualDisplays()
-        given(displays).create(named: .any, shape: .any, serial: .any).willReturn(makes ? made : nil)
+        given(displays).create(named: .any, shape: .any, serial: .any).willProduce { _, _, _ in
+            makes && !next.isEmpty ? next.removeFirst() : nil
+        }
         let arrangement = MockDisplayArrangement()
         given(arrangement).main.willReturn(1)
         given(arrangement).makeMain(.any).willReturn(true)
-        return (ScreenShares(displays: displays, arrangement: arrangement), made)
+        return (VirtualDisplayShares(displays: displays, arrangement: arrangement), made, turned)
     }
 
     static let body = ByteBuffer(string: #"{"viewer":"iPhone","width":402,"height":874,"scale":3}"#)
 
     @Test func `should share the Mac to a viewer through a display of its shape, answering the display's id`() async throws {
-        let (shares, _) = Self.shares()
+        let (shares, _, _) = Self.shares()
         try await InProcessServer(screenShares: shares).test { client in
             let response = try await client.execute(uri: "/mac/shares", method: .post, body: Self.body)
             #expect(response.status == .created)
@@ -37,7 +44,7 @@ struct MacSharesRouterTests {
     }
 
     @Test func `should reshape a share and end it`() async throws {
-        let (shares, made) = Self.shares()
+        let (shares, made, remade) = Self.shares()
         try await InProcessServer(screenShares: shares).test { client in
             _ = try await client.execute(uri: "/mac/shares", method: .post, body: Self.body)
             let turned = ByteBuffer(string: #"{"width":874,"height":402,"scale":3}"#)
@@ -46,7 +53,18 @@ struct MacSharesRouterTests {
             #expect(reshaped.status == .ok)
             #expect(ended.status == .noContent)
             #expect(!shares.isSharing("VIRTUAL-UUID"))
-            verify(made).remove().called(2)   // the turned-from display, then the turned one
+            verify(made).remove().called(1)     // the turned-from display, as the viewer turned
+            verify(remade).remove().called(1)   // the turned one, as the viewer left
+        }
+    }
+
+    @Test func `should end a share through any screen shares when its viewer leaves`() async throws {
+        let shares = MockScreenShares()
+        given(shares).end(.any).willReturn()
+        try await InProcessServer(screenShares: shares).test { client in
+            let ended = try await client.execute(uri: "/mac/shares/SHARED-UUID", method: .delete)
+            #expect(ended.status == .noContent)
+            verify(shares).end(.value("SHARED-UUID")).called(1)
         }
     }
 

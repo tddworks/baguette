@@ -15,12 +15,12 @@ struct MacPointerRouterTests {
                                     png: Data([0x89, 0x50, 0x4E, 0x47]))
 
     /// Pointer shapes whose helper process says `ibeam` the moment it runs.
-    static func shapes() -> PointerShapes {
+    static func shapes() -> ChildPointerShapes {
         let process = MockSubprocess()
         given(process).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any)
             .willProduce { _, _, onBytes, _ in onBytes(Data((Self.ibeam.line + "\n").utf8)) }
         given(process).terminate().willReturn()
-        return PointerShapes(executable: URL(fileURLWithPath: "/usr/local/bin/baguette"), makeProcess: { process })
+        return ChildPointerShapes(executable: URL(fileURLWithPath: "/usr/local/bin/baguette"), makeProcess: { process })
     }
 
     @Test func `should tell a page the Mac's pointer shape as it changes`() async throws {
@@ -41,6 +41,15 @@ struct MacPointerRouterTests {
             #expect(Data(buffer: image.body) == Self.ibeam.png)
             #expect(image.headers[.cacheControl]?.contains("immutable") == true)
             #expect(unknown.status == .notFound)
+        }
+    }
+
+    @Test func `should serve a shape's image through any pointer shapes`() async throws {
+        let shapes = MockPointerShapes()
+        given(shapes).image(id: .value("3de4a52b")).willReturn(Self.ibeam.png)
+        try await InProcessServer(pointerShapes: shapes).test { client in
+            let image = try await client.execute(uri: "/mac/pointer/3de4a52b.png", method: .get)
+            #expect(Data(buffer: image.body) == Self.ibeam.png)
         }
     }
 

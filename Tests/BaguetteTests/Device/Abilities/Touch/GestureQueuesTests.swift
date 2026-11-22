@@ -78,6 +78,11 @@ struct GestureQueuesTests {
         let open = DispatchSemaphore(value: 0)
         private let lock = NSLock()
         private var _ran: [String] = []
+        private var _holding = false
+        /// Whether the lane's work has begun holding it.
+        var holding: Bool { lock.withLock { _holding } }
+        /// The lane's work, holding it until `open`.
+        func hold() -> Bool { lock.withLock { _holding = true }; open.wait(); return true }
         var ran: [String] { lock.withLock { _ran } }
         func record(_ name: String) { lock.withLock { _ran.append(name) } }
     }
@@ -85,9 +90,9 @@ struct GestureQueuesTests {
     @Test func `should land only the newest of pointer moves that waited together`() async {
         let queues = GestureQueues()
         let gate = Gate()
-        async let busy: Bool = queues.run(on: "MAC") { gate.open.wait(); return true }
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        for i in 1...5 { queues.post(on: "MAC") { gate.record("move\(i)") } }
+        async let busy: Bool = queues.run(on: "MAC") { gate.hold() }
+        while !gate.holding { await Task.yield() }
+        for i in 1...5 { queues.post(on: "MAC", move: "hover") { gate.record("move\(i)") } }
         gate.open.signal()
         _ = await busy
         _ = await queues.run(on: "MAC") { true }
@@ -97,13 +102,13 @@ struct GestureQueuesTests {
     @Test func `should land a click between pointer moves in its place`() async {
         let queues = GestureQueues()
         let gate = Gate()
-        async let busy: Bool = queues.run(on: "MAC") { gate.open.wait(); return true }
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        queues.post(on: "MAC") { gate.record("move1") }
+        async let busy: Bool = queues.run(on: "MAC") { gate.hold() }
+        while !gate.holding { await Task.yield() }
+        queues.post(on: "MAC", move: "hover") { gate.record("move1") }
         async let click: Bool = queues.run(on: "MAC") { gate.record("click"); return true }
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        queues.post(on: "MAC") { gate.record("move2") }
-        queues.post(on: "MAC") { gate.record("move3") }
+        while queues.waiting(on: "MAC") < 2 { await Task.yield() }   // the click is in line behind move1
+        queues.post(on: "MAC", move: "hover") { gate.record("move2") }
+        queues.post(on: "MAC", move: "hover") { gate.record("move3") }
         gate.open.signal()
         _ = await (busy, click)
         _ = await queues.run(on: "MAC") { true }

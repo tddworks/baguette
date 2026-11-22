@@ -39,6 +39,9 @@ struct VideoToolboxSessionTests {
         let session = VideoToolboxSession()
         #expect(session.open(width: 64, height: 64, codec: kCMVideoCodecType_H264, lowLatencyRateControl: false) == 0)
         #expect(session.set(.highProfileAutoLevel) == 0)
+        // Real time, no reordering: the encoder hands a frame back at once, as the stream sets it.
+        #expect(session.set(.realTime(true)) == 0)
+        #expect(session.set(.allowFrameReordering(false)) == 0)
         #expect(session.prepare() == 0)
         let answered = DispatchSemaphore(value: 0)
         let box = FrameBox()
@@ -62,6 +65,9 @@ struct VideoToolboxSessionTests {
         let session = VideoToolboxSession()
         #expect(session.open(width: 64, height: 64, codec: kCMVideoCodecType_HEVC, lowLatencyRateControl: false) == 0)
         #expect(session.set(.hevcMainAutoLevel) == 0)
+        // Real time, no reordering: the encoder hands a frame back at once, as the stream sets it.
+        #expect(session.set(.realTime(true)) == 0)
+        #expect(session.set(.allowFrameReordering(false)) == 0)
         #expect(session.prepare() == 0)
         let answered = DispatchSemaphore(value: 0)
         let box = FrameBox()

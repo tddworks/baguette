@@ -968,8 +968,14 @@
       // `?codec=h264|h265|auto` on the page picks the codec (default: auto, H.265 when offered).
       codec: new URLSearchParams(location.search).get('codec') || undefined,
       onError: format === 'webrtc' ? () => {
-        localStorage.removeItem(FORMAT_KEY);
-        startSession(currentFormat());
+        // A shared Mac's tab keeps its own choice: the socket from now on.
+        const MacShare = sharedMac();
+        if (MacShare) {
+          try { sessionStorage.setItem(SHARE_FORMAT_KEY, MacShare.afterRefusal); } catch { /* the socket this once */ }
+        } else {
+          localStorage.removeItem(FORMAT_KEY);
+        }
+        startSession(MacShare ? window.StreamFormat.pick(MacShare.afterRefusal, decodeCapabilities()).id : currentFormat());
       } : undefined,
     }, sessionCallbacks()));
     // `boot()` runs this before wiring the toolbar and unload handler,
@@ -1731,6 +1737,12 @@
     const MacShare = window.Baguette && window.Baguette._MacShare;
     return MacShare && MacShare.fromAddress(location.search) ? MacShare : null;
   }
+  /** Reload this page — on a shared Mac's, keeping its share. */
+  function reloadPage() {
+    const MacShare = sharedMac();
+    if (MacShare) MacShare.reloadKeepingShare(location); else location.reload();
+  }
+
   function storedFormat() {
     const MacShare = sharedMac();
     if (!MacShare) return localStorage.getItem(FORMAT_KEY);
@@ -2226,7 +2238,7 @@
     card.querySelectorAll('[data-chrome-pick]').forEach((btn) => {
       btn.addEventListener('click', () => {
         localStorage.setItem('baguette.twin.chrome.' + udid, btn.dataset.chromePick);
-        location.reload();
+        reloadPage();
       });
     });
   }
@@ -2315,7 +2327,7 @@
           if (choice.pick) localStorage.setItem(key, choice.pick);
           else localStorage.removeItem(key);
         } catch { /* nothing remembered: the page keeps its look */ }
-        location.reload();
+        reloadPage();
       });
       pop.appendChild(item);
     });
@@ -2907,27 +2919,40 @@
     let shown = size();
     let reshaping = false;
     let settle = null;
-    const reshape = async () => {
-      const now = size();
-      if (reshaping || !MacShare.turned(shown, now)) return;
-      reshaping = true;
+    /** Ask for the display in `screen`'s shape; whether the Mac made it. */
+    const remake = async (screen) => {
       const body = MacShare.request({
-        viewport: now, pixelRatio: window.devicePixelRatio, userAgent: navigator.userAgent,
+        viewport: screen, pixelRatio: window.devicePixelRatio, userAgent: navigator.userAgent,
         room: share.room || undefined,
       });
       try {
-        const response = await fetch('/mac/shares/' + id, { method: 'PUT', body: JSON.stringify(body) });
-        if (response.ok) { location.reload(); return; }
-      } catch { /* keep the display as it is */ }
-      shown = now;
-      reshaping = false;
+        return (await fetch('/mac/shares/' + id, { method: 'PUT', body: JSON.stringify(body) })).ok;
+      } catch { return false; }
+    };
+    const reshape = async () => {
+      if (reshaping) return;
+      reshaping = true;
+      try {
+        let target = size();
+        while (MacShare.turned(shown, target)) {
+          // Refused: the display keeps its shape, and so does `shown` — the next turn asks again.
+          if (!(await remake(target))) return;
+          shown = target;
+          const now = size();
+          // Turned again while it was remade: remake it once more before showing it.
+          if (!MacShare.turned(shown, now)) { MacShare.reloadKeepingShare(location); return; }
+          target = now;
+        }
+      } finally {
+        reshaping = false;
+      }
     };
     window.addEventListener('resize', () => {
       clearTimeout(settle);
       settle = setTimeout(reshape, 700);   // a turn resizes several times before it settles
     });
     window.addEventListener('pagehide', () => {
-      if (reshaping) return;
+      if (reshaping || !MacShare.leaving()) return;
       try { fetch('/mac/shares/' + id, { method: 'DELETE', keepalive: true }); } catch { /* the server ends nothing */ }
     });
   }

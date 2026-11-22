@@ -1,3 +1,4 @@
+import BaguetteDevice
 import Darwin
 import Foundation
 
@@ -12,8 +13,8 @@ enum VirtualDisplayLife {
     }
 
     static func holdUntilOrphaned() -> Never {
-        let parent = getppid()
-        while getppid() == parent { sleep(1) }
+        let parent = ParentProcess(startedUnder: getppid())
+        while !parent.isGone(now: getppid()) { sleep(1) }
         exit(0)
     }
 }

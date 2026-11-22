@@ -8,7 +8,9 @@ Each display attached to this Mac is a device: listed by its own UUID (the
 same across reboots), watched through ScreenCaptureKit, and driven through the
 window server — a finger is the mouse, the keyboard and scroll are the Mac's.
 Everything a device's screen feeds works unchanged: `stream` (MJPEG, AVCC),
-`record`, `screenshot`, the `serve` page and its WebRTC view.
+`record`, `screenshot`, the `serve` page and its WebRTC view. One difference:
+a display that isn't changing may send no picture until something on it moves,
+so a new viewer or a `screenshot` of a still screen can wait for that.
 
 Mac displays are **opt-in**: they show and control the Mac itself.
 

@@ -29,4 +29,11 @@ struct ShareRequestTests {
         #expect(throws: ShareRequest.Invalid.self) { try ShareRequest.parse(#"{"width":402,"height":874,"use":"side"}"#) }
         #expect(throws: ShareRequest.Invalid.self) { try ShareRequest.parse("not json") }
     }
+
+    @Test func `should refuse a screen no device has, whose shape would overflow`() {
+        #expect(throws: ShareRequest.Invalid.self) { try ShareRequest.parse(#"{"width":1e308,"height":874,"room":"moreSpace"}"#) }
+        #expect(throws: ShareRequest.Invalid.self) { try ShareRequest.parse(#"{"width":402,"height":20001}"#) }
+        #expect(throws: ShareRequest.Invalid.self) { try ShareRequest.parse(#"{"width":402,"height":874,"scale":1e308}"#) }
+        #expect(throws: ShareRequest.Invalid.self) { try ShareRequest.parse(#"{"width":402,"height":874,"scale":0}"#) }
+    }
 }

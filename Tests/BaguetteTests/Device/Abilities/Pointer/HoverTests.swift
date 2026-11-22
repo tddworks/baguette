@@ -29,7 +29,7 @@ struct HoverTests {
 
     @Test func `should be a gesture every device's wire takes, refused where nothing points`() throws {
         let dispatcher = GestureDispatcher(input: Abilities(device: "iPhone"))
-        #expect(dispatcher.isMotion(line: #"{"type":"hover","x":1,"y":2,"width":10,"height":10}"#))
+        #expect(dispatcher.move(line: #"{"type":"hover","x":1,"y":2,"width":10,"height":10}"#) == "hover")
         #expect(dispatcher.dispatch(line: #"{"type":"hover","x":1,"y":2,"width":10,"height":10}"#).contains("pointer"))
     }
 }

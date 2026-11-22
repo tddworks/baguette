@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import Mockable
 import Testing
@@ -36,6 +37,8 @@ private struct Rig {
     let stream = MockStream()
     let screen = MockScreen()
     let trusted = Box<[String]>([])
+    /// The codecs streams were made in, in order.
+    let madeIn = Box<[CMVideoCodecType]>([])
     let viewers: WebRTCViewers
 
     /// `stun`: a STUN server the viewers ask; `seenAt`, what it answers (nil: silence).
@@ -80,14 +83,14 @@ private struct Rig {
         } else {
             given(stream).start(on: .any).willThrow(CancellationError())
         }
-        let (datagrams, handshake, trusted, stream) = (datagrams, handshake, trusted, stream)
+        let (datagrams, handshake, trusted, stream, madeIn) = (datagrams, handshake, trusted, stream, madeIn)
         viewers = WebRTCViewers(
             ticking: nil,
             connect: { fingerprint in
                 trusted.value.append(fingerprint)
                 return (datagrams, handshake)
             },
-            stream: { _, _ in stream },
+            stream: { _, codec in madeIn.value.append(codec.codecType); return stream },
             encodable: encodable,
             stun: stun, turn: turn)
     }
@@ -100,15 +103,19 @@ private struct Rig {
 @Suite("WebRTCViewers")
 struct WebRTCViewersTests {
     @Test func `should answer with H.265 when it was asked for and the offer carries it`() throws {
-        let (_, answer) = try Rig().admit(bothCodecs, codec: .h265)
+        let rig = Rig()
+        let (_, answer) = try rig.admit(bothCodecs, codec: .h265)
 
         #expect(answer.contains("a=rtpmap:49 H265/90000"))
+        #expect(rig.madeIn.value == [kCMVideoCodecType_HEVC])
     }
 
     @Test func `should answer with H.264 when nothing was asked for`() throws {
-        let (_, answer) = try Rig().admit(bothCodecs)
+        let rig = Rig()
+        let (_, answer) = try rig.admit(bothCodecs)
 
         #expect(answer.contains("a=rtpmap:112 H264/90000") && !answer.contains("H265"))
+        #expect(rig.madeIn.value == [kCMVideoCodecType_H264])
     }
 
     @Test func `should answer with H.264 when H.265 was asked for but this Mac can't encode it`() throws {

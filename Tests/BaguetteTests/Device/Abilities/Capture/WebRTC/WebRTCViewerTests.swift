@@ -230,7 +230,7 @@ struct WebRTCViewerTests {
     @Test func `should say which codec it sends, and which the browser offered`() {
         let rig = Rig(offer: hevcOffer)
 
-        #expect(rig.diagnostics.value.contains("[webrtc] viewer test-viewer sends H265/90000 profile-id=1 (offered: H265/90000 profile-id=1)"))
+        #expect(rig.diagnostics.value.contains("[webrtc] viewer test-viewer sends H265/90000 profile-id=1 level-id=180 (offered: H265/90000 profile-id=1 level-id=180)"))
         #expect(Rig().diagnostics.value.contains("[webrtc] viewer test-viewer sends H264/90000 profile-level-id=64001f (offered: H264/90000 profile-level-id=64001f)"))
     }
 

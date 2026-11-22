@@ -47,10 +47,13 @@
         arrow.style.top = at.top + '%';
         arrow.style.display = 'block';
       };
-      ['pointerdown', 'pointermove'].forEach((type) =>
-        screenArea.addEventListener(type, follow, { passive: true }));
+      const types = ['pointerdown', 'pointermove'];
+      types.forEach((type) => screenArea.addEventListener(type, follow, { passive: true }));
       return {
-        detach() { arrow.remove(); },
+        detach() {
+          types.forEach((type) => screenArea.removeEventListener(type, follow));
+          arrow.remove();
+        },
         /** The Mac's pointer as it looks now: `cursor` for a mouse, the image for a finger. */
         setShape({ image, hotspot, size, cursor }) {
           screenArea.style.cursor = cursor;

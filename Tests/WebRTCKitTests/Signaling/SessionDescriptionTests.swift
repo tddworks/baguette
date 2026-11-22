@@ -361,6 +361,31 @@ struct SessionDescriptionCodecTests {
         #expect(!answer.contains("H265"))
     }
 
+    /// An offer of one video section carrying `formats`, each as its rtpmap and fmtp lines.
+    static func offer(_ formats: [String]) -> String {
+        ([
+            "v=0", "m=video 9 UDP/TLS/RTP/SAVPF 49 112", "a=mid:0",
+            "a=ice-ufrag:h6vY", "a=ice-pwd:browserpasswordbrowserpass",
+            "a=fingerprint:sha-256 6B:8B", "a=setup:actpass",
+        ] + formats).joined(separator: "\r\n")
+    }
+
+    @Test func `should leave out an H.265 offered in a transmission mode other than one stream`() throws {
+        let description = try SessionDescription(offer: Self.offer([
+            "a=rtpmap:49 H265/90000", "a=fmtp:49 level-id=180;profile-id=1;tier-flag=0;tx-mode=MRST",
+            "a=rtpmap:112 H264/90000", "a=fmtp:112 packetization-mode=1;profile-level-id=64001f",
+        ]), asked: .h265, sendable: [.h264, .h265])
+        #expect(description.codec == .h264(payloadType: 112, profileLevelID: "64001f"))
+    }
+
+    @Test func `should leave out a format whose payload type RTP can't carry`() throws {
+        let description = try SessionDescription(offer: Self.offer([
+            "a=rtpmap:200 H265/90000", "a=fmtp:200 profile-id=1",
+            "a=rtpmap:112 H264/90000", "a=fmtp:112 packetization-mode=1;profile-level-id=64001f",
+        ]), asked: .h265, sendable: [.h264, .h265])
+        #expect(description.offered == [.h264(payloadType: 112, profileLevelID: "64001f")])
+    }
+
     @Test func `should refuse an offer with no video the owner can send`() {
         #expect(throws: SessionDescription.Refusal.noSendableVideo) {
             try SessionDescription(offer: chrome157Offer, asked: .h265, sendable: [])

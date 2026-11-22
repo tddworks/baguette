@@ -23,6 +23,16 @@ struct DisplayEventsTests {
         ])
     }
 
+    @Test func `should drag a swipe for at most ten seconds when asked for longer`() {
+        let events = display.swipe(from: Point(x: 0, y: 0), to: Point(x: 100, y: 0), size: size, duration: 1e20)
+        #expect(events.count == 2 + 2 * 600)   // down, 600 drags with their pauses, up
+    }
+
+    @Test func `should drag a swipe in one step when its duration is negative`() {
+        let events = display.swipe(from: Point(x: 0, y: 0), to: Point(x: 100, y: 0), size: size, duration: -1e20)
+        #expect(events.count == 4)
+    }
+
     @Test func `should drag a swipe from start to end in steps across its duration`() {
         let events = display.swipe(from: Point(x: 0, y: 0), to: Point(x: 100, y: 0), size: size, duration: 0.05)
         #expect(events.first == .mouseDown(Point(x: 1512, y: 0)))

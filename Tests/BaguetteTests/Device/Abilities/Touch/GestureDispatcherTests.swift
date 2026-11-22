@@ -160,11 +160,11 @@ private struct EscapingError: Error, CustomStringConvertible {
 struct GestureDispatcherMotionTests {
     @Test func `should call a finger moving a motion, and its landing and lifting not`() {
         let dispatcher = GestureDispatcher(input: Abilities(device: "Mac"))
-        #expect(dispatcher.isMotion(line: #"{"type":"touch1-move","x":1,"y":2,"width":10,"height":10}"#))
-        #expect(dispatcher.isMotion(line: #"{"type":"touch2-move","x1":1,"y1":2,"x2":3,"y2":4,"width":10,"height":10}"#))
-        #expect(!dispatcher.isMotion(line: #"{"type":"touch1-down","x":1,"y":2,"width":10,"height":10}"#))
-        #expect(!dispatcher.isMotion(line: #"{"type":"touch1-up","x":1,"y":2,"width":10,"height":10}"#))
-        #expect(!dispatcher.isMotion(line: #"{"type":"tap","x":1,"y":2,"width":10,"height":10}"#))
-        #expect(!dispatcher.isMotion(line: "not json"))
+        #expect(dispatcher.move(line: #"{"type":"touch1-move","x":1,"y":2,"width":10,"height":10}"#) == "touch1-move")
+        #expect(dispatcher.move(line: #"{"type":"touch2-move","x1":1,"y1":2,"x2":3,"y2":4,"width":10,"height":10}"#) == "touch2-move")
+        #expect(dispatcher.move(line: #"{"type":"touch1-down","x":1,"y":2,"width":10,"height":10}"#) == nil)
+        #expect(dispatcher.move(line: #"{"type":"touch1-up","x":1,"y":2,"width":10,"height":10}"#) == nil)
+        #expect(dispatcher.move(line: #"{"type":"tap","x":1,"y":2,"width":10,"height":10}"#) == nil)
+        #expect(dispatcher.move(line: "not json") == nil)
     }
 }

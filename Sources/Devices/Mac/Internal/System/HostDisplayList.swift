@@ -14,6 +14,13 @@ enum HostDisplayList {
         return ids.prefix(Int(count)).compactMap(info)
     }
 
+    /// Where display `id` is on the desktop now — cheap enough for every gesture; nil when it's gone.
+    @Sendable static func bounds(of id: UInt32) -> Rect? {
+        let bounds = CGDisplayBounds(id)
+        guard bounds.width > 0 else { return nil }
+        return Rect(origin: Point(x: bounds.origin.x, y: bounds.origin.y), size: Size(width: bounds.width, height: bounds.height))
+    }
+
     /// The main display now: where the menu bar, the Dock and new windows are.
     @Sendable static func main() -> UInt32 { CGMainDisplayID() }
 

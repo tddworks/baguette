@@ -7,8 +7,8 @@ import Testing
 /// The Mac's pointer shape, watched for whoever is viewing: a
 /// `baguette pointer-shapes` process — a run loop of its own, which a server
 /// lacks — says each change; every viewer hears it.
-@Suite("PointerShapes")
-struct PointerShapesTests {
+@Suite("ChildPointerShapes")
+struct ChildPointerShapesTests {
     static let arrow = PointerShape(id: "57a1d610", hotspot: Point(x: 5, y: 5), size: Size(width: 28, height: 40), png: Data([1, 2, 3]))
     static let ibeam = PointerShape(id: "3de4a52b", hotspot: Point(x: 12, y: 11), size: Size(width: 23, height: 22), png: Data([4, 5]))
 
@@ -29,7 +29,7 @@ struct PointerShapesTests {
         }
 
         func says(_ text: String) { lock.withLock { onBytes }?(Data(text.utf8)) }
-        var shapes: PointerShapes { PointerShapes(executable: URL(fileURLWithPath: "/usr/local/bin/baguette"), makeProcess: { self.process }) }
+        var shapes: ChildPointerShapes { ChildPointerShapes(executable: URL(fileURLWithPath: "/usr/local/bin/baguette"), makeProcess: { self.process }) }
     }
 
     final class Heard: @unchecked Sendable {
@@ -37,6 +37,42 @@ struct PointerShapesTests {
         private var _ids: [String] = []
         var ids: [String] { lock.withLock { _ids } }
         func hear(_ shape: PointerShape) { lock.withLock { _ids.append(shape.id) } }
+    }
+
+    /// Helpers, one new process each start, each exit played by the test.
+    final class Helpers: @unchecked Sendable {
+        private let lock = NSLock()
+        private var exits: [@Sendable (Int32) -> Void] = []
+        var started: Int { lock.withLock { exits.count } }
+        func make() -> any Subprocess {
+            let process = MockSubprocess()
+            given(process).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any)
+                .willProduce { [self] _, _, _, onExit in lock.withLock { exits.append(onExit) } }
+            given(process).terminate().willReturn()
+            return process
+        }
+        func exit(_ n: Int) { lock.withLock { exits[n] }(0) }
+        var shapes: ChildPointerShapes {
+            ChildPointerShapes(executable: URL(fileURLWithPath: "/usr/local/bin/baguette"), makeProcess: { self.make() })
+        }
+    }
+
+    @Test func `should start one helper when many viewers start watching at once`() {
+        let helpers = Helpers()
+        let shapes = helpers.shapes
+        DispatchQueue.concurrentPerform(iterations: 64) { _ in _ = shapes.watch { _ in } }
+        #expect(helpers.started == 1)
+    }
+
+    @Test func `should keep the running helper when a helper that ended earlier says so late`() {
+        let helpers = Helpers()
+        let shapes = helpers.shapes
+        shapes.watch { _ in }.end()          // helper 0 started, then ended
+        let watching = shapes.watch { _ in } // helper 1
+        helpers.exit(0)                      // helper 0's exit arrives now
+        _ = shapes.watch { _ in }            // joins helper 1
+        #expect(helpers.started == 2)
+        watching.end()
     }
 
     @Test func `should start watching the Mac's pointer once, for its first viewer`() {

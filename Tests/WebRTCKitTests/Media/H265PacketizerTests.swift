@@ -63,6 +63,17 @@ struct H265PacketizerTests {
         #expect(payloads == [aggregate, slice])
     }
 
+    @Test func `should send the parameter sets each in its own packet when together they don't fit one`() {
+        let vps = Data([0x40, 0x01] + [UInt8](repeating: 1, count: 498))
+        let sps = Data([0x42, 0x01] + [UInt8](repeating: 2, count: 498))
+        let pps = Data([0x44, 0x01] + [UInt8](repeating: 3, count: 498))
+
+        let payloads = packetizer.payloads(picture: lengthPrefixed([idrSlice(10)]), parameterSets: [vps, sps, pps])
+
+        #expect(payloads == [vps, sps, pps, idrSlice(10)])
+        #expect(payloads.allSatisfy { $0.count <= H265Packetizer.maxPayload })
+    }
+
     @Test func `should give an aggregation packet the lowest temporal id of what it carries`() {
         let tid2 = Data([0x40, 0x02, 0xAA]), tid1 = Data([0x42, 0x01, 0xBB])
         let payloads = packetizer.payloads(picture: Data(), parameterSets: [tid2, tid1])

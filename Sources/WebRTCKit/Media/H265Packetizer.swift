@@ -3,7 +3,8 @@ import Foundation
 /// Cuts one H.265 picture into RTP payloads (RFC 7798, no DONL: one stream, in
 /// order). A NAL unit that fits goes as it is; a bigger one goes as
 /// fragmentation units; the parameter sets ahead of a keyframe — VPS, SPS,
-/// PPS — go together as one aggregation packet. An H.265 NAL header is two
+/// PPS — go together as one aggregation packet when it fits, else each as
+/// any NAL unit goes. An H.265 NAL header is two
 /// bytes: F (1 bit) · type (6) · layer id (6) · temporal id (3).
 public struct H265Packetizer: RTPPacketizer, Equatable {
     public static let maxPayload = 1200
@@ -15,8 +16,12 @@ public struct H265Packetizer: RTPPacketizer, Equatable {
 
     public func payloads(picture: Data, parameterSets: [Data] = []) -> [Data] {
         var out: [Data] = []
-        if !parameterSets.isEmpty { out.append(Self.aggregate(parameterSets)) }
-        for nal in LengthPrefixedNALUnits.split(picture) {
+        var units = LengthPrefixedNALUnits.split(picture)
+        if !parameterSets.isEmpty {
+            let together = Self.aggregate(parameterSets)
+            if together.count <= Self.maxPayload { out.append(together) } else { units = parameterSets + units }
+        }
+        for nal in units {
             if nal.count <= Self.maxPayload {
                 out.append(nal)
             } else {

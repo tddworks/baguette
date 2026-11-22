@@ -31,6 +31,8 @@ struct DisplayEvents: Equatable, Sendable {
     static let textPiece = 20
     /// Drag steps a second of swipe takes.
     static let dragsPerSecond = 60.0
+    /// The longest a swipe lasts, whatever it asks for.
+    static let longestSwipe = 10.0
 
     let bounds: Rect
 
@@ -39,8 +41,10 @@ struct DisplayEvents: Equatable, Sendable {
         return [.mouseDown(at), .pause(duration), .mouseUp(at)]
     }
 
-    func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> [HostEvent] {
+    func swipe(from start: Point, to end: Point, size: Size, duration asked: Double) -> [HostEvent] {
         let (from, to) = (place(start, size), place(end, size))
+        // Ten seconds at most, none at least: the wire takes any number.
+        let duration = min(max(asked.isFinite ? asked : 0, 0), Self.longestSwipe)
         let steps = max(1, Int(duration * Self.dragsPerSecond))
         let drags = (1...steps).flatMap { step -> [HostEvent] in
             let t = Double(step) / Double(steps)

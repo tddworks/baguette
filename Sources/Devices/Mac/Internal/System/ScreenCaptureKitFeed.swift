@@ -5,18 +5,18 @@ import Foundation
 @preconcurrency import ScreenCaptureKit
 
 /// One display's pictures through ScreenCaptureKit, as BGRA surfaces at the
-/// size asked. Integration-only: which pictures are handed on, and starting
-/// again, are `MacScreen`'s.
+/// size asked. Integration-only: which pictures are handed on, and whether
+/// to start again, are `MacScreen`'s; this only says why the feed ended.
 final class ScreenCaptureKitFeed: NSObject, DisplayFeed, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     private let queue = DispatchQueue(label: "baguette.mac.feed", qos: .userInteractive)
     private let lock = NSLock()
     private var stream: SCStream?
     private var onPicture: (@Sendable (FeedPicture) -> Void)?
-    private var onEnd: (@Sendable () -> Void)?
+    private var onEnd: (@Sendable (FeedEnd) -> Void)?
 
     func start(display: UInt32, sizing: @escaping @Sendable (Size, Double) -> Size,
                onPicture: @escaping @Sendable (FeedPicture) -> Void,
-               onEnd: @escaping @Sendable () -> Void) throws {
+               onEnd: @escaping @Sendable (FeedEnd) -> Void) throws {
         guard CGPreflightScreenCaptureAccess() else {
             CGRequestScreenCaptureAccess()
             throw ScreenRecordingRefused()
@@ -67,7 +67,8 @@ final class ScreenCaptureKitFeed: NSObject, DisplayFeed, SCStreamOutput, SCStrea
             defer { self.stream = nil; onPicture = nil; self.onEnd = nil }
             return self.onEnd
         }
-        onEnd?()
+        let stoppedByUser = (error as? SCStreamError)?.code == .userStopped
+        onEnd?(stoppedByUser ? .stoppedByUser : .failed)
     }
 
     /// ScreenCaptureKit answers on a queue of its own; `Screen.start` waits. Five seconds at most.

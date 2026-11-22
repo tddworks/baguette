@@ -5,9 +5,10 @@ import IOSurface
 /// A Mac display's screen, through ScreenCaptureKit — as a simulator's: each
 /// complete picture handed on as a BGRA surface, at the display's capture
 /// size. An unchanged picture is never handed on; the stream's own refresh
-/// repeats the last. When the feed ends (sleep, a display change), the
+/// repeats the last. When the feed fails (sleep, a display change), the
 /// screen is still there: the feed starts again, a second later, for as long
-/// as the screen is started.
+/// as the screen is started. When the person stops sharing from macOS, it
+/// stays stopped: that is theirs to decide.
 final class MacScreen: Screen, @unchecked Sendable {
     private let display: MacDisplayInfo
     private let feed: any DisplayFeed
@@ -43,7 +44,11 @@ final class MacScreen: Screen, @unchecked Sendable {
         try feed.start(display: display.id,
                        sizing: { made ?? DisplayCaptureSize(points: $0, pixelsPerPoint: $1).pixels },
                        onPicture: { [weak self] picture in self?.hand(picture) },
-                       onEnd: { [weak self] in self?.reopen() })
+                       onEnd: { [weak self] why in
+                           why == .stoppedByUser ? self?.stop() : self?.reopen()
+                       })
+        // Stopped while ScreenCaptureKit was asked: the feed it just started has no one to show.
+        if !started { feed.stop() }
     }
 
     private func hand(_ picture: FeedPicture) {

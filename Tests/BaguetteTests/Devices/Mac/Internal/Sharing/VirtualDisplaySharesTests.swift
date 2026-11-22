@@ -7,8 +7,8 @@ import Testing
 /// This Mac shared to a viewer through a display of the viewer's shape: made
 /// when the share starts, the main display if the viewer asks, reshaped as the
 /// viewer turns, and gone — the main display given back — when it ends.
-@Suite("ScreenShares")
-struct ScreenSharesTests {
+@Suite("VirtualDisplayShares")
+struct VirtualDisplaySharesTests {
     static let iPhone = SharedScreenShape(viewer: ViewerScreen(points: Size(width: 402, height: 874), pixelsPerPoint: 3),
                                           room: .standard)
     static let turned = SharedScreenShape(viewer: ViewerScreen(points: Size(width: 874, height: 402), pixelsPerPoint: 3),
@@ -28,6 +28,12 @@ struct ScreenSharesTests {
         var main: UInt32 { lock.withLock { _main } }
         var created: [(name: String, shape: SharedScreenShape, serial: UInt32)] { lock.withLock { _created } }
         var removed: Int { lock.withLock { _removed } }
+        private var _whileCreating: (@Sendable (Int) -> Void)?
+        /// Work done as the Mac makes a display — given how many it has made, this one too.
+        var whileCreating: (@Sendable (Int) -> Void)? {
+            get { lock.withLock { _whileCreating } }
+            set { lock.withLock { _whileCreating = newValue } }
+        }
 
         /// Each display made is a new one to the Mac (a new `CGDirectDisplayID`),
         /// its UUID named by its serial — as CoreGraphics names it.
@@ -47,6 +53,7 @@ struct ScreenSharesTests {
                 given(made).uuid.willReturn("VIRTUAL-\(serial)")
                 given(made).id.willReturn(id)
                 given(made).remove().willProduce { [self] in lock.withLock { _removed += 1; _events.append("remove \(id)") } }
+                whileCreating?(created.count)
                 return made
             }
             given(arrangement).main.willProduce { [self] in lock.withLock { _main } }
@@ -56,9 +63,48 @@ struct ScreenSharesTests {
             }
         }
 
-        var shares: ScreenShares { ScreenShares(displays: displays, arrangement: arrangement) }
+        var shares: VirtualDisplayShares { VirtualDisplayShares(displays: displays, arrangement: arrangement) }
 
         func setMain(_ id: UInt32) { lock.withLock { _main = id } }
+    }
+
+    @Test func `should keep a later main share main when an earlier one ends, and give main back when the last one does`() {
+        let mac = Mac()
+        let shares = mac.shares
+        let first = shares.start(viewer: "iPad", shape: Self.iPhone, use: .main)!    // display 7, main after 1
+        let second = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .main)! // display 8, main after 7
+        shares.end(first)
+        #expect(mac.main == 8)
+        shares.end(second)
+        #expect(mac.main == 1)
+    }
+
+    @Test func `should give main back to the Mac's own display whichever main share ends last`() {
+        let mac = Mac()
+        let shares = mac.shares
+        let first = shares.start(viewer: "iPad", shape: Self.iPhone, use: .main)!
+        let second = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .main)!
+        shares.end(second)
+        #expect(mac.main == 7)
+        shares.end(first)
+        #expect(mac.main == 1)
+    }
+
+    @Test func `should end a share that its viewer left while it was being made again in a new shape`() {
+        let mac = Mac()
+        let shares = mac.shares
+        let id = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .extra)!
+        let leaving = DispatchGroup()
+        mac.whileCreating = { made in
+            guard made == 2 else { return }
+            leaving.enter()
+            DispatchQueue.global().async { shares.end(id); leaving.leave() }
+            _ = leaving.wait(timeout: .now() + 0.2)   // the leave arrives mid-turn
+        }
+        _ = shares.reshape(id, to: Self.turned)
+        leaving.wait()
+        #expect(!shares.isSharing(id))
+        #expect(mac.removed == 2)   // the turned-from display, and the turned one
     }
 
     @Test func `should share the Mac through a new display of the viewer's shape, named for the viewer`() {
@@ -163,8 +209,8 @@ struct ScreenSharesTests {
     }
 
     @Test func `should read how a viewer uses the display by its wire name, extra by default`() {
-        #expect(ScreenShares.Use(wire: "main") == .main)
-        #expect(ScreenShares.Use(wire: nil) == .extra)
-        #expect(ScreenShares.Use(wire: "side") == nil)
+        #expect(ShareUse(wire: "main") == .main)
+        #expect(ShareUse(wire: nil) == .extra)
+        #expect(ShareUse(wire: "side") == nil)
     }
 }

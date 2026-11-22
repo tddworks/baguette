@@ -14,10 +14,10 @@ For releases prior to this changelog, see the
 - `POST /devices/:udid/input` taps land ~35 ms sooner (no wait on the Android tools listing devices); live streams encode a changed screen at once and refresh a still one on a steady beat (~14 ms; 53 frames shown/s, was 41).
 
 ### Added
-- `baguette serve --share-mac` and `list --mac` show this Mac's displays as devices: streamed, recorded, screenshotted and driven (click, drag, scroll, keys, typing) like a simulator, through ScreenCaptureKit and CGEvent. → [docs](docs/features/mac-screen/README.md)
-- A Mac display's page has a **Frame** button: show it in a MacBook Pro 14" or iMac 27" frame that fits its shape, or none (the default); `scripts/install-mac-frames.sh` installs them. `screenshot-bezel.png?chrome=` frames a still in the pick. → [docs](docs/features/mac-screen/README.md#frames)
-- WebRTC viewers on the page get H.265 when the browser offers it (Chrome, iPhone Safari), H.264 otherwise: no cost measured, a little smoother on slow links. `?codec=h264` forces H.264; a WHEP client asking nothing stays H.264. → [docs](docs/features/webrtc/hevc.md)
-- Open `/mac/share` on a phone or tablet to share this Mac to it: a display the shape of its screen, main or extended, sharp over WebRTC, turning with it. The pointer is drawn locally in the Mac's real shape, keeps up, and hovers. → [docs](docs/features/mac-screen/README.md#share-to-your-device)
+- `baguette serve --share-mac` and `baguette list --mac` show this Mac's displays as devices: streamed, recorded, screenshotted and driven (click, drag, scroll, keys, typing) like a simulator. → [docs](docs/features/mac-screen/README.md) ([#156](https://github.com/tddworks/baguette/pull/156))
+- A Mac display page's **Frame** button shows it in a MacBook Pro 14" or iMac 27" frame that fits its shape, or none (the default); `screenshot-bezel.png?chrome=` frames a still in the pick. → [docs](docs/features/mac-screen/README.md#frames) ([#156](https://github.com/tddworks/baguette/pull/156))
+- The device page's **WebRTC** view streams H.265 when the browser offers it (Chrome, iPhone Safari), H.264 otherwise: no cost measured, a little smoother on slow links. `?codec=h264` forces H.264. → [docs](docs/features/webrtc/hevc.md) ([#156](https://github.com/tddworks/baguette/pull/156))
+- `/mac/share`, opened on a phone or tablet, shares this Mac to it: a display the shape of its screen, main or extended, sharp, turning with it, its pointer drawn locally in the Mac's real shape. → [docs](docs/features/mac-screen/README.md#share-to-your-device) ([#156](https://github.com/tddworks/baguette/pull/156))
 
 ---
 

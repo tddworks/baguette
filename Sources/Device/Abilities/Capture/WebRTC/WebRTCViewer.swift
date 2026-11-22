@@ -70,7 +70,7 @@ public final class WebRTCViewer: @unchecked Sendable {
     private static func named(_ codec: VideoCodec) -> String {
         switch codec {
         case let .h264(_, profileLevelID): "\(codec.rtpmap) profile-level-id=\(profileLevelID)"
-        case let .h265(_, profileID, _, _): "\(codec.rtpmap) profile-id=\(profileID)"
+        case let .h265(_, profileID, levelID, _): "\(codec.rtpmap) profile-id=\(profileID) level-id=\(levelID)"
         }
     }
 

@@ -49,9 +49,9 @@ struct Server: Sendable {
     /// The Mac frames installed on this Mac, which a Mac display's page offers.
     let macFrames: MacFrames
     /// This Mac shared to viewers' devices, with `--share-mac`; nil otherwise.
-    let screenShares: ScreenShares?
+    let screenShares: (any ScreenShares)?
     /// The Mac's pointer shape for pages, with `--share-mac`; nil otherwise.
-    let pointerShapes: PointerShapes?
+    let pointerShapes: (any PointerShapes)?
     let models: any DeviceModels
     let deviceRenderer: any DeviceRenderer
     let plugins: any Plugins
@@ -96,8 +96,8 @@ struct Server: Sendable {
         simulators: any Simulators,
         chromes: any Chromes,
         macFrames: MacFrames = MacFrames(),
-        screenShares: ScreenShares? = nil,
-        pointerShapes: PointerShapes? = nil,
+        screenShares: (any ScreenShares)? = nil,
+        pointerShapes: (any PointerShapes)? = nil,
         models: any DeviceModels = DeviceModelCatalog.empty,
         deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
         plugins: any Plugins = FileSystemPlugins(roots: []),
@@ -2323,8 +2323,8 @@ struct Server: Sendable {
         // A pointer move is posted, not awaited: the next message is read at
         // once, and a newer move replaces this one while it waits — so the
         // pointer keeps up with the hand. Anything else lands before the next.
-        if dispatcher.isMotion(line: line) {
-            gestureQueues.post(on: udid) { _ = dispatcher.dispatch(line: line) }
+        if let move = dispatcher.move(line: line) {
+            gestureQueues.post(on: udid, move: move) { _ = dispatcher.dispatch(line: line) }
             return
         }
         _ = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: line) }

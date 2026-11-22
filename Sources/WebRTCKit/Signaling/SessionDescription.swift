@@ -125,7 +125,9 @@ public struct SessionDescription: Equatable, Sendable {
                 uniquingKeysWith: { first, _ in first })
         }
         return section.compactMap { line -> VideoCodec? in
-            guard line.hasPrefix("a=rtpmap:"), let type = UInt8(line.dropFirst(9).prefix { $0 != " " }) else { return nil }
+            // RTP's payload type is 7 bits.
+            guard line.hasPrefix("a=rtpmap:"), let type = UInt8(line.dropFirst(9).prefix { $0 != " " }), type <= 127
+            else { return nil }
             let name = line.uppercased()
             let params = parameters(type)
             if name.hasSuffix(" H264/90000") {
@@ -133,6 +135,8 @@ public struct SessionDescription: Equatable, Sendable {
                 return .h264(payloadType: type, profileLevelID: profile)
             }
             if name.hasSuffix(" H265/90000") {
+                // One stream (SRST), RFC 7798's default, is all the sender sends.
+                guard (params["tx-mode"] ?? "SRST").uppercased() == "SRST" else { return nil }
                 return .h265(payloadType: type, profileID: params["profile-id"].flatMap(Int.init) ?? 1,
                              levelID: params["level-id"].flatMap(Int.init) ?? 93,
                              tier: params["tier-flag"].flatMap(Int.init) ?? 0)

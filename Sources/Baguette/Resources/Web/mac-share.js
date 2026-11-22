@@ -18,7 +18,25 @@
     return 'browser';
   }
 
+  /** Set while the page reloads itself, so that reload doesn't end the share. */
+  let keeping = false;
+
   const MacShare = {
+    /** A shared page's format once its WebRTC offer is refused: the socket's
+     *  H.264, which `StreamFormat` swaps for MJPEG where it can't decode. */
+    afterRefusal: 'avcc',
+
+    /** Reload the shared display's own page (a turn, a frame picked), keeping its share. */
+    reloadKeepingShare(location) {
+      keeping = true;
+      location.reload();
+    },
+
+    /** Whether the page is going for good, so its share should end. */
+    leaving() {
+      return !keeping;
+    },
+
     /**
      * The body of `POST /mac/shares`.
      * @param {{viewport: {width: number, height: number}, pixelRatio: number,

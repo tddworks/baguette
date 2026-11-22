@@ -100,10 +100,10 @@ the encoder again according to [the retuning rule](design.md#4--invariants-each-
 
 ## Gotchas
 
-- **H.264 High profile only.** An offer without High-profile H.264 in
-  packetization mode 1 is refused (422) and the page falls back to H.264 or
-  MJPEG over the WebSocket. Chrome and Safari offer it; Firefox offers only
-  Constrained Baseline, so it falls back.
+- **High-profile H.264, or Main-profile H.265 when asked for.** An offer
+  carrying neither one the viewer may get (`codec=`) is refused (422), and the
+  page falls back to H.264 or MJPEG over the WebSocket. Chrome and Safari offer
+  both; Firefox offers only Constrained Baseline H.264, so it falls back.
 - **Host addresses by default.** baguette offers this Mac's own IPv4 addresses
   (LAN, Tailscale, loopback). The browser needs a reachable address to play.
 - **Media on any free UDP port, unless told.** Each viewer takes its own port;

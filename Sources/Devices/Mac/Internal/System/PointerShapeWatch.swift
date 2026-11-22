@@ -1,11 +1,10 @@
 import AppKit
 import BaguetteDevice
-import CryptoKit
 
 /// The Mac's pointer shape, read from `NSCursor.currentSystem` 20 times a
 /// second on a running run loop — without one the shape a process reads never
-/// changes — and said as a `PointerShape` line when it changes, until this
-/// process's parent is gone. Integration-only.
+/// changes — until this process's parent is gone. Integration-only: which
+/// readings are a change is `PointerShapeChanges`'.
 enum PointerShapeWatch {
     static func sayChanges(_ say: @escaping @Sendable (String) -> Void) -> Never {
         // baguette's entry point is async, so a command runs off the main
@@ -16,19 +15,16 @@ enum PointerShapeWatch {
 
     @MainActor
     private static func watch(_ say: @escaping @Sendable (String) -> Void) {
-        let parent = getppid()
-        var last = ""
+        let parent = ParentProcess(startedUnder: getppid())
+        var changes = PointerShapeChanges()
         let timer = Timer(timeInterval: 0.05, repeats: true) { _ in
-            if getppid() != parent { exit(0) }
+            if parent.isGone(now: getppid()) { exit(0) }
             guard let cursor = NSCursor.currentSystem,
                   let tiff = cursor.image.tiffRepresentation,
-                  let png = png(of: cursor.image, scale: 2) else { return }
-            let id = SHA256.hash(data: tiff).prefix(4).map { String(format: "%02x", $0) }.joined()
-            guard id != last else { return }
-            last = id
-            let shape = PointerShape(
-                id: id, hotspot: Point(x: cursor.hotSpot.x, y: cursor.hotSpot.y),
-                size: Size(width: cursor.image.size.width, height: cursor.image.size.height), png: png)
+                  let png = png(of: cursor.image, scale: 2),
+                  let shape = changes.read(image: tiff, png: png, hotspot: Point(x: cursor.hotSpot.x, y: cursor.hotSpot.y),
+                                           size: Size(width: cursor.image.size.width, height: cursor.image.size.height))
+            else { return }
             say(shape.line)
         }
         RunLoop.main.add(timer, forMode: .common)

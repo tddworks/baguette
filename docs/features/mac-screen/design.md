@@ -8,7 +8,8 @@ description: Design of the Mac family — this Mac's displays as devices, watche
 displays, an iPhone 17 Pro Max over Wi-Fi and Tailscale): listing, watching,
 input, frames, sharing to a viewer's shape (main or extended, turning), the
 local pointer with the Mac's real shape, hover. Not built: sign-in (dropped for
-now, §8), HEVC (§8). Turning on a real iPhone is not yet confirmed (§8).
+now, §8). A shared display streams H.265 when the viewer's browser offers it,
+H.264 otherwise ([hevc](../webrtc/hevc.md)). Turning on a real iPhone is not yet confirmed (§8).
 
 This document owns **what a Mac display is, how it is watched and driven, how
 this Mac is shared to a viewer's device, and how the pointer reaches the page**.
@@ -94,13 +95,15 @@ MacDisplays ◆                      the displays CoreGraphics lists now; listin
     └── .touch .pointer .scroll .key .typing → MacInput ◆
         ├── DisplayEvents ◇        what each gesture becomes, placed on the desktop: [HostEvent]
         │   └── MacKeyCode ◇       HID page 7 → kVK_ANSI_*
-        └── HostEvents ◆           the window server, told events (CGEvent); refuses while untrusted
+        └── HostEvents ◆           the window server, told events; refuses while untrusted (WindowServerEvents)
+            └── WindowServer ◆     one event posted (CGEvent); whether this process is trusted
 
 ScreenShares ◆                     this Mac shared to viewers, by the shared display's UUID
 ├── SharedScreenShape ◇            the viewer's points × room, drawn at 2×; which mode is its own
 ├── VirtualDisplays ◆              makes a display of a shape, under a serial → the same UUID again
 │   └── VirtualDisplay ◆           id · uuid · remove() — returns once the Mac lists it no more
-└── DisplayArrangement ◆           which display is main; making another main
+└── DisplayArrangement ◆           which display is main; making another main (a child process)
+    └── DisplayConfiguration ◆     the session's: main · origins · place (MainDisplayMove, in the child)
 
 PointerShapes ◆                    the Mac's pointer shape while anyone views; each image by id
 └── PointerShape ◇                 id (from its image) · hotspot · size · png
@@ -158,7 +161,7 @@ displays added later, and the server must see them to list and stream them.
 
 ```
  page ── WS (stream / WebRTC control) ──▶ Server.handleInbound
-                                             │ isMotion? (touch1-move · touch2-move · hover)
+                                             │ move(line:)? (touch1-move · touch2-move · hover)
                           ┌──────────────────┴───────────────────┐
                           ▼ post — read on at once               ▼ run — wait, in order
                 ┌──────────────────────────────────────────────────────────┐
@@ -168,7 +171,7 @@ displays added later, and the server must see them to list and stream them.
                 │   key, scroll keep their place and are never dropped     │
                 └─────────────────────────────┬────────────────────────────┘
                                               ▼
-              MacInput → DisplayEvents ◇ → [HostEvent] → CGEventHostEvents.post
+              MacInput → DisplayEvents ◇ → [HostEvent] → WindowServerEvents → CGEventWindowServer
               (placed at x/width of the display's desktop bounds;    trust asked once,
                a two-finger move scrolls where its midpoint is)      one event source
 ```
@@ -229,8 +232,8 @@ shares.start(viewer: request.viewer, shape: request.shape, use: request.use)
 shares.reshape(id, to: request.shape)
 shares.end(id)
 
-// The lane is told a move; it decides what a newer one replaces.
-gestureQueues.post(on: udid) { _ = dispatcher.dispatch(line: line) }
+// The lane is told a move and its kind; it decides what a newer one replaces.
+gestureQueues.post(on: udid, move: move) { _ = dispatcher.dispatch(line: line) }
 
 // A viewer is told each shape; the page tells its pointer.
 let watch = shapes.watch { saying.yield($0.json) }
@@ -268,13 +271,15 @@ pointer.setShape({ ...shape, cursor: PointerShape.cursor(shape, density) })
 Commands/       list --mac · serve --share-mac · virtual-display · main-display · pointer-shapes (hidden)
 Server/         ServerMacShareRoutes (/mac/share, /mac/shares) · ServerMacPointerRoutes (/mac/pointer)
                 · handleInbound (moves posted, the rest awaited)
-Devices/Mac/    values: MacDisplayInfo · DisplayCaptureSize · DisplayEvents · MacKeyCode · SharedScreenShape
-                        · ShareRequest · DisplayOrigins · VirtualDisplayAnnouncement · PointerShape
-  Internal/     MacDisplays · MacDisplayLooks · Screen/MacScreen · Input/MacInput
-                · Sharing/ScreenShares · ChildVirtualDisplays · ChildDisplayArrangement · Pointer/PointerShapes
-  Internal/System/   the only calls to the outside, ≤ 100 lines each: ScreenCaptureKitFeed · CGEventHostEvents
-                     · HostDisplayList · VirtualDisplayHold (CGVirtualDisplay, private) · MainDisplayMove
-                     · PointerShapeWatch · ClearPicture
+Devices/Mac/    roles the server holds: ScreenShares · PointerShapes
+                values: MacDisplayInfo · DisplayCaptureSize · DisplayEvents · MacKeyCode · SharedScreenShape
+                        · ShareRequest · ShareUse · DisplayOrigins · VirtualDisplayAnnouncement · PointerShape
+  Internal/     MacDisplays · MacDisplayLooks · Screen/MacScreen (FeedEnd) · Input/MacInput · WindowServerEvents
+                · Sharing/VirtualDisplayShares · ChildVirtualDisplays · ChildDisplayArrangement · MainDisplayMove
+                · Pointer/ChildPointerShapes · PointerShapeChanges
+  Internal/System/   the bare calls to the outside, no decisions, ≤ 100 lines each: ScreenCaptureKitFeed
+                     · CGEventWindowServer · HostDisplayList · VirtualDisplayHold (CGVirtualDisplay, private)
+                     · CoreGraphicsDisplayConfiguration · PointerShapeWatch · ClearPicture
 Device/         Abilities/Pointer (Pointer role, Hover) · Abilities/Touch/PendingGestures · Chrome/MacFrame
 Resources/Web/  local-pointer.js · pointer-shape.js · baguette/gestures/hover-gesture-source.js
                 · mac-share.js + mac-share.html · mac-frame-choices.js
@@ -367,9 +372,9 @@ arrangement restored exactly.
 - **Does a real iPhone's turn reach the server?** The emulated turn works; on an
   iPhone the display once stayed portrait. Each share now logs `started`,
   `reshaped`, `ended` — the next try says whether the `PUT` arrived.
-- **HEVC over WebRTC?** Same picture at a lower bitrate — but bandwidth isn't
-  the limit (≤ 1.3 Mbit/s of 8). Designed, opt-in until measured:
-  [webrtc/hevc.md](../webrtc/hevc.md).
+- ~~**HEVC over WebRTC?**~~ Built: a share streams H.265 when the viewer's
+  browser offers it (an iPhone's does). Measured, it costs nothing and is a
+  little smoother on a slow link: [webrtc/hevc.md](../webrtc/hevc.md).
 - **Sign-in.** Today anyone who reaches the port controls this Mac.
   ~~Built with OpenDirectory, sessions and a throttle~~ — dropped before it was
   wired: on a Tailscale-only bind, the tailnet is the gate. Back if the server

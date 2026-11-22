@@ -33,3 +33,24 @@ test('should draw a pointer for a finger or a pen, and leave a mouse its own', (
 test('should draw a shape so its hotspot, not its corner, is under the finger', () => {
   assert.deepEqual(LocalPointer().offset({ hotspot: { x: 12, y: 11 } }), { left: -12, top: -11 });
 });
+
+test('should stop following the finger once detached', () => {
+  const listeners = new Map();
+  const area = {
+    style: {},
+    appendChild() {},
+    addEventListener(type, fn) { listeners.set(type, fn); },
+    removeEventListener(type, fn) { if (listeners.get(type) === fn) listeners.delete(type); },
+    getBoundingClientRect: () => screen,
+  };
+  const saved = globalThis.document;
+  globalThis.document = { createElement: () => ({ style: {}, remove() {} }) };
+  try {
+    const pointer = LocalPointer().attach(area);
+    assert.deepEqual([...listeners.keys()].sort(), ['pointerdown', 'pointermove']);
+    pointer.detach();
+    assert.equal(listeners.size, 0);
+  } finally {
+    globalThis.document = saved;
+  }
+});

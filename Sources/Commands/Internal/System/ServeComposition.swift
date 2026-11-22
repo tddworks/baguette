@@ -20,7 +20,7 @@ extension ServeCommand {
         // by a process of this binary; captured at the pixels it was made with.
         let baguette = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
         let screenShares = shareMac
-            ? ScreenShares(
+            ? VirtualDisplayShares(
                 displays: ChildVirtualDisplays(executable: baguette, makeProcess: { HostSubprocess() }),
                 arrangement: ChildDisplayArrangement(executable: baguette, makeProcess: { HostSubprocess() }))
             : nil
@@ -40,7 +40,7 @@ extension ServeCommand {
             ] + (shareMac ? [MacDisplayLooks(displays: { HostDisplayList.all() })] : [])),
             macFrames: frames,
             screenShares: screenShares,
-            pointerShapes: shareMac ? PointerShapes(executable: baguette, makeProcess: { HostSubprocess() }) : nil,
+            pointerShapes: shareMac ? ChildPointerShapes(executable: baguette, makeProcess: { HostSubprocess() }) : nil,
             models: models,
             deviceRenderer: RealityKitDeviceRenderer(),
             plugins: plugins,

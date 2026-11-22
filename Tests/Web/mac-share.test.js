@@ -73,3 +73,17 @@ test('should show a shared Mac over WebRTC unless the tab picked another format'
   assert.equal(MacShare().format(null), 'webrtc');
   assert.equal(MacShare().format('avcc'), 'avcc');
 });
+
+test('should keep the share when its own page reloads, and end it when the page is left', () => {
+  const share = MacShare();
+  assert.equal(share.leaving(), true);
+  let reloaded = 0;
+  share.reloadKeepingShare({ reload: () => { reloaded += 1; } });
+  assert.equal(reloaded, 1);
+  assert.equal(share.leaving(), false);
+});
+
+test('should fall back to the socket stream when a shared page\'s WebRTC offer is refused', () => {
+  assert.equal(MacShare().format('avcc'), 'avcc');
+  assert.equal(MacShare().afterRefusal, 'avcc');
+});

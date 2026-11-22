@@ -30,3 +30,23 @@ test('should say how dense a shape\'s image is from its pixels and its points', 
   assert.equal(PointerShape().density(46, { width: 23, height: 22 }), 2);
   assert.equal(PointerShape().density(0, { width: 23, height: 22 }), 1);
 });
+
+test('should apply only the newest shape when an older shape\'s image finishes loading after it', () => {
+  const images = [];
+  const saved = { location: globalThis.location, WebSocket: globalThis.WebSocket, Image: globalThis.Image };
+  let socket;
+  globalThis.location = { protocol: 'http:', host: 'localhost:8421' };
+  globalThis.WebSocket = class { constructor() { socket = this; } close() {} };
+  globalThis.Image = class { constructor() { images.push(this); } };
+  try {
+    const applied = [];
+    PointerShape().follow((shape) => applied.push(shape.id));
+    socket.onmessage({ data: JSON.stringify({ ...ibeam, id: 'old' }) });
+    socket.onmessage({ data: JSON.stringify({ ...ibeam, id: 'new' }) });
+    images[1].naturalWidth = 46; images[1].onload();
+    images[0].naturalWidth = 46; images[0].onload();   // the older one, late
+    assert.deepEqual(applied, ['new']);
+  } finally {
+    Object.assign(globalThis, saved);
+  }
+});

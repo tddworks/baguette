@@ -31,25 +31,31 @@ public final class GestureQueues: @unchecked Sendable {
     /// it before, and answer what it answered.
     public func run<T: Sendable>(on id: String, _ gesture: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { done in
-            enqueue(on: id, motion: false) { done.resume(returning: gesture()) }
+            enqueue(on: id, move: nil) { done.resume(returning: gesture()) }
         }
     }
 
     /// Post a pointer move to the device `id` names, after every gesture sent
-    /// before it, without waiting — replaced by a newer move while it waits.
-    public func post(on id: String, _ move: @escaping @Sendable () -> Void) {
-        enqueue(on: id, motion: true, move)
+    /// before it, without waiting — replaced by a newer move of its kind
+    /// (`move`, its wire type) while it waits.
+    public func post(on id: String, move: String, _ work: @escaping @Sendable () -> Void) {
+        enqueue(on: id, move: move, work)
     }
 
-    private func enqueue(on id: String, motion: Bool, _ work: @escaping @Sendable () -> Void) {
+    private func enqueue(on id: String, move: String?, _ work: @escaping @Sendable () -> Void) {
         let (lane, start) = lock.withLock { () -> (Lane, Bool) in
             let lane = lanes[id] ?? Lane(id)
             lanes[id] = lane
-            lane.pending.add(work, motion: motion)
+            lane.pending.add(work, move: move)
             defer { lane.draining = true }
             return (lane, !lane.draining)
         }
         if start { lane.queue.async { [self] in drain(lane) } }
+    }
+
+    /// How many gestures wait on the device `id` names, not counting the one running.
+    func waiting(on id: String) -> Int {
+        lock.withLock { lanes[id]?.pending.count ?? 0 }
     }
 
     private func drain(_ lane: Lane) {

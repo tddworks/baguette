@@ -21,8 +21,13 @@ struct MacScreenTests {
         private let lock = NSLock()
         private var _starts: [(display: UInt32, size: Size)] = []
         private var onPicture: (@Sendable (FeedPicture) -> Void)?
-        private var onEnd: (@Sendable () -> Void)?
+        private var onEnd: (@Sendable (FeedEnd) -> Void)?
+        private var _running = false
+        /// Work the next start does before it captures — as a stop arriving while ScreenCaptureKit is asked.
+        var whileStarting: (@Sendable () -> Void)?
         var starts: [(display: UInt32, size: Size)] { lock.withLock { _starts } }
+        /// Whether ScreenCaptureKit is capturing: started, and not stopped since.
+        var running: Bool { lock.withLock { _running } }
 
         /// `sees`: the display as ScreenCaptureKit reports it when the feed
         /// starts — its points and pixels a point.
@@ -30,17 +35,20 @@ struct MacScreenTests {
             given(feed).start(display: .any, sizing: .any, onPicture: .any, onEnd: .any)
                 .willProduce { [self] display, sizing, onPicture, onEnd in
                     if let refusal { throw refusal }
+                    let during = lock.withLock { () -> (@Sendable () -> Void)? in defer { whileStarting = nil }; return whileStarting }
+                    during?()
                     lock.withLock {
                         _starts.append((display, sizing(sees.points, sees.scale)))
                         self.onPicture = onPicture
                         self.onEnd = onEnd
+                        _running = true
                     }
                 }
-            given(feed).stop().willReturn()
+            given(feed).stop().willProduce { [self] in lock.withLock { _running = false } }
         }
 
         func picture(_ picture: FeedPicture) { lock.withLock { onPicture }?(picture) }
-        func end() { lock.withLock { onEnd }?() }
+        func end(_ why: FeedEnd = .failed) { lock.withLock { _running = false; return onEnd }?(why) }
     }
 
     final class Frames: @unchecked Sendable {
@@ -109,6 +117,27 @@ struct MacScreenTests {
         feed.end()
         feed.picture(FeedPicture(surface: Self.surface(), complete: true))
         #expect(feed.starts.count == 1)
+    }
+
+    @Test func `should leave the feed ended when the user stops sharing from macOS`() throws {
+        let feed = Feed()
+        let mac = screen(on: feed)
+        let frames = Frames()
+        try mac.start { frames.add($0) }
+        feed.end(.stoppedByUser)
+        feed.picture(FeedPicture(surface: Self.surface(), complete: true))
+        #expect(feed.starts.count == 1)
+        #expect(frames.count == 0)
+    }
+
+    @Test func `should stop capturing when the screen stops while the feed is starting again`() throws {
+        let feed = Feed()
+        let mac = screen(on: feed)
+        try mac.start { _ in }
+        feed.whileStarting = { mac.stop() }
+        feed.end()
+        #expect(feed.starts.count == 2)
+        #expect(!feed.running)
     }
 
     @Test func `should refuse to start when Screen Recording is not allowed`() {

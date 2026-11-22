@@ -9,12 +9,7 @@ import Foundation
 /// last leaves; a viewer who joins hears the shape now at once. Each shape's
 /// image is kept by id, for a page to fetch once.
 /// Design: docs/features/mac-screen/design.md#the-pointer.
-final class PointerShapes: @unchecked Sendable {
-    /// One viewer's watch; `end()` stops it hearing.
-    struct Watch {
-        let end: @Sendable () -> Void
-    }
-
+final class ChildPointerShapes: PointerShapes, @unchecked Sendable {
     private let executable: URL
     private let makeProcess: @Sendable () -> any Subprocess
     private let lock = NSLock()
@@ -30,15 +25,19 @@ final class PointerShapes: @unchecked Sendable {
     }
 
     /// Hear every new shape — and the shape now, at once, when there is one.
-    func watch(_ hear: @escaping @Sendable (PointerShape) -> Void) -> Watch {
+    func watch(_ hear: @escaping @Sendable (PointerShape) -> Void) -> PointerWatch {
         let id = UUID()
-        let (now, start) = lock.withLock { () -> (PointerShape?, Bool) in
+        // The helper is reserved under the lock, so viewers arriving together start one.
+        let (now, start) = lock.withLock { () -> (PointerShape?, (any Subprocess)?) in
             viewers[id] = hear
-            return (current, process == nil)
+            guard process == nil else { return (current, nil) }
+            let started = makeProcess()
+            process = started
+            return (current, started)
         }
-        if start { begin() }
+        if let start { begin(start) }
         if let now { hear(now) }
-        return Watch { [weak self] in self?.leave(id) }
+        return PointerWatch { [weak self] in self?.leave(id) }
     }
 
     /// The image of the shape `id`, once it has been seen.
@@ -46,15 +45,13 @@ final class PointerShapes: @unchecked Sendable {
         lock.withLock { images[id] }
     }
 
-    private func begin() {
-        let process = makeProcess()
-        lock.withLock { self.process = process }
+    private func begin(_ process: any Subprocess) {
         do {
             try process.run(executable: executable, arguments: ["pointer-shapes"],
                             onBytes: { [weak self] in self?.hear($0) },
-                            onExit: { [weak self] _ in self?.ended() })
+                            onExit: { [weak self, weak process] _ in if let process { self?.ended(process) } })
         } catch {
-            ended()
+            ended(process)
         }
     }
 
@@ -78,7 +75,12 @@ final class PointerShapes: @unchecked Sendable {
         ending?.terminate()
     }
 
-    private func ended() {
-        lock.withLock { process = nil; lines = LineBuffer() }
+    /// `helper` ended — forgotten only if it is the one running, not an earlier one ending late.
+    private func ended(_ helper: any Subprocess) {
+        lock.withLock {
+            guard process === helper else { return }
+            process = nil
+            lines = LineBuffer()
+        }
     }
 }

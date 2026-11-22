@@ -26,7 +26,7 @@ struct MacInputTests {
     }
 
     func input(on desktop: Desktop) -> MacInput {
-        MacInput(display: DisplayEvents(bounds: Rect(origin: Point(x: 0, y: 0), size: size)), events: desktop.events)
+        MacInput(display: { [size] in DisplayEvents(bounds: Rect(origin: Point(x: 0, y: 0), size: size)) }, events: desktop.events)
     }
 
     @Test func `should land a tap on the Mac as a click`() {
