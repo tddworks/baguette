@@ -9,7 +9,7 @@
 // A spot is remembered as `{side, yNorm}` — which edge, and how far
 // down the edge's travel — not as pixels, so it comes back to the same
 // place after a rotation or a resize. This class owns no DOM: it turns
-// a drop point into a spot and a spot into a position; sim-native.js
+// a drop point into a spot and a spot into a position; page/device-page.js
 // does the dragging and painting.
 (function (root) {
   'use strict';

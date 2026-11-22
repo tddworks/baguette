@@ -18,7 +18,7 @@ const path = require('node:path');
 
 const TEMPLATE = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'sim-native.html'
+  'page/device-page.html'
 );
 
 /** The concatenated contents of every `<style>` block in an HTML file. */
@@ -56,7 +56,7 @@ function unbalancedCommentLine(css) {
  * `used` counts only `--nv-*` read WITHOUT a fallback, which is the shape
  * that fails loudly in layout and silently in the console. A `var(--x,
  * something)` is a deliberate optional hook, and a non-`--nv-` name may
- * be set inline from JS (`sim-3d.js` writes `--swatch` on each element) —
+ * be set inline from JS (`page/device-3d.js` writes `--swatch` on each element) —
  * neither can be judged from this file alone.
  */
 function customProperties(css) {
@@ -67,7 +67,7 @@ function customProperties(css) {
   return { used, defined };
 }
 
-test('every CSS comment in sim-native.html is closed', () => {
+test('every CSS comment in page/device-page.html is closed', () => {
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   assert.equal(
     unbalancedCommentLine(css), 0,
@@ -126,15 +126,15 @@ test('the size budget defines every variable the device and panes size from', ()
 // way.
 
 /** Panel modules that render into `#simNativeView` and must not carry CSS. */
-const PANEL_MODULES = ['sim-plugins.js', 'sim-screens.js'];
+const PANEL_MODULES = ['page/plugins/plugins-rail.js', 'families/simulator/screens-rail.js'];
 
 test('panel modules inject no stylesheet of their own', () => {
   for (const name of PANEL_MODULES) {
-    const src = fs.readFileSync(path.join(path.dirname(TEMPLATE), name), 'utf8');
+    const src = fs.readFileSync(path.join(path.dirname(TEMPLATE), '..', name), 'utf8');
     assert.ok(
       !/createElement\(\s*['"]style['"]\s*\)/.test(src),
       `${name} builds a <style> element — focus-mode CSS belongs in ` +
-      'sim-native.html under #simNativeView, where the --nv-* tokens are'
+      'page/device-page.html under #simNativeView, where the --nv-* tokens are'
     );
   }
 });
@@ -143,7 +143,7 @@ test('the focus-mode stylesheet reads no token from outside the --nv-* set', () 
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   // `--bg` / `--text` are the standalone-preview :root in <head>, which
   // only applies under file://; `--swatch` is written per-element from
-  // sim-3d.js. Everything else must come from the theme block, because
+  // page/device-3d.js. Everything else must come from the theme block, because
   // only those names are redefined for light and dark.
   const allowed = new Set(['--bg', '--text', '--swatch']);
   const foreign = [...new Set(
@@ -160,11 +160,12 @@ test('the focus-mode stylesheet reads no token from outside the --nv-* set', () 
 // Focus mode is the screen people actually capture from, so the
 // output-size picker and the Record button have to be reachable there.
 // Both are wired the way every other control in this toolbar is —
-// markup in sim-native.html, a `window.__nativeXxx` indirection in
-// sim-native.js — and both are easy to half-land (a button with no
+// markup in page/device-page.html, a `window.__nativeXxx` indirection in
+// page/device-page.js — and both are easy to half-land (a button with no
 // handler, a handler with no button). These pin the pairing.
 
-const SCRIPT = path.join(path.dirname(TEMPLATE), 'sim-native.js');
+const WEB_ROOT = path.join(path.dirname(TEMPLATE), '..');
+const SCRIPT = path.join(WEB_ROOT, 'page', 'device-page.js');
 
 /** The `#simNativeView` markup, with the `<style>` blocks taken out. */
 function markup(html) {
@@ -219,7 +220,7 @@ test('the recording state is styled from the focus-mode palette', () => {
   );
 });
 
-test('sim-native.js loads the capture vocabulary and the recorder', () => {
+test('page/device-page.js loads the capture vocabulary and the recorder', () => {
   const src = fs.readFileSync(SCRIPT, 'utf8');
   for (const module of [
     '/capture/capture-size.js',
@@ -236,7 +237,7 @@ test('sim-native.js loads the capture vocabulary and the recorder', () => {
   }
 });
 
-test('sim-native.js answers every toolbar indirection the template calls', () => {
+test('page/device-page.js answers every toolbar indirection the template calls', () => {
   const html = markup(fs.readFileSync(TEMPLATE, 'utf8'));
   const src = fs.readFileSync(SCRIPT, 'utf8');
   const called = new Set(
@@ -245,7 +246,7 @@ test('sim-native.js answers every toolbar indirection the template calls', () =>
   const missing = [...called].filter((name) => !src.includes(`window.${name} =`));
   assert.deepEqual(
     missing, [],
-    'the template calls these but sim-native.js never assigns them, so ' +
+    'the template calls these but page/device-page.js never assigns them, so ' +
     'the button is inert'
   );
 });

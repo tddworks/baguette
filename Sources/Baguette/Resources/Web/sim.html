@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 
 <style>
-  /* Minimal tokens so the injected sim-list / sim-stream markup renders
+  /* Minimal tokens so the injected devices-list / devices-stream markup renders
      with a consistent look standalone (outside the host SPA). Mirrors
      the variables the legacy CSS expects. */
   :root {
@@ -48,9 +48,9 @@
     3. device-frame.js    — bezel + screen-area DOM construction
     4. capture-gallery.js — screenshot fetch + composite + thumbs
     5. stream-session.js  — WebSocket lifetime + paint loop
-    6. sim-stream.js      — orchestrator: registers `stream` affordance,
+    6. page/devices-stream.js      — orchestrator: registers `stream` affordance,
                             wires the modules above on Stream click
-    7. sim-list.js        — list page UI + boot/shutdown buttons
+    7. page/devices-list.js        — list page UI + boot/shutdown buttons
 
   Each file is a self-contained IIFE that hangs its public surface
   on `window`. No bundler, no module graph; just `<script>` tags.
@@ -68,15 +68,15 @@
 <script src="/families/mac/mac-frame-choices.js"></script>
 <script type="module" src="/families/families.js"></script>
 <script type="module" src="/page/page-panels.js"></script>
-<script type="module" src="/page/device-list.js"></script>
+<script type="module" src="/page/devices-list-share.js"></script>
 <script src="/families/mac/local-pointer.js"></script>
 <script src="/families/mac/pointer-shape.js"></script>
 <script src="/wire/frame-decoder.js"></script>
 <!-- Filters the stored format against frame-decoder.js's capability
-     probe; must load before sim-stream.js / sim-native.js. -->
+     probe; must load before page/devices-stream.js / page/device-page.js. -->
 <script src="/wire/stream-format.js"></script>
 <!-- Shared capture-size vocabulary (Resources/Web/capture/). These must
-     load BEFORE capture-gallery.js / recorder.js / sim-stream.js: the
+     load BEFORE capture-gallery.js / recorder.js / page/devices-stream.js: the
      picker and both capture surfaces read `window.Baguette._CaptureSize`
      and `_CaptureSettings` at construction time. Order inside the group
      matters too — settings parses a size, the menu renders settings. -->
@@ -85,7 +85,7 @@
 <script src="/capture/capture-composer.js"></script>
 <script src="/capture/capture-size-menu.js"></script>
 <!-- Toolbar cluster folding (Resources/Web/toolbar/). Must load before
-     sim-native.js, which builds the clusters at init and needs
+     page/device-page.js, which builds the clusters at init and needs
      `window.Baguette._ToolbarFold` to decide what folds. -->
 <script src="/toolbar/toolbar-fold.js"></script>
 <script src="/handheld/handheld-mode.js"></script>
@@ -95,7 +95,7 @@
 <script src="/wire/stream-session.js"></script>
 <script src="/wire/whep-session.js"></script>
 <script src="/panels/logs/log-view.js"></script>
-<script src="/sim-ax-inspector.js"></script>
+<script src="/page/accessibility-inspector.js"></script>
 <script src="/panels/camera/camera-view.js"></script>
 <script src="/panels/status-bar/status-bar-view.js"></script>
 <!-- Network conditioning. `network/network-condition-form.js` is the value
@@ -108,31 +108,31 @@
 <script src="/panels/defaults/preference-rows.js"></script>
 <script src="/panels/defaults/defaults-view.js"></script>
 <script src="/panels/notify/notify-view.js"></script>
-<script src="/sim-file-drop.js"></script>
-<script src="/sim-3d.js"></script>
+<script src="/page/file-drop.js"></script>
+<script src="/page/device-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +
      panels from /plugins.json. Host-rendered only: no plugin script,
-     CSS or markup is ever loaded into this page. `plugin-row-action.js`
-     carries the click semantics, `plugin-prompt.js` the text-field
-     semantics and `plugin-control.js` the tick semantics; all three must
+     CSS or markup is ever loaded into this page. `page/plugins/plugin-row-action.js`
+     carries the click semantics, `page/plugins/plugin-prompt.js` the text-field
+     semantics and `page/plugins/plugin-control.js` the tick semantics; all three must
      load first. -->
-<script src="/plugin-row-action.js"></script>
-<script src="/plugin-prompt.js"></script>
-<script src="/plugin-control.js"></script>
-<script src="/sim-plugins.js"></script>
+<script src="/page/plugins/plugin-row-action.js"></script>
+<script src="/page/plugins/plugin-prompt.js"></script>
+<script src="/page/plugins/plugin-control.js"></script>
+<script src="/page/plugins/plugins-rail.js"></script>
 <!-- Companion screens — the CarPlay display and the paired Apple Watch,
-     offered from their own rail. `screens/companion-screens.js` is the
-     value type (availability + instructions); `sim-screens.js` is the
+     offered from their own rail. `families/simulator/companion-screens.js` is the
+     value type (availability + instructions); `families/simulator/screens-rail.js` is the
      rail that draws it, and must load after it. -->
-<script src="/screens/companion-screens.js"></script>
-<script src="/sim-screens.js"></script>
+<script src="/families/simulator/companion-screens.js"></script>
+<script src="/families/simulator/screens-rail.js"></script>
 <!-- Leaflet (vendored) + the location map picker. Leaflet must load
-     before sim-location.js, which is itself lazy-used by sim-native.js
+     before sim-location.js, which is itself lazy-used by page/device-page.js
      on first open of the location card. -->
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/panels/location/location-view.js"></script>
 <!-- Baguette SDK (the new shape — see Resources/Web/baguette/). The
-     page-level scripts below (sim-stream / sim-native) consume the
+     page-level scripts below (page/devices-stream.js, page/device-page.js) consume the
      SDK via `Baguette.use({...}).mount(...)`. Load order matters:
      each part IIFE attaches to `window.Baguette` and the entry
      `baguette.js` reads them. -->
@@ -159,13 +159,13 @@
 <script src="/baguette/carplay/carplay-frame.js"></script>
 <script src="/baguette/simulator.js"></script>
 <script src="/baguette/baguette.js"></script>
-<script src="/sim-stream.js"></script>
-<!-- sim-native.js must run BEFORE sim-list.js: it sets the
+<script src="/page/devices-stream.js"></script>
+<!-- page/device-page.js must run BEFORE page/devices-list.js: it sets the
      `__baguetteNativeMode` flag synchronously when the URL is a
-     /simulators/<udid> deep link, which sim-list.js checks at the
+     /simulators/<udid> deep link, which page/devices-list.js checks at the
      top of its IIFE to bail out cleanly. Order matters here. -->
-<script src="/sim-native.js"></script>
-<script src="/sim-list/device-filter.js"></script>
-<script src="/sim-list.js"></script>
+<script src="/page/device-page.js"></script>
+<script src="/page/device-filter.js"></script>
+<script src="/page/devices-list.js"></script>
 </body>
 </html>

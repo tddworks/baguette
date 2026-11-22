@@ -12,7 +12,7 @@
 // renders a candidate state and reports whether the row fits; it hands
 // back the first state that did. That split is the point — the
 // arithmetic is unit-tested here and the rendering stays
-// integration-only, same bar as sim-native.js itself.
+// integration-only, same bar as page/device-page.js itself.
 //
 //   const fold = new ToolbarFold(CLUSTERS);
 //   const plan = fold.plan((state) => {

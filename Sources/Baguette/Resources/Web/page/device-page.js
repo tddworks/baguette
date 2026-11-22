@@ -1,14 +1,14 @@
-// sim-native.js — focus mode at /devices/<udid>.
+// page/device-page.js — focus mode at /devices/<udid>.
 //
 // Activates only when the page is loaded directly with a UDID in the
 // path. Renders a macOS-Simulator-style window chrome (traffic
 // lights, centered device title, top-right Home / Screenshot / Lock
 // toolbar) wrapping a focused live-stream surface. Reuses the same
-// modules as sim-stream.js — DeviceFrame, FrameDecoder, StreamSession,
+// modules as page/devices-stream.js — DeviceFrame, FrameDecoder, StreamSession,
 // SimInput, MouseGestureSource, PinchOverlay — without the sidebar.
 //
 // Sets `window.__baguetteNativeMode = true` *synchronously* so
-// sim-list.js (loaded later) can early-return and not paint the list
+// page/devices-list.js (loaded later) can early-return and not paint the list
 // underneath us.
 (function () {
   'use strict';
@@ -27,7 +27,7 @@
   }
 
   const udid = deepLinkUdid();
-  if (!udid) return; // not deep-link mode; let sim-list run.
+  if (!udid) return; // not deep-link mode; let the devices list (page/devices-list.js) run.
   window.__baguetteNativeMode = true;
   // One page for every device. What it shows follows the device: each
   // control only when the device has the ability it drives
@@ -190,7 +190,7 @@
   // back to the device's portrait coord system. Used by the input
   // transport so taps/swipes/touches land on the iOS element the
   // user clicked on, even though iOS expects portrait coords.
-  // Direction must mirror the CSS transforms in sim-native.html —
+  // Direction must mirror the CSS transforms in page/device-page.html —
   // landscape-right is rotate(-90deg) (CCW) on the wrapper, so the
   // visual→portrait inverse rotates CW.
   function visualToPortraitNorm(x, y) {
@@ -319,11 +319,11 @@
     // before the template paints.
     document.body.style.background = 'var(--nv-page-bg, #1a1a1f)';
 
-    // 1. Load template + inline styles from sim-native.html.
+    // 1. Load template + inline styles from page/device-page.html.
     const html = await fetchTemplate();
     if (!html) {
       document.body.innerHTML =
-          '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">sim-native.html not found</pre>';
+          '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">page/device-page.html not found</pre>';
       return;
     }
     document.body.insertAdjacentHTML('beforeend', html);
@@ -447,7 +447,7 @@
     // A Home Screen launch has a translucent status bar over the top of
     // the page (sim.html's meta) whatever mode it is in, so the view
     // always covers the whole glass and pads itself by the safe area
-    // (`[data-standalone]` in sim-native.html) — the workbench too.
+    // (`[data-standalone]` in page/device-page.html) — the workbench too.
     if (launchedStandalone()) {
       document.getElementById('simNativeView').setAttribute('data-standalone', '');
       coverViewport(true);
@@ -508,7 +508,7 @@
   // screen takes the whole view, no bezel, no workbench, the way the
   // phone in your hand would look. HandheldMode (handheld/handheld-mode.js)
   // answers whether, where and how big; this paints it. The CSS under
-  // `[data-handheld]` in sim-native.html does the rest. See
+  // `[data-handheld]` in page/device-page.html does the rest. See
   // docs/features/handheld/README.md.
 
   function handheldMode() {
@@ -913,7 +913,7 @@
   // given wire format. Tearing down + restarting is the cheapest way
   // to swap formats — the WS protocol is per-connection and the
   // server's makeStream(...) is keyed at session open.
-  // Same text-frame router as sim-stream.js: hand JSON envelopes to
+  // Same text-frame router as page/devices-stream.js: hand JSON envelopes to
   // the inspector first, then claim paste_result; anything nobody
   // claims falls through to the decoder's error logger.
   function routeStreamText(env) {
@@ -1081,7 +1081,7 @@
   }
 
   /// The open panes, on the root, as a space-separated list — the size
-  /// budget in sim-native.html reads it to decide how much of the
+  /// budget in page/device-page.html reads it to decide how much of the
   /// window the device may take when something is beside it.
   function reflectCompanions() {
     const view = document.getElementById('simNativeView');
@@ -1658,7 +1658,7 @@
   let _templatePromise = null;
   function fetchTemplate() {
     if (_templatePromise) return _templatePromise;
-    _templatePromise = fetch('/sim-native.html')
+    _templatePromise = fetch('/page/device-page.html')
         .then((r) => (r.ok ? r.text() : ''))
         .then((html) => {
           if (!html) return '';
@@ -1760,7 +1760,7 @@
   // runs both so the difference is visible.
   //
   // The grouping is applied at runtime rather than authored into
-  // sim-native.html. That template is a flat list of buttons and reads
+  // page/device-page.html. That template is a flat list of buttons and reads
   // better as one; keeping the cluster definition here means the
   // membership, the fold order and the menu's idea of each control's
   // ROLE live in a single table instead of being split between HTML
@@ -2282,7 +2282,7 @@
     };
     // Sidebar-view jump — bounce out of focus mode and into the
     // inline `startStream` layout on `/simulators`. The hash is
-    // the cue sim-stream.js reads on load to auto-open the same
+    // the cue page/devices-stream.js reads on load to auto-open the same
     // device's stream view without an extra click.
     window.__nativeOpenSidebarView = () => {
       location.href = '/simulators#stream=' + encodeURIComponent(udid);
@@ -2507,7 +2507,7 @@
   // Those modules are pulled in at runtime rather than with a <script>
   // tag, because this page has no <head> of its own: sim.html carries
   // the page's script tags, and `fetchTemplate` deliberately drops the
-  // ones inside sim-native.html. Anything already on the page (sim.html
+  // ones inside page/device-page.html. Anything already on the page (sim.html
   // loads /recorder.js today) is left alone — the guard is the global
   // the module hangs itself on, not the URL, so this stays correct
   // whichever page happens to have loaded it first.
@@ -2521,7 +2521,7 @@
 
   let captureMenu = null;   // CaptureSizeMenu — the size chip in the toolbar
 
-  // Recording state, mirroring sim-stream.js's `recordingState`:
+  // Recording state, mirroring page/devices-stream.js's `recordingState`:
   //   recorder  : BrowserRecorder while a recording is in flight
   //   active    : true between start() and stop()
   //   startedAt : ms timestamp behind the mm:ss readout
@@ -2976,5 +2976,5 @@
     });
   }
 
-  console.log('[Baguette] sim-native.js active for', udid);
+  console.log('[Baguette] page/device-page.js active for', udid);
 })();

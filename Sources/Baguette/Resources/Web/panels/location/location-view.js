@@ -1,6 +1,6 @@
 // sim-location.js — simulated-location map picker for the focus page.
 //
-// Hangs `window.LocationPanel` on the global so sim-native.js can surface
+// Hangs `window.LocationPanel` on the global so page/device-page.js can surface
 // a floating glass card with a Leaflet map. Click the map to drop a pin
 // and "Set location"; switch to Route mode to drop two or more waypoints
 // and "Start route" a moving location; switch to Walk mode to drive the
@@ -216,7 +216,7 @@
       requestAnimationFrame(() => { if (this.map) this.map.invalidateSize(); });
     }
 
-    // Re-measure when the card is reopened (sim-native reuses the mounted
+    // Re-measure when the card is reopened (the page reuses the mounted
     // panel), so the tiles fill the container after any layout change.
     refresh() {
       if (this.map) requestAnimationFrame(() => this.map.invalidateSize());

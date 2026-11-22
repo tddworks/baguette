@@ -1,4 +1,4 @@
-// sim-3d.js — live server-rendered 3D simulator stream.
+// page/device-3d.js — live server-rendered 3D simulator stream.
 (function () {
   'use strict';
 

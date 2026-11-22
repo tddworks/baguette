@@ -14,7 +14,7 @@
 //   menu.detach();
 //
 // DOM rendering is integration-only in this codebase (same bar as
-// sim-native.js / farm-focus.js); the parts worth asserting on — the
+// page/device-page.js / farm-focus.js); the parts worth asserting on — the
 // preset catalogue, the placement maths, persistence — live in
 // CaptureSize / CaptureSettings and are unit-tested there.
 (function () {

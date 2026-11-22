@@ -1,7 +1,7 @@
 // sim-camera.js — camera-picker panel for the simulator pages.
 //
 // Hangs `window.CameraPanel` on the global so the focus-mode page
-// (sim-native.js) and the sidebar page (sim-stream.js) can both
+// (page/device-page.js) and the sidebar page (page/devices-stream.js) can both
 // surface a small camera-control card. UX echoes SimCamMac's HUD:
 // device list + Start/Stop + Fit/Fill + Mirror + a live FPS readout.
 //

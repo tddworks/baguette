@@ -1,6 +1,6 @@
-// sim-file-drop.js — drag-and-drop files onto the device.
+// page/file-drop.js — drag-and-drop files onto the device.
 //
-// Hangs `window.SimFileDrop` on the global so sim-native.js can make the
+// Hangs `window.SimFileDrop` on the global so page/device-page.js can make the
 // focus view accept dropped files: an .ipa/.app installs an app, an
 // image/video lands in Photos.
 //

@@ -203,7 +203,7 @@ protocol Devices: AnyObject, Sendable {
 | **Never** | `boot` / `connect` (those are abilities); a filter per family on the protocol; a guess between two devices claiming one id |
 
 `all` is a snapshot because the page already re-reads the list
-(`sim-list.js` fetches it; `sim-native.js` polls while a boot runs). A
+(`page/devices-list.js` fetches it; `page/device-page.js` polls while a boot runs). A
 `watch(onChange:)` earns its place only when the page moves to push.
 
 ### `DeviceKind` · `DeviceState` · `DeviceID` — values

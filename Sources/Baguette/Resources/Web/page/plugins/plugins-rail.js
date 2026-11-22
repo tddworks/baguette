@@ -1,4 +1,4 @@
-// sim-plugins.js — renders plugin contributions in focus mode.
+// page/plugins/plugins-rail.js — renders plugin contributions in focus mode.
 //
 // Plugins live in their OWN rail on the right edge, deliberately apart
 // from the device toolbar. Baguette ships the toolbar; plugins are
@@ -1218,7 +1218,7 @@
   }
 
   // No CSS here. The rail, its flyout and the panel are styled by the
-  // focus-mode stylesheet in sim-native.html, under `#simNativeView`,
+  // focus-mode stylesheet in page/device-page.html, under `#simNativeView`,
   // where the --nv-* theme tokens are defined — same arrangement as the
   // logs, status-bar, location and a11y panels. A stylesheet written
   // beside this module can't see those tokens, so every colour in it had

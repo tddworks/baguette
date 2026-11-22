@@ -1,4 +1,4 @@
-// The devices list's own additions to the list (sim-list.js draws the list):
+// The devices list's own additions to the list (page/devices-list.js draws the list):
 // sharing this Mac to the device the page is on, when the server shares it.
 import { isDevicesList, sharingOn, mountShareCard, pageBrowser } from '../families/mac/share-card.js';
 

@@ -308,7 +308,7 @@ route list itself lives in [README.md](README.md#http--websocket).
 
 The web UI is the **same page** as `/simulators/:udid` — `target.js`
 is the one seam that knows the base path, `stream-session.js` builds
-its socket URL through it, and `sim-native.js` reduces the surface in
+its socket URL through it, and `page/device-page.js` reduces the surface in
 device mode (control / simulate / inspect clusters hidden, a
 "DEVICE · view-only" badge beside the runtime, no boot or orientation
 calls). The list page shows connected companions in a DEVICES section

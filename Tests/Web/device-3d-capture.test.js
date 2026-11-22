@@ -5,7 +5,7 @@
 // PNG header read it does to name the file after the real dimensions.
 //
 // The panel itself (canvas, pointer orbiting, stream lifecycle) stays
-// integration-only — same bar as sim-native.js. These two statics are the
+// integration-only — same bar as page/device-page.js. These two statics are the
 // part with arithmetic in it, so they get covered.
 
 const test = require('node:test');
@@ -19,7 +19,7 @@ function load() {
   return loadBrowserModules([
     path.join(WEB, 'capture', 'capture-size.js'),
     path.join(WEB, 'capture', 'capture-settings.js'),
-    path.join(WEB, 'sim-3d.js'),
+    path.join(WEB, 'page/device-3d.js'),
   ]);
 }
 
@@ -181,7 +181,7 @@ test('reports no size for bytes that are not a PNG', () => {
 // a fallback behind it, and "the user always ends up with a file" is the
 // promise worth pinning. A fake document is enough to drive it.
 
-// `document`, `fetch` and `URL` are bare globals inside sim-3d.js (it is a
+// `document`, `fetch` and `URL` are bare globals inside page/device-3d.js (it is a
 // browser file, not a module), so the fakes have to be real Node globals
 // rather than properties of the throwaway `window`. Every test restores
 // them so the stubs don't leak into the rest of the process.
@@ -207,7 +207,7 @@ function fakePanel(respond) {
   const window = loadBrowserModules([
     path.join(WEB, 'capture', 'capture-size.js'),
     path.join(WEB, 'capture', 'capture-settings.js'),
-    path.join(WEB, 'sim-3d.js'),
+    path.join(WEB, 'page/device-3d.js'),
   ]);
   const panel = new window.Sim3DPanel();
   panel.udid = 'BC3E-138D';

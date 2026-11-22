@@ -72,7 +72,7 @@ temp dir. An unknown extension is rejected before the body is read.
 
 ## The browser drop target
 
-`sim-file-drop.js` hangs `window.SimFileDrop`; `sim-native.js` calls
+`page/file-drop.js` hangs `window.SimFileDrop`; `page/device-page.js` calls
 `SimFileDrop.attach(nativeDeviceFrame, {udid})` on the focus page. The drop
 listeners live on the device frame, and the highlight **mirrors the bezel's
 `screenArea` rect** (same percentage geometry and `clipRadius` corner radius the
@@ -90,7 +90,7 @@ directory**:
 - It walks a `*.app` directory recursively, draining `readEntries`, which returns
   ~100 entries per call.
 - It packs the tree into a **stored (uncompressed) zip** built in
-  `sim-file-drop.js`: local headers + CRC-32 + central directory, no library, no
+  `page/file-drop.js`: local headers + CRC-32 + central directory, no library, no
   bundler.
 - Every entry is stamped unix mode `0755` in its external attributes (the
   file-system API can't say which files had the exec bit, and a spare exec bit

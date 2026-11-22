@@ -34,7 +34,7 @@
   // same shape without asking twice.
   const CAPTURE_STORAGE_KEY = 'asc.capture.stream';
 
-  // Shared with the focus view (sim-native.js) — one stream-format
+  // Shared with the focus view (page/device-page.js) — one stream-format
   // preference per origin, whichever surface set it.
   const FORMAT_KEY = 'asc.simFormat';
 
@@ -320,7 +320,7 @@
   // edited through the CaptureSizeMenu chip in the Captures card header.
 
   /** The current selection, or null when /capture/*.js isn't loaded
-   *  (the host SPA can pull in sim-stream.js on its own). Call sites
+   *  (the host SPA can pull in page/devices-stream.js on its own). Call sites
    *  treat null as "no resizing", i.e. exactly the old behaviour. */
   function captureSettings() {
     return sizeMenu ? sizeMenu.settings : null;
@@ -679,7 +679,7 @@
 
   // --- Affordance handler ---
   // Stream click on the list page navigates to `/devices/<udid>`
-  // — the focus-mode page owned by sim-native.js — instead of
+  // — the focus-mode page owned by page/device-page.js — instead of
   // swapping the inline #simPluginView in place. The deep-link route
   // is the canonical "stream this device" surface (browser back
   // returns to the list, share-link works, no inline-view flash).
@@ -689,7 +689,7 @@
   };
 
   // --- Hash trigger ---
-  // Focus mode (sim-native.js) exposes a "sidebar view" floating
+  // Focus mode (page/device-page.js) exposes a "sidebar view" floating
   // button that navigates here with `#stream=<udid>`. When that
   // hash is present on load, auto-open the inline stream view for
   // the named device so the user lands directly in the sidebar
@@ -719,5 +719,5 @@
     openFromHash();
   }
 
-  console.log('[ASC Pro] sim-stream.js loaded (modular)');
+  console.log('[ASC Pro] page/devices-stream.js loaded (modular)');
 })();

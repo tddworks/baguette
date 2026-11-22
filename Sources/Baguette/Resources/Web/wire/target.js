@@ -10,7 +10,7 @@
     base: 'devices',
     /**
      * Whether the page drives a physical phone is the device's kind, not
-     * the URL: sim-native reads it from /devices/<udid>/device.json.
+     * the URL: the device page reads it from /devices/<udid>/device.json.
      */
     isDevice: false,
     /** '/devices/<udid><rest>'. */

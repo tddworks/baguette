@@ -55,7 +55,7 @@ iPhone is data only.
 2. **(landed)** Button geometry + transform CSS computed in Swift (anchor switch + mirror formula + image-percent translates).
 3. **(landed)** Full gesture interpreter ported into the SDK — drag, pinch, pan, edge-stream, wheel-as-2-finger, Safari gesture events, option-hover preview, touch (iOS WebView).
 4. **(landed)** Keyboard part added. W3C-code whitelist consolidated in one file.
-5. **(landed)** Cutover of all three consumer pages: `sim-stream.js`, `sim-native.js` (with orientation-aware coord remap at the send boundary), `farm/farm-tile.js` (uses SDK parts à la carte — Transport + Screen + Keyboard — since the tile has its own canvas surface).
+5. **(landed)** Cutover of all three consumer pages: `page/devices-stream.js`, `page/device-page.js` (with orientation-aware coord remap at the send boundary), `farm/farm-tile.js` (uses SDK parts à la carte — Transport + Screen + Keyboard — since the tile has its own canvas surface).
 6. **(landed)** Deleted: `bezel-buttons.js`, `sim-input.js`, `sim-input-bridge.js`, `device-frame.js`, `keyboard-capture.js`.
 7. **(next)** Add a crown part. Apple Watch correctness lands (rotary input, not button).
 8. **(eventually)** Add a remote part for Apple TV. Vision Pro adds whatever parts it needs.

@@ -1,6 +1,6 @@
 // sim-notify.js — remote-notification card for the focus page.
 //
-// Hangs `window.NotifyPanel` on the global so sim-native.js can surface a
+// Hangs `window.NotifyPanel` on the global so page/device-page.js can surface a
 // floating glass card that delivers a remote notification to an app, as if
 // APNs had sent it.
 //

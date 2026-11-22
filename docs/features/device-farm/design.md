@@ -52,7 +52,7 @@ autoplay or codec edge cases.
 Input is attached to the **mirror** (`MouseGestureSource` + `PinchOverlay`),
 not the grid canvas: mouse coords normalise against the listener element's
 bounding box, and the focus pane is what the user clicks. `SimInputBridge`,
-shared with `sim-stream.js`, translates `SimInput`'s dialect to the gesture
+shared with `page/devices-stream.js`, translates `SimInput`'s dialect to the gesture
 wire.
 
 The focus pane's button row maps only `home` and `lock` to device buttons; Vol+,

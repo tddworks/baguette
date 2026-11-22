@@ -1,4 +1,4 @@
-// sim-screens.js — the companion-screens rail in focus mode.
+// families/simulator/screens-rail.js — the companion-screens rail in focus mode.
 //
 // A simulator can drive more than its own glass: a CarPlay external
 // display, and the Apple Watch paired with it. Both used to be a
@@ -14,7 +14,7 @@
 //
 // The rail owns the buttons, the state card and the remembered choice.
 // It does not own the streams: opening a pane calls back into
-// sim-native.js, which owns every StreamSession on the page.
+// page/device-page.js, which owns every StreamSession on the page.
 //
 // Wire:
 //   GET  /devices/<udid>/companion-screens.json  → what's attached
@@ -505,7 +505,7 @@
   }
 
   // No CSS here — the rail and its card are styled by the focus-mode
-  // stylesheet in sim-native.html, beside the plugin rail it shares a
+  // stylesheet in page/device-page.html, beside the plugin rail it shares a
   // shape with. See the note there.
   root.ScreensRail = ScreensRail;
 })(window);

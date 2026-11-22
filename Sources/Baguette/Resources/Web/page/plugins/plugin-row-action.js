@@ -6,11 +6,11 @@
 // at all depends on both: a `tap` row without a frame has nothing to
 // aim at, and a `copy` row never needed one.
 //
-// Split out of sim-plugins.js so the decision is testable without a
-// DOM. sim-plugins.js keeps the rendering and the clipboard/gesture
+// Split out of page/plugins/plugins-rail.js so the decision is testable without a
+// DOM. page/plugins/plugins-rail.js keeps the rendering and the clipboard/gesture
 // plumbing; this only says what should happen.
 //
-// Lives at the web root beside sim-plugins.js rather than in a
+// Lives at the web root beside page/plugins/plugins-rail.js rather than in a
 // `plugins/` folder: `/plugins/:file` and the plugin API's
 // `/plugins/:id/commands/:cmd` would bind the same router slot under
 // two different names, which Hummingbird rejects outright (see the

@@ -1,6 +1,6 @@
 // sim-defaults.js — the Defaults card for the focus page.
 //
-// Hangs `window.DefaultsPanel` on the global so sim-native.js can surface a
+// Hangs `window.DefaultsPanel` on the global so page/device-page.js can surface a
 // floating glass card that reads and edits an installed app's persisted
 // UserDefaults: its standard suite, one of its App Groups, or a suite of its
 // own.

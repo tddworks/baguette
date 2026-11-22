@@ -8,7 +8,7 @@
 //
 // This class owns no DOM. It answers the three questions the page has
 // to ask — should we be handheld, what address remembers it, how big
-// is the screen — and sim-native.js does the painting. Same split as
+// is the screen — and page/device-page.js does the painting. Same split as
 // ToolbarFold: the arithmetic is unit-tested, the rendering is
 // integration-only.
 (function (root) {

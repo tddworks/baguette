@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Simulator — focus</title>
 <style>
-  /* Standalone preview tokens — at runtime sim-native.js extracts the
+  /* Standalone preview tokens — at runtime page/device-page.js extracts the
      #simNativeView block + sibling <style>, so this :root only matters
      when this file is opened directly via file://. */
   :root {
@@ -18,7 +18,7 @@
 </head>
 <body>
 <!--
-  Focus mode template. sim-native.js extracts everything inside
+  Focus mode template. page/device-page.js extracts everything inside
   #simNativeView (plus the <style> below) and injects it when the
   page is loaded directly at /simulators/<udid>.
 
@@ -72,7 +72,7 @@
   /* A Home Screen launch: the iPhone's status bar is translucent over
      the top of the page and the home indicator over the bottom, so the
      workbench keeps its 12px inside the safe area rather than under
-     them. sim-native.js sets the attribute and `viewport-fit=cover`,
+     them. page/device-page.js sets the attribute and `viewport-fit=cover`,
      without which every inset reads 0. */
   #simNativeView[data-standalone] {
     padding: calc(env(safe-area-inset-top, 0px) + 12px)
@@ -185,7 +185,7 @@
     /* Where the floating panels start. The toolbar sits in the device's
        vertically centred column, so in a window taller than the device
        needs it lands well below the top — `placeFloatingPanels` in
-       sim-native.js moves this under it. 84px is the toolbar-at-top
+       page/device-page.js moves this under it. 84px is the toolbar-at-top
        resting place, and the floor. */
     --nv-panel-top: 84px;
     --nv-device-max-w:    min(100%, 96vw);
@@ -305,7 +305,7 @@
      and the tall aspect means height is what actually runs out first.
 
      The ratio here is only the placeholder an empty pane wears; every
-     model has its own (a 46mm is 416×496), so sim-native.js replaces it
+     model has its own (a 46mm is 416×496), so page/device-page.js replaces it
      inline from the first frame's reported size. */
   #simNativeView .watch-frame {
     position: relative;
@@ -505,7 +505,7 @@
 
   /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
      mirrors the simulator's interface orientation as a CSS
-     transform; sim-native.js sets `data-orientation` on the
+     transform; page/device-page.js sets `data-orientation` on the
      container after each rotate-button click. Rotation is purely
      visual — pixel positions inside the screen area stay in the
      device's portrait coord system, and JS wraps the input
@@ -529,7 +529,7 @@
      visibly wrong. The CSS only sets `transform-origin` and the
      transition curve; the actual rotation degree comes from
      `rotation-deg` set inline by `applyOrientation` in
-     `sim-native.js`. */
+     `page/device-page.js`. */
 
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div,
@@ -549,7 +549,7 @@
 
      Deliberately black in BOTH themes: a powered-off phone screen is
      black, and the card sits inside the screen cutout, not on the
-     page. Built by `sim-native.js` and appended to the SDK's
+     page. Built by `page/device-page.js` and appended to the SDK's
      screenArea, so it inherits the bezel's border-radius clip. */
   #simNativeView .power-card {
     position: absolute; inset: 0;
@@ -756,7 +756,7 @@
      LEFT of the control it belongs to and read as unrelated to it.
      Only the merged menu keeps `right: 0` — it sits at the end of the
      bar, where opening leftward is the only direction available. */
-  /* Border-box throughout this menu. sim-native.html does not set a
+  /* Border-box throughout this menu. page/device-page.html does not set a
      global `box-sizing`, so `width: 100%` on a padded row resolved to
      content-width PLUS padding and every row sat a few pixels wider
      than the popover holding it — which is what clipped the frame-rate
@@ -983,7 +983,7 @@
      against the device's `z-index: 2` screen area a level up, so the
      scrim meant to dim the phone painted behind it. Page-covering
      things hang off `#simNativeView` instead — see `modalMount` in
-     sim-native.js. */
+     page/device-page.js. */
   #simNativeView .right-rails {
     position: fixed;
     right: 16px; top: 12px; bottom: 12px;
@@ -2262,7 +2262,7 @@
 
   /* --- Right-edge rails: companion screens + plugins -----------------
      Both rails and everything they open. This lives here, with the rest
-     of the focus chrome, rather than in sim-screens.js / sim-plugins.js
+     of the focus chrome, rather than in families/simulator/screens-rail.js / page/plugins/plugins-rail.js
      — those used to inject a stylesheet each, and a stylesheet written
      next to its module can't see the token block, so both had to guess
      at a fallback for every colour. The guesses were light-theme values,
@@ -2981,7 +2981,7 @@
      (`left` / `top` set inline from HandheldButton.place), faded while
      idle so it reads as part of the glass rather than a control laid
      over it. `.handheld-ui` spans the view only to carry the phone's
-     safe area as padding, which sim-native.js reads back for the
+     safe area as padding, which page/device-page.js reads back for the
      button's travel; it lets every touch through except on its
      children. */
   #simNativeView .handheld-ui { display: none; }
@@ -3120,7 +3120,7 @@
 
       <!-- Scroll-left chevron — shown only when the icon strip overflows
            (mouse users; trackpads scroll the strip directly). Disabled at
-           the left end. Wired in sim-native.js `wireToolbarScroll`. -->
+           the left end. Wired in page/device-page.js `wireToolbarScroll`. -->
       <button class="tb-arrow" id="nativeScrollLeft" type="button"
               title="Scroll controls left" aria-label="Scroll controls left" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
@@ -3386,7 +3386,7 @@
 
       <!-- Capture output size — the chip that says "App Store 6.9″" /
            "Square" / "Native" for both Screenshot and Record. Mounted
-           by CaptureSizeMenu (sim-native.js `mountCaptureUI`), so it
+           by CaptureSizeMenu (page/device-page.js `mountCaptureUI`), so it
            stays an empty zero-width box until then.
 
            Deliberately OUTSIDE `#nativeToolScroll`, even though it
@@ -3402,7 +3402,7 @@
   </div>
 
   <!-- Companion screens. Both start hidden: they are shown only when
-       the screens rail (sim-screens.js) opens one, and only when the
+       the screens rail (families/simulator/screens-rail.js) opens one, and only when the
        host says the screen is actually attached. `hidden` rather than a
        CSS-only hide so the canvases stay out of layout entirely while
        nothing is streaming into them. -->
@@ -3463,7 +3463,7 @@
        nearer side (HandheldButton, handheld/handheld-button.js). A tap
        opens the menu over a scrim, so a tap aimed at the menu never
        lands on the simulator. Shown only while `[data-handheld]` is on
-       the root; sim-native.js places it and wires the drag. -->
+       the root; page/device-page.js places it and wires the drag. -->
   <div class="handheld-ui" id="nativeHandheldUI" data-open="false">
     <div class="hh-scrim"
          onclick="window.__nativeHandheldMenu && window.__nativeHandheldMenu(false)"></div>
@@ -3523,7 +3523,7 @@
 
   <div class="right-rails" id="nativeRightRails"></div>
 
-  <!-- Accessibility-inspector host. sim-native.js mounts an
+  <!-- Accessibility-inspector host. page/device-page.js mounts an
        AXInspector into this element after the surface is ready;
        the inspector renders its own toggle + selection info here. -->
   <div id="nativeAxHost" class="ax-host"></div>

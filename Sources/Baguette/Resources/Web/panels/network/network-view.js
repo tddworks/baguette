@@ -1,6 +1,6 @@
 // sim-network.js — network-conditioning panel for the focus page.
 //
-// Hangs `window.NetworkPanel` on the global so sim-native.js can surface a
+// Hangs `window.NetworkPanel` on the global so page/device-page.js can surface a
 // floating glass card that conditions what the simulator's apps see of the
 // network — latency, downlink bandwidth, request loss, and hard offline.
 //

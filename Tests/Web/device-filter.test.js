@@ -7,7 +7,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'sim-list', 'device-filter.js'
+  'page', 'device-filter.js'
 );
 
 function DeviceFilter() {

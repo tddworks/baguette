@@ -1,7 +1,7 @@
 // log-view.js — the device's live unified log, in a host: the logs panel's view (panels/logs/logs-panel.js).
 //
 // Hangs `window.LogPanel` on the global so the focus-mode page
-// (sim-native.js) and the sidebar-mode page (sim-stream.js) can
+// (page/device-page.js) and the sidebar-mode page (page/devices-stream.js) can
 // share one wiring pattern. Visual layout mirrors the sidebar's
 // "Events" card: monospace, muted timestamps, severity-coloured
 // type badge + message body, scrolling auto-pinned to the bottom.

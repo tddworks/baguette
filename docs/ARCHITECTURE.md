@@ -231,7 +231,7 @@ Thin orchestration; ArgumentParser lives in `Commands/`, Hummingbird in
 2. **`SimInput`** — emits a payload `{kind:"tap", x, y, duration, width, height}`
    in the host plugin's wire dialect, hands it to its `transport`
    callback.
-3. **`sim-stream.js` orchestrator** — translates the dialect to
+3. **`page/devices-stream.js` orchestrator** — translates the dialect to
    Baguette's wire (`type:"tap"`, x/y multiplied to device-point
    space), serialises to JSON, sends as a text WS message.
 4. **`Server.streamWS`** — receives the text frame, runs
@@ -274,7 +274,7 @@ divides by `size.width` / `size.height` to produce the normalized
 [0, 1] CGPoint the C function expects.
 
 The browser-side IIFE (`SimInput`) speaks normalized [0, 1] internally
-and multiplies by `width` / `height` in `sim-stream.js`'s translator
+and multiplies by `width` / `height` in `page/devices-stream.js`'s translator
 before serialising. Documenting this once: **the wire is in points,
 not normalized**.
 
@@ -404,7 +404,7 @@ by any plugin, so a plugin can't run other plugins or install new ones.
 
 No `/api/` prefix; UDID always in the path; format distinguished by
 file extension. Static UI siblings live at the root so
-`<script src="sim-list.js">` resolves naturally from a page served at
+`<script src="page/devices-list.js">` resolves naturally from a page served at
 `/simulators` — no conflict with `/simulators/:udid` (UDIDs don't end
 in `.js`).
 
@@ -426,10 +426,10 @@ one responsibility:
 | `device-frame.js` | `DeviceFrame` — bezel + screen-area DOM construction |
 | `capture-gallery.js` | `CaptureGallery` — screenshot fetch + composite + thumbs |
 | `stream-session.js` | `StreamSession` — WS lifetime + paint loop |
-| `sim-list.js` | list page renderer + boot/shutdown buttons |
-| `sim-stream.js` | orchestrator — wires the above on Stream click |
-| `sim-plugins.js` | `PluginPanels` — the plugins rail, flyout, panels and add-a-bakery modal, drawn entirely with host markup |
-| `plugin-row-action.js` | `PluginRowAction` — what clicking a plugin row means (highlight / tap / copy), split out so it's testable without a DOM |
+| `page/devices-list.js` | list page renderer + boot/shutdown buttons |
+| `page/devices-stream.js` | orchestrator — wires the above on Stream click |
+| `page/plugins/plugins-rail.js` | `PluginPanels` — the plugins rail, flyout, panels and add-a-bakery modal, drawn entirely with host markup |
+| `page/plugins/plugin-row-action.js` | `PluginRowAction` — what clicking a plugin row means (highlight / tap / copy), split out so it's testable without a DOM |
 
 Nothing a plugin ships reaches this page — no plugin script, CSS or
 markup. A manifest names an icon from a host-owned set and every string

@@ -6,7 +6,7 @@ const path = require('node:path');
 const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const { AXInspector } = loadBrowserModule(path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'sim-ax-inspector.js'
+  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'page/accessibility-inspector.js'
 ));
 
 function hover(tree, x, y) {

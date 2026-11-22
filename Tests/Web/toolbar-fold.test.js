@@ -5,7 +5,7 @@
 // that renders a candidate state and reports whether it fits, and gets
 // back the first state that did. That split is what makes the
 // arithmetic testable — the rendering stays integration-only, same bar
-// as sim-native.js itself.
+// as page/device-page.js itself.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

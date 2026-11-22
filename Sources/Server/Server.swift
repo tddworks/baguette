@@ -39,9 +39,9 @@ import NIOCore
 ///   WS   /devices/:udid/stream?format=      → physical-device mirror frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
-/// Static UI siblings live at the *root* (e.g. `GET /sim-list.js`)
-/// so the page at `/simulators` resolves `<script src="sim-list.js">`
-/// to a sibling — no prefix juggling, no conflict with the
+/// Static UI lives at the *root* (`GET /sim.html`) and in the folders
+/// `staticAssetSubdirectories` lists (`GET /page/devices-list.js`), each
+/// with a literal route — no prefix juggling, no conflict with the
 /// `/simulators/:udid` resource tree (UDIDs don't end in `.js`).
 struct Server: Sendable {
     let simulators: any Simulators
@@ -521,7 +521,6 @@ struct Server: Sendable {
         "carplay-frames",
         "carplay-frames/cupra",
         "carplay-frames/plain",
-        "sim-list",
         "device",
         "families",
         "families/android",
@@ -531,6 +530,7 @@ struct Server: Sendable {
         "farm",
         "handheld",
         "page",
+        "page/plugins",
         "panels",
         "panels/camera",
         "panels/defaults",
@@ -539,7 +539,6 @@ struct Server: Sendable {
         "panels/network",
         "panels/notify",
         "panels/status-bar",
-        "screens",
         "toolbar",
         "wire",
         "vendor/leaflet",

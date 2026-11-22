@@ -7,7 +7,7 @@
 <style>
   /* Design system — duplicated from the host page (`/api/sim/ui`) so this
      file renders correctly when opened directly via file://. At runtime,
-     sim-stream.js only extracts the #simPluginView contents, so these
+     page/devices-stream.js only extracts the #simPluginView contents, so these
      parent-page styles are ignored (the host's own copy is already loaded). */
   :root {
     --bg: #f8fafc;
@@ -59,7 +59,7 @@
 <div id="preview-banner">PREVIEW</div>
 
 <!--
-  Everything inside #simPluginView is what sim-stream.js injects into the
+  Everything inside #simPluginView is what page/devices-stream.js injects into the
   host page when a stream starts. The style block directly below is scoped
   to #simStreamSidebar and travels with the extracted markup.
 -->
@@ -115,7 +115,7 @@
     #simStreamSidebar #simRecordList a .rec-meta{color:#475569;font-weight:500;font-variant-numeric:tabular-nums;margin-left:auto}
 
     /* Responsive — sidebar collapses to grid / single column on narrow
-       widths. Moved here from sim-stream.js so the rules arrive with the
+       widths. Moved here from page/devices-stream.js so the rules arrive with the
        markup and can be previewed at any width. */
     @media (max-width: 820px) {
       #simStreamLayout { flex-direction: column !important; gap: 16px !important; }
@@ -256,7 +256,7 @@
         <div class="card-header">
           <div class="captures-head">
             <span class="card-title" style="font-size:12px;flex:1">Captures <span id="simCaptureCount" style="font-weight:500;color:var(--text-muted)"></span></span>
-            <!-- CaptureSizeMenu mounts here (sim-stream.js). It owns the
+            <!-- CaptureSizeMenu mounts here (page/devices-stream.js). It owns the
                  output size, fit, background AND the "Include bezel"
                  switch, which is why the old standalone `#simFrameToggle`
                  checkbox is gone: `CaptureSettings.withFrame` is the same
@@ -319,7 +319,7 @@
 
 <script>
   // Preview bootstrap — only fires when this file is opened directly in a
-  // browser (file://). In production, sim-stream.js extracts the markup
+  // browser (file://). In production, page/devices-stream.js extracts the markup
   // above and injects it into the live page, so none of this runs.
   (function(){
     if (location.protocol !== 'file:') return;

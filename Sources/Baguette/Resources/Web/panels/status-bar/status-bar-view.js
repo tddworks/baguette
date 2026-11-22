@@ -1,6 +1,6 @@
 // sim-status-bar.js — status-bar override panel for the focus page.
 //
-// Hangs `window.StatusBarPanel` on the global so sim-native.js can
+// Hangs `window.StatusBarPanel` on the global so page/device-page.js can
 // surface a floating glass card that overrides the simulator's status
 // bar (time, carrier, network, Wi-Fi / cellular signal, battery).
 //
