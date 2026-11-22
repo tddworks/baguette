@@ -14,7 +14,7 @@ final class ScreenCaptureKitFeed: NSObject, DisplayFeed, SCStreamOutput, SCStrea
     private var onPicture: (@Sendable (FeedPicture) -> Void)?
     private var onEnd: (@Sendable () -> Void)?
 
-    func start(display: UInt32, size: Size,
+    func start(display: UInt32, sizing: @escaping @Sendable (Size, Double) -> Size,
                onPicture: @escaping @Sendable (FeedPicture) -> Void,
                onEnd: @escaping @Sendable () -> Void) throws {
         guard CGPreflightScreenCaptureAccess() else {
@@ -27,6 +27,9 @@ final class ScreenCaptureKitFeed: NSObject, DisplayFeed, SCStreamOutput, SCStrea
         guard let target = content.displays.first(where: { $0.displayID == display }) else {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "display \(display) is gone"])
         }
+        let filter = SCContentFilter(display: target, excludingWindows: [])
+        let size = sizing(Size(width: filter.contentRect.width, height: filter.contentRect.height),
+                          Double(filter.pointPixelScale))
         let config = SCStreamConfiguration()
         config.width = Int(size.width)
         config.height = Int(size.height)
@@ -34,8 +37,7 @@ final class ScreenCaptureKitFeed: NSObject, DisplayFeed, SCStreamOutput, SCStrea
         config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         config.queueDepth = 6
         config.showsCursor = true
-        let stream = SCStream(filter: SCContentFilter(display: target, excludingWindows: []),
-                              configuration: config, delegate: self)
+        let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         lock.withLock { self.stream = stream; self.onPicture = onPicture; self.onEnd = onEnd }
         let _: Bool = try wait { done in stream.startCapture { done($0 == nil ? true : nil, $0) } }

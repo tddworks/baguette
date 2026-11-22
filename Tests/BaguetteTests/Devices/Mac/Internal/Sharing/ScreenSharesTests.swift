@@ -131,6 +131,17 @@ struct ScreenSharesTests {
         #expect(first != second)
     }
 
+    @Test func `should know the pixels each shared display was made with, through a turn`() {
+        let mac = Mac()
+        let shares = mac.shares
+        let id = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .extra)!
+        #expect(shares.pixels(of: id) == Size(width: 1206, height: 2622))
+        _ = shares.reshape(id, to: Self.turned)
+        #expect(shares.pixels(of: id) == Size(width: 2622, height: 1206))
+        shares.end(id)
+        #expect(shares.pixels(of: id) == nil)
+    }
+
     @Test func `should reshape nothing when no share has the id`() {
         #expect(!Mac().shares.reshape("nope", to: Self.turned))
     }

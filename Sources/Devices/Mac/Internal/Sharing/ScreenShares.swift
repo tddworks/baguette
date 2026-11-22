@@ -27,6 +27,7 @@ final class ScreenShares: @unchecked Sendable {
         let viewer: String
         let serial: UInt32
         let use: Use
+        var shape: SharedScreenShape
         var display: any VirtualDisplay
         /// The main display before this share took it, to give back.
         let previousMain: UInt32?
@@ -53,10 +54,15 @@ final class ScreenShares: @unchecked Sendable {
         var previousMain: UInt32?
         if let main, arrangement.makeMain(display.id) { previousMain = main }
         lock.withLock {
-            shares[display.uuid] = Share(viewer: viewer, serial: serial, use: use, display: display,
+            shares[display.uuid] = Share(viewer: viewer, serial: serial, use: use, shape: shape, display: display,
                                          previousMain: previousMain)
         }
         return display.uuid
+    }
+
+    /// The pixels the share's display was made with; nil when no share has the id.
+    func pixels(of id: String) -> Size? {
+        lock.withLock { shares[id]?.shape.pixels }
     }
 
     func isSharing(_ id: String) -> Bool {
@@ -77,6 +83,7 @@ final class ScreenShares: @unchecked Sendable {
         }
         if share.use == .main { _ = arrangement.makeMain(display.id) }
         share.display = display
+        share.shape = shape
         lock.withLock { shares[id] = share }
         return true
     }

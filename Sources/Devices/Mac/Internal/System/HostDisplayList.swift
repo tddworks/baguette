@@ -31,13 +31,10 @@ enum HostDisplayList {
               let text = CFUUIDCreateString(nil, uuid) as String?
         else { return nil }
         let bounds = CGDisplayBounds(id)
-        let mode = CGDisplayCopyDisplayMode(id)
-        let scale = mode.map { Double($0.pixelWidth) / Double(max(1, $0.width)) } ?? 1
         return MacDisplayInfo(
             id: id, uuid: text, name: name(of: id), isMain: CGDisplayIsMain(id) != 0,
             bounds: Rect(origin: Point(x: bounds.origin.x, y: bounds.origin.y),
-                         size: Size(width: bounds.width, height: bounds.height)),
-            pixelsPerPoint: scale)
+                         size: Size(width: bounds.width, height: bounds.height)))
     }
 
     /// The name System Settings shows ("Built-in Retina Display").

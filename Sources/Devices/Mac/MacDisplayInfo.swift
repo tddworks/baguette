@@ -12,11 +12,6 @@ struct MacDisplayInfo: Equatable, Sendable {
     /// Where it sits on the desktop, in global points (the main display's
     /// top-left at 0,0, y down) — where its events land.
     let bounds: Rect
-    let pixelsPerPoint: Double
-
-    var captureSize: DisplayCaptureSize {
-        DisplayCaptureSize(points: bounds.size, pixelsPerPoint: pixelsPerPoint)
-    }
 }
 
 /// Screen Recording isn't allowed for the app that launched baguette.

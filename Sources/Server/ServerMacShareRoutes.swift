@@ -28,10 +28,13 @@ extension Server {
             do { request = try ShareRequest.parse(await Self.bodyText(r)) } catch let invalid as ShareRequest.Invalid {
                 return Self.twinJSONResponse(["ok": false, "error": invalid.reason], status: .badRequest)
             }
+            let shape = "\(Int(request.shape.points.width))×\(Int(request.shape.points.height)) pt"
             guard let id = shares.start(viewer: request.viewer, shape: request.shape, use: request.use) else {
+                log("[mac] share for \(request.viewer) at \(shape) refused: this Mac didn't make the display")
                 return Self.twinJSONResponse(["ok": false, "error": "this Mac didn't make the display"],
                                              status: .serviceUnavailable)
             }
+            log("[mac] share \(id) started for \(request.viewer): \(shape), \(request.use.rawValue) display")
             return Self.twinJSONResponse(["ok": true, "id": id], status: .created)
         }
 
@@ -43,17 +46,24 @@ extension Server {
                 return Self.twinJSONResponse(["ok": false, "error": invalid.reason], status: .badRequest)
             }
             guard shares.isSharing(id) else {
+                log("[mac] reshape for unknown share \(id)")
                 return Self.twinJSONResponse(["ok": false, "error": "no share \(id)"], status: .notFound)
             }
-            return shares.reshape(id, to: request.shape)
-                ? Self.okJSON
-                : Self.twinJSONResponse(["ok": false, "error": "the display didn't take the shape"],
-                                        status: .internalServerError)
+            let shape = "\(Int(request.shape.points.width))×\(Int(request.shape.points.height)) pt"
+            guard shares.reshape(id, to: request.shape) else {
+                log("[mac] share \(id) didn't take \(shape); it ended")
+                return Self.twinJSONResponse(["ok": false, "error": "the display didn't take the shape"],
+                                             status: .internalServerError)
+            }
+            log("[mac] share \(id) reshaped to \(shape)")
+            return Self.okJSON
         }
 
         router.delete("/mac/shares/:id") { r, context in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
-            shares.end(context.parameters.get("id") ?? "")
+            let id = context.parameters.get("id") ?? ""
+            log("[mac] share \(id) ended")
+            shares.end(id)
             return Response(status: .noContent)
         }
     }

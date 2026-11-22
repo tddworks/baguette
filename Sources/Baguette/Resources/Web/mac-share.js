@@ -49,6 +49,12 @@
       return id ? { id, room: query.get('room') } : null;
     },
 
+    /** A shared Mac streams over WebRTC — paced, hardware-decoded, smooth on a
+     *  phone — unless its tab picked another format (`picked`). */
+    format(picked) {
+      return picked || 'webrtc';
+    },
+
     /** Whether the screen went from `before` to `now` by turning, or by a real resize. */
     turned(before, now) {
       if ((before.width > before.height) !== (now.width > now.height)) return true;

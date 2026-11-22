@@ -1721,10 +1721,25 @@
   //
   // `StreamFormat` filters the stored value against what this browser
   // can decode, so nothing unplayable reaches the socket.
+  /// The format asked for: a shared Mac's tab picks its own, WebRTC until it
+  /// does, leaving the saved choice for every other device alone.
+  const SHARE_FORMAT_KEY = 'asc.shareFormat';
+  function sharedMac() {
+    const MacShare = window.Baguette && window.Baguette._MacShare;
+    return MacShare && MacShare.fromAddress(location.search) ? MacShare : null;
+  }
+  function storedFormat() {
+    const MacShare = sharedMac();
+    if (!MacShare) return localStorage.getItem(FORMAT_KEY);
+    let picked = null;
+    try { picked = sessionStorage.getItem(SHARE_FORMAT_KEY); } catch { /* none picked */ }
+    return MacShare.format(picked);
+  }
+
   function currentFormat() {
     if (!window.StreamFormat) return 'mjpeg';
     return window.StreamFormat
-        .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities()).id;
+        .pick(storedFormat(), decodeCapabilities()).id;
   }
 
   /** What a surface that only has a stream socket — CarPlay, the watch,
@@ -1733,7 +1748,7 @@
   function socketFormat() {
     if (!window.StreamFormat) return 'mjpeg';
     return window.StreamFormat
-        .pick(localStorage.getItem(FORMAT_KEY), decodeCapabilities())
+        .pick(storedFormat(), decodeCapabilities())
         .forSockets(decodeCapabilities()).id;
   }
 
@@ -2413,7 +2428,11 @@
       const view = document.getElementById('simNativeView');
       if (current === wanted.id && (session ||
           (view && view.getAttribute('data-render3d') === 'open'))) return;
-      localStorage.setItem(FORMAT_KEY, wanted.id);
+      if (sharedMac()) {
+        try { sessionStorage.setItem(SHARE_FORMAT_KEY, wanted.id); } catch { /* the tab forgets */ }
+      } else {
+        localStorage.setItem(FORMAT_KEY, wanted.id);
+      }
       reflectFormat(wanted.id);
       if (view && view.getAttribute('data-render3d') === 'open') {
         if (render3DPanel) render3DPanel.setFormat(wanted.forSockets(decodeCapabilities()).id);

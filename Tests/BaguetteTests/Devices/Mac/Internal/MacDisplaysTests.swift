@@ -10,10 +10,10 @@ import Testing
 struct MacDisplaysTests {
     static let builtIn = MacDisplayInfo(
         id: 1, uuid: "37D8832A-2D66-02CA-B9F7-8F30A301B230", name: "Built-in Retina Display", isMain: true,
-        bounds: Rect(origin: Point(x: 0, y: 0), size: Size(width: 1512, height: 982)), pixelsPerPoint: 2)
+        bounds: Rect(origin: Point(x: 0, y: 0), size: Size(width: 1512, height: 982)))
     static let studio = MacDisplayInfo(
         id: 2, uuid: "9E1F2A10-0000-4000-8000-00000000ABCD", name: "Studio Display", isMain: false,
-        bounds: Rect(origin: Point(x: 1512, y: 0), size: Size(width: 2560, height: 1440)), pixelsPerPoint: 2)
+        bounds: Rect(origin: Point(x: 1512, y: 0), size: Size(width: 2560, height: 1440)))
 
     func devices(_ displays: [MacDisplayInfo]) -> MacDisplays {
         MacDisplays(displays: { displays }, feed: { MockDisplayFeed() }, events: MockHostEvents())

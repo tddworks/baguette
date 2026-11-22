@@ -62,3 +62,8 @@ test('should leave the display be when the size only wobbles, as a browser bar c
 test('should remake the display when the viewer is resized a good deal without turning', () => {
   assert.equal(MacShare().turned({ width: 800, height: 600 }, { width: 1200, height: 900 }), true);
 });
+
+test('should show a shared Mac over WebRTC unless the tab picked another format', () => {
+  assert.equal(MacShare().format(null), 'webrtc');
+  assert.equal(MacShare().format('avcc'), 'avcc');
+});

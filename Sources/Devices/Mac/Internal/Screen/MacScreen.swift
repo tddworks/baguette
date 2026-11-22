@@ -11,14 +11,18 @@ import IOSurface
 final class MacScreen: Screen, @unchecked Sendable {
     private let display: MacDisplayInfo
     private let feed: any DisplayFeed
+    private let madePixels: Size?
     private let pause: @Sendable (TimeInterval) -> Void
     private let lock = NSLock()
     private var onFrame: (@Sendable (IOSurface) -> Void)?
 
-    init(display: MacDisplayInfo, feed: any DisplayFeed,
+    /// `madePixels`: a display baguette made itself is captured at the pixels
+    /// it made it with — a long-running process can read it stale, as 1×.
+    init(display: MacDisplayInfo, feed: any DisplayFeed, madePixels: Size? = nil,
          pause: @escaping @Sendable (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }) {
         self.display = display
         self.feed = feed
+        self.madePixels = madePixels
         self.pause = pause
     }
 
@@ -35,7 +39,9 @@ final class MacScreen: Screen, @unchecked Sendable {
     private var started: Bool { lock.withLock { onFrame != nil } }
 
     private func open() throws {
-        try feed.start(display: display.id, size: display.captureSize.pixels,
+        let made = madePixels
+        try feed.start(display: display.id,
+                       sizing: { made ?? DisplayCaptureSize(points: $0, pixelsPerPoint: $1).pixels },
                        onPicture: { [weak self] picture in self?.hand(picture) },
                        onEnd: { [weak self] in self?.reopen() })
     }

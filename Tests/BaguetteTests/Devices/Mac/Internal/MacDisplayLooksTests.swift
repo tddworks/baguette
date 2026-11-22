@@ -9,7 +9,7 @@ import Testing
 struct MacDisplayLooksTests {
     static let dell = MacDisplayInfo(
         id: 2, uuid: "D", name: "DELL UP2716D", isMain: false,
-        bounds: Rect(origin: Point(x: 1440, y: 595), size: Size(width: 2560, height: 1440)), pixelsPerPoint: 1)
+        bounds: Rect(origin: Point(x: 1440, y: 595), size: Size(width: 2560, height: 1440)))
 
     final class Pictures: @unchecked Sendable {
         private let lock = NSLock()

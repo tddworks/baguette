@@ -12,7 +12,7 @@ import Testing
 struct MacScreenTests {
     let display = MacDisplayInfo(
         id: 2, uuid: "D-UUID", name: "Studio Display", isMain: false,
-        bounds: Rect(origin: Point(x: 1512, y: 0), size: Size(width: 2560, height: 1440)), pixelsPerPoint: 2)
+        bounds: Rect(origin: Point(x: 1512, y: 0), size: Size(width: 2560, height: 1440)))
 
     /// ScreenCaptureKit's feed, played by the test: it remembers how it was
     /// started, and the test hands pictures and ends through it.
@@ -24,12 +24,14 @@ struct MacScreenTests {
         private var onEnd: (@Sendable () -> Void)?
         var starts: [(display: UInt32, size: Size)] { lock.withLock { _starts } }
 
-        init(refusal: Error? = nil) {
-            given(feed).start(display: .any, size: .any, onPicture: .any, onEnd: .any)
-                .willProduce { [self] display, size, onPicture, onEnd in
+        /// `sees`: the display as ScreenCaptureKit reports it when the feed
+        /// starts — its points and pixels a point.
+        init(refusal: Error? = nil, sees: (points: Size, scale: Double) = (Size(width: 2560, height: 1440), 2)) {
+            given(feed).start(display: .any, sizing: .any, onPicture: .any, onEnd: .any)
+                .willProduce { [self] display, sizing, onPicture, onEnd in
                     if let refusal { throw refusal }
                     lock.withLock {
-                        _starts.append((display, size))
+                        _starts.append((display, sizing(sees.points, sees.scale)))
                         self.onPicture = onPicture
                         self.onEnd = onEnd
                     }
@@ -52,10 +54,24 @@ struct MacScreenTests {
         MacScreen(display: display, feed: feed.feed, pause: { _ in })
     }
 
-    @Test func `should start the feed on the display at its capture size`() throws {
-        let feed = Feed()
+    @Test func `should capture a display at its pixels as it is when the feed starts`() throws {
+        let feed = Feed(sees: (Size(width: 603, height: 1311), 2))
         try screen(on: feed).start { _ in }
         #expect(feed.starts.map(\.display) == [2])
+        #expect(feed.starts.map(\.size) == [Size(width: 1206, height: 2622)])
+    }
+
+    @Test func `should capture a display baguette made at the pixels it made it with, whatever ScreenCaptureKit says`() throws {
+        // A long-running server can read a just-made display as 1×: here 589 × 988 points at 1.
+        let feed = Feed(sees: (Size(width: 589, height: 988), 1))
+        let made = MacScreen(display: display, feed: feed.feed, madePixels: Size(width: 1178, height: 1976), pause: { _ in })
+        try made.start { _ in }
+        #expect(feed.starts.map(\.size) == [Size(width: 1178, height: 1976)])
+    }
+
+    @Test func `should capture a 5K display no larger than the encoder takes`() throws {
+        let feed = Feed(sees: (Size(width: 2560, height: 1440), 2))
+        try screen(on: feed).start { _ in }
         #expect(feed.starts.map(\.size) == [Size(width: 4096, height: 2304)])
     }
 

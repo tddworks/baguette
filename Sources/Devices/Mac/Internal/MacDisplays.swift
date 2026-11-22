@@ -11,23 +11,29 @@ final class MacDisplays: Devices, @unchecked Sendable {
     private let displays: @Sendable () -> [MacDisplayInfo]
     private let feed: @Sendable () -> any DisplayFeed
     private let events: any HostEvents
+    private let madePixels: @Sendable (String) -> Size?
 
+    /// `madePixels`: the pixels of a display baguette made itself (a share's),
+    /// by its UUID — what it is captured at.
     init(displays: @escaping @Sendable () -> [MacDisplayInfo],
          feed: @escaping @Sendable () -> any DisplayFeed,
-         events: any HostEvents) {
+         events: any HostEvents,
+         madePixels: @escaping @Sendable (String) -> Size? = { _ in nil }) {
         self.displays = displays
         self.feed = feed
         self.events = events
+        self.madePixels = madePixels
     }
 
     /// This Mac's own displays, watched through ScreenCaptureKit and driven
     /// through the window server.
-    static func onThisMac() -> MacDisplays {
-        MacDisplays(displays: { HostDisplayList.all() }, feed: { ScreenCaptureKitFeed() }, events: CGEventHostEvents())
+    static func onThisMac(madePixels: @escaping @Sendable (String) -> Size? = { _ in nil }) -> MacDisplays {
+        MacDisplays(displays: { HostDisplayList.all() }, feed: { ScreenCaptureKitFeed() }, events: CGEventHostEvents(),
+                    madePixels: madePixels)
     }
 
     var all: [any Device] {
-        displays().map { MacDisplay(info: $0, feed: feed, events: events) }
+        displays().map { MacDisplay(info: $0, feed: feed, events: events, madePixels: madePixels) }
     }
 
     func find(id: DeviceID) throws -> (any Device)? {
@@ -43,6 +49,7 @@ struct MacDisplay: Device {
     let info: MacDisplayInfo
     let feed: @Sendable () -> any DisplayFeed
     let events: any HostEvents
+    var madePixels: @Sendable (String) -> Size? = { _ in nil }
 
     var id: DeviceID { DeviceID(info.uuid) }
     var name: String { info.name }
@@ -51,9 +58,9 @@ struct MacDisplay: Device {
 
     var abilities: Abilities {
         var abilities = Abilities(device: name)
-        let (info, feed) = (info, feed)
+        let (info, feed, madePixels) = (info, feed, madePixels)
         let input = MacInput(display: DisplayEvents(bounds: info.bounds), events: events)
-        abilities.register(.screen) { MacScreen(display: info, feed: feed()) }
+        abilities.register(.screen) { MacScreen(display: info, feed: feed(), madePixels: madePixels(info.uuid)) }
         abilities.register(.touch) { input }
         abilities.register(.scroll) { input }
         abilities.register(.key) { input }
