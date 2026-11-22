@@ -1,152 +1,398 @@
-# Mac screen — design
+---
+description: Design of the Mac family — this Mac's displays as devices, watched through ScreenCaptureKit and driven through CGEvent, shared to a viewer's device through a virtual display of its shape, with a pointer the page draws. Read before touching Sources/Devices/Mac or the share, pointer or hover paths.
+---
 
-A Mac display is one more device family (`Sources/Devices/Mac/`). It adds no
-role and no format: it plays `Screen`, `Touch`, `Scroll`, `Key` and `Typing`,
-and every consumer of those works unchanged.
+# Mac screen — "this Mac, watched and driven from any browser, in the viewer's shape"
+
+**Status:** BUILT on `feat/mac-screen`, and measured on macOS 27 (two Dell
+displays, an iPhone 17 Pro Max over Wi-Fi and Tailscale): listing, watching,
+input, frames, sharing to a viewer's shape (main or extended, turning), the
+local pointer with the Mac's real shape, hover. Not built: sign-in (dropped for
+now, §8), HEVC (§8). Turning on a real iPhone is not yet confirmed (§8).
+
+This document owns **what a Mac display is, how it is watched and driven, how
+this Mac is shared to a viewer's device, and how the pointer reaches the page**.
+Its neighbours own the rest:
+
+| For | Read |
+|---|---|
+| using it — flags, routes, the page's choices | [README](README.md) |
+| how any device registers what it can do | [devices](../devices/design.md) |
+| how frames are encoded and leave — MJPEG, AVCC, WebRTC | [stream](../stream/README.md), [webrtc](../webrtc/design.md) |
+| how a gesture travels from the page to a device | [ARCHITECTURE](../../ARCHITECTURE.md) |
+| every law across baguette, one line each | [CANONICAL_MODEL](../../CANONICAL_MODEL.md) |
+
+---
+
+## What the product already says
 
 ```
-MacDisplays (Devices) ── HostDisplayList (CoreGraphics; no permission)
-└── MacDisplay (Device, .macOS / .physical)
-    ├── .screen  → MacScreen ── any DisplayFeed ── ScreenCaptureKitFeed (System/)
-    └── .touch · .scroll · .key · .typing
-                 → MacInput ── DisplayEvents ◇ ── any HostEvents ── CGEventHostEvents (System/)
+  baguette list --mac              {"udid":"<display UUID>", …, "model":"DELL UP2716D"}   ← a display is a device
+  baguette serve --share-mac       "Also show this Mac's displays … Anyone who can reach --host:--port sees and controls this Mac."
+  the device page                  [DEVICE · touch] [Frame]   ← a frame is a look, picked, never guessed
+  /mac/share                       "Share this Mac" · Room: Larger text / Standard / More space
+                                   · Use as: Main display / Extended display   ← macOS's own "Use as" words
+  System Settings › Displays       "baguette – iPhone"   ← macOS lists a share as a real display
 ```
 
-## Listing
+The user thinks of their Mac's screens as devices like any other, and of
+sharing as "make my Mac fit my phone" — the words Apple's own Screen Sharing
+taught them.
 
-`CGGetActiveDisplayList` + `CGDisplayBounds` + `CGDisplayCopyDisplayMode`
-(pixels per point) + `NSScreen.localizedName`. None of it asks for Screen
-Recording, so `list --mac` never prompts. A display is named by
-`CGDisplayCreateUUIDFromDisplayID`: the `CGDirectDisplayID` changes across
-reboots and reconnects, the UUID doesn't.
+## The one sentence
 
-## Screen
+**A Mac display is a device that plays `Screen`, `Touch`, `Pointer`, `Scroll`,
+`Key` and `Typing`; sharing makes one more — a virtual display the viewer's
+shape — and the page draws the pointer itself, so it never waits for the
+picture.**
 
-`SCStream` over `SCContentFilter(display:excludingWindows: [])`, BGRA, up to
-60 fps, the cursor shown, queue depth 6. Each sample buffer's
-`SCStreamFrameInfo.status` decides: only `.complete` is handed on — `.idle`
-repeats the last picture and `.blank` / `.suspended` carry none. The surface
-is the pixel buffer's `IOSurface`, as a simulator's framebuffer is.
+```
+                         Devices ◆  (simulators · phones · Androids · this Mac)
+                            │
+                   MacDisplays ◆  (with --share-mac, or a display's UUID)
+                            │                                         ScreenShares ◆
+                   MacDisplay : Device ── one per attached display  ◀── makes virtual displays
+                            │              and per share                the viewer's shape
+        ┌───────────────────┼────────────────────────┐
+     .screen             .touch .pointer .scroll .key .typing
+     MacScreen ◆         MacInput ◆ ── DisplayEvents ◇ → HostEvents ◆ (CGEvent)
+       │
+     DisplayFeed ◆ (ScreenCaptureKit, no pointer in the picture)
+                                                      PointerShapes ◆ ── the Mac's pointer shape,
+                                                                         for the page to draw
+```
 
-- **Size.** `DisplayCaptureSize`: pixels, scaled so the long side is at most
-  4096 (VideoToolbox's hardware H.264 refuses larger), both sides even.
-  ScreenCaptureKit scales at the source — cheaper than `VideoFrameScaler`.
-- **Sync over async.** `Screen.start` is synchronous; the feed waits at most
-  5 s on `getExcludingDesktopWindows` and `startCapture`'s completion handlers.
-  The async forms don't compile under Swift 6: `SCShareableContent` and
-  `SCStream` aren't `Sendable`.
-- **Ending.** `didStopWithError` (sleep, display removed) ends the feed;
-  `MacScreen` starts it again a second later while started, as
-  `EmulatorScreen` does.
-- **Permission.** `CGPreflightScreenCaptureAccess` first; refused, it asks once
-  (`CGRequestScreenCaptureAccess`) and throws `ScreenRecordingRefused`.
+---
 
-## Input
+## 1 · Ubiquitous language
 
-`DisplayEvents` turns each gesture into `[HostEvent]` values — global points,
-key codes, pauses — so every decision is a value test. `CGEventHostEvents`
-posts them at `.cghidEventTap` and sleeps on each pause.
+| Term | Meaning | Not to be confused with |
+|---|---|---|
+| **Mac display** | one display attached to this Mac — physical or virtual — as a device, named by its own UUID | a window (not a device, §8) |
+| **share** | this Mac shown on a viewer's device through a display made for it; ends when the viewer leaves | macOS Screen Sharing (VNC), which baguette doesn't speak |
+| **viewer** | the device a share is shown on — its screen in its own points and pixel ratio | the person; a Mac display can have several pages open |
+| **shape** | a shared display's size: the viewer's points × the room, drawn at 2× | the display's *mode*, macOS's word for one size it offers |
+| **room** | how much of the Mac fits the viewer: Larger text (1×), Standard (1.5×), More space (2×) | the stream's `scale`, which shrinks the picture, not the desktop |
+| **main / extended** | whether the shared display carries the menu bar, Dock and new windows (macOS's "Use as") | mirrored, which baguette doesn't offer (§9) |
+| **local pointer** | the pointer the page draws — instant — instead of the one in the picture | the Mac's pointer, which still moves (clicks land there) |
+| **pointer shape** | what the Mac's pointer looks like now (arrow, I-beam, hand), its image and hotspot | the cursor CSS the page builds from it |
+| **hover** | the pointer moving with no button down | a drag (`touch1-move`), which has one down |
+| **frame** | a picture of a MacBook or iMac a display can be shown in | a stream frame; chrome (DeviceKit's word for a simulator's bezel) |
 
-- **Placement.** A point at `x / width` of the display lands at that fraction
-  of `CGDisplayBounds`: global points, the main display's top-left at 0,0.
-- **Keys.** `MacKeyCode`: HID page 7 → `kVK_ANSI_*`. The ANSI codes follow the
-  physical layout, so the table is by hand. Modifiers go down in
-  `KeyModifier.allCases` order and up in reverse, each event flagged with what
-  is held.
-- **Typing.** `CGEventKeyboardSetUnicodeString`, in pieces of at most 20
-  UTF-16 units (what one event carries), never splitting a character. The
-  role would type any script, but `TypeText.parse` still holds the wire to
-  US-ASCII for every device; lifting that for the Mac is a change to that law,
-  not to this family.
-- **Scroll.** Pixel units, deltas negated: a browser's positive `deltaY` moves
-  the view down, the window server's scrolls content up. A scroll event has no
-  target of its own: the window server gives it to the window under the
-  pointer. A two-finger move (`touch2-*`, a pan path — what the page turns the
-  wheel into) scrolls by its midpoint's travel and carries the midpoint as the
-  event's `location`, which routes it there and moves the pointer there, as a
-  click does. Measured: posted with a location at `.cghidEventTap`, the
-  pointer jumped from (649, 1003) to the location. A wire `scroll` has no
-  point and lands under the pointer.
-- **Trust.** `AXIsProcessTrustedWithOptions` with the prompt; untrusted, the
-  window server would drop the events silently, so nothing is posted and the
-  gesture answers false. The prompt key is spelled out because Swift 6 won't
-  read the `kAXTrustedCheckOptionPrompt` global.
+---
 
-## Frames
+## 2 · The aggregate — from the root down
 
-`MacFrame` (`Sources/Device/Chrome/`) is a picture's size and its screen's
-opening, measured once from each frame's picture: scanning out from inside the
-screen for the first opaque pixel, horizontally through the middle and
-vertically at a quarter of the width — the middle column runs into a
-MacBook's notch. Each opening matches its panel within a pixel of
-anti-aliasing (MacBook Pro 14" measures 3022 × 1962 of 3024 × 1964).
-Centring the screen in the picture would be wrong for a MacBook (the base
-below) and an iMac (chin and stand), so each opening is measured, not computed.
+```
+MacDisplays ◆                      the displays CoreGraphics lists now; listing asks no permission
+└── MacDisplay : Device            one display: UUID, name, .macOS · .physical, always .ready
+    ├── MacDisplayInfo ◇           id (this boot) · uuid (for good) · name · bounds on the desktop (global points)
+    ├── .screen  → MacScreen ◆     hands on complete pictures only; restarts a feed that ends;
+    │                              captures a display baguette made at the pixels it made it with
+    │   └── DisplayFeed ◆          ScreenCaptureKit, started with a sizing rule, no pointer in the picture
+    │       └── DisplayCaptureSize ◇   pixels, long side ≤ 4096, both sides even
+    └── .touch .pointer .scroll .key .typing → MacInput ◆
+        ├── DisplayEvents ◇        what each gesture becomes, placed on the desktop: [HostEvent]
+        │   └── MacKeyCode ◇       HID page 7 → kVK_ANSI_*
+        └── HostEvents ◆           the window server, told events (CGEvent); refuses while untrusted
 
-`MacFrames` is a `Chromes` that answers a measured name with the picture from
-the frames folder; `CombinedChromes` asks DeviceKit first, then it, then — with
-`--share-mac` — `MacDisplayLooks`, each display's own look: a clear PNG its
-size in points, the screen filling it. So with no pick the page draws the
-stream alone at the display's shape through the same bezel path, and a pick
-rides `?chrome=` exactly as a phone's borrowed DeviceKit chrome does. Two
-pictures ship in `scripts/mac-frames/` (MacBook Pro 14-inch (M4), iMac
-27-inch; ~4.4 MB each) and `scripts/install-mac-frames.sh` copies them into the
-folder; the rest of the measured frames are known by geometry only.
+ScreenShares ◆                     this Mac shared to viewers, by the shared display's UUID
+├── SharedScreenShape ◇            the viewer's points × room, drawn at 2×; which mode is its own
+├── VirtualDisplays ◆              makes a display of a shape, under a serial → the same UUID again
+│   └── VirtualDisplay ◆           id · uuid · remove() — returns once the Mac lists it no more
+└── DisplayArrangement ◆           which display is main; making another main
 
-## Sharing to a viewer's shape
+PointerShapes ◆                    the Mac's pointer shape while anyone views; each image by id
+└── PointerShape ◇                 id (from its image) · hotspot · size · png
 
-A share is a virtual display made to the viewer's screen (`SharedScreenShape`:
-its points × the room, drawn at 2×, the long side ≤ 4096 px), streamed as any
-Mac display. What macOS 27 does, measured, and what it made us build:
+MacFrame ◇ (Device/Chrome)         a frame picture's size and its measured screen opening; fits(display)
+```
+
+---
+
+## 3 · How it works
+
+### 3.1 · Watching a display
+
+```
+ ScreenCaptureKit                      MacScreen                         Stream (unchanged)
+ ┌─────────────────────┐  FeedPicture  ┌──────────────────────────┐ IOSurface ┌──────────────────┐
+ │ SCStream on one     │ ────────────▶ │ .complete only; .idle /  │ ────────▶ │ MJPEG · AVCC ·   │──▶ page
+ │ display, BGRA,      │               │ .blank carry nothing new │           │ WebRTC (H.264)   │
+ │ ≤ 60 fps,           │ ◀── sizing ── │ size: madePixels (a share│           │ LatestFrame      │
+ │ showsCursor = false │   rule at     │ it made) else Display-   │           │ refreshes a still│
+ └─────────────────────┘   start       │ CaptureSize(SCK points × │           │ screen           │
+         ▲                             │ pointPixelScale)         │           └──────────────────┘
+         │ ends (sleep, display gone)  │ ended → start again in 1s│
+         └─────────────────────────────┴──────────────────────────┘
+```
+
+A Mac display adds no format: everything a simulator's screen feeds works on
+it. ScreenCaptureKit scales at the source, so a 5K display is never copied at 5K.
+
+### 3.2 · Sharing to a viewer's shape
+
+```
+ Viewer (/mac/share)              Server                                   Helper processes
+ ┌──────────────────────┐ POST    ┌───────────────────────────────┐ spawn  ┌─────────────────────────────┐
+ │ visible size, pixel  │ /mac/   │ ShareRequest ◇ → Shared-      │ ─────▶ │ baguette virtual-display    │
+ │ ratio, room, use     │ shares  │ ScreenShape ◇                 │ ready  │  makes ONE display, chooses │
+ └──────────────────────┘ ──────▶ │ ScreenShares.start            │ ◀───── │  its 2× mode, holds it while│
+            ▲                     │  1 read main (before: a new   │ id uuid│  it lives                   │
+            │ 201 {id}            │    display reads as main)     │        └─────────────────────────────┘
+            │                     │  2 VirtualDisplays.create     │ spawn  ┌─────────────────────────────┐
+            │                     │  3 main? → makeMain(new)      │ ─────▶ │ baguette main-display --id  │
+ /devices/<id>?share=…  ◀──────── │ log "[mac] share … started"   │ exit 0 │  shifts every origin so the │
+ WebRTC, the viewer's shape       └───────────────────────────────┘ ◀───── │  display sits at 0,0        │
+                                                                           └─────────────────────────────┘
+ turn (resize ≥ 8% or flip) → PUT /mac/shares/<id>:  main back → remove old → create new (same serial, same id) → main
+ leave (pagehide)           → DELETE /mac/shares/<id>: main back → remove → the process ends, the display goes in ½ s
+```
+
+Why helper processes, and why in that order, is §7: each step is a measured
+macOS behaviour. The server stays a reader — it never makes a display and never
+changes the arrangement — because a process that does either stops seeing
+displays added later, and the server must see them to list and stream them.
+
+### 3.3 · Input
+
+```
+ page ── WS (stream / WebRTC control) ──▶ Server.handleInbound
+                                             │ isMotion? (touch1-move · touch2-move · hover)
+                          ┌──────────────────┴───────────────────┐
+                          ▼ post — read on at once               ▼ run — wait, in order
+                ┌──────────────────────────────────────────────────────────┐
+                │ GestureQueues lane (one per device)                      │
+                │   PendingGestures ◇:  [down] [move→move→move] [up]       │
+                │   a newer move REPLACES a waiting move; down, up, tap,   │
+                │   key, scroll keep their place and are never dropped     │
+                └─────────────────────────────┬────────────────────────────┘
+                                              ▼
+              MacInput → DisplayEvents ◇ → [HostEvent] → CGEventHostEvents.post
+              (placed at x/width of the display's desktop bounds;    trust asked once,
+               a two-finger move scrolls where its midpoint is)      one event source
+```
+
+### 3.4 · The pointer
+
+```
+ Viewer                                             Mac (baguette serve)
+ ┌──────────────────────────────────┐             ┌────────────────────────────────────────────────┐
+ │ finger / trackpad moves          │             │                                                │
+ │   ├─▶ LocalPointer draws it NOW  │  hover/move │  GestureQueues lane — latest wins (3.3)        │
+ │   │   (mouse: the browser's own  │ ──────────▶ │    └─▶ MacInput → CGEvent → the Mac's pointer  │
+ │   │   cursor; finger: drawn at   │             │                         │            │         │
+ │   │   its hotspot)               │             │                         ▼            ▼         │
+ │   └─▶ HoverGestureSource: no     │  picture    │  ScreenCaptureKit             baguette          │
+ │       button → hover, newest,    │ ◀────────── │  showsCursor = false          pointer-shapes   │
+ │       once a frame               │  WebRTC     │  → encode → send              (run loop, 20 Hz) │
+ │ ┌──────────────────────────────┐ │             │                                     │ "shape …"  │
+ │ │ canvas: picture, no pointer  │ │ {"type":    │                               PointerShapes ◆   │
+ │ │  + LocalPointer on top, in   │ │◀─"pointer",…│                               while anyone      │
+ │ │  the Mac's shape             │ │ WS /mac/    │                               watches; image   │
+ │ └──────────────────────────────┘ │ pointer     │                               by id            │
+ │   GET /mac/pointer/<id>.png once │ ◀────────── │                                                │
+ └──────────────────────────────────┘             └────────────────────────────────────────────────┘
+   The pointer follows the hand at once; only what is under it (menus, highlights) waits for the round trip.
+```
+
+Taken from Apple's Screen Sharing, as an open client
+([open-screen-sharing](https://github.com/nekohasekai/open-screen-sharing))
+reads its protocol: the pointer travels apart from the picture — its shape,
+cached by id, and its position — and pointer moves are latest-wins.
+
+### 3.5 · Frames
+
+```
+ definition.json?chrome=<frame>          CombinedChromes ◆  — the first that answers
+ ───────────────────────────────▶ ┌── LiveChromes      (DeviceKit: simulators, borrowed by phones)
+                                  ├── MacFrames        (a measured MacFrame + <frames folder>/<name>.png)
+                                  └── MacDisplayLooks  (with --share-mac: a display's own look — a clear
+                                                        PNG its size, the screen filling it: "No frame")
+```
+
+---
+
+## 4 · The tells
+
+```swift
+// The family decides what a display can do, once.
+abilities.register(.screen)  { MacScreen(display: info, feed: feed(), madePixels: madePixels(info.uuid)) }
+abilities.register(.pointer) { input }
+
+// A gesture is told what it becomes; the window server is told the events.
+events.post(display.hover(at: point, size: size))
+events.post(display.twoFingerScroll(from: last, to: (first, second), size: size))
+
+// A share is told what to do, never asked how.
+shares.start(viewer: request.viewer, shape: request.shape, use: request.use)
+shares.reshape(id, to: request.shape)
+shares.end(id)
+
+// The lane is told a move; it decides what a newer one replaces.
+gestureQueues.post(on: udid) { _ = dispatcher.dispatch(line: line) }
+
+// A viewer is told each shape; the page tells its pointer.
+let watch = shapes.watch { saying.yield($0.json) }
+pointer.setShape({ ...shape, cursor: PointerShape.cursor(shape, density) })
+```
+
+---
+
+## 5 · Invariants — each law, one owner
+
+| Law | Owner |
+|---|---|
+| a Mac display is reached only when asked for — `serve --share-mac`, `list --mac`, or its UUID; listing asks no permission | `MacDisplays` · `DeviceKinds` |
+| a display is named by its UUID, the same across reboots; its `CGDirectDisplayID` isn't | `MacDisplayInfo` |
+| a picture is handed on only when complete; an unchanged one repeats the last | `MacScreen` |
+| a capture is the display's pixels, long side ≤ 4096, both sides even | `DisplayCaptureSize` |
+| a display baguette made is captured at the pixels it made it with | `MacScreen` (`madePixels`) |
+| a gesture lands at the same fraction of the display, wherever it sits on the desktop | `DisplayEvents` |
+| a key's modifiers are held around it and released in reverse | `DisplayEvents` |
+| two fingers moving together scroll where their midpoint is; a pinch scrolls nothing | `DisplayEvents` · `MacInput` |
+| a pointer move still waiting is replaced by a newer one; nothing else is dropped or reordered | `PendingGestures` |
+| only a device with a pointer of its own takes a hover; a page draws the pointer and sends hovers for any device that can `pointer` | each family's `Abilities` · the page's `mountPointer` |
+| a shared display is the viewer's shape — its points × room, drawn at 2×, long side ≤ 4096 px | `SharedScreenShape` |
+| a share's display keeps its id through a turn; main is given back, before the old display goes | `ScreenShares` |
+| the server never makes a display nor changes the arrangement; helper processes do | `ChildVirtualDisplays` · `ChildDisplayArrangement` |
+| removing a display finishes when the Mac no longer lists it | `ChildVirtualDisplays` |
+| the pointer shape is read only by a process whose run loop runs, while anyone watches; each image is fetched once by id | `PointerShapes` · `PointerShape` |
+| a frame fits a display only of its screen's shape, within 2%; a display shows with none until one is picked | `MacFrame` · `MacDisplayLooks` |
+
+---
+
+## 6 · The tree — outside in
+
+```
+Commands/       list --mac · serve --share-mac · virtual-display · main-display · pointer-shapes (hidden)
+Server/         ServerMacShareRoutes (/mac/share, /mac/shares) · ServerMacPointerRoutes (/mac/pointer)
+                · handleInbound (moves posted, the rest awaited)
+Devices/Mac/    values: MacDisplayInfo · DisplayCaptureSize · DisplayEvents · MacKeyCode · SharedScreenShape
+                        · ShareRequest · DisplayOrigins · VirtualDisplayAnnouncement · PointerShape
+  Internal/     MacDisplays · MacDisplayLooks · Screen/MacScreen · Input/MacInput
+                · Sharing/ScreenShares · ChildVirtualDisplays · ChildDisplayArrangement · Pointer/PointerShapes
+  Internal/System/   the only calls to the outside, ≤ 100 lines each: ScreenCaptureKitFeed · CGEventHostEvents
+                     · HostDisplayList · VirtualDisplayHold (CGVirtualDisplay, private) · MainDisplayMove
+                     · PointerShapeWatch · ClearPicture
+Device/         Abilities/Pointer (Pointer role, Hover) · Abilities/Touch/PendingGestures · Chrome/MacFrame
+Resources/Web/  local-pointer.js · pointer-shape.js · baguette/gestures/hover-gesture-source.js
+                · mac-share.js + mac-share.html · mac-frame-choices.js
+```
+
+---
+
+## 7 · What macOS 27 does — measured
+
+### Listing and screen
+
+- `CGGetActiveDisplayList` + `CGDisplayBounds` + `NSScreen.localizedName` ask
+  for no permission, so `list --mac` never prompts.
+- `SCStream`: BGRA, ≤ 60 fps, queue depth 6. `SCStreamFrameInfo.status`:
+  `.complete` carries a new picture, `.idle` repeats, `.blank` / `.suspended`
+  carry none. A still screen may deliver no first complete picture at all.
+- Sync over async: `Screen.start` is synchronous; the feed waits ≤ 5 s on
+  `getExcludingDesktopWindows` and `startCapture`'s completion handlers. The
+  async forms don't compile under Swift 6 (`SCShareableContent`, `SCStream`
+  aren't `Sendable`).
+- `didStopWithError` (sleep, display removed) ends a feed.
+- Permission: `CGPreflightScreenCaptureAccess`; refused, asked once, then
+  `ScreenRecordingRefused`. It belongs to the app that launched baguette —
+  started from one without it, the server lists but can't watch.
+
+### Input
+
+- `CGEvent` at `.cghidEventTap`, global points (the main display's top-left at
+  0,0). Untrusted for Accessibility, the window server drops events silently —
+  so nothing is posted and the gesture answers false.
+- `kVK_ANSI_*` codes follow the physical layout: the table is by hand.
+- `CGEventKeyboardSetUnicodeString` carries ≤ 20 UTF-16 units an event.
+  The wire is still US-ASCII (`TypeText.parse`), for every device.
+- Scroll in pixels, deltas negated (a browser's +`deltaY` moves the view down;
+  the window server's scrolls content up). A scroll goes to the window under the
+  pointer; given a `location`, it goes there — and the pointer moves there
+  (from (649, 1003) to the location).
+- Costs: asking trust with the prompt 1.15 ms, without 0.001 ms; an event
+  source 0.02 ms; a mouse event 0.17 ms. 200 moves 2 ms apart reach the pointer
+  as the last is sent — the lag a viewer feels is the picture's round trip.
+
+### Sharing
 
 | Measured | So |
 |---|---|
-| A process can choose the mode of only the **first** virtual display it makes; later ones are invisible to its own CoreGraphics | each display lives in a `baguette virtual-display` process of its own (`ChildVirtualDisplays`); ending the share ends the process, and the display goes within ½ s |
-| A display starts on its **1×** mode though offered a 2× one | the process chooses the 2× mode by name (`SharedScreenShape.isMode`) |
-| A display takes its modes **once**; neither new settings nor `rotation` change it | turning makes it again in the new shape, under the same serial, so its UUID — its device id — holds |
-| Once a process **changes the arrangement**, displays added later never appear in its own list | `baguette main-display` makes a display main; the server only reads |
-| Removing the **main** display is slow: macOS picks another and moves everything first | a turned main display hands main back before it goes |
-| A long-running process reads a just-made display **stale** (1×) — CoreGraphics, AppKit and ScreenCaptureKit alike | a display baguette made is captured at the pixels it made it with (`MacScreen.madePixels`) |
-| The UUID follows from vendor `0xBA6E`, product and serial | two viewers get two serials |
+| `CGVirtualDisplay` (private; what DeskPad and BetterDisplay use) makes a display of any size; its mode is in **points** | `SharedScreenShape` asks for its points, `maxPixels` its pixels |
+| it starts on the **1×** mode though offered a 2× one | the helper chooses the 2× mode by name (`SharedScreenShape.isMode`) |
+| a process can choose the mode of only the **first** virtual display it makes; later ones are invisible to its own CoreGraphics | one `baguette virtual-display` process per display |
+| a display takes its modes **once**; new settings and `rotation` change nothing, and a display set up twice isn't freed on release | turning makes a new display; each is set up once |
+| a display goes within ½ s of its last reference — from an autorelease pool, or its process ending | removing ends the helper and waits until it's unlisted |
+| the UUID follows from vendor `0xBA6E`, product and serial | the same serial on a turn keeps the id; two viewers, two serials |
+| once a process **changes the arrangement**, displays added later never appear in its own list (others see them in ½ s) | `baguette main-display` changes it; the server only reads |
+| a just-made display reads as **main** for a moment | the previous main is read before the display is made |
+| removing the **main** display takes seconds: macOS picks another and moves everything | main goes back before the old display does |
+| a long-running process reads a just-made display **stale** (1×) — CoreGraphics, AppKit and ScreenCaptureKit alike | a display baguette made is captured at the pixels it made |
+| a share at 660 × 1149 pt (an iPhone 17 Pro Max in Safari) vs 660 × 1434 from a Home Screen icon | the page asks for its visible area; a Home Screen launch has no bars |
 
-## The pointer
+### The pointer
 
-What makes a native remote desktop feel instant, and what baguette took from
-Apple's Screen Sharing (as an open client reads its protocol): the pointer is
-not in the picture — the viewer draws it at once — and pointer moves are
-latest-wins. `showsCursor` is off for Mac displays and the page draws the arrow
-(`local-pointer.js`); a stream socket posts a move rather than awaiting it, and
-`PendingGestures` replaces a waiting move with a newer one (clicks, keys and
-scrolls keep their order). Measured: 200 moves 2 ms apart reach the Mac's
-pointer as the last is sent, before and after — the lag you feel is the picture's
-round trip, which the local pointer takes out.
+- `NSCursor.currentSystem`: a long-running process reads it once and never
+  again; one whose **run loop runs** follows it (over TextEdit: all 8
+  crossings between text and title bar right — I-beam 23 × 22 at (12, 11),
+  arrow 28 × 40 at (5, 5)).
+- baguette's async entry point runs a command off the main thread, so
+  `pointer-shapes` hands the main thread the run loop.
+- Its TIFF holds up to 10× (280 × 400 for the arrow); a browser ignores a cursor
+  image over 128 px a side, so it is drawn at 2× (56 × 80).
 
-The pointer's shape comes from `NSCursor.currentSystem` — but a long-running
-process reads it once and never again, and one whose run loop runs follows it
-(measured over TextEdit: all 8 crossings between text and title bar read
-right). So `baguette pointer-shapes` — its main thread running the run loop,
-since baguette's async entry point runs a command elsewhere — reads it 20 times
-a second and says each change (`PointerShape`); `PointerShapes` runs it while
-anyone watches and keeps each image by id. The image is drawn at 2×: its TIFF
-holds up to 10×, and a browser ignores a cursor over 128 px a side. A page
-hears shapes on `WS /mac/pointer` and fetches each image once from
-`/mac/pointer/<id>.png`.
+### Frames
 
-## Measured
+Each opening was measured from its picture: scanning out from inside the screen
+for the first opaque pixel, through the middle horizontally and at a quarter of
+the width vertically (the middle runs into a MacBook's notch). Each matches its
+panel within a pixel (MacBook Pro 14": 3022 × 1962 of 3024 × 1964). Centring
+would be wrong — a MacBook's base, an iMac's chin and stand. Two pictures ship
+in `scripts/mac-frames/` (~4.4 MB each); the rest are known by geometry only.
 
-On a 2560 × 1440 display at 1× (an external Dell beside a portrait one, so at
-global x 1440, y 595): MJPEG ~55 frames / 4 s over the stream socket, AVCC
-streaming without encoder errors at 1440 × 2560; a tap landed in a TextEdit
-window; `type`, a held key and ⌘A + Delete reached it; a browser `deltaY` of
-+400 scrolled ~29 lines down — the negation is right.
+### End to end
 
-## Decided against
+A 2560 × 1440 display at 1×: H.264 ~60 fps, gaps p50 16.7 / p99 22 ms, 1.3 Mbit/s
+with motion; a shared 603 × 1311 pt display the same at 0.5 Mbit/s. A tap,
+typing, ⌘A + Delete reached TextEdit; a browser `deltaY` of +400 scrolled
+~29 lines down. A main share: made 0.9 s, turned 1.7 s, ended 0.5 s, the
+arrangement restored exactly.
+
+---
+
+## 8 · Open questions
+
+- **Does a real iPhone's turn reach the server?** The emulated turn works; on an
+  iPhone the display once stayed portrait. Each share now logs `started`,
+  `reshaped`, `ended` — the next try says whether the `PUT` arrived.
+- **HEVC over WebRTC?** Same picture at a lower bitrate — but bandwidth isn't
+  the limit (≤ 1.3 Mbit/s of 8). Needs an RFC 7798 packetizer, the HEVC encoder
+  and SDP with an H.264 fallback; Safari only. Worth it only if text stays soft.
+- **Sign-in.** Today anyone who reaches the port controls this Mac.
+  ~~Built with OpenDirectory, sessions and a throttle~~ — dropped before it was
+  wired: on a Tailscale-only bind, the tailnet is the gate. Back if the server
+  is shared beyond one's own devices.
+- **A locked Mac.** ScreenCaptureKit shows no lock screen and secure input drops
+  synthetic keys — not measured; Screen Sharing (VNC) is the way to unlock.
+- ~~**Can a background process read the pointer shape?**~~ Only with its run
+  loop running — measured, built as `pointer-shapes`.
+- ~~**Is the pointer lag a queue backlog?**~~ No — measured: moves keep up; it
+  was the picture's round trip, removed by the local pointer.
+- ~~**Why is a shared display soft?**~~ Captured at half its pixels from a stale
+  1× reading; captured now at the pixels it was made with.
+
+## 9 · Decided against
 
 - **Guessing a frame** — a built-in panel's size names its MacBook, but no
-  frame is shown until picked, as for a phone.
+  frame shows until picked, as for a phone.
 - **Windows as devices** — window ids change across launches; later, with an
   id scheme of their own.
-- **Listed by default** — a display shows and drives the Mac itself; it's
-  reached only through `serve --share-mac`, `list --mac` or its UUID.
-- **Pinch as magnify** — `CGEvent` has no public gesture events; a pinch
-  (fingers spreading about a still midpoint) scrolls nothing.
+- **Listed by default** — a display shows and drives the Mac itself.
+- **Mirror** (macOS's third "Use as") — macOS shrinks a mirrored desktop to fit,
+  the opposite of a display the viewer's shape.
+- **Pinch as magnify** — `CGEvent` has no public gesture events.
+- **The pointer in the picture** — it trails the hand by the round trip.
+- **Speaking VNC** — a VNC server can't make a display the viewer's shape; that
+  needs code on the Mac, which baguette is.
