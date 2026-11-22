@@ -2,7 +2,7 @@
 // server lists its simulators.
 import { deviceOf } from '../../device/device.js';
 import { bootThroughServer } from '../../device/power.js';
-import { toPortrait } from './portrait.js';
+import { toPortrait } from './internal/portrait.js';
 
 /** `com.apple.CoreSimulator.SimRuntime.iOS-26-4` → `iOS 26.4`. */
 function formatRuntime(raw) {

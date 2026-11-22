@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toPortrait } from '../../../../Sources/Baguette/Resources/Web/families/simulator/portrait.js';
+import { toPortrait } from '../../../../Sources/Baguette/Resources/Web/families/simulator/internal/portrait.js';
 
 // A turned simulator is drawn rotated, so the page's input arrives in the
 // frame the user sees; iOS takes portrait coordinates. Each envelope is turned

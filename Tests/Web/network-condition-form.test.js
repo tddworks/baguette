@@ -7,7 +7,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'panels', 'network', 'network-condition-form.js'
+  'panels', 'network', 'internal', 'network-condition-form.js'
 );
 
 function Form() {

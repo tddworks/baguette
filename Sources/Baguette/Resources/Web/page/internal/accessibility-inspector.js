@@ -1,4 +1,4 @@
-// page/accessibility-inspector.js — accessibility-tree overlay for the live
+// page/internal/accessibility-inspector.js — accessibility-tree overlay for the live
 // stream view. Hangs `window.AXInspector` on the global; page/devices-stream.js
 // wires one instance per active stream.
 //

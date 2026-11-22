@@ -7,7 +7,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'panels', 'defaults', 'preference-rows.js'
+  'panels', 'defaults', 'internal', 'preference-rows.js'
 );
 
 function Rows() {

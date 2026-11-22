@@ -1639,7 +1639,7 @@
   let refreshToolbarScroll = () => {};
 
   // ── Toolbar ──────────────────────────────────────────────────────
-  // The toolbar's clusters and fold menus (page/toolbar-view.js), made on
+  // The toolbar's clusters and fold menus (page/internal/toolbar-view.js), made on
   // first use — after the modules have loaded — over the page's port.
   let toolbarUI = null;
   function toolbar() {
@@ -1991,7 +1991,7 @@
     if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
   }
 
-  /// The page as a share's follow sees it (families/mac/share-follow.js).
+  /// The page as a share's follow sees it (families/mac/internal/share-follow.js).
   function pageBrowser() {
     return {
       get width() { return window.innerWidth; },

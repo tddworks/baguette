@@ -6,7 +6,7 @@ const path = require('node:path');
 const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'families', 'mac', 'local-pointer.js'
+  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'families', 'mac', 'internal', 'local-pointer.js'
 );
 
 function LocalPointer() {

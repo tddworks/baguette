@@ -144,6 +144,6 @@ struct PluginRouteTests {
         #expect(PluginRoute.capability(path: "/") == nil)
         #expect(PluginRoute.capability(path: "/simulators") == nil)
         #expect(PluginRoute.capability(path: "/simulators/U") == nil)
-        #expect(PluginRoute.capability(path: "/page/plugins/plugins-rail.js") == nil)
+        #expect(PluginRoute.capability(path: "/page/internal/plugins/plugins-rail.js") == nil)
     }
 }

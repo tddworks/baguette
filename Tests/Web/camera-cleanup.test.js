@@ -6,7 +6,7 @@ const path = require('node:path');
 const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const { CameraPanel } = loadBrowserModule(path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'panels', 'camera', 'camera-view.js'
+  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'panels', 'camera', 'internal', 'camera-view.js'
 ));
 
 test('failed cleanup offers an explicit stop retry and cannot start another source', () => {

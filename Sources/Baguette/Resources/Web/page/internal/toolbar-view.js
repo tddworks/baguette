@@ -3,7 +3,7 @@
 // it needs — and how it folds into menus when the row is narrow. What it
 // needs of the page is its port: { abilities } (the device's, or null when
 // none are listed). Out of page/device-page.js (design §4, page/).
-import { toolbarOf } from './page-panels.js';
+import { toolbarOf } from '../page-panels.js';
 
 export function toolbarView(page) {
   // ── Toolbar clusters ─────────────────────────────────────────────

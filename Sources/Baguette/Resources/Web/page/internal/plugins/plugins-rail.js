@@ -1,4 +1,4 @@
-// page/plugins/plugins-rail.js — renders plugin contributions in focus mode.
+// page/internal/plugins/plugins-rail.js — renders plugin contributions in focus mode.
 //
 // Plugins live in their OWN rail on the right edge, deliberately apart
 // from the device toolbar. Baguette ships the toolbar; plugins are

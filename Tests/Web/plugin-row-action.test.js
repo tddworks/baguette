@@ -7,7 +7,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'page/plugins/plugin-row-action.js'
+  'page/internal/plugins/plugin-row-action.js'
 );
 
 function PluginRowAction() {

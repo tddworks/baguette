@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { macPointer } from '../../../../Sources/Baguette/Resources/Web/families/mac/pointer.js';
-import { framesThatFit, rememberFrame } from '../../../../Sources/Baguette/Resources/Web/families/mac/frame-picker.js';
+import { macPointer } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/pointer.js';
+import { framesThatFit, rememberFrame } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/frame-picker.js';
 
 // A Mac display's own roles: the page draws its pointer, in the Mac's shape,
 // and offers the Mac frames that fit it.

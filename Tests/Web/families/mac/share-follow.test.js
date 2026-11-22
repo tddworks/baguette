@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { followShare } from '../../../../Sources/Baguette/Resources/Web/families/mac/share-follow.js';
+import { followShare } from '../../../../Sources/Baguette/Resources/Web/families/mac/internal/share-follow.js';
 import { pageShare } from '../../../../Sources/Baguette/Resources/Web/families/mac/share.js';
 
 // A share's page follows its viewer: when the device turns, the display is

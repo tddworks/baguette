@@ -58,7 +58,7 @@ test('should import an internal/ module only from inside the folder that holds i
 });
 
 /** The devices list, which filters by kind — the user's chosen platform and reality. */
-const LIST = ['devices-list.js', 'device-filter.js'];
+const LIST = [join('page', 'devices-list.js'), join('page', 'internal', 'device-filter.js')];
 
 test('should leave reading a device\'s kind to Families on the device page', () => {
   // The device page tells its device's roles; only families/families.js reads
@@ -66,7 +66,7 @@ test('should leave reading a device\'s kind to Families on the device page', () 
   // own choice of platform and reality — which is data, not behaviour.)
   const page = [join(WEB, 'page/device-page.js'), ...imports().map((m) => join(WEB, m.file))]
     .filter((file) => !file.endsWith(join('families', 'families.js')))
-    .filter((file) => !LIST.some((name) => file.endsWith(join('page', name))));
+    .filter((file) => !LIST.some((path) => file.endsWith(path)));
   for (const file of page) {
     const reads = readFileSync(file, 'utf8').match(/\.reality\b|kind\.platform\b|\bdevicePlatform\b|\bdeviceMode\b/g);
     assert.equal(reads, null, `${relative(WEB, file)} reads a device's kind: ${reads}`);

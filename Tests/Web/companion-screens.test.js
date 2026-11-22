@@ -7,7 +7,7 @@ const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
 const MODULE_PATH = path.join(
   __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'families', 'simulator', 'companion-screens.js'
+  'families', 'simulator', 'internal', 'companion-screens.js'
 );
 
 function CompanionScreens() {

@@ -428,8 +428,8 @@ one responsibility:
 | `stream-session.js` | `StreamSession` — WS lifetime + paint loop |
 | `page/devices-list.js` | list page renderer + boot/shutdown buttons |
 | `page/devices-stream.js` | orchestrator — wires the above on Stream click |
-| `page/plugins/plugins-rail.js` | `PluginPanels` — the plugins rail, flyout, panels and add-a-bakery modal, drawn entirely with host markup |
-| `page/plugins/plugin-row-action.js` | `PluginRowAction` — what clicking a plugin row means (highlight / tap / copy), split out so it's testable without a DOM |
+| `page/internal/plugins/plugins-rail.js` | `PluginPanels` — the plugins rail, flyout, panels and add-a-bakery modal, drawn entirely with host markup |
+| `page/internal/plugins/plugin-row-action.js` | `PluginRowAction` — what clicking a plugin row means (highlight / tap / copy), split out so it's testable without a DOM |
 
 Nothing a plugin ships reaches this page — no plugin script, CSS or
 markup. A manifest names an icon from a host-owned set and every string

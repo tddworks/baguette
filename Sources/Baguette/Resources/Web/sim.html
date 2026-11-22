@@ -65,14 +65,14 @@
      before every module that builds a resource URL. -->
 <script src="/wire/target.js"></script>
 <script src="/device/device-badge.js"></script>
-<script src="/families/mac/mac-frame-choices.js"></script>
+<script src="/families/mac/internal/mac-frame-choices.js"></script>
 <script type="module" src="/families/families.js"></script>
 <script type="module" src="/page/page-panels.js"></script>
 <script type="module" src="/page/devices-list-share.js"></script>
 <script type="module" src="/capture/capture-controls.js"></script>
-<script type="module" src="/page/toolbar-view.js"></script>
-<script src="/families/mac/local-pointer.js"></script>
-<script src="/families/mac/pointer-shape.js"></script>
+<script type="module" src="/page/internal/toolbar-view.js"></script>
+<script src="/families/mac/internal/local-pointer.js"></script>
+<script src="/families/mac/internal/pointer-shape.js"></script>
 <script src="/wire/frame-decoder.js"></script>
 <!-- Filters the stored format against frame-decoder.js's capability
      probe; must load before page/devices-stream.js / page/device-page.js. -->
@@ -96,43 +96,43 @@
 <script src="/capture/recorder.js"></script>
 <script src="/wire/stream-session.js"></script>
 <script src="/wire/whep-session.js"></script>
-<script src="/panels/logs/log-view.js"></script>
-<script src="/page/accessibility-inspector.js"></script>
-<script src="/panels/camera/camera-view.js"></script>
-<script src="/panels/status-bar/status-bar-view.js"></script>
+<script src="/panels/logs/internal/log-view.js"></script>
+<script src="/page/internal/accessibility-inspector.js"></script>
+<script src="/panels/camera/internal/camera-view.js"></script>
+<script src="/panels/status-bar/internal/status-bar-view.js"></script>
 <!-- Network conditioning. `network/network-condition-form.js` is the value
      type (which of the three mutually exclusive sources a request states);
      `sim-network.js` is the card that draws it, and must load after it. -->
-<script src="/panels/network/network-condition-form.js"></script>
-<script src="/panels/network/network-view.js"></script>
+<script src="/panels/network/internal/network-condition-form.js"></script>
+<script src="/panels/network/internal/network-view.js"></script>
 <!-- App defaults. `defaults/preference-rows.js` shapes rows and request
      bodies; `sim-defaults.js` is the card that draws them, and loads after. -->
-<script src="/panels/defaults/preference-rows.js"></script>
-<script src="/panels/defaults/defaults-view.js"></script>
-<script src="/panels/notify/notify-view.js"></script>
-<script src="/page/file-drop.js"></script>
-<script src="/page/device-3d.js"></script>
+<script src="/panels/defaults/internal/preference-rows.js"></script>
+<script src="/panels/defaults/internal/defaults-view.js"></script>
+<script src="/panels/notify/internal/notify-view.js"></script>
+<script src="/page/internal/file-drop.js"></script>
+<script src="/page/internal/device-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +
      panels from /plugins.json. Host-rendered only: no plugin script,
-     CSS or markup is ever loaded into this page. `page/plugins/plugin-row-action.js`
-     carries the click semantics, `page/plugins/plugin-prompt.js` the text-field
-     semantics and `page/plugins/plugin-control.js` the tick semantics; all three must
+     CSS or markup is ever loaded into this page. `page/internal/plugins/plugin-row-action.js`
+     carries the click semantics, `page/internal/plugins/plugin-prompt.js` the text-field
+     semantics and `page/internal/plugins/plugin-control.js` the tick semantics; all three must
      load first. -->
-<script src="/page/plugins/plugin-row-action.js"></script>
-<script src="/page/plugins/plugin-prompt.js"></script>
-<script src="/page/plugins/plugin-control.js"></script>
-<script src="/page/plugins/plugins-rail.js"></script>
+<script src="/page/internal/plugins/plugin-row-action.js"></script>
+<script src="/page/internal/plugins/plugin-prompt.js"></script>
+<script src="/page/internal/plugins/plugin-control.js"></script>
+<script src="/page/internal/plugins/plugins-rail.js"></script>
 <!-- Companion screens — the CarPlay display and the paired Apple Watch,
-     offered from their own rail. `families/simulator/companion-screens.js` is the
-     value type (availability + instructions); `families/simulator/screens-rail.js` is the
+     offered from their own rail. `families/simulator/internal/companion-screens.js` is the
+     value type (availability + instructions); `families/simulator/internal/screens-rail.js` is the
      rail that draws it, and must load after it. -->
-<script src="/families/simulator/companion-screens.js"></script>
-<script src="/families/simulator/screens-rail.js"></script>
+<script src="/families/simulator/internal/companion-screens.js"></script>
+<script src="/families/simulator/internal/screens-rail.js"></script>
 <!-- Leaflet (vendored) + the location map picker. Leaflet must load
      before sim-location.js, which is itself lazy-used by page/device-page.js
      on first open of the location card. -->
 <script src="/vendor/leaflet/leaflet.js"></script>
-<script src="/panels/location/location-view.js"></script>
+<script src="/panels/location/internal/location-view.js"></script>
 <!-- Baguette SDK (the new shape — see Resources/Web/baguette/). The
      page-level scripts below (page/devices-stream.js, page/device-page.js) consume the
      SDK via `Baguette.use({...}).mount(...)`. Load order matters:
@@ -167,7 +167,7 @@
      /simulators/<udid> deep link, which page/devices-list.js checks at the
      top of its IIFE to bail out cleanly. Order matters here. -->
 <script src="/page/device-page.js"></script>
-<script src="/page/device-filter.js"></script>
+<script src="/page/internal/device-filter.js"></script>
 <script src="/page/devices-list.js"></script>
 </body>
 </html>

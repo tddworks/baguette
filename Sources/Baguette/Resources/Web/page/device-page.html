@@ -2262,7 +2262,7 @@
 
   /* --- Right-edge rails: companion screens + plugins -----------------
      Both rails and everything they open. This lives here, with the rest
-     of the focus chrome, rather than in families/simulator/screens-rail.js / page/plugins/plugins-rail.js
+     of the focus chrome, rather than in families/simulator/internal/screens-rail.js / page/internal/plugins/plugins-rail.js
      — those used to inject a stylesheet each, and a stylesheet written
      next to its module can't see the token block, so both had to guess
      at a fallback for every colour. The guesses were light-theme values,
@@ -3402,7 +3402,7 @@
   </div>
 
   <!-- Companion screens. Both start hidden: they are shown only when
-       the screens rail (families/simulator/screens-rail.js) opens one, and only when the
+       the screens rail (families/simulator/internal/screens-rail.js) opens one, and only when the
        host says the screen is actually attached. `hidden` rather than a
        CSS-only hide so the canvases stay out of layout entirely while
        nothing is streaming into them. -->
@@ -3584,7 +3584,7 @@
   </button>
 
   <!-- Live-log sheet — slides up from the bottom, hosts a LogPanel
-       built by panels/logs/log-view.js. Hidden by default; toolbar's
+       built by panels/logs/internal/log-view.js. Hidden by default; toolbar's
        `nativeLogsToggle` flips `[data-logs="open"]` on the root. -->
   <aside id="nativeLogsSheet" class="logs-sheet" aria-hidden="true">
     <header class="logs-sheet-header">

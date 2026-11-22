@@ -56,7 +56,7 @@ function unbalancedCommentLine(css) {
  * `used` counts only `--nv-*` read WITHOUT a fallback, which is the shape
  * that fails loudly in layout and silently in the console. A `var(--x,
  * something)` is a deliberate optional hook, and a non-`--nv-` name may
- * be set inline from JS (`page/device-3d.js` writes `--swatch` on each element) —
+ * be set inline from JS (`page/internal/device-3d.js` writes `--swatch` on each element) —
  * neither can be judged from this file alone.
  */
 function customProperties(css) {
@@ -126,7 +126,7 @@ test('should define in the size budget every variable the device and panes size 
 // way.
 
 /** Panel modules that render into `#simNativeView` and must not carry CSS. */
-const PANEL_MODULES = ['page/plugins/plugins-rail.js', 'families/simulator/screens-rail.js'];
+const PANEL_MODULES = ['page/internal/plugins/plugins-rail.js', 'families/simulator/internal/screens-rail.js'];
 
 test('should leave styling to the template when a panel module renders into the view', () => {
   for (const name of PANEL_MODULES) {
@@ -143,7 +143,7 @@ test('should read no token from outside the --nv-* set in the focus-mode stylesh
   const css = styleBlocks(fs.readFileSync(TEMPLATE, 'utf8'));
   // `--bg` / `--text` are the standalone-preview :root in <head>, which
   // only applies under file://; `--swatch` is written per-element from
-  // page/device-3d.js. Everything else must come from the theme block, because
+  // page/internal/device-3d.js. Everything else must come from the theme block, because
   // only those names are redefined for light and dark.
   const allowed = new Set(['--bg', '--text', '--swatch']);
   const foreign = [...new Set(

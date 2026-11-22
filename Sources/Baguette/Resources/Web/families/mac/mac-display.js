@@ -3,9 +3,9 @@
 import { deviceOf, describeListed } from '../../device/device.js';
 import { pickedChrome } from '../../device/picked-chrome.js';
 import { MacShare } from './share.js';
-import { followShare } from './share-follow.js';
-import { macPointer } from './pointer.js';
-import { macFramePicker } from './frame-picker.js';
+import { followShare } from './internal/share-follow.js';
+import { macPointer } from './internal/pointer.js';
+import { macFramePicker } from './internal/frame-picker.js';
 
 export function macDisplay(listing, { id, wire, storage, address }) {
   const shared = MacShare.fromAddress(address);

@@ -16,7 +16,7 @@ description: Why companion screens work the way they do — the CarPlay HID serv
 - Gestures on the CarPlay plane → `DisplayTouchTarget` → `IndigoHIDInput`,
   whose `warmServices` creates pointer, mouse **and** CarPlay services
   (`IndigoHIDMessageToCreateCarPlayService`) before anything is sent.
-- The page's `families/simulator/screens-rail.js` owns the rail and state card, not the streams —
+- The page's `families/simulator/internal/screens-rail.js` owns the rail and state card, not the streams —
   opening a pane calls back into `page/device-page.js`, which owns every
   `StreamSession` on the page.
 

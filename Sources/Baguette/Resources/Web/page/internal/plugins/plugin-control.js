@@ -26,7 +26,7 @@
 // Ticks are plain objects passed in and returned, never held here: the
 // renderer owns the current set, this file only says what the next one
 // should be. That keeps every decision testable without a DOM, the same
-// arrangement page/plugins/plugin-row-action.js and page/plugins/plugin-prompt.js use.
+// arrangement page/internal/plugins/plugin-row-action.js and page/internal/plugins/plugin-prompt.js use.
 (function (root) {
   'use strict';
 
@@ -57,7 +57,7 @@
      * other string here is escaped for, and `kind` is interpolated
      * straight into `data-control` and `role` attributes — one malformed
      * value would close the attribute and open one of its own. Same
-     * treatment `SEVERITIES` gets in page/plugins/plugins-rail.js.
+     * treatment `SEVERITIES` gets in page/internal/plugins/plugins-rail.js.
      */
     get kind() {
       return this.present ? this.spec.kind : null;

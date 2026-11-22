@@ -13,9 +13,9 @@
 // `rowAction: "run"` click posts, to the same endpoint. So this is a
 // widget, not a new execution model, and no plugin code runs in the page.
 //
-// Split out of page/plugins/plugins-rail.js so the decisions are testable without a
-// DOM, exactly as page/plugins/plugin-row-action.js is: this file says what should
-// happen, page/plugins/plugins-rail.js does it.
+// Split out of page/internal/plugins/plugins-rail.js so the decisions are testable without a
+// DOM, exactly as page/internal/plugins/plugin-row-action.js is: this file says what should
+// happen, page/internal/plugins/plugins-rail.js does it.
 (function (root) {
   'use strict';
 

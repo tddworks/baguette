@@ -1,4 +1,4 @@
-// families/simulator/screens-rail.js — the companion-screens rail in focus mode.
+// families/simulator/internal/screens-rail.js — the companion-screens rail in focus mode.
 //
 // A simulator can drive more than its own glass: a CarPlay external
 // display, and the Apple Watch paired with it. Both used to be a
