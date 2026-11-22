@@ -112,3 +112,8 @@ test('should turn a simulator\'s input back to portrait, and give no other famil
   assert.deepEqual([turned.x, turned.y], [10, 10]);
   for (const other of [phone, android, mac]) assert.equal(device(other).orientation, undefined);
 });
+
+test('should give a simulator its companion screens, and no other family any', () => {
+  assert.equal(typeof device(simulated).companions.mount, 'function');
+  for (const other of [phone, android, mac]) assert.equal(device(other).companions, undefined);
+});
