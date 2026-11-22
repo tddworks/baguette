@@ -23,7 +23,7 @@ test('should make a simulated device a simulator, framed by its own bezel', () =
   const sim = device(simulated);
   assert.equal(sim.family, 'simulator');
   assert.equal(sim.frame.definition, undefined);
-  assert.equal(sim.frame.offersChromePicker, false);
+  assert.equal(sim.frame.chromePicker, undefined);
   assert.equal(sim.badge, undefined);
 });
 
@@ -36,14 +36,14 @@ test('should frame a phone on the cable in the chrome its user picked, offering 
   assert.equal(picked.family, 'phone');
   assert.equal(picked.frame.definition, '/devices/D/definition.json?chrome=iPhone%2015%20Pro');
   assert.equal(device(phone).frame.definition, '/devices/D/definition.json');
-  assert.equal(picked.frame.offersChromePicker, true);
+  assert.equal(typeof picked.frame.chromePicker.show, 'function');
   assert.equal(picked.badge, true);
 });
 
 test('should frame an Android device as a phone is framed, as its own family', () => {
   const droid = device(android);
   assert.equal(droid.family, 'android');
-  assert.equal(droid.frame.offersChromePicker, true);
+  assert.equal(typeof droid.frame.chromePicker.show, 'function');
   assert.equal(droid.frame.picker, undefined);
 });
 
@@ -51,6 +51,7 @@ test('should let a Mac display pick a Mac frame, draw its pointer, and share it 
   const display = device(mac);
   assert.equal(display.family, 'mac');
   assert.equal(typeof display.frame.picker.mount, 'function');
+  assert.equal(display.frame.chromePicker, undefined);   // its own frames are its pick, not a phone's
   assert.equal(typeof display.pointer.follow, 'function');
   assert.equal(display.share, undefined);
   const shared = device(mac, { address: '?handheld=1&share=D&room=moreSpace' });

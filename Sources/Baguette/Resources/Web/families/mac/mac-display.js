@@ -14,7 +14,6 @@ export function macDisplay(listing, { id, wire, storage, address }) {
     family: 'mac',
     frame: {
       definition: pickedChrome(id, { wire, storage }),
-      offersChromePicker: true,
       picker: macFramePicker(id, { wire, storage, reload: () => MacShare.reloadKeepingShare(window.location) }),
     },
     badge: true,
