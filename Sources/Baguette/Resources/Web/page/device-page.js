@@ -193,8 +193,18 @@
     // 2. Resolve device name + iOS runtime from the list endpoint.
     //    The SDK definition gives us the bezel; /simulators.json gives
     //    us the human-readable identity that sits above it.
-    const listing = await fetchDeviceListing(udid);
-    if (listing) deviceAbilities = listing.abilities || [];
+    // What the device is decides its family, so a read that fails once is
+    // read again; failing twice, the page says so rather than guess a family.
+    const listing = (await fetchDeviceListing(udid)) || (await fetchDeviceListing(udid));
+    if (!listing) {
+      const view = document.getElementById('simNativeView');
+      if (view) view.remove();
+      document.body.insertAdjacentHTML('beforeend',
+          '<pre id="nativeNoListing" style="color:#f87171;padding:24px;font-family:ui-monospace">' +
+          'Couldn\u2019t read what this device is (' + udid.replace(/[<&]/g, '') + ') \u2014 reload to try again.</pre>');
+      return;
+    }
+    deviceAbilities = listing.abilities || [];
     device = window.Baguette._Families.device(listing, {
       id: udid,
       wire: {
@@ -210,7 +220,8 @@
       },
       storage: localStorage,
       address: location.search,
-      reload: () => reloadPage(),
+      // `params` (a pick the browser may not store) ride the reload in the address.
+      reload: (params) => reloadPage(params),
     });
     panels = window.Baguette._PagePanels.on({ element: (id) => document.getElementById(id) });
     const meta = await device.describe();
@@ -811,9 +822,17 @@
     return device && device.share ? window.Baguette._MacShare : null;
   }
   /** Reload this page — on a shared Mac's, keeping its share. */
-  function reloadPage() {
+  function reloadPage(params) {
     const MacShare = sharedMac();
-    if (MacShare) MacShare.reloadKeepingShare(location); else location.reload();
+    let to = location;
+    if (params) {
+      const url = new URL(location.href);
+      for (const [key, value] of Object.entries(params)) {
+        if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+      }
+      to = { reload: () => location.assign(url.href) };
+    }
+    if (MacShare) MacShare.reloadKeepingShare(to); else to.reload();
   }
 
   function storedFormat() {

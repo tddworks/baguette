@@ -4,11 +4,11 @@ import { deviceOf, describeListed } from '../../device/device.js';
 import { pickedChrome } from '../../device/picked-chrome.js';
 import { chromePicker } from '../../device/chrome-picker.js';
 
-export function phone(listing, { id, wire, storage, reload }) {
+export function phone(listing, { id, wire, storage, address, reload }) {
   return deviceOf(listing, {
     id,
     family: 'phone',
-    frame: { definition: pickedChrome(id, { wire, storage }), chromePicker: chromePicker(id, { wire, storage, reload }) },
+    frame: { definition: pickedChrome(id, { wire, storage, address }), chromePicker: chromePicker(id, { wire, storage, reload }) },
     badge: true,
     describe: () => describeListed(id, listing, wire),
   });

@@ -70,7 +70,8 @@ export function chromePicker(id, { wire, storage, reload }) {
       card.querySelectorAll('[data-chrome-pick]').forEach((btn) => {
         btn.addEventListener('click', () => {
           try { storage.setItem('baguette.twin.chrome.' + id, btn.dataset.chromePick); } catch { /* not remembered */ }
-          reload();
+          // The pick rides the reload too, in case the browser wouldn't store it.
+          reload({ chrome: btn.dataset.chromePick });
         });
       });
     },

@@ -50,8 +50,10 @@ export function followShare(share, macShare, browser) {
     browser.clearTimeout(settle);
     settle = browser.setTimeout(reshape, SETTLE_MS);
   });
+  // Leaving ends the share, even mid-turn: the server ends it after the turn
+  // it is making. A reload of the page's own (a turn done) keeps it.
   browser.on('pagehide', () => {
-    if (reshaping || !macShare.leaving()) return;
+    if (!macShare.leaving()) return;
     try { browser.fetch('/mac/shares/' + id, { method: 'DELETE', keepalive: true }); } catch { /* the server ends nothing */ }
   });
 }

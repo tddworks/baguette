@@ -67,7 +67,7 @@ iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` /
 
 `IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent thread-local state, so it **must build on the main thread**; elsewhere its messages are malformed and silently dropped. `IndigoHIDInput` hops there for the build alone; gestures run on their device's `GestureQueues` lane. Buttons (`IndigoHIDMessageForButton`) are pure C and thread-safe — useful as a sanity check when input fails.
 
-**Coordinates.** Wire coordinates (`x`, `y`, `startX`, `x1`, `cx`, …) are **device points**, the units of the `width` / `height` every gesture envelope carries — never normalized. The browser normalizes internally and `page/devices-stream.js` multiplies back before sending; `IndigoHIDInput.sendMouse` divides by size before the C call.
+**Coordinates.** Wire coordinates (`x`, `y`, `startX`, `x1`, `cx`, …) are **device points**, the units of the `width` / `height` every gesture envelope carries — never normalized. The browser normalizes internally and the gesture sources multiply back before sending (`baguette/gestures/attachable-event-source.js`); `IndigoHIDInput.sendMouse` divides by size before the C call.
 
 ## Testing approach
 

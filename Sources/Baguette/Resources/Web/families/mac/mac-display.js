@@ -7,14 +7,14 @@ import { followShare } from './internal/share-follow.js';
 import { macPointer } from './internal/pointer.js';
 import { macFramePicker } from './internal/frame-picker.js';
 
-export function macDisplay(listing, { id, wire, storage, address }) {
+export function macDisplay(listing, { id, wire, storage, address, reload }) {
   const shared = MacShare.fromAddress(address);
   return deviceOf(listing, {
     id,
     family: 'mac',
     frame: {
-      definition: pickedChrome(id, { wire, storage }),
-      picker: macFramePicker(id, { wire, storage, reload: () => MacShare.reloadKeepingShare(window.location) }),
+      definition: pickedChrome(id, { wire, storage, address }),
+      picker: macFramePicker(id, { wire, storage, reload }),
     },
     badge: true,
     pointer: macPointer,

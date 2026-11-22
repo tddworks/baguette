@@ -84,7 +84,11 @@ test('should describe a device as it is listed now, not as it was when the page 
 test('should answer what the device can do from the abilities it is listed with', () => {
   assert.equal(device(mac).can('screen'), true);
   assert.equal(device(mac).can('orientation'), false);
-  assert.equal(device(null).can('screen'), false);
+});
+
+test('should allow everything when the server lists nothing for the device, as the toolbar does', () => {
+  assert.equal(device(null).can('screen'), true);
+  assert.equal(device(null).can('network'), true);
 });
 
 test('should boot a simulator through the server, saying why when it can\'t', async () => {

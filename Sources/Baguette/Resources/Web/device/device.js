@@ -5,14 +5,15 @@
 
 /** A device of `family` from its `listing` (or none), with `roles`. */
 export function deviceOf(listing, { id, family, ...roles }) {
-  const abilities = listing && Array.isArray(listing.abilities) ? listing.abilities : [];
+  const listed = listing && Array.isArray(listing.abilities) ? listing.abilities : null;
   return {
     id,
     family,
     listing,
-    abilities,
-    /** Whether the server lists the ability `name` for it. */
-    can: (name) => abilities.includes(name),
+    abilities: listed || [],
+    /** Whether the server lists the ability `name` for it — everything when it
+     *  lists nothing, as the toolbar shows everything then. */
+    can: (name) => listed === null || listed.includes(name),
     ...roles,
   };
 }

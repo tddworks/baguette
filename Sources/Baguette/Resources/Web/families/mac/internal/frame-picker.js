@@ -45,7 +45,8 @@ export function macFramePicker(id, { wire, storage, reload }) {
       item.style.cssText =
           'text-align:left;padding:6px 10px;border:0;border-radius:7px;cursor:pointer;' +
           'background:' + (choice.chosen ? '#eff6ff' : 'transparent') + ';color:#1f2937;font:inherit';
-      item.addEventListener('click', () => { rememberFrame(storage, id, choice.pick); reload(); });
+      // The pick rides the reload too, in case the browser wouldn't store it.
+      item.addEventListener('click', () => { rememberFrame(storage, id, choice.pick); reload({ chrome: choice.pick || null }); });
       pop.appendChild(item);
     });
     if (choices.length === 1) {

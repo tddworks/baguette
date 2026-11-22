@@ -66,10 +66,12 @@ than to a broken page.
 
 1. The route probably exists: `boot` and `shutdown` are both already registered
    via `Server.applyPower`.
-2. Read whatever state you need from `fetchDeviceMeta` in `page/device-page.js`;
-   extend its return value rather than adding a fetch.
-3. Render through `renderPowerCard(phase, detail)`: add a phase to the `copy`
-   table and, if it needs a spinner, to the `SPIN_GLYPH` branch.
+2. Read whatever state you need from the device's `describe()` — its family's
+   (`families/<family>/`), which the page calls at boot and while it polls a
+   boot; extend what it returns rather than adding a fetch.
+3. Render through `renderPowerCard(phase, detail)` in
+   `page/internal/power-card.js`: add a phase to the `copy` table and, if it
+   needs a spinner, to the `SPIN_GLYPH` branch.
 4. Style it in the `--- Power card ---` block of `page/device-page.html`. The card is
    a container (`container-type: inline-size`), so type sizes use `cqw` and track
    the rendered bezel, not the viewport.

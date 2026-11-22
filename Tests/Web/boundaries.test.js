@@ -16,14 +16,24 @@ function modules(dir) {
   });
 }
 
+/** The relative modules `source` depends on: what it imports, and what it re-exports. */
+export function dependencies(source) {
+  return [...source.matchAll(/^\s*(?:import|export)\s[^'";]*?from\s*['"](\.[^'"]+)['"]|^\s*import\s*['"](\.[^'"]+)['"]/gm)]
+    .map((m) => m[1] || m[2]);
+}
+
+/** Where `source` reads a device's kind: its platform or reality, by name or destructured. */
+export function kindReads(source) {
+  return source.match(/\.reality\b|kind\.platform\b|\bdevicePlatform\b|\bdeviceMode\b|\{[^{}]*\b(?:platform|reality)\b[^{}]*\}\s*=\s*[\w.]*kind\b/g);
+}
+
 /** Every module under the layered folders, with the files it imports (web-root relative). */
 function imports() {
   const layered = ['device', 'families', 'panels', 'wire', 'page', 'capture']
     .map((folder) => join(WEB, folder)).filter((dir) => { try { return statSync(dir).isDirectory(); } catch { return false; } });
   return layered.flatMap(modules).map((file) => ({
     file: relative(WEB, file),
-    imports: [...readFileSync(file, 'utf8').matchAll(/^\s*import\s[^'"]*['"](\.[^'"]+)['"]/gm)]
-      .map((m) => relative(WEB, resolve(dirname(file), m[1]))),
+    imports: dependencies(readFileSync(file, 'utf8')).map((spec) => relative(WEB, resolve(dirname(file), spec))),
   }));
 }
 
@@ -68,7 +78,18 @@ test('should leave reading a device\'s kind to Families on the device page', () 
     .filter((file) => !file.endsWith(join('families', 'families.js')))
     .filter((file) => !LIST.some((path) => file.endsWith(path)));
   for (const file of page) {
-    const reads = readFileSync(file, 'utf8').match(/\.reality\b|kind\.platform\b|\bdevicePlatform\b|\bdeviceMode\b/g);
+    const reads = kindReads(readFileSync(file, 'utf8'));
     assert.equal(reads, null, `${relative(WEB, file)} reads a device's kind: ${reads}`);
   }
+});
+
+test('should count a re-export as a dependency, as an import is', () => {
+  assert.deepEqual(dependencies("export { simulator } from '../simulator/simulator.js';"), ['../simulator/simulator.js']);
+  assert.deepEqual(dependencies("import { a } from './a.js';\nimport './side.js';\nexport * from './b.js';"), ['./a.js', './side.js', './b.js']);
+});
+
+test('should see a device\'s kind read however it is spelled, destructured too', () => {
+  assert.ok(kindReads("const { platform } = listing.kind; if (platform === 'macOS') {}"));
+  assert.ok(kindReads("if (listing.kind.reality === 'simulated') {}"));
+  assert.equal(kindReads("const { id, name } = listing;"), null);
 });

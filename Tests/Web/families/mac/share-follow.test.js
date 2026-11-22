@@ -85,3 +85,22 @@ test('should end the share when the page is left, and keep it when the page relo
   reloading.fire('pagehide');
   assert.equal(reloading.requests.length, 0);
 });
+
+test('should end the share when the page is left while a turn is still being made', async () => {
+  const b = browser();
+  let answer;
+  b.fetch = async (url, init) => {
+    b.requests.push({ url, method: init.method });
+    if (init.method === 'PUT') await new Promise((r) => { answer = r; });
+    return { ok: true };
+  };
+  followShare(share, pageShare(), b);
+  Object.assign(b, { width: 874, height: 402 });
+  b.fire('resize');
+  const turning = b.settle();
+  await new Promise((r) => setTimeout(r, 0));
+  b.fire('pagehide');
+  assert.deepEqual(b.requests.map((r) => r.method), ['PUT', 'DELETE']);
+  answer();
+  await turning;
+});
