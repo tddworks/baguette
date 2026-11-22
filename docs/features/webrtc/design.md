@@ -1002,6 +1002,7 @@ Record the chosen candidate pair to establish which path carried media.
 | **FEC (RED/ULPFEC)** | Redundancy sent with the video, so the browser rebuilds a lost packet without asking | Freezes on mobile follow bursts of loss 2–3.5× more than chance (§6, slice 11): each costs a resend round trip (100–300 ms). FEC removes the round trip for single losses, at ~10–25 % more bandwidth; bursts need more |
 | **A lower ceiling on mobile** | Cap the bitrate (e.g. 4 Mbps) when the link is a phone's | Fewer packets per frame, so a loss burst hits fewer frames. A cheap experiment before FEC |
 | **Lift the cap only on sustained arrival** | The confirmed-capacity cap (§6, slice 11) released only when a longer window shows more getting through | After a radio dropout, held packets arrive at once; the half-second window reads that as spare capacity, lifts the cap, and the target jumps back to 8 Mbps — refilling the queue |
+| **H.265 (HEVC)** | The same picture in ~30–40 % fewer bits, chosen per viewer from its offer — opt-in until measured | Only where bandwidth is the limit (cellular, a relayed path); designed in [hevc.md](hevc.md) |
 | **A minimum pacing rate** | The pacer never slower than what drains a keyframe in ~50 ms | At a low target — REMB's 300 kbps floor on a still screen — a keyframe waits ~300 ms in the pacer before it leaves: the first tap after idle feels slow |
 
 ### The kit itself

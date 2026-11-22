@@ -368,8 +368,8 @@ arrangement restored exactly.
   iPhone the display once stayed portrait. Each share now logs `started`,
   `reshaped`, `ended` — the next try says whether the `PUT` arrived.
 - **HEVC over WebRTC?** Same picture at a lower bitrate — but bandwidth isn't
-  the limit (≤ 1.3 Mbit/s of 8). Needs an RFC 7798 packetizer, the HEVC encoder
-  and SDP with an H.264 fallback; Safari only. Worth it only if text stays soft.
+  the limit (≤ 1.3 Mbit/s of 8). Designed, opt-in until measured:
+  [webrtc/hevc.md](../webrtc/hevc.md).
 - **Sign-in.** Today anyone who reaches the port controls this Mac.
   ~~Built with OpenDirectory, sessions and a throttle~~ — dropped before it was
   wired: on a Tailscale-only bind, the tailnet is the gate. Back if the server
