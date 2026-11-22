@@ -50,6 +50,8 @@ struct Server: Sendable {
     let macFrames: MacFrames
     /// This Mac shared to viewers' devices, with `--share-mac`; nil otherwise.
     let screenShares: ScreenShares?
+    /// The Mac's pointer shape for pages, with `--share-mac`; nil otherwise.
+    let pointerShapes: PointerShapes?
     let models: any DeviceModels
     let deviceRenderer: any DeviceRenderer
     let plugins: any Plugins
@@ -95,6 +97,7 @@ struct Server: Sendable {
         chromes: any Chromes,
         macFrames: MacFrames = MacFrames(),
         screenShares: ScreenShares? = nil,
+        pointerShapes: PointerShapes? = nil,
         models: any DeviceModels = DeviceModelCatalog.empty,
         deviceRenderer: any DeviceRenderer = RealityKitDeviceRenderer(),
         plugins: any Plugins = FileSystemPlugins(roots: []),
@@ -121,6 +124,7 @@ struct Server: Sendable {
         self.chromes = chromes
         self.macFrames = macFrames
         self.screenShares = screenShares
+        self.pointerShapes = pointerShapes
         self.models = models
         self.deviceRenderer = deviceRenderer
         self.plugins = plugins
@@ -206,6 +210,8 @@ struct Server: Sendable {
         registerDeviceListingRoute(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerPlaceRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerMacShareRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
+        registerMacPointerRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser,
+                                 trustedWebSocketUpgrade: trustedWebSocketUpgrade)
         registerFileRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerHingeRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)
         registerCompanionScreenRoutes(on: router, rejectUntrustedBrowser: rejectUntrustedBrowser)

@@ -119,9 +119,18 @@ latest-wins. `showsCursor` is off for Mac displays and the page draws the arrow
 `PendingGestures` replaces a waiting move with a newer one (clicks, keys and
 scrolls keep their order). Measured: 200 moves 2 ms apart reach the Mac's
 pointer as the last is sent, before and after — the lag you feel is the picture's
-round trip, which the local pointer takes out. Not yet: the pointer's real
-shape. A long-running process reads `NSCursor.currentSystem` once and never
-again; one whose run loop runs follows it, so it needs a helper process.
+round trip, which the local pointer takes out.
+
+The pointer's shape comes from `NSCursor.currentSystem` — but a long-running
+process reads it once and never again, and one whose run loop runs follows it
+(measured over TextEdit: all 8 crossings between text and title bar read
+right). So `baguette pointer-shapes` — its main thread running the run loop,
+since baguette's async entry point runs a command elsewhere — reads it 20 times
+a second and says each change (`PointerShape`); `PointerShapes` runs it while
+anyone watches and keeps each image by id. The image is drawn at 2×: its TIFF
+holds up to 10×, and a browser ignores a cursor over 128 px a side. A page
+hears shapes on `WS /mac/pointer` and fetches each image once from
+`/mac/pointer/<id>.png`.
 
 ## Measured
 

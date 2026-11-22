@@ -29,3 +29,7 @@ test('should draw a pointer for a finger or a pen, and leave a mouse its own', (
   assert.equal(LocalPointer().draws('mouse'), false);
 });
 
+
+test('should draw a shape so its hotspot, not its corner, is under the finger', () => {
+  assert.deepEqual(LocalPointer().offset({ hotspot: { x: 12, y: 11 } }), { left: -12, top: -11 });
+});

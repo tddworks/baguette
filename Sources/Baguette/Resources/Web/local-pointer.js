@@ -22,6 +22,11 @@
       };
     },
 
+    /** Where a drawn shape's corner goes, so its hotspot is under the finger. */
+    offset(shape) {
+      return { left: -shape.hotspot.x, top: -shape.hotspot.y };
+    },
+
     /** Whether the page draws the pointer for this kind of pointer: a mouse has its own. */
     draws(pointerType) {
       return pointerType === 'touch' || pointerType === 'pen';
@@ -44,7 +49,18 @@
       };
       ['pointerdown', 'pointermove'].forEach((type) =>
         screenArea.addEventListener(type, follow, { passive: true }));
-      return { detach() { arrow.remove(); } };
+      return {
+        detach() { arrow.remove(); },
+        /** The Mac's pointer as it looks now: `cursor` for a mouse, the image for a finger. */
+        setShape({ image, hotspot, size, cursor }) {
+          screenArea.style.cursor = cursor;
+          const at = LocalPointer.offset({ hotspot });
+          arrow.style.width = size.width + 'px';
+          arrow.style.height = size.height + 'px';
+          arrow.innerHTML = '<img src="' + image + '" width="' + size.width + '" height="' + size.height +
+              '" style="position:relative;left:' + at.left + 'px;top:' + at.top + 'px" alt="">';
+        },
+      };
     },
   };
 

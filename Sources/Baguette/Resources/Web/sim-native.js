@@ -2885,8 +2885,11 @@
   /// the page draws it — it never trails the hand — and a mouse moving over
   /// the screen moves it (hover). docs/features/mac-screen/README.md#input.
   function mountPointer() {
-    window.Baguette._LocalPointer.attach(sim.screenArea);
+    const pointer = window.Baguette._LocalPointer.attach(sim.screenArea);
     new window.Baguette._HoverGestureSource(sim.screen).attach(sim.screenArea);
+    const PointerShape = window.Baguette._PointerShape;
+    PointerShape.follow((shape, density) =>
+      pointer.setShape({ ...shape, cursor: PointerShape.cursor(shape, density) }));
   }
 
   /// A page showing a Mac shared to this device (`/mac/share`): the display

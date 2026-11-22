@@ -53,6 +53,7 @@ struct Baguette: AsyncParsableCommand {
             DefaultsCommand.self,
             VirtualDisplayCommand.self,
             MainDisplayCommand.self,
+            PointerShapesCommand.self,
         ]
     )
 }

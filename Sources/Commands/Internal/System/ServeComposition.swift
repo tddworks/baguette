@@ -40,6 +40,7 @@ extension ServeCommand {
             ] + (shareMac ? [MacDisplayLooks(displays: { HostDisplayList.all() })] : [])),
             macFrames: frames,
             screenShares: screenShares,
+            pointerShapes: shareMac ? PointerShapes(executable: baguette, makeProcess: { HostSubprocess() }) : nil,
             models: models,
             deviceRenderer: RealityKitDeviceRenderer(),
             plugins: plugins,

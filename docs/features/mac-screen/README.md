@@ -59,8 +59,9 @@ none; `CGDisplayBounds` has them) or the stream's frame size both work.
 ```
 
 **The pointer is drawn by the page**, never streamed: on the stream it would
-trail the hand by the whole round trip. A mouse or trackpad shows the browser's
-own arrow; a finger gets one drawn where it touches. A pointer move still
+trail the hand by the whole round trip. It takes the Mac's real shape — an
+I-beam over text, a hand over a link — as the browser's own pointer for a
+mouse or trackpad, and drawn where a finger touches. A pointer move still
 waiting to reach the Mac is replaced by a newer one, so it never falls behind;
 clicks, keys and scrolls keep their order. A mouse moving over the picture
 moves the Mac's pointer too (hover) — so watch a display from another device:
