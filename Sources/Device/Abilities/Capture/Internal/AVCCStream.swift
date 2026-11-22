@@ -11,7 +11,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     public var config: StreamConfig { configLock.withLock { currentConfig } }
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
-    private let h264: H264Encoder
+    private let h264: VideoEncoder
     private let scaler = VideoFrameScaler()
     /// Where every frame is encoded, including VideoToolbox's answers; the
     /// stream's state is confined to it.
@@ -32,10 +32,10 @@ public final class AVCCStream: Stream, @unchecked Sendable {
 
     public convenience init(config: StreamConfig, sink: any FrameSink, quality: Double = 0.7) {
         self.init(config: config, sink: sink, quality: quality,
-                  encoder: H264Encoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict))
+                  encoder: VideoEncoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict))
     }
 
-    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: H264Encoder) {
+    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: VideoEncoder) {
         currentConfig = config
         self.sink = sink
         jpeg = JPEGEncoder(quality: quality)
@@ -160,7 +160,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
         }
     }
 
-    private func write(_ encoded: H264Encoder.Encoded) {
+    private func write(_ encoded: VideoEncoder.Encoded) {
         if let description = encoded.description { sink.write(AVCCEnvelope.description(avcc: description)) }
         switch encoded.kind {
         case .keyframe: sink.write(AVCCEnvelope.keyframe(avcc: encoded.avcc))

@@ -34,7 +34,7 @@ struct H264TuningTests {
     }
 
     @Test func `should ask the encoder for every property a low-latency tuning sets`() {
-        #expect(H264Tuning.lowLatency.properties(bitrate: 2_000_000, fps: 30) == [
+        #expect(H264Tuning.lowLatency.properties(bitrate: 2_000_000, fps: 30, profile: .highProfileAutoLevel) == [
             .realTime(true), .highProfileAutoLevel, .allowFrameReordering(false),
             .averageBitRate(2_000_000), .expectedFrameRate(30), .maxKeyFrameInterval(150),
             .maxFrameDelayCount(0),
@@ -42,7 +42,7 @@ struct H264TuningTests {
     }
 
     @Test func `should leave the frame delay to the encoder when the tuning sets none`() {
-        #expect(!H264Tuning.strict.properties(bitrate: 1, fps: 30).contains(.maxFrameDelayCount(0)))
+        #expect(!H264Tuning.strict.properties(bitrate: 1, fps: 30, profile: .highProfileAutoLevel).contains(.maxFrameDelayCount(0)))
     }
 
     @Test func `should retune only the rate and the keyframe spacing when the frame rate changes`() {

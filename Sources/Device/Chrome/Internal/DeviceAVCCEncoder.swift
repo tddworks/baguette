@@ -5,7 +5,7 @@ import IOSurface
 /// Copies each render before its surface is reused. Only an unsubmitted snapshot
 /// can be replaced; every submitted frame and its reference chain is delivered.
 public final class DeviceAVCCEncoder: @unchecked Sendable {
-    public typealias Completion = @Sendable (Result<H264Encoder.Encoded?, any Error>) -> Void
+    public typealias Completion = @Sendable (Result<VideoEncoder.Encoded?, any Error>) -> Void
     // The copied buffer is retained and never mutated after submission.
     private struct Snapshot: @unchecked Sendable {
         let pixels: CVPixelBuffer
@@ -44,7 +44,7 @@ public final class DeviceAVCCEncoder: @unchecked Sendable {
     ) {
         let scaler = VideoFrameScaler()
         let jpeg = JPEGEncoder(quality: quality)
-        let video = H264Encoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict)
+        let video = VideoEncoder(fps: config.fps, bitrate: config.bitrateBps, tuning: .strict)
         self.init(
             copy: { scaler.scale($0, by: config.scale) }, seed: { jpeg.encode($0) },
             encode: { video.encode($0, completion: $1) }, deliver: deliver, onError: onError,
@@ -83,7 +83,7 @@ public final class DeviceAVCCEncoder: @unchecked Sendable {
         }
     }
 
-    private func completed(_ result: Result<H264Encoder.Encoded?, any Error>, snapshot: Snapshot) {
+    private func completed(_ result: Result<VideoEncoder.Encoded?, any Error>, snapshot: Snapshot) {
         guard !stopped else { return }
         do {
             if let encoded = try result.get() {

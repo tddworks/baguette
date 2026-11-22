@@ -40,7 +40,7 @@ Device/Abilities/Capture/
 ├── H264Tuning.swift                 CompressionProperty values a tuning sets (pure)
 ├── AVCDecoderConfigurationRecord.swift   avcC from SPS/PPS (pure)
 └── Internal/
-    ├── H264Encoder.swift            when to open, keyframes, which answer counts
+    ├── VideoEncoder.swift            when to open, keyframes, which answer counts
     ├── CompressionSession.swift     @Mockable role: open / set / prepare / submit / close
     └── System/
         ├── VideoToolboxSession.swift          one VT call per method
@@ -73,7 +73,7 @@ browser (sim-stream.js)           baguette input (stdin)
 ### A stream
 
 ```
-Screen (onFrame IOSurface) ─▶ AVCCStream ─▶ H264Encoder ─▶ CompressionSession ─▶ VideoToolbox
+Screen (onFrame IOSurface) ─▶ AVCCStream ─▶ VideoEncoder ─▶ CompressionSession ─▶ VideoToolbox
                                    │              (decides)        (role)          (System/)
                                    ▼
                               FrameSink: StdoutSink (CLI) · WebSocketFrameSink (serve)

@@ -11,8 +11,9 @@ import Testing
 @Suite("AVCCStream")
 struct AVCCStreamTests {
 
-    private let sps = Data([0x67, 0x64, 0x00, 0x1F])
-    private let pps = Data([0x68, 0xEE])
+    /// The avcC record the encoder made for a keyframe.
+    private let record = Data([0x01, 0x64, 0x00, 0x1F, 0xFF, 0xE1, 0x00, 0x04, 0x67, 0x64, 0x00, 0x1F,
+                               0x01, 0x00, 0x02, 0x68, 0xEE])
 
     private func screen() -> MockScreen {
         let screen = MockScreen()
@@ -27,7 +28,7 @@ struct AVCCStreamTests {
     private func session(_ answers: [CompressionResult], holding held: Held? = nil) -> MockCompressionSession {
         let session = MockCompressionSession()
         let next = Counter()
-        given(session).open(width: .any, height: .any, lowLatencyRateControl: .any).willReturn(0)
+        given(session).open(width: .any, height: .any, codec: .any, lowLatencyRateControl: .any).willReturn(0)
         given(session).set(.any).willReturn(0)
         given(session).prepare().willReturn(0)
         given(session).close().willReturn()
@@ -40,16 +41,16 @@ struct AVCCStreamTests {
     }
 
     private var keyframe: CompressionResult {
-        CompressionResult(status: 0, dropped: false, frame: CompressedFrame(avcc: Data([0, 0, 0, 1, 0x65]), keyframe: true, sps: sps, pps: pps))
+        CompressionResult(status: 0, dropped: false, frame: CompressedFrame(avcc: Data([0, 0, 0, 1, 0x65]), keyframe: true, records: ["avcC": record]))
     }
 
     private var delta: CompressionResult {
-        CompressionResult(status: 0, dropped: false, frame: CompressedFrame(avcc: Data([0, 0, 0, 1, 0x41]), keyframe: false, sps: nil, pps: nil))
+        CompressionResult(status: 0, dropped: false, frame: CompressedFrame(avcc: Data([0, 0, 0, 1, 0x41]), keyframe: false))
     }
 
     private func stream(_ session: MockCompressionSession, sink: RecordingSink) -> AVCCStream {
         AVCCStream(config: .default, sink: sink, quality: 0.7,
-                   encoder: H264Encoder(fps: 60, tuning: .strict, session: session))
+                   encoder: VideoEncoder(fps: 60, tuning: .strict, session: session))
     }
 
     /// Hand the stream one screen, and wait for what it makes of it.
@@ -70,7 +71,7 @@ struct AVCCStreamTests {
         send(Surfaces.filled(0x10), to: stream)
 
         #expect(tags(sink) == [AVCCEnvelope.seedTag, AVCCEnvelope.descriptionTag, AVCCEnvelope.keyframeTag])
-        #expect(AVCCEnvelope.unwrap(sink.writes[1])?.payload == AVCDecoderConfigurationRecord.bytes(sps: sps, pps: pps))
+        #expect(AVCCEnvelope.unwrap(sink.writes[1])?.payload == record)
         stream.stop()
     }
 

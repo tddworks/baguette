@@ -7,11 +7,11 @@ import Mockable
 /// `VTCompressionSession`, reduced to the calls the encoder makes. Every
 /// call answers an `OSStatus` (`0` is success) and decides nothing: when to
 /// open, which frame is a keyframe and which answer counts belong to
-/// `H264Encoder`. The real one is `VideoToolboxSession`.
+/// `VideoEncoder`. The real one is `VideoToolboxSession`.
 @Mockable
 protocol CompressionSession: AnyObject, Sendable {
     /// Open a session for frames of this size, closing any open one first.
-    func open(width: Int32, height: Int32, lowLatencyRateControl: Bool) -> Int32
+    func open(width: Int32, height: Int32, codec: CMVideoCodecType, lowLatencyRateControl: Bool) -> Int32
     func set(_ property: CompressionProperty) -> Int32
     func prepare() -> Int32
     /// Hand one frame in. `done` is called once, on the session's own queue,
@@ -36,6 +36,7 @@ struct CompressionResult: Sendable {
 struct CompressedFrame: Equatable, Sendable {
     let avcc: Data
     let keyframe: Bool
-    let sps: Data?
-    let pps: Data?
+    /// The decoder configuration records the encoder made for a keyframe, by
+    /// atom — `"avcC"` for H.264, `"hvcC"` for HEVC — as it hands them back.
+    var records: [String: Data] = [:]
 }

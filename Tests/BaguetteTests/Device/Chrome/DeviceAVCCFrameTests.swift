@@ -142,21 +142,21 @@ struct DeviceAVCCFrameTests {
 private final class AVCCState: @unchecked Sendable {
     private let lock = NSLock()
     private var submissions: [Int] = []
-    private var callbacks: [@Sendable (Result<H264Encoder.Encoded?, any Error>) -> Void] = []
+    private var callbacks: [@Sendable (Result<VideoEncoder.Encoded?, any Error>) -> Void] = []
     private var received: [Data] = []
     private var failures = 0
     var widths: [Int] { lock.withLock { submissions } }
     var packets: [Data] { lock.withLock { received } }
     var errors: Int { lock.withLock { failures } }
     func submit(
-        _ buffer: CVPixelBuffer, completion: @escaping @Sendable (Result<H264Encoder.Encoded?, any Error>) -> Void
+        _ buffer: CVPixelBuffer, completion: @escaping @Sendable (Result<VideoEncoder.Encoded?, any Error>) -> Void
     ) {
         lock.withLock {
             submissions.append(CVPixelBufferGetWidth(buffer))
             callbacks.append(completion)
         }
     }
-    func complete(_ result: Result<H264Encoder.Encoded?, any Error>) {
+    func complete(_ result: Result<VideoEncoder.Encoded?, any Error>) {
         let callback = lock.withLock { callbacks.removeFirst() }
         callback(result)
     }

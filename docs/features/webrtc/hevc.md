@@ -5,7 +5,8 @@ description: Design for sending H.265 (HEVC) to a WebRTC viewer — why and when
 # HEVC over WebRTC — "the same picture in fewer bits, when the viewer can take it"
 
 **Status:** the kit's part is BUILT (K1–K3: packetizer, codec choice, offer
-and answer); baguette's isn't (slices 4–7), so every viewer still gets
+and answer), and baguette's encoder is codec-blind (4a: `Codec`, `H264Codec`,
+`VideoEncoder`); H.265 itself isn't (4b–7), so every viewer still gets
 High-profile H.264. H.265 stays **opt-in** (`?codec=h265`) until slice 6
 measures it winning; if it doesn't, the default never changes.
 
@@ -119,7 +120,7 @@ record is built and no SPS is parsed.
  │      └── HEVCCodec  (Main, hvcC; reads it with HVCCParameterSets ◇)        │    │   (K1–K3)          │
  │      … AV1 later = one new type                                            │    └─────────▲──────────┘
  │                                                                            │              │ kind ↔ Codec
- │  VideoEncoder ◆ (today's H264Encoder) — codec-blind:                       │              │ (Codecs.of(kind))
+ │  VideoEncoder ◆ (was H264Encoder) — codec-blind:                       │              │ (Codecs.of(kind))
  │    opens the session with codec.codecType, sets codec.profile + tuning;    │              │
  │    on a keyframe takes the format description's codec.recordAtom as is     │              │
  │    → Encoded { description: record, kind, avcc }                           │              │
@@ -143,7 +144,7 @@ record is built and no SPS is parsed.
 **What dies:** `AVCDecoderConfigurationRecord.bytes(sps:pps:)` — baguette
 hand-building `avcC`, replaced by VideoToolbox's own record; `CompressedFrame`'s
 `sps` / `pps`, replaced by `configuration` (the record, on a keyframe); the name
-`H264Encoder`, and `.highProfileAutoLevel` as a fixed tuning step — the profile
+`H264Encoder` (now `VideoEncoder`), and `.highProfileAutoLevel` as a fixed tuning step — the profile
 is the codec's. **Stays:** `AVCCParameterSets` (now `H264Codec`'s reader, and
 still `VTH264Decoder`'s, which decodes a phone's stream); the socket path, H.264.
 

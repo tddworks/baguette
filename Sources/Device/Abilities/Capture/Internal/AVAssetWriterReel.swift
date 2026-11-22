@@ -22,7 +22,7 @@ import IOSurface
 /// live-stream / device-farm case because it would add an N+1th
 /// VideoToolbox session next to the one each booted device already runs
 /// for its live AVCC stream, and because an `ffmpeg -c copy` tap never
-/// sees the SPS/PPS `H264Encoder` emits on its first IDR. `baguette
+/// sees the SPS/PPS `VideoEncoder` emits on its first IDR. `baguette
 /// record` has no competing live stream and owns the encode from frame
 /// one, so neither objection applies. This type is not reachable from
 /// `baguette serve`.

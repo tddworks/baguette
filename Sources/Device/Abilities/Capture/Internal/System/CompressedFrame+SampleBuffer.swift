@@ -16,7 +16,13 @@ extension CompressedFrame {
         let format = keyframe ? CMSampleBufferGetFormatDescription(sample) : nil
         return CompressedFrame(
             avcc: Data(bytes: pointer, count: length), keyframe: keyframe,
-            sps: format.flatMap { parameterSet(0, of: $0) }, pps: format.flatMap { parameterSet(1, of: $0) })
+            records: format.map(records) ?? [:])
+    }
+
+    /// The decoder configuration records the format carries, as VideoToolbox made them.
+    private static func records(of format: CMFormatDescription) -> [String: Data] {
+        let extensions = CMFormatDescriptionGetExtensions(format) as? [String: Any]
+        return extensions?[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms as String] as? [String: Data] ?? [:]
     }
 
     private static func notSync(_ sample: CMSampleBuffer) -> Bool {
@@ -28,15 +34,6 @@ extension CompressedFrame {
         return CFDictionaryContainsKey(dictionary, Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque())
     }
 
-    private static func parameterSet(_ index: Int, of format: CMFormatDescription) -> Data? {
-        var pointer: UnsafePointer<UInt8>?
-        var size = 0
-        guard CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
-            format, parameterSetIndex: index, parameterSetPointerOut: &pointer,
-            parameterSetSizeOut: &size, parameterSetCountOut: nil, nalUnitHeaderLengthOut: nil
-        ) == noErr, let pointer else { return nil }
-        return Data(bytes: pointer, count: size)
-    }
 }
 
 /// A pixel buffer over a surface, without copying it.

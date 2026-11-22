@@ -2,7 +2,7 @@ import Foundation
 
 /// Encoder-latency knobs for the H.264 (AVCC) stream, as a pure value so
 /// the "what config do we want" decision is testable apart from the
-/// irreducible VideoToolbox calls that apply it (`H264Encoder`). The
+/// irreducible VideoToolbox calls that apply it (`VideoEncoder`). The
 /// `lowLatency` preset targets frames stalling in the browser's WebCodecs
 /// decoder queue: no reordering + low-latency rate control signal a
 /// minimal DPB, so the decoder stops holding frames back.
@@ -73,10 +73,11 @@ public enum CompressionProperty: Equatable, Sendable {
 }
 
 public extension H264Tuning {
-    /// Everything a new session is given, in the order it is given.
-    func properties(bitrate: Int, fps: Int32) -> [CompressionProperty] {
+    /// Everything a new session is given, in the order it is given — the
+    /// codec's `profile` second, after real-time mode.
+    func properties(bitrate: Int, fps: Int32, profile: CompressionProperty) -> [CompressionProperty] {
         var all: [CompressionProperty] = [
-            .realTime(realTime), .highProfileAutoLevel, .allowFrameReordering(allowFrameReordering),
+            .realTime(realTime), profile, .allowFrameReordering(allowFrameReordering),
             .averageBitRate(bitrate),
         ] + frameRateProperties(fps: fps)
         if let maxFrameDelayCount { all.append(.maxFrameDelayCount(maxFrameDelayCount)) }

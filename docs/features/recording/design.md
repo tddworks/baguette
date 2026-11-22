@@ -173,7 +173,7 @@ out. This argument is about the live-stream and device-farm case, and
 it is still correct — see the next section for why `baguette record`
 is not the same situation.
 
-1. **`ffmpeg -c copy` tap into AVCC** — `H264Encoder` emits SPS/PPS
+1. **`ffmpeg -c copy` tap into AVCC** — `VideoEncoder` emits SPS/PPS
    only on the first IDR; a recorder attaching mid-stream never saw
    them. The keep-alive pump duplicated the last surface every `1/fps`
    to keep `VideoDecoder` fresh, and `-c copy` propagated those

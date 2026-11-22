@@ -12,7 +12,7 @@ import Foundation
 /// **This is the one place server-side recording belongs.**
 /// `docs/features/recording/README.md` rejects server-side recording for the
 /// live-stream / device-farm case on two grounds — an `ffmpeg -c copy`
-/// tap never sees the SPS/PPS `H264Encoder` emits only on its first IDR,
+/// tap never sees the SPS/PPS `VideoEncoder` emits only on its first IDR,
 /// and a parallel encode adds an N+1th VideoToolbox session next to the
 /// one every booted device already runs for its live stream, which makes
 /// every farm tile stutter. A standalone `record` has no competing live
