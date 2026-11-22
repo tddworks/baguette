@@ -2246,8 +2246,15 @@
     button.style.cssText =
         'margin-left:6px;padding:2px 10px;border:1px solid #dbeafe;border-radius:99px;' +
         'background:#eff6ff;color:#2563eb;font-size:10.5px;font-weight:700;cursor:pointer';
-    button.addEventListener('click', () => { void showMacFramePicker(button); });
-    badge.insertAdjacentElement('afterend', button);
+    // The badge sits inside the header's link back to the device list: the
+    // button goes after that link, and its click goes no further, so
+    // opening the picker never leaves the page.
+    button.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void showMacFramePicker(button);
+    });
+    (badge.closest('a') || badge).insertAdjacentElement('afterend', button);
   }
 
   /// The frames this display fits — asked of the server by the display's own
