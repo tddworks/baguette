@@ -25,10 +25,13 @@ struct VirtualDisplayCommand: ParsableCommand {
         SharedScreenShape(points: Size(width: Double(width), height: Double(height)))
     }
 
-    func run() throws {
-        let announcement = VirtualDisplayHold.make(named: name, shape: shape, serial: serial)
-        VirtualDisplayLife.say(announcement.line)
+    /// Make the display (`make`), say which it made (`say`), and hold it
+    /// (`holdOn`); with none made, say why and exit failed.
+    func hold(make: (String, SharedScreenShape, UInt32) -> VirtualDisplayAnnouncement,
+              say: (String) -> Void, holdOn: () -> Void) throws {
+        let announcement = make(name, shape, serial)
+        say(announcement.line)
         guard case .ready = announcement else { throw ExitCode.failure }
-        VirtualDisplayLife.holdUntilOrphaned()
+        holdOn()
     }
 }

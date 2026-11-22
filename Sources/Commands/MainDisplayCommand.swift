@@ -16,7 +16,9 @@ struct MainDisplayCommand: ParsableCommand {
 
     @Option(name: .long) var display: UInt32
 
-    func run() throws {
-        guard MainDisplayMove(configuration: CoreGraphicsDisplayConfiguration()).makeMain(display) else { throw ExitCode.failure }
+    /// Make `display` main in `configuration`; exit failed when it never takes.
+    func makeMain(with configuration: any DisplayConfiguration,
+                  pause: @escaping @Sendable (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }) throws {
+        guard MainDisplayMove(configuration: configuration, pause: pause).makeMain(display) else { throw ExitCode.failure }
     }
 }

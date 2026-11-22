@@ -35,6 +35,22 @@ struct MacInputTests {
         #expect(desktop.posted == [.mouseDown(Point(x: 5, y: 6)), .pause(0), .mouseUp(Point(x: 5, y: 6))])
     }
 
+    @Test func `should drag the Mac's mouse as a finger lands, moves and lifts`() {
+        let desktop = Desktop()
+        let mac = input(on: desktop)
+        #expect(mac.touch1(phase: .down, at: Point(x: 1, y: 2), size: size, edge: nil))
+        #expect(mac.touch1(phase: .move, at: Point(x: 3, y: 4), size: size, edge: nil))
+        #expect(mac.touch1(phase: .up, at: Point(x: 3, y: 4), size: size, edge: nil))
+        #expect(desktop.posted == [.mouseDown(Point(x: 1, y: 2)), .mouseDragged(Point(x: 3, y: 4)), .mouseUp(Point(x: 3, y: 4))])
+    }
+
+    @Test func `should land a swipe on the Mac as a drag from start to end`() {
+        let desktop = Desktop()
+        #expect(input(on: desktop).swipe(from: Point(x: 0, y: 0), to: Point(x: 60, y: 0), size: size, duration: 0))
+        #expect(desktop.posted.first == .mouseDown(Point(x: 0, y: 0)))
+        #expect(desktop.posted.last == .mouseUp(Point(x: 60, y: 0)))
+    }
+
     @Test func `should report a tap unsent when the Mac refuses its events`() {
         #expect(!input(on: Desktop(accepts: false)).tap(at: Point(x: 5, y: 6), size: size, duration: 0, edge: nil))
     }

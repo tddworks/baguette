@@ -29,14 +29,6 @@ final class MacDisplays: Devices, @unchecked Sendable {
         self.madePixels = madePixels
     }
 
-    /// This Mac's own displays, watched through ScreenCaptureKit and driven
-    /// through the window server.
-    static func onThisMac(madePixels: @escaping @Sendable (String) -> Size? = { _ in nil }) -> MacDisplays {
-        MacDisplays(displays: { HostDisplayList.all() }, feed: { ScreenCaptureKitFeed() },
-                    events: WindowServerEvents(server: CGEventWindowServer()),
-                    madePixels: madePixels, bounds: HostDisplayList.bounds(of:))
-    }
-
     var all: [any Device] {
         displays().map { MacDisplay(info: $0, feed: feed, events: events, madePixels: madePixels, bounds: bounds) }
     }

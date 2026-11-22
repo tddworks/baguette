@@ -2,11 +2,11 @@ import BaguetteDevice
 import Darwin
 import Foundation
 
-/// A `virtual-display` process's life: its one line to the server, then
-/// waiting — its display lives as long as it does. SIGTERM (the share ended)
-/// ends it by default; so does its server going away, which leaves it
-/// orphaned to launchd. Integration-only.
-enum VirtualDisplayLife {
+/// A process `serve` started (`virtual-display`, `pointer-shapes`): its lines
+/// to the server, on stdout, and its life — as long as the server's. SIGTERM
+/// (the share ended) ends it by default; so does its server going away, which
+/// leaves it orphaned to launchd. Integration-only.
+enum ServeChild {
     static func say(_ line: String) {
         print(line)
         fflush(stdout)

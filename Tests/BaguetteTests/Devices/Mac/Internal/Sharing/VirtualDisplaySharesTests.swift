@@ -39,9 +39,10 @@ struct VirtualDisplaySharesTests {
         /// its UUID named by its serial — as CoreGraphics names it.
         /// `seenAsMain`: the Mac reports a display as main the moment it is
         /// made, as macOS briefly does.
-        init(makes: Bool = true, seenAsMain: Bool = false) {
+        /// `makesOnly`: how many displays the Mac makes before it makes no more.
+        init(makes: Bool = true, makesOnly limit: Int = .max, seenAsMain: Bool = false) {
             given(displays).create(named: .any, shape: .any, serial: .any).willProduce { [self] name, shape, serial in
-                guard makes else { return nil }
+                guard makes, created.count < limit else { return nil }
                 let made = MockVirtualDisplay()
                 let id = lock.withLock { () -> UInt32 in
                     _created.append((name, shape, serial))
@@ -66,6 +67,15 @@ struct VirtualDisplaySharesTests {
         var shares: VirtualDisplayShares { VirtualDisplayShares(displays: displays, arrangement: arrangement) }
 
         func setMain(_ id: UInt32) { lock.withLock { _main = id } }
+    }
+
+    @Test func `should end a share whose display the Mac won't make again in the new shape`() {
+        let mac = Mac(makesOnly: 1)
+        let shares = mac.shares
+        let id = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .extra)!
+        #expect(!shares.reshape(id, to: Self.turned))
+        #expect(!shares.isSharing(id))
+        #expect(mac.removed == 1)
     }
 
     @Test func `should keep a later main share main when an earlier one ends, and give main back when the last one does`() {

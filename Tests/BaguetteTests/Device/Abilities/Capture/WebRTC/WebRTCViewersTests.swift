@@ -102,6 +102,19 @@ private struct Rig {
 
 @Suite("WebRTCViewers")
 struct WebRTCViewersTests {
+    @Test func `should stream a viewer through a stream of its own when given no other`() throws {
+        let rig = Rig()
+        let screen = MockScreen()
+        given(screen).start(onFrame: .any).willReturn()
+        given(screen).stop().willReturn()
+        let (datagrams, handshake) = (rig.datagrams, rig.handshake)
+        let viewers = WebRTCViewers(ticking: nil, connect: { _ in (datagrams, handshake) }, encodable: [.h264])
+        let (id, _) = try viewers.admit(offer: offer, on: screen)
+        #expect(viewers.count == 1)
+        try viewers.find(id).hangUp()
+        #expect(viewers.count == 0)
+    }
+
     @Test func `should answer with H.265 when it was asked for and the offer carries it`() throws {
         let rig = Rig()
         let (_, answer) = try rig.admit(bothCodecs, codec: .h265)

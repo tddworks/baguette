@@ -117,6 +117,21 @@ struct DeviceAVCCFrameTests {
         }
     }
 
+    @Test func `should report a frame that failed to render, through the real encoders`() {
+        let failed = Box()
+        let encoder = DeviceAVCCEncoder(config: .default, quality: 0.7, deliver: { _ in }, onError: { _ in failed.mark() })
+        encoder.receive(.failure(DeviceModelError.renderFailed))
+        encoder.stop()
+        #expect(failed.marked)
+    }
+
+    private final class Box: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _marked = false
+        var marked: Bool { lock.withLock { _marked } }
+        func mark() { lock.withLock { _marked = true } }
+    }
+
     private static func encoder(_ state: AVCCState) -> DeviceAVCCEncoder {
         DeviceAVCCEncoder(
             copy: { surface in

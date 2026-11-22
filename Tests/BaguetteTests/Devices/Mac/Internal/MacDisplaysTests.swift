@@ -65,6 +65,17 @@ struct MacDisplaysTests {
         #expect(input.display() == DisplayEvents(bounds: moved.bounds))
     }
 
+    @Test func `should watch a display baguette didn't make at the size the Mac reports`() throws {
+        let screen = try devices([Self.studio]).all[0].abilities.require(.screen)
+        #expect(screen is MacScreen)
+    }
+
+    @Test func `should land a display's touches where it was listed when the Mac can't say where it is now`() throws {
+        let display = MacDisplay(info: Self.studio, feed: { MockDisplayFeed() }, events: MockHostEvents())
+        let input = try #require(try display.abilities.require(.touch) as? MacInput)
+        #expect(input.display() == DisplayEvents(bounds: Self.studio.bounds))
+    }
+
     final class Listed: @unchecked Sendable {
         private let lock = NSLock()
         private var displays: [MacDisplayInfo]

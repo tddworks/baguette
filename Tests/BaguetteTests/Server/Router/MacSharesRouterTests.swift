@@ -58,6 +58,25 @@ struct MacSharesRouterTests {
         }
     }
 
+    @Test func `should refuse to reshape a share to a screen that isn't one`() async throws {
+        let shares = MockScreenShares()
+        try await InProcessServer(screenShares: shares).test { client in
+            let bad = try await client.execute(uri: "/mac/shares/SHARED-UUID", method: .put, body: ByteBuffer(string: "{}"))
+            #expect(bad.status == .badRequest)
+        }
+    }
+
+    @Test func `should say the share ended when its display won't take the new shape`() async throws {
+        let shares = MockScreenShares()
+        given(shares).isSharing(.any).willReturn(true)
+        given(shares).reshape(.any, to: .any).willReturn(false)
+        try await InProcessServer(screenShares: shares).test { client in
+            let failed = try await client.execute(uri: "/mac/shares/SHARED-UUID", method: .put, body: Self.body)
+            #expect(failed.status == .internalServerError)
+            #expect(failed.json["error"] as? String == "the display didn't take the shape")
+        }
+    }
+
     @Test func `should end a share through any screen shares when its viewer leaves`() async throws {
         let shares = MockScreenShares()
         given(shares).end(.any).willReturn()

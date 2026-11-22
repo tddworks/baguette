@@ -13,11 +13,4 @@ struct PointerShapesCommand: ParsableCommand {
         abstract: "Say the Mac's pointer shape as it changes (run by serve)",
         shouldDisplay: false
     )
-
-    func run() throws {
-        PointerShapeWatch.sayChanges { line in
-            print(line)
-            fflush(stdout)
-        }
-    }
 }

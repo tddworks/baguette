@@ -71,7 +71,11 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
         let old = share.display.id
         share.display.remove()
         guard let display = displays.create(named: Self.name(share.viewer), shape: shape, serial: share.serial) else {
-            end(id)
+            // Not made again: the share ends — its display is already gone, and main already given back.
+            lock.withLock {
+                shares[id] = nil
+                handBack(from: old, to: share.previousMain)
+            }
             return false
         }
         if wasMain { _ = arrangement.makeMain(display.id) }

@@ -136,7 +136,7 @@ it. ScreenCaptureKit scales at the source, so a 5K display is never copied at 5K
 ### 3.2 · Sharing to a viewer's shape
 
 ```
- Viewer (/mac/share)              Server                                   Helper processes
+ Viewer (/mac/share)              Server                                   Child processes
  ┌──────────────────────┐ POST    ┌───────────────────────────────┐ spawn  ┌─────────────────────────────┐
  │ visible size, pixel  │ /mac/   │ ShareRequest ◇ → Shared-      │ ─────▶ │ baguette virtual-display    │
  │ ratio, room, use     │ shares  │ ScreenShape ◇                 │ ready  │  makes ONE display, chooses │
@@ -152,7 +152,7 @@ it. ScreenCaptureKit scales at the source, so a 5K display is never copied at 5K
  leave (pagehide)           → DELETE /mac/shares/<id>: main back → remove → the process ends, the display goes in ½ s
 ```
 
-Why helper processes, and why in that order, is §7: each step is a measured
+Why child processes, and why in that order, is §7: each step is a measured
 macOS behaviour. The server stays a reader — it never makes a display and never
 changes the arrangement — because a process that does either stops seeing
 displays added later, and the server must see them to list and stream them.
@@ -258,7 +258,7 @@ pointer.setShape({ ...shape, cursor: PointerShape.cursor(shape, density) })
 | only a device with a pointer of its own takes a hover; a page draws the pointer and sends hovers for any device that can `pointer` | each family's `Abilities` · the page's `mountPointer` |
 | a shared display is the viewer's shape — its points × room, drawn at 2×, long side ≤ 4096 px | `SharedScreenShape` |
 | a share's display keeps its id through a turn; main is given back, before the old display goes | `ScreenShares` |
-| the server never makes a display nor changes the arrangement; helper processes do | `ChildVirtualDisplays` · `ChildDisplayArrangement` |
+| the server never makes a display nor changes the arrangement; child processes of `serve` do | `ChildVirtualDisplays` · `ChildDisplayArrangement` |
 | removing a display finishes when the Mac no longer lists it | `ChildVirtualDisplays` |
 | the pointer shape is read only by a process whose run loop runs, while anyone watches; each image is fetched once by id | `PointerShapes` · `PointerShape` |
 | a frame fits a display only of its screen's shape, within 2%; a display shows with none until one is picked | `MacFrame` · `MacDisplayLooks` |
@@ -326,10 +326,10 @@ Resources/Web/  local-pointer.js · pointer-shape.js · baguette/gestures/hover-
 | Measured | So |
 |---|---|
 | `CGVirtualDisplay` (private; what DeskPad and BetterDisplay use) makes a display of any size; its mode is in **points** | `SharedScreenShape` asks for its points, `maxPixels` its pixels |
-| it starts on the **1×** mode though offered a 2× one | the helper chooses the 2× mode by name (`SharedScreenShape.isMode`) |
+| it starts on the **1×** mode though offered a 2× one | the `virtual-display` process chooses the 2× mode by name (`SharedScreenShape.isMode`) |
 | a process can choose the mode of only the **first** virtual display it makes; later ones are invisible to its own CoreGraphics | one `baguette virtual-display` process per display |
 | a display takes its modes **once**; new settings and `rotation` change nothing, and a display set up twice isn't freed on release | turning makes a new display; each is set up once |
-| a display goes within ½ s of its last reference — from an autorelease pool, or its process ending | removing ends the helper and waits until it's unlisted |
+| a display goes within ½ s of its last reference — from an autorelease pool, or its process ending | removing ends its process and waits until it's unlisted |
 | the UUID follows from vendor `0xBA6E`, product and serial | the same serial on a turn keeps the id; two viewers, two serials |
 | once a process **changes the arrangement**, displays added later never appear in its own list (others see them in ½ s) | `baguette main-display` changes it; the server only reads |
 | a just-made display reads as **main** for a moment | the previous main is read before the display is made |
