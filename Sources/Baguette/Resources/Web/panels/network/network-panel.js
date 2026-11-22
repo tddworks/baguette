@@ -14,6 +14,7 @@ function markArmed(control, armed, summary) {
 
 export const networkPanel = {
   name: 'network', needs: 'network', slot: 'Network', attribute: 'network',
+  cluster: 'simulate', label: 'Network',
   mount(host, { device, control }) {
     return mountView('NetworkPanel', host, device, {
       refreshes: true,

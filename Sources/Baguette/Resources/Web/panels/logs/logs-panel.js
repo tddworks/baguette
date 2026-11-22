@@ -6,6 +6,8 @@ export const logsPanel = {
   needs: 'logs',
   slot: 'Logs',
   attribute: 'logs',
+  cluster: 'inspect',
+  label: 'Logs',
   mount(host, { device }) {
     return new window.LogPanel(host, { udid: device.id, level: 'info' });
   },

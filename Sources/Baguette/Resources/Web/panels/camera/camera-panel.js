@@ -4,6 +4,7 @@ import { mountView } from '../sheet-view.js';
 
 export const cameraPanel = {
   name: 'camera', needs: 'camera', slot: 'Camera', attribute: 'camera',
+  cluster: 'simulate', label: 'Camera',
   mount(host, { device, control }) {
     return mountView('CameraPanel', host, device, {
       prepare: (view) => {

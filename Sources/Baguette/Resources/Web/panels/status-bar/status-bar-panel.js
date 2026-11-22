@@ -3,5 +3,6 @@ import { mountView } from '../sheet-view.js';
 
 export const statusBarPanel = {
   name: 'statusBar', needs: 'statusBar', slot: 'StatusBar', attribute: 'statusbar',
+  cluster: 'simulate', label: 'Status bar',
   mount: (host, { device }) => mountView('StatusBarPanel', host, device),
 };

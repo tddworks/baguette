@@ -104,3 +104,13 @@ test('should watch the device for a throttle armed elsewhere, before the network
     assert.equal(marked.attributes.title, 'Network conditioning on — Edge');
   });
 });
+
+test('should place each panel\'s control in the toolbar cluster it belongs to, under its own label', async () => {
+  const { logsPanel } = await import('../../../Sources/Baguette/Resources/Web/panels/logs/logs-panel.js');
+  const placed = [statusBarPanel, locationPanel, notifyPanel, cameraPanel, networkPanel, logsPanel, defaultsPanel]
+    .map((panel) => [panel.cluster, panel.label]);
+  assert.deepEqual(placed, [
+    ['simulate', 'Status bar'], ['simulate', 'Location'], ['simulate', 'Notification'], ['simulate', 'Camera'],
+    ['simulate', 'Network'], ['inspect', 'Logs'], ['inspect', 'Defaults'],
+  ]);
+});

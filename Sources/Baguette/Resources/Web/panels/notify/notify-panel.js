@@ -3,5 +3,6 @@ import { mountView } from '../sheet-view.js';
 
 export const notifyPanel = {
   name: 'notify', needs: 'notify', slot: 'Notify', attribute: 'notify',
+  cluster: 'simulate', label: 'Notification',
   mount: (host, { device }) => mountView('NotifyPanel', host, device),
 };

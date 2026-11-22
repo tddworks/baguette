@@ -5,5 +5,6 @@ import { mountView } from '../sheet-view.js';
 
 export const locationPanel = {
   name: 'location', needs: 'location', slot: 'Location', attribute: 'location',
+  cluster: 'simulate', label: 'Location',
   mount: (host, { device }) => mountView('LocationPanel', host, device, { refreshes: true }),
 };

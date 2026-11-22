@@ -37,8 +37,7 @@
   // device's kind). Both are read at boot; the URL's tree decides neither.
   let device = null;
   let deviceAbilities = null;
-  const can = (ability) => deviceAbilities === null
-      || window.Baguette._DeviceAbilities.has(deviceAbilities, ability);
+  const can = (ability) => deviceAbilities === null || deviceAbilities.includes(ability);
 
   // --- State -------------------------------------------------------
   let session = null;
@@ -1792,27 +1791,18 @@
     {
       id: 'control', label: 'Control', fold: 4, icon: 'home',
       members: [
-        { id: 'nativeRotate', label: 'Rotate', role: 'action' },
-        { id: 'nativeHome', label: 'Home', role: 'action' },
-        { id: 'nativeAppSwitcher', label: 'App switcher', role: 'action' },
-        { id: 'nativeShake', label: 'Shake', role: 'action' },
+        { id: 'nativeRotate', label: 'Rotate', role: 'action', needs: 'orientation' },
+        { id: 'nativeHome', label: 'Home', role: 'action', needs: 'press' },
+        { id: 'nativeAppSwitcher', label: 'App switcher', role: 'action', needs: 'press' },
+        { id: 'nativeShake', label: 'Shake', role: 'action', needs: 'shake' },
       ],
     },
-    {
-      id: 'simulate', label: 'Simulate', fold: 1, icon: 'wave',
-      members: [
-        { id: 'nativeStatusBarToggle', label: 'Status bar', role: 'state' },
-        { id: 'nativeLocationToggle', label: 'Location', role: 'state' },
-        { id: 'nativeNotifyToggle', label: 'Notification', role: 'state' },
-        { id: 'nativeCameraToggle', label: 'Camera', role: 'state' },
-      ],
-    },
+    // Each panel places its own control here (its `cluster`): page/page-panels.js.
+    { id: 'simulate', label: 'Simulate', fold: 1, icon: 'wave', members: [] },
     {
       id: 'inspect', label: 'Inspect', fold: 2, icon: 'glass',
       members: [
-        { id: 'nativeAxToggle', label: 'Accessibility', role: 'state' },
-        { id: 'nativeLogsToggle', label: 'Logs', role: 'state' },
-        { id: 'nativeDefaultsToggle', label: 'Defaults', role: 'state' },
+        { id: 'nativeAxToggle', label: 'Accessibility', role: 'state', needs: 'accessibility' },
       ],
     },
     {
@@ -1873,18 +1863,11 @@
 
     // Only the controls this device has an ability for; a cluster left
     // with none goes too, and with it its fold menu.
-    if (deviceAbilities !== null) {
-      for (let i = TOOLBAR_CLUSTERS.length - 1; i >= 0; i--) {
-        const cluster = TOOLBAR_CLUSTERS[i];
-        cluster.members = cluster.members.filter((member) => {
-          const keep = window.Baguette._DeviceAbilities.shows(member.id, deviceAbilities);
-          const el = document.getElementById(member.id);
-          if (!keep && el) el.remove();
-          return keep;
-        });
-        if (!cluster.members.length) TOOLBAR_CLUSTERS.splice(i, 1);
-      }
-    }
+    // The device's toolbar: each control only when it can do what the control
+    // needs, every panel's in its own cluster (device/toolbar.js).
+    const toolbar = window.Baguette._PagePanels.toolbar(TOOLBAR_CLUSTERS, deviceAbilities);
+    toolbar.hidden.forEach((id) => { const el = document.getElementById(id); if (el) el.remove(); });
+    TOOLBAR_CLUSTERS.splice(0, TOOLBAR_CLUSTERS.length, ...toolbar.clusters);
 
     // The scroller and its chevrons are what this replaces.
     ['nativeScrollLeft', 'nativeScrollRight'].forEach((id) => {
