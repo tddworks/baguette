@@ -1,6 +1,6 @@
 // WhepSession — the phone plane over WebRTC (WHEP, draft-ietf-wish-whep), with the same
 // face as StreamSession (start / stop / send), so the page swaps one for the
-// other by format. The picture arrives as H.264 (or H.265, `codec: 'h265'`) in a hidden <video> and is
+// other by format. The picture arrives as H.265 when the browser offers it, else H.264 (`codec:` picks), in a hidden <video> and is
 // painted onto the session's canvas frame by frame, so everything that reads
 // the canvas (recording, the inspector, sizing) keeps working. Input and
 // stream control ride the viewer's control socket, as they ride the stream
@@ -66,8 +66,11 @@
   };
 
   WhepSession.prototype.start = async function () {
-    const { udid, canvas, display, congestion, codec, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
+    const { udid, canvas, display, congestion, onSize, onFps, onLog, onText, onOpen, onError, onPaint } = this.opts;
     const log = onLog || (() => {});
+    // H.265 when the browser offers it, H.264 otherwise (`auto`, the default
+    // since slice 6 measured it costing nothing); `codec: 'h264'` opts out.
+    const codec = this.opts.codec || 'auto';
     this.alive = true;
 
     // Its STUN servers first: the browser gathers its own public address with

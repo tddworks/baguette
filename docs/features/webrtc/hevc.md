@@ -10,8 +10,9 @@ baguette): the encoder is codec-blind (`Codec`, `H264Codec`, `HEVCCodec`,
 answered with (`Codecs.of(kind)`), and `?codec=` reaches it from the WHEP
 request or the device page. Checked end to end (2026-11-22): headless Chrome 157
 with `?codec=h265` decoded a 2560×1440 Mac display as `video/H265` (299 frames
-in 6 s). Nothing asked stays High-profile H.264. H.265 stays **opt-in** until
-slice 6 measures it winning; if it doesn't, the default never changes.
+in 6 s). **The page asks `auto` by default** (slice 7): a viewer gets H.265 when
+its browser offers it and H.264 otherwise; `?codec=h264` opts out. A WHEP client
+that asks nothing still gets High-profile H.264.
 
 This document owns **why baguette would send H.265, how the live view asks for
 it and encodes it, and how it is decided**. The codec choice, the SDP and the
@@ -176,7 +177,7 @@ sender.send(EncodedFrame(avcc: payload, isKeyframe: true, parameterSets: sets))
 | everything that isn't one of a codec's four answers is codec-blind | `VideoEncoder` · `WebRTCViewer` |
 | a viewer's encoder makes exactly the codec its sender was answered with | `WebRTCViewer` (one `VideoCodec`, given to both) |
 | the WebSocket (AVCC) path stays H.264 | `StreamFormat.avcc` for sockets |
-| H.265 is the default only once measured to win (slice 6) | this doc — a decision, not code |
+| the page asks `auto` unless told a codec; a client that asks nothing gets H.264 | `WhepSession` (the page) · `CodecChoice` (the server) |
 | a phone streams H.264 to baguette, never HEVC | `MediaStreamOffer` — untouched |
 
 The codec choice itself — and its replacing CANONICAL_MODEL's "an offer with no
@@ -195,7 +196,7 @@ then:
 | 4d | `VideoToolboxSession` opens the codec it's told | BUILT with 4a/4b: the session has opened `codec.codecType` since 4a; 4b's `.system` test runs the real HEVC encoder and reads its `hvcC` |
 | 5 | wiring: `?codec=` from the WHEP request through `WebRTCViewers` to the viewer's stream and sender | BUILT: the route's tests (`?codec=h265` answers `H265/90000`, nothing asked `H264/90000`, an unknown codec refused), `WebRTCViewers`' (H.264 when this Mac can't encode H.265), the viewer's (its stream made in its codec), the page's (`codec=` asked, H.265 preferred); and headless Chrome decoding it |
 | 6 | **measure**: the same scene, H.264 vs H.265 — the LAN, then a phone on cellular over Tailscale | the bitrate congestion control settles on, text sharpness at it, glass-to-glass latency, recovery after induced loss |
-| 7 | only if 6 wins: `auto` prefers H.265, the page asks `auto`; docs + CHANGELOG | — |
+| 7 | BUILT: the page asks `auto` (`WhepSession`, H.265 first in its offer); `?codec=h264` opts out. Decided on slice 6: it never cost anything and leaned smoother | the page's tests: no codec asks `auto` and prefers H.265; `h264` asks it alone |
 
 ### Slice 6, measured so far
 
@@ -243,14 +244,28 @@ One more H.265 run showed no picture in 15 s. The server sent its keyframes, but
 the browser never asked for a resend or a keyframe, so nothing arrived. Three
 repeat runs all started, so it reads as the throttle catching the connection's
 setup, not H.265. On a slow link H.265 leans better, with less freezing and
-a shorter buffer, but not in every run. Slice 7 (`auto` by default) is
-plausible but not yet proven; a phone on real cellular is the next evidence.
+a shorter buffer, but not in every run.
+
+On a phone on real cellular over Tailscale (2026-11-22, iPhone Safari, Wi-Fi
+off, one run each), the link carried the full ceiling for both:
+
+| | H.264 | H.265 |
+|---|---|---|
+| bitrate / fps | 7.86 Mbit/s / 55.1 | 8.03 Mbit/s / 57.0 |
+| freezes | 1 (235 ms) | none |
+| keyframes asked | 2 | 0 |
+| first frame | 1,565 ms | 2,762 ms (790 vs 835 on Wi-Fi, so noise) |
+
+So across every link measured, H.265 costs nothing and leans smoother, and the
+link was short of bandwidth only when throttled on purpose. Slice 7 (`auto` by
+default) is a judgement call, not a measured necessity.
 
 ## 6 · Open questions
 
-- **Does H.265 win on a real slow link?** On a capped one it leans better
-  (less freezing, a shorter buffer) but not in every run (slice 6, measured).
-  A phone on real cellular decides slice 7.
+- ~~**Should `auto` (H.265 when offered) be the default?**~~ Yes, for the page
+  (slice 7, 2026-11-22). Every link measured said it costs nothing and leans
+  smoother. No real link was short of bandwidth (cellular carried 8 Mbit/s), so it
+  was decided rather than forced. `?codec=h264` opts out.
 - ~~**Does iPhone Safari offer and decode H.265 over WebRTC?**~~ Yes. An
   iPhone sharing this Mac offered `H265/90000 profile-id=1` first and was sent
   H.265 (2026-11-22). Chrome 157 offers it too.
