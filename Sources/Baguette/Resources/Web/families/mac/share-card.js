@@ -103,6 +103,66 @@ export function mountShareCard(host, browser, open) {
   });
 }
 
+/**
+ * Sharing, offered as a device the list shows beside the Mac's displays: the
+ * display this Mac will make for this screen. Its action asks the room and the
+ * use, then makes it and opens it. `run(anchor)` opens that choice by the
+ * button that asked.
+ */
+export function shareOffer(browser = null, open = null) {
+  return {
+    listing: {
+      id: 'this-mac', name: 'This Mac', state: 'ready', status: 'Ready to share', abilities: ['share'],
+      kind: { platform: 'macOS', reality: 'physical', model: 'A display for this screen', os: 'macOS' },
+    },
+    action: 'Share…',
+    run: (anchor) => openShareChoice(anchor, browser || pageBrowser(), open || ((url) => location.assign(url))),
+  };
+}
+
+const CHOICE_STYLE =
+  'position:absolute;z-index:80;display:flex;flex-direction:column;gap:8px;min-width:240px;padding:12px;' +
+  'background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.14);' +
+  'font:400 12.5px/1.4 -apple-system,BlinkMacSystemFont,Inter,sans-serif;color:#1f2937';
+
+/** The room and use, by `anchor`; sharing makes the display and opens it. */
+function openShareChoice(anchor, browser, open) {
+  const was = document.getElementById('macShareChoice');
+  if (was) { was.remove(); return; }
+  const pop = document.createElement('form');
+  pop.id = 'macShareChoice';
+  pop.style.cssText = CHOICE_STYLE;
+  pop.innerHTML = `
+    <label style="display:flex;flex-direction:column;gap:4px;font-weight:700">Room
+      <select name="room" class="asc-sim-select">
+        <option value="largerText">Larger text — the Mac's text at this device's size</option>
+        <option value="standard" selected>Standard — sharp on this screen</option>
+        <option value="moreSpace">More space — the most room</option>
+      </select></label>
+    <label style="display:flex;flex-direction:column;gap:4px;font-weight:700">Use as
+      <select name="use" class="asc-sim-select">
+        <option value="main" selected>Main display — menu bar, Dock, new windows</option>
+        <option value="extra">Extended display — beside the Mac's own</option>
+      </select></label>
+    <button type="submit" class="asc-sim-button">Share</button>
+    <span class="mac-share-error" role="alert" style="color:#dc2626"></span>`;
+  pop.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const button = pop.querySelector('button');
+    button.disabled = true;
+    try {
+      open(await startShare({ room: pop.room.value, use: pop.use.value }, browser));
+    } catch (failure) {
+      pop.querySelector('.mac-share-error').textContent = failure.message;
+      button.disabled = false;
+    }
+  });
+  const box = anchor.getBoundingClientRect();
+  pop.style.top = (box.bottom + window.scrollY + 6) + 'px';
+  pop.style.left = Math.max(8, box.right + window.scrollX - 260) + 'px';
+  document.body.appendChild(pop);
+}
+
 /** This page, as the card sees it. */
 export function pageBrowser() {
   return {

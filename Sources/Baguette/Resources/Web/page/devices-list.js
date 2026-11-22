@@ -209,8 +209,15 @@
       os: kind.os || '',
       state: device.state || '',
       reason: device.reason || '',
+      status: device.status || '',
       abilities: device.abilities || [],
     };
+  }
+
+  /** What families offer beyond the server's list (a display this Mac can
+   *  make for this screen): each a device listing, with its own action. */
+  function offers() {
+    return (window.Baguette && window.Baguette._ListOffers) || [];
   }
 
   /** What a device is, in a few words: "Simulator", "Emulator", or its model on a real one. */
@@ -221,6 +228,7 @@
   }
 
   function stateLabel(device) {
+    if (device.status) return device.status;
     switch (device.state) {
       case 'ready': return 'Running';
       case 'starting': return 'Starting';
@@ -232,6 +240,10 @@
 
   /** The row's controls, from what the device can do. */
   function actionsOf(device) {
+    // An offered device acts as its family says.
+    if (device.offer) {
+      return `<button type="button" class="asc-sim-button" data-offer-id="${escapeHTML(device.id)}">${escapeHTML(device.offer.action)}</button>`;
+    }
     const can = (ability) => device.abilities.includes(ability);
     const actions = [];
     if (device.state === 'ready' && can('screen')) {
@@ -361,7 +373,8 @@
     const response = await fetch('/devices.json', { cache: 'no-store' });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const json = await response.json();
-    return (json.devices || []).map(rowOf);
+    return (json.devices || []).map(rowOf)
+      .concat(offers().map((offer) => ({ ...rowOf(offer.listing), offer })));
   }
 
   async function loadSimDeviceList() {
@@ -439,12 +452,21 @@
       return;
     }
 
+    const offered = event.target.closest?.('[data-offer-id]');
+    if (offered) {
+      const offer = offers().find((o) => o.listing.id === offered.dataset.offerId);
+      if (offer) offer.run(offered);
+      return;
+    }
+
     const button = event.target.closest?.('[data-sim-action]');
     if (!button) return;
     handleAction(button.dataset.simAction, button.dataset.simId);
   });
 
   window.loadSimDeviceList = loadSimDeviceList;
+  // A family's offers can arrive after the list did.
+  window.addEventListener('baguette:offers', () => loadSimDeviceList());
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loadSimDeviceList, { once: true });

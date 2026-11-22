@@ -14,7 +14,7 @@ For releases prior to this changelog, see the
 - `POST /devices/:udid/input` taps land ~35 ms sooner (no wait on the Android tools listing devices); live streams encode a changed screen at once and refresh a still one on a steady beat (~14 ms; 53 frames shown/s, was 41).
 
 ### Added
-- The devices page (`/simulators`) shows a **Share this Mac here** card when `serve --share-mac` is on: share this Mac to the device you're on without leaving the list; `/mac/share` still works. → [docs](docs/features/web-page/design.md) ([#157](https://github.com/tddworks/baguette/pull/157))
+- The devices page (`/simulators`) lists **This Mac** as a device to share when `serve --share-mac` is on: **Share…** makes a display for the screen you're on and opens it; `/mac/share` still works. → [docs](docs/features/web-page/design.md) ([#157](https://github.com/tddworks/baguette/pull/157))
 - `baguette serve --share-mac` and `baguette list --mac` show this Mac's displays as devices: streamed, recorded, screenshotted and driven (click, drag, scroll, keys, typing) like a simulator. → [docs](docs/features/mac-screen/README.md) ([#156](https://github.com/tddworks/baguette/pull/156))
 - A Mac display page's **Frame** button shows it in a MacBook Pro 14" or iMac 27" frame that fits its shape, or none (the default); `screenshot-bezel.png?chrome=` frames a still in the pick. → [docs](docs/features/mac-screen/README.md#frames) ([#156](https://github.com/tddworks/baguette/pull/156))
 - The device page's **WebRTC** view streams H.265 when the browser offers it (Chrome, iPhone Safari), H.264 otherwise: no cost measured, a little smoother on slow links. `?codec=h264` forces H.264. → [docs](docs/features/webrtc/hevc.md) ([#156](https://github.com/tddworks/baguette/pull/156))

@@ -191,15 +191,19 @@ old `window.X`, and an old IIFE may be given a module's export through
 
 ### Sharing this Mac, from the devices page
 
-Today a viewer opens a separate page, `/mac/share`, to share this Mac to their
-device. The share belongs on the **devices page** instead, beside the Mac's
-displays it creates one of: a **Share this Mac here** card, with the same room
-and use choices, that makes the display and opens it — the same page the
-viewer picks every other device from. Its code is the Mac family's
-(`families/mac/share.js`), shown only when the server shares the Mac.
+A share is a device the Mac can make: a display shaped to the viewer's
+screen. So the devices page offers it as one — a row beside the Mac's own
+displays, **This Mac · A display for this screen · Ready to share**, whose
+action **Share…** asks the room and the use, makes the display and opens it.
+It is the Mac family's offer (`families/mac/share-card.js` `shareOffer`),
+listed only when the server shares the Mac.
 
-**Kept for compatibility:** `/mac/share` (the page) and `/mac/shares` (the API)
-stay as they are; the old page becomes a thin page over the same module.
+The list doesn't know it's a Mac: a family may *offer* devices beyond the
+server's list — each a device listing (so the list's filters apply) with its
+own action — and the list renders an offer as any row and runs its action.
+
+**Kept for compatibility:** `/mac/share` (the page, its full card over the
+same module) and `/mac/shares` (the API).
 
 ## 5 · Invariants — each law, one owner
 
@@ -225,7 +229,7 @@ stay as they are; the old page becomes a thin page over the same module.
 | 6 BUILT | `Toolbar` built from `Panels` filtered by `Device.abilities`; `DeviceAbilities` dies | a phone shows no logs control; a Mac display no rotate |
 | 7 BUILT | each family's role code moves into its folder: `families/mac/` (share, frames, pointer), `families/simulator/` (companions, power card, hinge, bezel), `phone/`, `android/` | each family's tests through its roles |
 | 8 BUILT | `stream/` (was `wire/`): StreamSession, WhepSession, transport, device.json; `capture/` gathered | — |
-| 9 BUILT | the share on the devices page: a **Share this Mac here** card on the list, from `families/mac/share.js`; `/mac/share` kept as a thin page over it | sharing from the devices page lands on the shared display, as `/mac/share` did |
+| 9 BUILT | the share on the devices page: offered as a device row (This Mac · Share…), not a card; from `families/mac/share.js`; `/mac/share` kept as a thin page over it | sharing from the devices page lands on the shared display, as `/mac/share` did |
 | 10 PART | what is left of `sim-native.js` is `page/device-page.js`'s composition; `sim-` names gone; `sim.html` loads one module | `sim-native.js` is deleted |
 
 Each slice is its own commit; slices 1–3 (the stable domain) are one PR, the rest can follow.

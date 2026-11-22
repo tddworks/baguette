@@ -1,18 +1,16 @@
-// The devices list's own additions to the list (page/devices-list.js draws the list):
-// sharing this Mac to the device the page is on, when the server shares it.
-import { isDevicesList, sharingOn, mountShareCard, pageBrowser } from '../families/mac/share-card.js';
+// The devices list's offers from the Mac family: when the server shares this
+// Mac, the display it can make for this screen is offered as one more device
+// in the list (families/mac/share-card.js `shareOffer`), with Share… as its
+// action. The list renders an offer as it renders any device, and runs the
+// offer's own action — it knows nothing about Macs.
+import { isDevicesList, sharingOn, shareOffer, pageBrowser } from '../families/mac/share-card.js';
 
 async function offerSharing() {
   if (!isDevicesList(location.pathname)) return;
-  const browser = pageBrowser();
-  if (!(await sharingOn(browser))) return;
-  const host = document.createElement('section');
-  host.id = 'macShareHost';
-  host.style.cssText = 'max-width:440px;margin:16px auto;padding:0 16px;box-sizing:border-box';
-  const card = document.createElement('div');
-  host.appendChild(card);
-  document.body.prepend(host);
-  mountShareCard(card, browser, (url) => location.assign(url));
+  if (!(await sharingOn(pageBrowser()))) return;
+  window.Baguette = window.Baguette || {};
+  (window.Baguette._ListOffers = window.Baguette._ListOffers || []).push(shareOffer());
+  window.dispatchEvent(new Event('baguette:offers'));
 }
 
 void offerSharing();

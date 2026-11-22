@@ -40,3 +40,14 @@ test('should show the card on the devices list, never on a device\'s own page', 
   assert.equal(isDevicesList('/devices/D'), false);
   assert.equal(isDevicesList('/simulators/D'), false);
 });
+
+test('should offer sharing as a device the list shows: a display of this Mac, for this screen, ready to share', async () => {
+  const { shareOffer } = await import('../../../../Sources/Baguette/Resources/Web/families/mac/share-card.js');
+  const offer = shareOffer();
+  assert.deepEqual(offer.listing, {
+    id: 'this-mac', name: 'This Mac', state: 'ready', status: 'Ready to share', abilities: ['share'],
+    kind: { platform: 'macOS', reality: 'physical', model: 'A display for this screen', os: 'macOS' },
+  });
+  assert.equal(offer.action, 'Share…');
+  assert.equal(typeof offer.run, 'function');
+});
