@@ -91,10 +91,10 @@ POST /devices/:udid/interface             set any subset
 ```
 
 ```bash
-curl localhost:8421/simulators/$UDID/interface.json
+curl localhost:8421/devices/$UDID/interface.json
 # {"appearance":"light","contentSize":"large","increaseContrast":"disabled"}
 
-curl -X POST localhost:8421/simulators/$UDID/interface \
+curl -X POST localhost:8421/devices/$UDID/interface \
      -H 'content-type: application/json' \
      -d '{"appearance":"dark","contentSize":"increment"}'
 # {"appearance":"dark","contentSize":"extra-large","increaseContrast":"disabled"}

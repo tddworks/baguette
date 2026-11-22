@@ -11,8 +11,8 @@
 </head>
 <body>
 <!--
-  Static shell. The six farm scripts below own one job each, hung off
-  `window` as IIFE classes (same pattern as sim-list.js / sim-stream.js):
+  Static shell. The six farm modules own one job each; farm-app.js, the one
+  the page loads, imports the rest:
 
     1. farm-focus-width.js — persisted focus-pane resizing
     2. farm-views.js       — Grid / Wall / List renderers (pure DOM)
@@ -40,43 +40,8 @@
   <footer id="farm-cli"></footer>
 </div>
 
-<script src="/stream-session.js"></script>
-<script src="/frame-decoder.js"></script>
-<!-- Capture-size vocabulary — the size a user picks once ("App Store
-     6.9″", "square") in the focus pane, spelled the same way the routes
-     and the CLI spell it. Ahead of /recorder.js: BrowserRecorder reads
-     the shared CaptureSize/CaptureComposer to size its output. Within
-     the group, size → settings → composer → menu, since each restores
-     the previous one in its constructor. -->
-<script src="/capture/capture-size.js"></script>
-<script src="/capture/capture-settings.js"></script>
-<script src="/capture/capture-composer.js"></script>
-<script src="/capture/capture-size-menu.js"></script>
-<script src="/recorder.js"></script>
-<!-- Baguette SDK — farm-tile uses Transport / Screen / Keyboard
-     directly (no Bezel; the farm tile is its own surface). -->
-<script src="/baguette/transport.js"></script>
-<script src="/baguette/gestures/gesture-envelope.js"></script>
-<script src="/baguette/gestures/pinch-overlay.js"></script>
-<script src="/baguette/gestures/edge-bands.js"></script>
-<script src="/baguette/gestures/attachable-event-source.js"></script>
-<script src="/baguette/gestures/touch-gesture-source.js"></script>
-<script src="/baguette/gestures/wheel-gesture-source.js"></script>
-<script src="/baguette/gestures/safari-gesture-event-source.js"></script>
-<script src="/baguette/gestures/mouse-gesture-source.js"></script>
-<script src="/baguette/gestures/option-hover-preview.js"></script>
-<script src="/baguette/gestures/pointer-interpreter.js"></script>
-<script src="/baguette/parts/bezel.js"></script>
-<script src="/baguette/parts/screen.js"></script>
-<script src="/baguette/parts/button.js"></script>
-<script src="/baguette/parts/keyboard.js"></script>
-<script src="/baguette/simulator.js"></script>
-<script src="/baguette/baguette.js"></script>
-<script src="/farm/farm-focus-width.js"></script>
-<script src="/farm/farm-views.js"></script>
-<script src="/farm/farm-tile.js"></script>
-<script src="/farm/farm-focus.js"></script>
-<script src="/farm/farm-filter.js"></script>
-<script src="/farm/farm-app.js"></script>
+<!-- One module: farm-app.js imports its tiles, focus pane and views,
+     and they import the stream, capture and SDK modules they use. -->
+<script type="module" src="/farm/farm-app.js"></script>
 </body>
 </html>

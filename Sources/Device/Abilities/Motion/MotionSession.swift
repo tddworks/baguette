@@ -37,7 +37,7 @@ public final class MotionSession {
 
     /// The smallest speed change worth a republish. Each publish costs a
     /// `launchctl` spawn and the joystick sends a fresh vector several
-    /// times a second; this is the same epsilon `sim-location.js` already
+    /// times a second; this is the same epsilon `panels/location/internal/location-view.js` already
     /// throttles its own sends with (`SPEED_EPSILON`).
     public static let speedEpsilon = 0.1
 

@@ -57,7 +57,7 @@ Every other target (`make`, `make docs`, `make check-docs`, …) and the toolcha
 
 ## Architecture
 
-Imports flow inward, outside in: `Sources/Commands/` (the CLI) and `Sources/Server/` (`baguette serve`) → `Devices/{Simulator,iPhone,CompanionPhone}` + `Plugins/{Plugin,Bakery}` → `Device/` (`BaguetteDevice`: id, kind, power, `Chrome/`, `Abilities/<ability>/`), which imports nothing of ours. Each folder's public face is at its top, its implementations in `Internal/`. Device families never import each other → [devices](docs/features/devices/design.md). `Tests/BaguetteTests/` mirrors `Sources/`. `Sources/Baguette/` holds `@main` and `Resources/Web/`, the page's vanilla IIFE modules.
+Imports flow inward, outside in: `Sources/Commands/` (the CLI) and `Sources/Server/` (`baguette serve`) → `Devices/{Simulator,iPhone,CompanionPhone}` + `Plugins/{Plugin,Bakery}` → `Device/` (`BaguetteDevice`: id, kind, power, `Chrome/`, `Abilities/<ability>/`), which imports nothing of ours. Each folder's public face is at its top, its implementations in `Internal/`. Device families never import each other → [devices](docs/features/devices/design.md). `Tests/BaguetteTests/` mirrors `Sources/`. `Sources/Baguette/` holds `@main` and `Resources/Web/`, the page's ES modules.
 
 **Two consumers, one pipeline.** Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → the gesture's role (`Touch`, `Key`, …) → `IndigoHIDInput`. The only difference is the App-layer entry point.
 
@@ -67,7 +67,7 @@ iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` /
 
 `IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent thread-local state, so it **must build on the main thread**; elsewhere its messages are malformed and silently dropped. `IndigoHIDInput` hops there for the build alone; gestures run on their device's `GestureQueues` lane. Buttons (`IndigoHIDMessageForButton`) are pure C and thread-safe — useful as a sanity check when input fails.
 
-**Coordinates.** Wire coordinates (`x`, `y`, `startX`, `x1`, `cx`, …) are **device points**, the units of the `width` / `height` every gesture envelope carries — never normalized. The browser normalizes internally and `sim-stream.js` multiplies back before sending; `IndigoHIDInput.sendMouse` divides by size before the C call.
+**Coordinates.** Wire coordinates (`x`, `y`, `startX`, `x1`, `cx`, …) are **device points**, the units of the `width` / `height` every gesture envelope carries — never normalized. The browser normalizes internally and the gesture sources multiply back before sending (`baguette/gestures/attachable-event-source.js`); `IndigoHIDInput.sendMouse` divides by size before the C call.
 
 ## Testing approach
 

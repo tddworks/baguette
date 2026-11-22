@@ -5,10 +5,10 @@ description: Every HTTP and WebSocket route `baguette serve` answers, one row ea
 # `baguette serve`
 
 ```bash
-baguette serve                  # http://127.0.0.1:8421/simulators
+baguette serve                  # http://127.0.0.1:8421/devices
 ```
 
-Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/simulators` lists devices with Boot / Shutdown; `/devices/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).
+Every flag: [commands.md#baguette-serve](commands.md#baguette-serve). `/devices` lists every device with Boot / Shutdown (`/simulators` is its old spelling, still served); `/devices/<UDID>` is the focus-mode page (live stream, bezel, toolbar); `/farm` shows every booted device at once ([device-farm](features/device-farm/README.md)).
 
 One resource tree: no `/api/` prefix, the UDID is always in the path, and the format is the file extension.
 
@@ -24,8 +24,9 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 
 | Method | Path | What | Docs |
 |---|---|---|---|
-| `GET` | `/` | 302 → `/simulators` | |
-| `GET` | `/simulators` | device list page | |
+| `GET` | `/` | 302 → `/devices` | |
+| `GET` | `/devices` | device list page — every device, whatever its kind | |
+| `GET` | `/simulators` | the same page, its old spelling (kept for links and bookmarks) | |
 | `GET` | `/simulators.json` | `{running, available}`, same as `baguette list --json` | |
 | `GET` | `/mac/share` *with `--share-mac`* | the page that shares this Mac to the device it's opened on | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
 | `POST` · `PUT` · `DELETE` | `/mac/shares`, `/mac/shares/:id` *with `--share-mac`* | start, reshape, end a share: a display of the viewer's shape | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
@@ -59,7 +60,7 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `POST` | `/devices/:udid/openurl?url=` *any device* | open a deep link | [deep-links](features/deep-links/README.md) |
 | `GET` | `/devices/:udid/schemes.json?q=` *any device* | URL schemes the device's apps registered | [deep-links](features/deep-links/README.md) |
 | `POST` | `/devices/:udid/notify?bundleId=` *any device* | deliver a remote notification (body: the payload) | [notifications](features/notifications/README.md) |
-| `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
+| `WS` | `/devices/:udid/stream?format=mjpeg\|avcc` *any device* | live frames + gestures + stream control (`display=carplay`, `panel=`; `codec=h265\|auto` sends `avcc` in HEVC when this Mac encodes it, H.264 otherwise); a phone running the companion app streams its own video instead | [below](#one-websocket-per-stream) |
 | `POST` | `/devices/:udid/whep` *any device* | WebRTC (WHEP) viewer of the screen: SDP offer in, `201` + `Location` + answer out | [webrtc](features/webrtc/README.md) |
 | `DELETE` | `/devices/:udid/whep/:viewer` *any device* | hang a WebRTC viewer up | [webrtc](features/webrtc/README.md) |
 | `WS` | `/devices/:udid/whep/:viewer/control` *any device* | a WebRTC viewer's gestures + stream control, no video | [webrtc](features/webrtc/README.md) |

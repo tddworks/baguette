@@ -87,7 +87,7 @@ browser never sends it and it stays a host shortcut.
 device's screen element and gates on `document.activeElement`; a
 forwarded key is `preventDefault`'d, an unsupported one is dropped
 **without** `preventDefault` so the browser keeps it. `mousedown` on
-the screen takes focus. Mounted from `sim-native.js` (focus mode) and
+the screen takes focus. Mounted from `page/device-page.js` (focus mode) and
 `farm-tile.js` (focused farm tile).
 
 ## Known limits

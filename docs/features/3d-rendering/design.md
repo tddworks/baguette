@@ -109,7 +109,7 @@ turning a screen's texture coordinates — is made on the prototype.
 (`ScreenQuadProjection`, mirroring the same rotation and perspective-camera
 math the renderer uses) rather than reading back GPU geometry. Interact mode
 uses it to invert a canvas click into a screen-space point via bilinear
-interpolation across the quad — see `sim-3d.js`'s `mapClientPoint`. It is a
+interpolation across the quad — see `page/internal/device-3d.js`'s `mapClientPoint`. It is a
 flat rectangle, not a full ray cast against the GPU mesh — correct for the
 planar displays every model authors so far, but two-finger pinch/pan and
 the Option-hover preview still assume a 1:1 canvas crop and drift from the

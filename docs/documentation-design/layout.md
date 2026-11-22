@@ -41,7 +41,7 @@ They don't care which domain role, private symbol or HID usage page changed; tha
 |---|---|
 | Keep a Changelog headings; **`Removed` and `Changed` come before `Added`**; one heading of each kind per release | Question 1 is answered before anything else |
 | Anything that breaks existing use starts with **`Breaking:`** and says what to do instead | Plugin authors can grep for "Breaking" across versions |
-| Each bullet starts with **what the user types or clicks** (`` `baguette hinge` ``, `` `POST /simulators/<udid>/hinge` ``, the page's pose bar) | They're scanning for *their* entry point |
+| Each bullet starts with **what the user types or clicks** (`` `baguette hinge` ``, `` `POST /devices/<udid>/hinge` ``, the page's pose bar) | They're scanning for *their* entry point |
 | Say the **effect**, not the implementation: "Duo's volume keys work", not "`FoldableInput` routes through `DeviceKeys`" | They can check the effect; they can't check the implementation |
 | One bullet per user-visible change, **≤300 chars**; merge related fixes | Five bullets about one feature are one piece of news |
 | Every bullet ends with its PR link; bullets that change how you use baguette also get `→ [docs](…)` | Two ways down: *how do I use it* and *why did it change* |
@@ -52,7 +52,7 @@ They don't care which domain role, private symbol or HID usage page changed; tha
 
 **Before (0.1.99):** a 1,100-char `Added` bullet mixes the new command with a domain protocol change, packaging, model-definition fields and a socket message change:
 
-> - **`baguette hinge`** and `POST /simulators/<udid>/hinge` fold iPhone Duo — `--pose closed|open|flat` or `--angle`, swept over Device Hub's 0.8 s — through `HingeControl`, a guest-side executable (the first non-dylib under `Injected/`) that reproduces the HID pose events Device Hub's `dtuhidd` dispatches. `docs/features/hinge/README.md` records the route. `Subprocess` gains `runInteractive` / `write` … Packaging: the homebrew formula needs one plain-link entry … Model definitions gain `asset.xcodeResource`, `scene.restRotation`, … the 3D socket's `screen_quad` gains `pieces`, `buttons` and `litPanel`, and `set_3d_camera` takes `orientation`.
+> - **`baguette hinge`** and `POST /devices/<udid>/hinge` fold iPhone Duo — `--pose closed|open|flat` or `--angle`, swept over Device Hub's 0.8 s — through `HingeControl`, a guest-side executable (the first non-dylib under `Injected/`) that reproduces the HID pose events Device Hub's `dtuhidd` dispatches. `docs/features/hinge/README.md` records the route. `Subprocess` gains `runInteractive` / `write` … Packaging: the homebrew formula needs one plain-link entry … Model definitions gain `asset.xcodeResource`, `scene.restRotation`, … the 3D socket's `screen_quad` gains `pieces`, `buttons` and `litPanel`, and `set_3d_camera` takes `orientation`.
 
 A plugin author reading `screen_quad` has to find it in the last sentence of a bullet about folding.
 
@@ -65,7 +65,7 @@ A plugin author reading `screen_quad` has to find it in the last sentence of a b
 - The 3D socket's `screen_quad` message adds `pieces`, `buttons` and `litPanel`; `set_3d_camera` accepts `orientation`. Existing fields are unchanged. → [wire](docs/wire.md#3d) ([#NN](…))
 
 ### Added
-- `baguette hinge` and `POST /simulators/<udid>/hinge` fold iPhone Duo to a pose (`closed`, `open`, `flat`) or an angle, swept like Device Hub. → [docs](docs/features/hinge/README.md) ([#NN](…))
+- `baguette hinge` and `POST /devices/<udid>/hinge` fold iPhone Duo to a pose (`closed`, `open`, `flat`) or an angle, swept like Device Hub. → [docs](docs/features/hinge/README.md) ([#NN](…))
 - iPhone Duo's volume, power and camera-control keys work from the CLI, `POST …/input` and the page. ([#NN](…))
 - A booted Duo's page draws Apple's own 3D model, posed live by the hinge. → [docs](docs/features/iphone-duo/README.md) ([#NN](…))
 ```
@@ -125,7 +125,7 @@ on iOS 26+, where idb / AXe stopped working.       ← 2-line pitch
 brew install baguette
 
 ## Quick start                                     ← ~15 lines
-baguette serve                     # web UI at http://127.0.0.1:8421/simulators
+baguette serve                     # web UI at http://127.0.0.1:8421/devices
 baguette tap --udid <UDID> --x 200 --y 400 --width 402 --height 874
 baguette screenshot --udid <UDID> -o shot.png
 
@@ -198,7 +198,7 @@ Or click the shake button in the `serve` toolbar, next to Home.
 ## HTTP
 | Method | Path |
 |---|---|
-| POST | `/simulators/<UDID>/shake` |
+| POST | `/devices/<UDID>/shake` |
 
 ## Gotchas
 - iOS only; watchOS and tvOS have no shake.

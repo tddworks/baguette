@@ -15,7 +15,7 @@ description: How every boot entry point reaches one CoreSimulator call, and how 
 
 ## Focus mode reads state it already fetched
 
-`sim-native.js` already fetched `/simulators.json` on load to resolve the
+`page/device-page.js` already fetched `/simulators.json` on load to resolve the
 device's name and runtime; it reads `state` from the same response. No new
 endpoint, no change to the definition payload.
 
@@ -66,11 +66,13 @@ than to a broken page.
 
 1. The route probably exists: `boot` and `shutdown` are both already registered
    via `Server.applyPower`.
-2. Read whatever state you need from `fetchDeviceMeta` in `sim-native.js`;
-   extend its return value rather than adding a fetch.
-3. Render through `renderPowerCard(phase, detail)`: add a phase to the `copy`
-   table and, if it needs a spinner, to the `SPIN_GLYPH` branch.
-4. Style it in the `--- Power card ---` block of `sim-native.html`. The card is
+2. Read whatever state you need from the device's `describe()` — its family's
+   (`families/<family>/`), which the page calls at boot and while it polls a
+   boot; extend what it returns rather than adding a fetch.
+3. Render through `renderPowerCard(phase, detail)` in
+   `page/internal/power-card.js`: add a phase to the `copy` table and, if it
+   needs a spinner, to the `SPIN_GLYPH` branch.
+4. Style it in the `--- Power card ---` block of `page/device-page.html`. The card is
    a container (`container-type: inline-size`), so type sizes use `cqw` and track
    the rendered bezel, not the viewport.
 5. Keep the frontend a dumb sender: no state machine duplicated from Swift, no

@@ -19,11 +19,11 @@
 //   • Gesture interpreters live in `gestures/<name>.js` and call
 //     domain methods on parts — never wire envelopes.
 //   • Adding a new part doesn't change the public API.
-(function (root) {
-  'use strict';
+import { Transport } from './transport.js';
+import { Simulator } from './simulator.js';
 
-  root.Baguette = root.Baguette || {};
-  root.Baguette.version = '0.1.0';
+const Baguette = {
+  version: '0.1.0',
 
   /**
    * Fetch the simulator's definition and return a ready Simulator.
@@ -34,7 +34,7 @@
    * @param {(msg:string, isErr?:boolean)=>void} [opts.log]
    * @returns {Promise<Simulator>}
    */
-  root.Baguette.use = async function use({ host, udid, send, log, getOrientation, definitionURL }) {
+  async use({ host, udid, send, log, getOrientation, definitionURL }) {
     if (!udid) throw new Error('Baguette.use: udid is required');
     if (typeof send !== 'function') throw new Error('Baguette.use: send must be a function');
 
@@ -50,8 +50,15 @@
     }
     const def = await res.json();
 
-    const T = root.Baguette._Transport;
-    const transport = new T({ send, log });
-    return new root.Baguette._Simulator(def, transport, { getOrientation, log });
-  };
-})(window);
+    const transport = new Transport({ send, log });
+    return new Simulator(def, transport, { getOrientation, log });
+  },
+};
+
+export { Baguette };
+
+// `window.Baguette` stays the SDK's public face for a page that loads it
+// with a plain module tag and no import; the parts already on it stay.
+if (typeof window !== 'undefined') {
+  window.Baguette = Object.assign(window.Baguette || {}, Baguette);
+}

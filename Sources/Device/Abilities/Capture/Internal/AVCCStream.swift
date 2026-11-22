@@ -47,7 +47,7 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     }
 
     public func start(on screen: any Screen) throws {
-        log("start: format=avcc fps=\(config.fps) bitrate=\(config.bitrateBps) scale=\(config.scale)")
+        log("start: format=avcc codec=\(encoder.codec.recordAtom) fps=\(config.fps) bitrate=\(config.bitrateBps) scale=\(config.scale)")
         self.screen = screen
         queue.sync {
             generation += 1

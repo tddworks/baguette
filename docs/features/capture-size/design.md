@@ -150,19 +150,9 @@ change has learned something false about the feature.
 
 ## Loading the browser half
 
-The four `capture/*.js` files are plain IIFEs like the rest of
-`Resources/Web/`, so any page that captures or records has to include
-them **before** the module that uses them:
-
-```html
-<script src="/capture/capture-size.js"></script>
-<script src="/capture/capture-settings.js"></script>
-<script src="/capture/capture-composer.js"></script>
-<script src="/capture/capture-size-menu.js"></script>
-```
-
-`recorder.js` and `capture-gallery.js` both depend on the first three
-and fail loudly — not silently at native size — when they're missing.
+The `capture/*.js` files are ES modules: whatever records or captures imports
+`CaptureSettings`, `CaptureSizeMenu`, `BrowserRecorder` or `CaptureGallery`,
+and they import the size vocabulary they need. Nothing has to be loaded first.
 
 ## Known limits (contributor)
 

@@ -7,7 +7,7 @@
 <p align="center"><em>Bon appétit.</em></p>
 
 <p align="center">
-  Drive iOS simulators, real iPhones and Android emulators from one CLI and one browser page.
+  Drive iOS simulators, real iPhones, Android emulators and your Mac's own screens from one CLI and one browser page.
 </p>
 
 <p align="center">
@@ -25,18 +25,10 @@ drives your devices headless, without opening Xcode, `Simulator.app` or
 Android Studio: one `--udid`, the same commands and page for every device,
 and one that can't do something says so by name and exits 1.
 
-- **iOS simulators** — everything below: boot them, stream their screens
-  at 60 fps, dispatch taps, swipes, multi-finger and system gestures,
-  keyboard and hardware buttons, read the accessibility tree, tail the
-  unified log, take screenshots and recordings, and feed them a camera,
-  a location, motion and a slower network — on iOS 26 and later, where
-  the 5-argument HID call `idb` and `AXe` rely on stopped working.
-- **Real iPhones on a cable** — touches, a live screen, screenshots,
-  recordings, the pasteboard and the accessibility tree, through
-  CoreDevice → [real devices](docs/features/real-devices/README.md).
-- **Android emulators** — boot and shut down an AVD, stream its screen,
-  touches with two fingers, scrolls, buttons (`back` too), keys and typing,
-  through the emulator's own control API → [Android](docs/features/android/README.md).
+It drives iOS simulators on iOS 26 and later, where the 5-argument HID
+call `idb` and `AXe` rely on stopped working, real iPhones on a cable,
+Android emulators, and this Mac's own displays. What each covers is in
+[What it covers](#what-it-covers).
 
 ## Demo
 
@@ -75,7 +67,7 @@ The rest of development is in [CONTRIBUTING](CONTRIBUTING.md#build--test).
 ## Quick start
 
 ```bash
-baguette serve                          # web UI at http://127.0.0.1:8421/simulators
+baguette serve                          # web UI at http://127.0.0.1:8421/devices
 open http://localhost:8421/farm         # every booted simulator side by side
 
 baguette list                           # simulators, iPhones on a cable, Android emulators
@@ -120,11 +112,19 @@ Apps that use and support Baguette development:
 
 ## What it covers
 
-Rows below are for simulators; other devices do the parts their pages list.
+Every device is in one list (`/devices`) and opens in one page; each does what its kind can, and refuses the rest by name.
+
+| Device | What you can do |
+|---|---|
+| iOS simulators | Boot them, stream at 60 fps, touches, gestures, buttons, keyboard, the accessibility tree, logs, captures, and a simulated world; the second table below |
+| Real iPhones and iPads on a cable | Touches and swipes (an edge swipe goes Home), a live screen, screenshots, recordings, the pasteboard, the accessibility tree; through CoreDevice → [real devices](docs/features/real-devices/README.md) |
+| Android emulators | Boot and shut down an AVD, stream and record its screen, touches with two fingers, scrolls, buttons (`back` too), keys and typing → [Android](docs/features/android/README.md) |
+| This Mac's displays | Stream (WebRTC, H.264/H.265), record, screenshot; drive with mouse, hover, keyboard and scroll; the pointer drawn in its real shape; share to a phone or tablet as a virtual display of the device's shape, used as an extended or main display; Mac frames → [Mac screen](docs/features/mac-screen/README.md) |
+
+What a simulator covers:
 
 | Area | What you can do |
 |---|---|
-| Devices | iOS simulators, real iPhones on a cable, Android emulators; all in one list and one page → [real devices](docs/features/real-devices/README.md), [Android](docs/features/android/README.md), [serve](docs/serve.md) |
 | Touches & gestures | Tap, swipe, pinch, pan, streamed one- and two-finger touches, home-indicator and pull-down system gestures → [touches](docs/features/touches/README.md), [double-tap](docs/features/double-tap/README.md) |
 | Buttons & keyboard | Home, lock, volume, action, Watch crown; keystrokes, typed text, paste and clipboard sync → [buttons](docs/features/buttons/README.md), [keyboard](docs/features/keyboard/README.md), [paste](docs/features/paste/README.md) |
 | Screen capture | Screenshots, recordings, frame streams to stdout, one output-size vocabulary, 3D device renders → [screenshot](docs/features/screenshot/README.md), [stream](docs/features/stream/README.md), [recording](docs/features/recording/README.md), [capture-size](docs/features/capture-size/README.md), [3d-rendering](docs/features/3d-rendering/README.md) |

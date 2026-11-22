@@ -27,7 +27,7 @@ xcrun simctl install <X> path/to/App.app     # if it isn't installed
 ```
 
 If the user wants to watch, start `baguette serve` and give them
-`http://localhost:8421/simulators/<X>`.
+`http://localhost:8421/devices/<X>`.
 
 Write down what success looks like before the first click, in the user's words.
 "Signed up" isn't enough: "a new account, on the free plan, with the receipt

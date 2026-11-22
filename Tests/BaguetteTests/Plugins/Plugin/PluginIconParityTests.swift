@@ -4,7 +4,7 @@ import Foundation
 @testable import BaguetteDevice
 
 /// The icon set exists twice — `PluginIcon` here, the `ICONS` map in
-/// `sim-plugins.js` — and until this suite nothing checked they agreed.
+/// `page/internal/plugins/plugins-rail.js` — and until this suite nothing checked they agreed.
 ///
 /// The duplication is deliberate and not removable: the Swift side is
 /// the parse boundary that stops manifest text reaching the DOM, and the
@@ -23,16 +23,16 @@ struct PluginIconParityTests {
 
     private static var simPluginsJS: URL {
         RepoRoot.url
-            .appendingPathComponent("Sources/Baguette/Resources/Web/sim-plugins.js")
+            .appendingPathComponent("Sources/Baguette/Resources/Web/page/internal/plugins/plugins-rail.js")
     }
 
-    /// The keys of the `ICONS` object literal in `sim-plugins.js`.
+    /// The keys of the `ICONS` object literal in `page/internal/plugins/plugins-rail.js`.
     static func iconsDeclaredInJS() throws -> Set<String> {
         let source = try String(contentsOf: simPluginsJS, encoding: .utf8)
         guard let start = source.range(of: "const ICONS = {"),
-              let end = source.range(of: "\n  };", range: start.upperBound..<source.endIndex)
+              let end = source.range(of: "\n};", range: start.upperBound..<source.endIndex)
         else {
-            Issue.record("could not find the ICONS literal in sim-plugins.js")
+            Issue.record("could not find the ICONS literal in page/internal/plugins/plugins-rail.js")
             return []
         }
 
@@ -58,7 +58,7 @@ struct PluginIconParityTests {
 
         #expect(
             swift.subtracting(js).isEmpty,
-            "PluginIcon has cases sim-plugins.js can't draw: \(swift.subtracting(js).sorted())"
+            "PluginIcon has cases page/internal/plugins/plugins-rail.js can't draw: \(swift.subtracting(js).sorted())"
         )
     }
 
@@ -71,7 +71,7 @@ struct PluginIconParityTests {
 
         #expect(
             js.subtracting(swift).isEmpty,
-            "sim-plugins.js draws glyphs PluginIcon doesn't name: \(js.subtracting(swift).sorted())"
+            "page/internal/plugins/plugins-rail.js draws glyphs PluginIcon doesn't name: \(js.subtracting(swift).sorted())"
         )
     }
 

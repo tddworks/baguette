@@ -27,7 +27,7 @@ struct MacSharesRouterTests {
         }
         let arrangement = MockDisplayArrangement()
         given(arrangement).main.willReturn(1)
-        given(arrangement).makeMain(.any).willReturn(true)
+        given(arrangement).makeMain(.any, freeingDock: .any).willReturn(true)
         return (VirtualDisplayShares(displays: displays, arrangement: arrangement), made, turned)
     }
 

@@ -11,7 +11,7 @@ import Testing
 /// table is data — `Server.staticAssetSubdirectories` — and this
 /// suite pins it against the web root on disk so adding a new
 /// subfolder without routing it fails a test instead of 404ing in
-/// the browser (as `sim-list/device-filter.js` once did).
+/// the browser (as `page/internal/device-filter.js` once did).
 @Suite("Server static asset routes")
 struct StaticAssetRoutesTests {
 

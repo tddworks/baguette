@@ -1,0 +1,3825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulator — focus</title>
+<style>
+  /* Standalone preview tokens — at runtime page/device-page.js extracts the
+     #simNativeView block + sibling <style>, so this :root only matters
+     when this file is opened directly via file://. */
+  :root {
+    --bg: #f8fafc;
+    --text: #334155;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+               font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif; }
+</style>
+</head>
+<body>
+<!--
+  Focus mode template. page/device-page.js extracts everything inside
+  #simNativeView (plus the <style> below) and injects it when the
+  page is loaded directly at /simulators/<udid>.
+
+  No fake window, no bottom HUD. The whole UI is one slim
+  translucent bar at the top carrying every control:
+
+    [← iPhone 17 Pro Max · iOS 26.4]    [60 fps  H.264|MJPEG  🏠 📷 🪟]
+
+  The device floats free on the dark page below — biggest possible
+  device, least possible chrome.
+-->
+<style>
+  /* Theme tokens — defaults are dark; the prefers-color-scheme:
+     light media query at the bottom flips them. Native form
+     controls also pick up `color-scheme` so scrollbars / focus
+     rings match the surrounding theme. */
+  #simNativeView {
+    color-scheme: light dark;
+    --nv-page-bg:        #1a1a1f;
+    --nv-bar-bg:         rgba(20, 20, 24, 0.78);
+    --nv-bar-border:     rgba(255, 255, 255, 0.08);
+    --nv-bar-shadow:     0 8px 24px rgba(0, 0, 0, 0.45);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --nv-text:           #f5f5f7;
+    --nv-text-muted:     rgba(245, 245, 247, 0.55);
+    --nv-text-faint:     rgba(245, 245, 247, 0.5);
+    --nv-divider:        rgba(255, 255, 255, 0.12);
+    --nv-btn-hover:      rgba(255, 255, 255, 0.10);
+    --nv-btn-active:     rgba(255, 255, 255, 0.18);
+    --nv-fmt-track-bg:   rgba(255, 255, 255, 0.06);
+    --nv-fmt-track-border: rgba(255, 255, 255, 0.06);
+    --nv-fmt-btn-text:   rgba(245, 245, 247, 0.65);
+    --nv-accent:         #2563eb;
+    --nv-accent-text:    #fff;
+    /* Status colours and the modal scrim. Both themes get a value for
+       the same reason the rest of this block exists: a panel reporting
+       an error picked its own red before these were here, and the one
+       it picked was a light-theme red on a near-black page. */
+    --nv-danger:         #f87171;
+    --nv-warn:           #fbbf24;
+    --nv-scrim:          rgba(0, 0, 0, 0.55);
+
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px;
+    box-sizing: border-box;
+    background: var(--nv-page-bg);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  /* A Home Screen launch: the iPhone's status bar is translucent over
+     the top of the page and the home indicator over the bottom, so the
+     workbench keeps its 12px inside the safe area rather than under
+     them. page/device-page.js sets the attribute and `viewport-fit=cover`,
+     without which every inset reads 0. */
+  #simNativeView[data-standalone] {
+    padding: calc(env(safe-area-inset-top, 0px) + 12px)
+             calc(env(safe-area-inset-right, 0px) + 12px)
+             calc(env(safe-area-inset-bottom, 0px) + 12px)
+             calc(env(safe-area-inset-left, 0px) + 12px);
+  }
+  /* Light + dark token blocks. Defined as both a media query (for
+     "follow system" mode) and a `data-theme` attribute selector
+     (for the manual toggle). The attribute selector has higher
+     specificity than the media query, so a user-pinned theme
+     wins over the OS preference. */
+  @media (prefers-color-scheme: light) {
+    #simNativeView:not([data-theme="dark"]) {
+      --nv-page-bg:        #f1f3f6;
+      --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+      --nv-bar-border:     rgba(15, 23, 42, 0.08);
+      --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+      --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+      --nv-text:           #1d1d1f;
+      --nv-text-muted:     rgba(29, 29, 31, 0.65);
+      --nv-text-faint:     rgba(29, 29, 31, 0.55);
+      --nv-divider:        rgba(15, 23, 42, 0.14);
+      --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+      --nv-btn-active:     rgba(15, 23, 42, 0.12);
+      --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+      --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+      --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
+      --nv-danger:         #b91c1c;
+      --nv-warn:           #b45309;
+      --nv-scrim:          rgba(15, 23, 42, 0.32);
+    }
+    #simNativeView:not([data-theme="dark"]) .carplay-frame,
+    #simNativeView:not([data-theme="dark"]) .watch-frame {
+      border-color: rgba(15, 23, 42, 0.14);
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+    }
+  }
+  #simNativeView[data-theme="light"] {
+    --nv-page-bg:        #f1f3f6;
+    --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+    --nv-bar-border:     rgba(15, 23, 42, 0.08);
+    --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    --nv-text:           #1d1d1f;
+    --nv-text-muted:     rgba(29, 29, 31, 0.65);
+    --nv-text-faint:     rgba(29, 29, 31, 0.55);
+    --nv-divider:        rgba(15, 23, 42, 0.14);
+    --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+    --nv-btn-active:     rgba(15, 23, 42, 0.12);
+    --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+    --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+    --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
+    --nv-danger:         #b91c1c;
+    --nv-warn:           #b45309;
+    --nv-scrim:          rgba(15, 23, 42, 0.32);
+  }
+  #simNativeView[data-theme="light"] .carplay-frame,
+  #simNativeView[data-theme="light"] .watch-frame {
+    border-color: rgba(15, 23, 42, 0.14);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+  }
+
+  /* Phone | companion screens side-by-side. Each column keeps its own
+     intrinsic width; the row centers in the viewport.
+     `data-companions` on the root carries which panes are open as a
+     space-separated list, so the size budget below can react to the
+     count rather than every column claiming half the viewport whether
+     or not anything is beside it. */
+  #simNativeView .dual-pane {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    max-width: 100%;
+    max-height: 100%;
+    min-width: 0;
+  }
+
+  /* --- The size budget -----------------------------------------------
+     One place decides how much room the device and each companion pane
+     may take, because the answer depends on facts spread across the
+     page: how wide the window is, whether the panes are side by side or
+     stacked, and how many are open. Expressing that as four variables
+     keeps the `!important` overrides below (which fight the SDK Bezel's
+     own inline caps) down to one rule each.
+
+     Alone, the device gets the window. It only gives up half when
+     something is actually next to it — previously it was pinned to
+     46vw at all times, so a phone with no CarPlay pane rendered at half
+     size on a laptop and at a *third* of the screen once the narrow
+     breakpoint stacked the columns.
+
+     `--nv-vh` is the viewport-height unit the budget is written in.
+     `dvh` (dynamic viewport height) is the one we want — it subtracts
+     iOS Safari's URL bar and bottom toolbar instead of letting them
+     overlay the bezel — but a custom property can't carry the old
+     `vh`-then-`dvh` double declaration the rest of this file uses,
+     since both parse fine and the later one always wins. `@supports`
+     asks the question directly instead.
+
+     Every width carries a `100%` term. The vw shares are a *share of
+     the window*, but the column they land in has already given up a
+     gutter to the right-edge rails — without the `100%` bound a pane
+     claims its full share and slides back under them, which is exactly
+     what it did at the narrowest widths. */
+  #simNativeView {
+    --nv-vh: 1vh;
+    /* Where the floating panels start. The toolbar sits in the device's
+       vertically centred column, so in a window taller than the device
+       needs it lands well below the top — `placeFloatingPanels` in
+       page/device-page.js moves this under it. 84px is the toolbar-at-top
+       resting place, and the floor. */
+    --nv-panel-top: 84px;
+    --nv-device-max-w:    min(100%, 96vw);
+    --nv-device-max-h:    calc(100 * var(--nv-vh) - 68px);
+    --nv-companion-max-w: min(100%, 720px, 88vw);
+    --nv-companion-max-h: calc(100 * var(--nv-vh) - 68px);
+  }
+  @supports (height: 1dvh) {
+    #simNativeView { --nv-vh: 1dvh; }
+  }
+  /* The shares add up to 88vw, not 100: the gaps between columns and
+     the right-edge rails need the remainder, and a row that adds up to
+     the whole window overflows it and slides under them. */
+  #simNativeView[data-companions] {
+    --nv-device-max-w:    min(100%, 46vw);
+    --nv-companion-max-w: min(100%, 720px, 42vw);
+  }
+  /* Two panes open: three columns share one row. */
+  #simNativeView[data-companions~="external"][data-companions~="watch"] {
+    --nv-device-max-w:    min(100%, 30vw);
+    --nv-companion-max-w: min(100%, 560px, 29vw);
+  }
+  /* Keep the panes clear of the fixed right-edge rails. Padding on the
+     row rather than a narrower budget, so the group stays optically
+     centred in what's left of the window instead of straddling them.
+     Unconditional: the device is no longer pinned to half the window,
+     so on a wide screen it can now reach the rails on its own. */
+  #simNativeView .dual-pane { padding-right: 58px; }
+
+  /* SwiftUI-style VStack: toolbar pill above the device, both
+     centered horizontally, stacked vertically with a small gap.
+     Each child keeps its own intrinsic width; nothing stretches
+     to match the other. */
+  #simNativeView .device-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-height: 100%;
+    min-width: 0;
+    /* A column shrink-wraps its widest child, so without this the
+       toolbar pill set the column's width and a `100%` inside it
+       resolved against the pill itself — no constraint at all. Capping
+       the column against the row gives that percentage something real
+       to measure, and stops the pill hanging off both edges. */
+    max-width: 100%;
+  }
+
+  #simNativeView .companion-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
+  }
+  #simNativeView .companion-column[hidden] { display: none; }
+
+  #simNativeView .companion-label {
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text-muted);
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+
+  /* Plain landscape rect (~16:9). Mounted brands swap aspect via
+     .carplay-frame__wrapper and drop the plain border. */
+  #simNativeView .carplay-frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: var(--nv-companion-max-w);
+    max-height: var(--nv-companion-max-h);
+    background: #0a0a0c;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    outline: none;
+    flex-shrink: 1;
+  }
+  #simNativeView .carplay-frame.carplay-frame--mounted {
+    aspect-ratio: auto;
+    border-color: transparent;
+    border-radius: 0;
+    background: transparent;
+  }
+  #simNativeView .carplay-frame__wrapper {
+    position: relative;
+    width: 100%;
+    height: auto;
+    max-height: var(--nv-companion-max-h);
+  }
+  #simNativeView .carplay-frame canvas,
+  #simNativeView .watch-frame canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+    pointer-events: none;
+  }
+
+  /* The watch is sized from its height, not the width budget: a watch
+     stretched to a CarPlay display's share of the row would be absurd,
+     and the tall aspect means height is what actually runs out first.
+
+     The ratio here is only the placeholder an empty pane wears; every
+     model has its own (a 46mm is 416×496), so page/device-page.js replaces it
+     inline from the first frame's reported size. */
+  #simNativeView .watch-frame {
+    position: relative;
+    aspect-ratio: 41 / 50;
+    /* 44px of the pane's height budget belongs to the button row below. */
+    height: min(430px, calc(var(--nv-companion-max-h) - 44px));
+    width: auto;
+    max-width: min(100%, 34vw);
+    background: #0a0a0c;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 15%/12%;
+    overflow: hidden;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    outline: none;
+    flex-shrink: 1;
+  }
+
+  /* Toolbar pill — its own content-based width (label + controls).
+     Sits directly above the device as the upper child of the
+     VStack. */
+  #simNativeView .top-bar {
+    display: inline-flex; align-items: center;
+    box-sizing: border-box;   /* so the max-width below is the real width */
+    flex-shrink: 0;
+    gap: 12px;
+    /* One line, always. A second row was tried — the pane baguette is
+       squeezed into is narrow and tall, so height looked like the
+       cheap dimension — and it is not worth having: a pill with a
+       short identity row above a long control row is lopsided, and it
+       pushes the device down for controls that fold perfectly well
+       into a menu. Folding is the answer to a narrow bar; wrapping is
+       a different-looking bar. */
+    height: 36px;
+    padding: 4px 6px 4px 4px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    /* Never wider than the device is allowed to be. The pill sits in
+       the same column as the bezel and sizes to its contents, so
+       without this it — not the device — set the column's width: with
+       a companion pane open the toolbar stayed full length, pushed the
+       row wider than the window, and slid the pane under the rails
+       while clipping its own back button off the left edge. The icon
+       strip already scrolls when it doesn't fit, which is exactly the
+       behaviour this hands it. */
+    max-width: min(100%, var(--nv-device-max-w));
+    /* `backdrop-filter` makes the bar its own stacking context, so a
+       popover opened inside it (the capture-size chip's) composites at
+       the bar's level no matter how high its own z-index goes. Without
+       a level of its own the bar sits at 0, which puts the popover
+       under the floating cards (z-index 40) and under the device
+       wrapper once `applyOrientation` gives it a transform. 50 clears
+       both; the cards start below the bar (`--nv-panel-top`), so the
+       two never overlap geometrically. */
+    position: relative;
+    z-index: 50;
+  }
+
+  /* `!important` overrides the SDK Bezel's inline `max-height: 70vh`
+     on both the wrapper <div> and the bezel <img> — those defaults
+     are tuned for the sidebar layout and would cap the device to
+     70% of the viewport here. The 68px subtracts the toolbar
+     (36px) + column gap (8px) + container padding (24px).
+
+     Uses `dvh` (dynamic viewport height) so iOS Safari's URL bar +
+     bottom toolbar are subtracted from the viewport, not overlaid on
+     top of the bezel. With plain `vh` the bezel renders behind the
+     Safari toolbar and the bottom of the device gets clipped. Falls
+     back to `vh` on engines that don't support `dvh`. */
+  #simNativeView #nativeDeviceFrame,
+  #simNativeView #nativeDeviceFrame > div,
+  #simNativeView #nativeDeviceFrame img,
+  #simNativeView #nativeDeviceFrame canvas {
+    max-height: var(--nv-device-max-h) !important;
+    max-width: var(--nv-device-max-w) !important;
+  }
+
+  /* Narrow windows: the row becomes a stack, so width stops being the
+     contended axis and height starts. Both budgets are redefined here
+     rather than in a `!important` override, because an override would
+     have had to out-specify the `[data-companions]` rules above — and
+     the earlier attempt at this lost that fight silently: the 46vw cap
+     below it in the file won at every width, which is what left the
+     phone rendering at under half the window on a small screen.
+
+     `dvh` (dynamic viewport height) so iOS Safari's URL bar and bottom
+     toolbar are subtracted from the viewport rather than overlaid on
+     the bezel; `vh` first as the fallback for engines without it. */
+  /* A companion pane that couldn't bind. Sits under the pane rather
+     than over it: the empty frame is honest about there being no
+     picture, and covering it would hide the one thing that changes when
+     the fix works. Sized to the pane so the steps stay readable at any
+     width the pane is drawn at. */
+  #simNativeView .companion-fault {
+    box-sizing: border-box;
+    width: min(100%, 380px);
+    padding: 11px 13px 12px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    flex-shrink: 0;
+  }
+  #simNativeView .companion-fault-title {
+    font: 600 11.5px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    color: #fbbf24;                 /* amber: the screen is fine, the wiring isn't */
+    margin-bottom: 7px;
+  }
+  #simNativeView .companion-fault-steps {
+    margin: 0 0 9px; padding-left: 16px;
+    display: flex; flex-direction: column; gap: 5px;
+    font: 400 11.5px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .companion-fault-steps li { overflow-wrap: anywhere; }
+  #simNativeView .companion-fault-raw {
+    display: block;
+    font: 500 10.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-faint);
+    overflow-wrap: anywhere;
+    user-select: all; -webkit-user-select: all;
+  }
+
+  /* The watch's hardware buttons, as a glass pill under its pane —
+     same tokens as the toolbar, so the row reads as chrome around the
+     device rather than as part of what's on screen. */
+  #simNativeView .watch-buttons {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 3px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    flex-shrink: 0;
+  }
+  #simNativeView .watch-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 0 11px; height: 26px;
+    appearance: none; -webkit-appearance: none;
+    border: 0; border-radius: 999px;
+    background: transparent; color: var(--nv-text);
+    font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+  }
+  #simNativeView .watch-btn:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .watch-btn:active { background: var(--nv-btn-active); transform: scale(0.96); }
+  #simNativeView .watch-btn svg { display: block; color: var(--nv-text-muted); }
+  #simNativeView .watch-btn:hover svg { color: inherit; }
+
+  @media (max-width: 960px) {
+    #simNativeView,
+    #simNativeView[data-companions],
+    #simNativeView[data-companions~="external"][data-companions~="watch"] {
+      --nv-device-max-w:    min(100%, 92vw);
+      --nv-companion-max-w: min(100%, 720px, 92vw);
+    }
+    /* Stacked and sharing the height: the phone keeps the larger share
+       because it is the thing being worked on. The subtractions are the
+       chrome between and around the panes — 24px of view padding, the
+       36px toolbar, the 36px pane label and four gaps, ~132px in all —
+       so one open pane fits without scrolling. Two do scroll, which is
+       what the scroll container below is for. */
+    #simNativeView[data-companions] {
+      --nv-device-max-h:    calc(55 * var(--nv-vh) - 80px);
+      --nv-companion-max-h: calc(45 * var(--nv-vh) - 75px);
+    }
+    #simNativeView .dual-pane {
+      flex-direction: column;
+      gap: 16px;
+      overflow: auto;
+      max-height: 100%;
+      /* Longhand, not `padding: 4px 0` — the shorthand quietly reset
+         the right gutter reserved for the rails above, and the panes
+         went straight back under them at this width. */
+      padding-top: 4px;
+      padding-bottom: 4px;
+      /* Not `center`: a centred flex container that overflows spills
+         out of BOTH ends, and the top end can't be scrolled back to —
+         which quietly cut the top off the toolbar as soon as a pane
+         made the stack too tall. Growing downwards keeps every pixel
+         reachable. */
+      justify-content: flex-start;
+    }
+    #simNativeView .watch-frame { max-width: min(100%, 60vw); }
+  }
+
+  /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
+     mirrors the simulator's interface orientation as a CSS
+     transform; page/device-page.js sets `data-orientation` on the
+     container after each rotate-button click. Rotation is purely
+     visual — pixel positions inside the screen area stay in the
+     device's portrait coord system, and JS wraps the input
+     transport + pinch overlay so coords still land where the
+     user's cursor is.
+
+     In landscape, the rotated visual width = portrait device
+     height; cap the unrotated max-height by viewport width too so
+     the rotated bbox fits horizontally on narrow viewports. */
+  #simNativeView #nativeDeviceFrame > div {
+    transform-origin: center center;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  /* Rotation is applied as an *inline* transform via JS so each
+     rotate-button click is a monotonically increasing 90° step
+     (0 → 90 → 180 → 270 → 360 → 450 → …). Per-orientation CSS
+     rules would interpolate the numeric difference between the
+     OLD value and the NEW value; jumping from
+     `portrait-upside-down (180)` to `landscape-right (-90)`
+     animates -270° backward instead of +90° forward, which is
+     visibly wrong. The CSS only sets `transform-origin` and the
+     transition curve; the actual rotation degree comes from
+     `rotation-deg` set inline by `applyOrientation` in
+     `page/device-page.js`. */
+
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
+    max-height: min(var(--nv-device-max-h), calc(100vw - 32px)) !important;
+  }
+
+  /* --- Power card ---------------------------------------------------
+     Shown on the device's own screen when the simulator isn't booted.
+     The bezel renders normally (chrome comes from `definition.json`,
+     which doesn't need a running guest), so the tab still looks like
+     the device it is — the glass just carries a Boot button instead of
+     a live framebuffer.
+
+     Deliberately black in BOTH themes: a powered-off phone screen is
+     black, and the card sits inside the screen cutout, not on the
+     page. Built by `page/device-page.js` and appended to the SDK's
+     screenArea, so it inherits the bezel's border-radius clip. */
+  #simNativeView .power-card {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px;
+    padding: 8% 12%;
+    box-sizing: border-box;
+    text-align: center;
+    background: radial-gradient(120% 90% at 50% 40%, #17171c 0%, #08080a 100%);
+    cursor: default;
+    z-index: 5;
+    animation: nv-power-in 0.24s ease both;
+    /* Type scales with the rendered screen, not the viewport — the
+       bezel shrinks on narrow windows and on landscape rotation, and
+       `cqw` on the children resolves against this box. */
+    container-type: inline-size;
+  }
+  @keyframes nv-power-in { from { opacity: 0; } to { opacity: 1; } }
+
+  /* No definition for this udid — there's no bezel to sit inside, so
+     the card supplies its own phone-shaped silhouette in the empty
+     device slot rather than collapsing to nothing.
+
+     Sized from the height so it can never overflow the viewport: the
+     width follows from the aspect ratio, the way the real bezel does. */
+  #simNativeView .power-card--bare {
+    position: relative; inset: auto;
+    height: min(640px, calc(100vh - 110px));
+    height: min(640px, calc(100dvh - 110px));
+    aspect-ratio: 9 / 19.5;
+    width: auto;
+    max-width: 78vw;
+    border-radius: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+
+  #simNativeView .power-card .power-glyph {
+    color: rgba(245, 245, 247, 0.85);
+    flex-shrink: 0;
+  }
+  /* Spins while a boot is in flight. */
+  #simNativeView .power-card[data-phase="booting"] .power-glyph,
+  #simNativeView .power-card[data-phase="starting"] .power-glyph {
+    animation: nv-power-spin 1.4s linear infinite;
+    color: rgba(245, 245, 247, 0.6);
+  }
+  @keyframes nv-power-spin { to { transform: rotate(360deg); } }
+
+  #simNativeView .power-card .power-title {
+    color: #f5f5f7;
+    font: 600 clamp(13px, 4.2cqw, 17px)/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .power-card .power-sub {
+    color: rgba(245, 245, 247, 0.5);
+    font: 500 clamp(10px, 3.2cqw, 12px)/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    max-width: 26ch;
+  }
+  /* Boot failures — the message from the server, not a generic retry
+     prompt. Amber rather than red: the device is fine, the boot isn't. */
+  #simNativeView .power-card .power-sub[data-error] {
+    color: #fbbf24;
+  }
+
+  #simNativeView .power-card .power-btn {
+    appearance: none;
+    margin-top: 2px;
+    padding: 9px 26px;
+    border: 0; border-radius: 999px;
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    font: 600 clamp(11px, 3.4cqw, 13px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    cursor: pointer;
+    transition: filter 0.12s ease, transform 0.12s ease;
+  }
+  #simNativeView .power-card .power-btn:hover:not(:disabled) { filter: brightness(1.12); }
+  #simNativeView .power-card .power-btn:active:not(:disabled) { transform: scale(0.97); }
+  #simNativeView .power-card .power-btn:disabled {
+    opacity: 0.45; cursor: default;
+  }
+
+  /* Toolbar gating. Every control in the scroll strip (rotate, AX,
+     status bar, location, camera, logs, home, screenshot, app
+     switcher) and the format picker needs a live guest — dim and
+     disable them until the stream is up. The back link, theme
+     toggle and sidebar-view toggle stay reachable: those are how the
+     user leaves a device that won't boot. */
+  /* The controls live in the toolbar's clusters and fold menus once it is
+     built (the strip they started in is gone), so the gate is theirs. */
+  #simNativeView[data-power] #nativeToolScroll,
+  #simNativeView[data-power] .tb-cluster,
+  #simNativeView[data-power] .tb-fold,
+  #simNativeView[data-power] #nativeFormatPicker,
+  #simNativeView[data-power] #nativeCodecPicker {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  #simNativeView[data-power] #nativeStatus {
+    color: var(--nv-text-faint);
+  }
+
+  /* Label group — clickable, returns to the simulator list. The
+     chevron + device name + OS subtitle read as one breadcrumb. */
+  #simNativeView .tb-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+    color: inherit; text-decoration: none;
+    transition: background 0.12s ease;
+    min-width: 0; /* enable ellipsis inside the flex item */
+  }
+  #simNativeView .tb-label:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-label .tb-back {
+    color: var(--nv-text-muted);
+    flex-shrink: 0;
+  }
+  #simNativeView .tb-label .tb-name {
+    color: var(--nv-text);
+    font: 600 13px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 22ch;
+  }
+  #simNativeView .tb-label .tb-os {
+    color: var(--nv-text-faint);
+    font: 500 11px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    white-space: nowrap;
+    padding-left: 2px;
+    border-left: 1px solid var(--nv-divider);
+  }
+
+  /* Right-side controls cluster: fps badge · format picker · actions. */
+  #simNativeView .tb-controls {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding-right: 4px;
+    min-width: 0;
+  }
+
+  /* Horizontally-scrollable icon strip. Trackpads scroll it directly;
+     mouse users get the flanking chevron buttons. It's the only flexible
+     child of .tb-controls, so it shrinks (and scrolls) when the window is
+     too narrow while the label / fps / format stay put. Scrollbar hidden
+     for the clean pill look. */
+  #simNativeView .tb-scroll {
+    display: inline-flex; align-items: center; gap: 2px;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: none;                 /* Firefox */
+  }
+  /* Clipping is what makes `scrollWidth` meaningful while ToolbarFold
+     tries candidates, and it is worn only for that: a clipped bar also
+     cuts off every popover hanging out of it. */
+  /* Clipping is what makes `scrollWidth` meaningful while ToolbarFold
+     tries candidates, and it is worn only for that: a clipped bar also
+     cuts off every popover hanging out of it. */
+  #simNativeView .top-bar.measuring { overflow: hidden; }
+
+  /* Once every cluster has folded and merged there is nothing left to
+     give but Navigate itself. The OS version goes first — it is a
+     caption nobody acts on — and then the device name truncates,
+     because a shortened name still says which device while a dropped
+     control is simply gone. */
+  #simNativeView .top-bar.tight .tb-os { display: none; }
+  #simNativeView .top-bar.tight .tb-name { max-width: 92px; }
+  #simNativeView .tb-scroll::-webkit-scrollbar { display: none; }  /* WebKit */
+
+  /* ── Cluster folding ────────────────────────────────────────────
+     The strip is seven CONTEXT CLUSTERS, not fifteen loose controls:
+     Navigate, Stream, View, Control, Simulate, Inspect, Capture. When
+     the row runs out of width a whole cluster folds into one menu
+     button — never an item, never a partial group. `ToolbarFold`
+     (toolbar/toolbar-fold.js) owns the order; this is its dressing.
+     See docs/mockups/focus-toolbar-overflow.html. */
+  #simNativeView .tb-cluster {
+    display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto;
+  }
+  #simNativeView .tb-cluster[hidden] { display: none; }
+  #simNativeView .tb-sep {
+    flex: 0 0 auto; width: 1px; height: 16px; margin: 0 2px;
+    background: var(--nv-divider);
+  }
+  #simNativeView .tb-sep[hidden] { display: none; }
+
+  /* A folded cluster is an ICON plus a caret, never a text label:
+     folding has to be a saving, and "Inspect" as a label is an 85px
+     button replacing two 30px glyphs. The names still do their work,
+     as the menu's section headings and the button's tooltip. */
+  #simNativeView .tb-fold { position: relative; flex: 0 0 auto; }
+  #simNativeView .tb-fold[hidden] { display: none; }
+  #simNativeView .tb-fold-btn {
+    display: inline-flex; align-items: center; gap: 1px;
+    height: 26px; padding: 0 4px 0 5px;
+    background: transparent; border: 1px solid transparent; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer;
+  }
+  #simNativeView .tb-fold-btn:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-fold-btn[aria-expanded="true"] {
+    border-color: var(--nv-accent); color: var(--nv-accent);
+  }
+  #simNativeView .tb-fold-btn svg { display: block; }
+  #simNativeView .tb-fold-btn .tb-caret { opacity: 0.5; }
+
+  /* A cluster menu is anchored under the button that opened it.
+     `right: 0` put a 234px popover's right edge on a 40px button, so
+     the Stream menu opened almost the full width of the bar to the
+     LEFT of the control it belongs to and read as unrelated to it.
+     Only the merged menu keeps `right: 0` — it sits at the end of the
+     bar, where opening leftward is the only direction available. */
+  /* Border-box throughout this menu. page/device-page.html does not set a
+     global `box-sizing`, so `width: 100%` on a padded row resolved to
+     content-width PLUS padding and every row sat a few pixels wider
+     than the popover holding it — which is what clipped the frame-rate
+     readout against the right border. */
+  #simNativeView .tb-fold-pop,
+  #simNativeView .tb-row,
+  #simNativeView .tb-read,
+  #simNativeView .tb-choice,
+  #simNativeView .tb-acc > summary,
+  #simNativeView .tb-acc-body { box-sizing: border-box; }
+
+  #simNativeView .tb-fold-pop {
+    position: absolute; z-index: 60; top: calc(100% + 8px);
+    left: 50%; transform: translateX(-50%);
+    /* Sized for the widest row a cluster menu holds, which is the
+       codec CHOICE — at 208px "MJPEG" was clipped off it. */
+    width: 234px; padding: 6px; border-radius: 12px;
+    /* Opaque, unlike the bar itself. The toolbar's translucency reads
+       as chrome floating over the device; a MENU sits directly on top
+       of the running screen, and at `--nv-bar-bg`'s 0.82 alpha the app
+       behind it showed through the rows. A control you have to squint
+       past a home screen to read is not worth folding into. */
+    background: var(--nv-page-bg);
+    border: 1px solid var(--nv-bar-border);
+    box-shadow: var(--nv-bar-shadow);
+    color: var(--nv-text);
+    font: 500 12px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    max-height: 60vh; overflow-y: auto;
+  }
+  #simNativeView [data-fold="more"] .tb-fold-pop {
+    left: auto; right: 0; transform: none;
+  }
+  #simNativeView .tb-fold-pop[hidden] { display: none; }
+
+  /* Merged mode is an EXCLUSIVE accordion. Four clusters flattened
+     into one popover is thirteen rows — the "too many things"
+     complaint moved down a level rather than answered. Collapsed it is
+     four rows; `name=` makes them a radio group where supported and
+     the click handler enforces it everywhere else. */
+  #simNativeView .tb-acc > summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px; border-radius: 8px;
+    font: 600 12px/1.3 inherit; color: var(--nv-text);
+  }
+  #simNativeView .tb-acc > summary::-webkit-details-marker { display: none; }
+  #simNativeView .tb-acc > summary:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-acc > summary svg { flex: 0 0 auto; opacity: 0.8; }
+  #simNativeView .tb-acc[open] > summary { color: var(--nv-accent); }
+  #simNativeView .tb-acc > summary .tb-acc-n {
+    margin-left: auto; font-size: 10px; font-weight: 500;
+    color: var(--nv-text-faint); font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .tb-acc > summary .tb-caret { opacity: 0.5; transition: transform 0.15s ease; }
+  #simNativeView .tb-acc[open] > summary .tb-caret { transform: rotate(180deg); }
+  #simNativeView .tb-acc-body { padding: 1px 0 5px 8px; }
+
+  /* A MENU ROW IS NOT ONE THING. Flattening every control to
+     icon + label + value turned the codec picker into a caption
+     reading "Codec H.264" with no way to reach MJPEG. Actions,
+     toggles, choices and readouts each get their own rendering. */
+  #simNativeView .tb-row {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 7px 8px; border: 0; border-radius: 8px; cursor: pointer;
+    background: transparent; color: inherit; font: inherit; text-align: left;
+  }
+  #simNativeView .tb-row:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-row svg { flex: 0 0 auto; opacity: 0.85; }
+  #simNativeView .tb-row.on { color: var(--nv-accent); }
+  #simNativeView .tb-row.on svg { opacity: 1; }
+  /* A dot, not a switch. Every control that reaches this menu — status
+     bar, location, camera, accessibility, logs — OPENS A PANEL. A
+     switch says "a setting you flip and leave"; these are disclosures,
+     and the switch also justified keeping the menu open so you could
+     watch it move, which left the panel you just opened sitting behind
+     the menu covering it. The dot reports the same state without
+     claiming to be a setting. */
+  #simNativeView .tb-dot {
+    margin-left: auto; flex: 0 0 auto;
+    width: 6px; height: 6px; border-radius: 999px;
+    background: transparent;
+  }
+  #simNativeView .tb-row.on .tb-dot { background: var(--nv-accent); }
+
+  /* readout — no hover, no pointer: nothing happens when you press it */
+  #simNativeView .tb-read {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 7px 8px; cursor: default; color: var(--nv-text-muted);
+  }
+  #simNativeView .tb-read svg { flex: 0 0 auto; opacity: 0.55; }
+  #simNativeView .tb-read span:first-of-type { flex: 0 1 auto; min-width: 0; }
+  #simNativeView .tb-read .tb-val {
+    margin-left: auto; padding-left: 8px; flex: 0 0 auto;
+    font-size: 11px; color: var(--nv-text-faint);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  /* choice — the options come with it, because a value you cannot
+     change is a caption pretending to be a control */
+  #simNativeView .tb-choice {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 8px; border-radius: 8px;
+  }
+  #simNativeView .tb-choice > svg { flex: 0 0 auto; opacity: 0.85; }
+  #simNativeView .tb-choice .fmt-picker { margin-left: auto; }
+
+  /* Chevron scroll buttons — hidden unless the strip overflows. */
+  #simNativeView .tb-arrow {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 26px; padding: 0;
+    background: transparent; border: 0; border-radius: 7px;
+    color: var(--nv-text-muted); cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+  }
+  #simNativeView .tb-arrow:hover { background: var(--nv-btn-hover); color: var(--nv-text); }
+  #simNativeView .tb-arrow:disabled { opacity: 0.28; cursor: default; background: transparent; }
+  #simNativeView .tb-arrow[hidden] { display: none; }
+  #simNativeView .tb-arrow svg { display: block; }
+
+  /* fps — small monospace label. Hidden until the stream reports a
+     value so the bar isn't carrying dead text on startup. */
+  #simNativeView #nativeStatus {
+    color: var(--nv-text-muted);
+    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 0 2px;
+  }
+  #simNativeView #nativeStatus:empty { display: none; }
+
+  /* Format segmented control. Active is filled blue; the other is
+     a quiet ghost that lifts on hover. */
+  #simNativeView .fmt-picker {
+    display: inline-flex; align-items: stretch;
+    padding: 2px;
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-fmt-track-border);
+    border-radius: 999px;
+  }
+  #simNativeView .fmt-btn {
+    appearance: none; -webkit-appearance: none;
+    border: 0; padding: 0 10px; height: 22px;
+    background: transparent; color: var(--nv-fmt-btn-text);
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.04em;
+    border-radius: 999px; cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  #simNativeView .fmt-btn:hover { color: var(--nv-text); }
+  #simNativeView .fmt-btn.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  }
+  /* A codec this browser has no decoder for. The `title` says why. */
+  #simNativeView .fmt-btn:disabled {
+    opacity: 0.35; cursor: not-allowed;
+  }
+  #simNativeView .fmt-btn:disabled:hover { color: var(--nv-fmt-btn-text); }
+  #simNativeView .fmt-picker[hidden],
+  #simNativeView .tb-choice:has(> .fmt-picker[hidden]) { display: none; }
+  /* HEVC chosen, H.264 arrived: the browser can't play HEVC. The `title` says so. */
+  #simNativeView .fmt-btn.active[data-fell-back] {
+    background: transparent; color: var(--nv-text);
+    box-shadow: inset 0 0 0 1px var(--nv-accent);
+  }
+
+  /* Action buttons — Home / Screenshot / App-switcher. */
+  #simNativeView .tb-actions {
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  #simNativeView .ico-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  #simNativeView .ico-btn:hover { background: var(--nv-btn-hover); }
+  #simNativeView .ico-btn:active { background: var(--nv-btn-active); }
+  #simNativeView .ico-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  #simNativeView .ico-btn svg { display: block; }
+
+  /* Sidebar-view toggle — floating glass pill on the bottom-left,
+     mirror of the theme toggle. Click navigates back to the inline
+     sidebar layout (`/simulators#stream=<udid>`) — the
+     classic startStream view with the right-hand sidebar of
+     buttons + capture gallery. Same tokens as the theme pill so
+     the two read as a matched pair. */
+  #simNativeView .sidebar-view-toggle {
+    position: fixed; left: 16px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .sidebar-view-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .sidebar-view-toggle:active { transform: scale(0.96); }
+  #simNativeView .sidebar-view-toggle svg { display: block; }
+
+  /* Right-edge rail stack. Two rails live here — baguette's own
+     companion-screens rail on top, the plugins rail below — and both
+     used to claim `right: 16px; top: 50%` for themselves, which put
+     them on top of each other the moment both existed.
+
+     Deliberately NOT centred with `transform: translateY(-50%)`: a
+     transformed element becomes the containing block for `position:
+     fixed` descendants, and the plugin panel and its flyout are both
+     fixed and mounted in here. Full-height plus `justify-content:
+     center` centres the group without that side effect.
+
+     This container IS a stacking context, and no `z-index` here can
+     change that: `position: fixed` creates one on its own, whatever
+     `z-index` says. Everything mounted inside therefore composites at
+     the stack's level — the rail's own `z-index` is what the page
+     sorts, and a child's is only ever measured against its siblings in
+     here. That's fine for the rails, the flyout and the panel, which
+     all live at the right edge; it is not fine for anything meant to
+     cover the page. The add-a-bakery modal used to mount here and its
+     `z-index: 60` was being weighed against the rail rather than
+     against the device's `z-index: 2` screen area a level up, so the
+     scrim meant to dim the phone painted behind it. Page-covering
+     things hang off `#simNativeView` instead — see `modalMount` in
+     page/device-page.js. */
+  #simNativeView .right-rails {
+    position: fixed;
+    right: 16px; top: 12px; bottom: 12px;
+    display: flex; flex-direction: column;
+    align-items: flex-end; justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+  }
+  #simNativeView .right-rails > * { pointer-events: auto; }
+  /* `order` rather than DOM order: both rails are appended by their own
+     async fetch, so whichever server answer lands first would otherwise
+     decide which rail is on top — and the plugins rail beat the screens
+     rail on a warm cache but not a cold one. baguette's own controls go
+     above the ones you installed, every time. */
+  #simNativeView .right-rails > .screens-rail { order: 1; }
+  #simNativeView .right-rails > .plugin-rail  { order: 2; }
+
+  /* Theme toggle — floating glass pill at the bottom-right
+     corner. Carries one icon (sun in light theme, moon in dark
+     theme); click flips the manual override. The same pill
+     tokens as the toolbar so it reads as a sibling control. */
+  #simNativeView .theme-toggle {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .theme-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .theme-toggle:active { transform: scale(0.96); }
+  /* Show only the icon that matches the active theme. The other
+     is collapsed via display: none — both icons live in the DOM
+     so screen readers can announce either label. */
+  #simNativeView .theme-toggle .ic-sun  { display: none; }
+  #simNativeView .theme-toggle .ic-moon { display: block; }
+  @media (prefers-color-scheme: light) {
+    #simNativeView:not([data-theme="dark"]) .theme-toggle .ic-sun  { display: block; }
+    #simNativeView:not([data-theme="dark"]) .theme-toggle .ic-moon { display: none; }
+  }
+  #simNativeView[data-theme="light"] .theme-toggle .ic-sun  { display: block; }
+  #simNativeView[data-theme="light"] .theme-toggle .ic-moon { display: none; }
+  #simNativeView[data-theme="dark"]  .theme-toggle .ic-sun  { display: none; }
+  #simNativeView[data-theme="dark"]  .theme-toggle .ic-moon { display: block; }
+
+  /* Narrow viewports — drop the OS subtitle and the fps badge so
+     the bar collapses gracefully instead of wrapping. */
+  @media (max-width: 560px) {
+    #simNativeView .tb-label .tb-os { display: none; }
+    #simNativeView #nativeStatus { display: none; }
+    #simNativeView .top-bar { gap: 8px; }
+  }
+  /* The codec picker stays: where it goes when the row is narrow (inline,
+     or in the folded Stream menu) is the toolbar planner's call. */
+  @media (max-width: 420px) {
+    #simNativeView .tb-label .tb-name { max-width: 16ch; }
+  }
+
+  /* Live-log sheet — slides up from the bottom on toggle. Hidden
+     by default; the toolbar's `__nativeToggleLogs` flips
+     `[data-logs="open"]` on `#simNativeView`. The sheet uses the
+     same glass tokens as the toolbar so it reads as a sibling
+     control, and the inner panel adopts the Events-card monospace
+     styling so colour-coding pops the same way as the sidebar
+     view. */
+  #simNativeView .logs-sheet {
+    position: fixed;
+    left: 16px; right: 16px; bottom: 16px;
+    max-height: 50vh;
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    transform: translateY(calc(100% + 24px));
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+                opacity 0.18s ease;
+    z-index: 60;
+  }
+  #simNativeView[data-logs="open"] .logs-sheet {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #simNativeView .logs-sheet[aria-hidden="true"] { display: flex; }
+  #simNativeView .logs-sheet-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .logs-sheet-close {
+    width: 26px; height: 24px;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .logs-sheet-body {
+    flex: 1; min-height: 0; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  /* The LogPanel renders into .logs-sheet-body. Its inner list
+     needs to flex inside this column so it scrolls properly. */
+  #simNativeView .logs-sheet-body > [data-role="list"],
+  #simNativeView .logs-sheet-body div[data-role="list"] {
+    flex: 1; min-height: 0; max-height: none !important;
+  }
+
+  /* Camera control card. Mirrors `.ax-host` (top-right) on the
+     LEFT side so the two floating panels can coexist without
+     stacking conflicts. Sized for a control card — narrow, glass-
+     styled, slight fade animation. Crucially does NOT cover the
+     device frame: the user opens this to start the camera and then
+     looks at the iOS app's actual preview rendered on the
+     simulator screen — a bottom-anchored sheet would obscure that
+     exact area. */
+  #simNativeView .camera-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    left: 24px;
+    z-index: 40;
+    width: 260px;
+    padding: 12px 14px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-camera="open"] .camera-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .camera-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: -2px 0 8px 0;
+    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .camera-host-close {
+    width: 22px; height: 22px;
+    color: var(--nv-text-muted);
+  }
+
+  /* Streaming indicator on the camera toolbar button — small green
+     dot in the top-right corner while the WS is reporting
+     `phase=streaming`. Persists when the card is closed, so the
+     user always knows the camera is on. */
+  #simNativeView #nativeCameraToggle { position: relative; }
+  #simNativeView #nativeCameraToggle.streaming::after {
+    content: '';
+    position: absolute;
+    top: 5px; right: 5px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+  }
+
+  /* Status-bar override card. Mirror of `.camera-host` but anchored
+     top-right and sized for a settings panel. The toolbar's
+     `nativeStatusBarToggle` flips `[data-statusbar="open"]` on the
+     root; CSS fades it in. All inner control styles are scoped under
+     `.status-bar-host` so the generic class names (.sb-field, .sb-seg,
+     .sb-pill …) can't leak into the rest of the focus chrome. */
+  #simNativeView .status-bar-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 332px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-statusbar="open"] .status-bar-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .status-bar-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .status-bar-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .status-bar-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .status-bar-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeStatusBarHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  /* Network-conditioning card — same floating-glass chrome as the
+     status-bar card. Inner control styles are scoped under
+     `.network-host` so the short class names (.nw-field, .nw-pill …)
+     can't leak into the rest of the focus chrome. */
+  #simNativeView .network-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 332px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-network="open"] .network-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .network-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .network-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .network-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .network-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeNetworkHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  /* Notify card — same floating-glass chrome as the network card. Inner
+     styles are scoped under `.notify-host` (.nt-*). */
+  #simNativeView .notify-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 332px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-notify="open"] .notify-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .notify-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .notify-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .notify-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .notify-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeNotifyHost { overflow-y: auto; padding: 2px 14px 12px; }
+  #simNativeView .notify-host .nt-section { padding: 10px 0 0; display: flex; flex-direction: column; gap: 5px; }
+  #simNativeView .notify-host .nt-label {
+    font: 500 11px/1.2 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .notify-host .nt-field {
+    width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 7px;
+    border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg); color: var(--nv-text);
+    font: 12px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .notify-host .nt-payload {
+    resize: vertical; font: 11.5px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  #simNativeView .notify-host .nt-field:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .notify-host .nt-footer { flex-direction: row; justify-content: flex-end; gap: 6px; }
+  #simNativeView .notify-host .nt-example,
+  #simNativeView .notify-host .nt-send {
+    padding: 5px 12px; border-radius: 7px; border: 1px solid var(--nv-bar-border);
+    background: transparent; color: var(--nv-text); font: 500 12px/1.2 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .notify-host .nt-send { background: var(--nv-accent); color: var(--nv-accent-text); border-color: transparent; }
+  #simNativeView .notify-host .nt-result {
+    margin: 10px 0 0; font: 11.5px/1.45 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .notify-host .nt-result:empty { display: none; }
+  #simNativeView .notify-host .nt-result.error { color: var(--nv-danger); }
+
+  /* Defaults card — same floating-glass chrome as the status-bar and
+     network cards, a little wider for its key / type / value rows. Inner
+     styles are scoped under `.defaults-host` (.df-*). */
+  #simNativeView .defaults-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 384px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-defaults="open"] .defaults-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .defaults-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .defaults-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .defaults-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .defaults-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeDefaultsHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  #simNativeView .defaults-host .df-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  #simNativeView .defaults-host .df-section { padding: 10px 0; border-top: 1px solid var(--nv-divider); }
+  #simNativeView .defaults-host .df-section:first-child { border-top: 0; }
+  #simNativeView .defaults-host .df-title {
+    display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px;
+    color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif; letter-spacing: 0.10em; text-transform: uppercase;
+  }
+  #simNativeView .defaults-host .df-row { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+  #simNativeView .defaults-host .df-row + .df-row { margin-top: 8px; }
+  #simNativeView .defaults-host .df-row[hidden] { display: none; }
+  #simNativeView .defaults-host .df-row > label,
+  #simNativeView .defaults-host .df-row > span:first-child {
+    flex: 0 0 44px; color: var(--nv-text-muted); font: 500 11px/1.2 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-other { align-items: flex-start; }
+  #simNativeView .defaults-host .df-other-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  #simNativeView .defaults-host .df-field {
+    appearance: none; -webkit-appearance: none; flex: 1; min-width: 0; width: 100%; box-sizing: border-box;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 8px; color: var(--nv-text);
+    font: 500 12px/1 -apple-system, sans-serif; padding: 6px 8px;
+  }
+  #simNativeView .defaults-host .df-field.df-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+  #simNativeView .defaults-host select.df-field { cursor: pointer; }
+  #simNativeView .defaults-host .df-field:focus,
+  #simNativeView .defaults-host .df-value:focus,
+  #simNativeView .defaults-host textarea:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .defaults-host .df-hint {
+    color: var(--nv-text-muted); font: 400 11px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-notice {
+    margin: 4px 0 2px; padding: 10px; border-radius: 9px;
+    font: 500 11.5px/1.45 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-notice[hidden] { display: none; }
+  #simNativeView .defaults-host .df-notice.df-danger { color: var(--nv-danger); border: 1px solid var(--nv-danger); }
+  #simNativeView .defaults-host .df-notice.df-warn { color: var(--nv-warn); border: 1px solid var(--nv-warn); }
+  #simNativeView .defaults-host .df-notice .df-chip { margin-top: 8px; }
+  #simNativeView .defaults-host .df-item { border-top: 1px solid var(--nv-divider); }
+  #simNativeView .defaults-host .df-item-main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 46px 132px 22px;
+    align-items: center; gap: 8px; min-height: 38px;
+  }
+  #simNativeView .defaults-host .df-key {
+    font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #simNativeView .defaults-host .df-type {
+    justify-self: start; font-size: 10px; padding: 3px 6px; border-radius: 999px;
+    background: var(--nv-fmt-track-bg); color: var(--nv-text-muted);
+  }
+  #simNativeView .defaults-host .df-control {
+    display: flex; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0;
+  }
+  #simNativeView .defaults-host .df-value {
+    width: 100%; min-width: 0; box-sizing: border-box;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 7px; color: var(--nv-text); font-size: 11px; padding: 5px 7px;
+  }
+  #simNativeView .defaults-host .df-value.df-num { text-align: right; }
+  /* Not set: a setting the running app reads that nothing stores. The
+     last column says where its value comes from instead of a delete —
+     there is nothing stored to delete. An untyped one puts its type
+     picker and value on a line of their own. */
+  #simNativeView .defaults-host .df-unset .df-value::placeholder { color: var(--nv-text-faint); font-style: italic; }
+  #simNativeView .defaults-host .df-source {
+    justify-self: center; font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--nv-text-faint); cursor: default;
+  }
+  #simNativeView .defaults-host .df-item-pick { grid-template-columns: minmax(0, 1fr) 46px 22px; }
+  #simNativeView .defaults-host .df-item-pick .df-control {
+    grid-column: 1 / -1; grid-row: 2; justify-content: stretch; padding-bottom: 8px;
+  }
+  #simNativeView .defaults-host .df-pick-type { flex: 0 0 76px; width: 76px; }
+  /* Live: the running app watches this key (@AppStorage), so a change
+     reaches it without a relaunch. A dot, not a word, so the key keeps
+     its width. */
+  #simNativeView .defaults-host .df-live-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--nv-accent); margin: 0 6px 1px 0; vertical-align: middle;
+  }
+  #simNativeView .defaults-host .df-filter { margin-bottom: 10px; }
+  /* Monitor: a value the app itself just wrote fades in from a tint. */
+  #simNativeView .defaults-host .df-flash { animation: df-flash 1.6s ease-out; }
+  @keyframes df-flash {
+    from { background: color-mix(in srgb, var(--nv-accent) 22%, transparent); }
+    to   { background: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #simNativeView .defaults-host .df-flash { animation: none; outline: 1px solid var(--nv-accent); }
+  }
+  #simNativeView .defaults-host .df-discover {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 2px 0 4px;
+  }
+  #simNativeView .defaults-host .df-value.df-bad { border-color: var(--nv-danger); }
+  #simNativeView .defaults-host .df-row-error {
+    color: var(--nv-danger); font: 500 11px/1.3 -apple-system, sans-serif;
+    text-align: right; padding: 0 30px 8px 0;
+  }
+  #simNativeView .defaults-host .df-size { font-size: 11px; color: var(--nv-text-muted); }
+  #simNativeView .defaults-host .df-chip {
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg); color: var(--nv-text);
+    border-radius: 7px; font: 600 10.5px/1 -apple-system, sans-serif; padding: 5px 7px; white-space: nowrap;
+  }
+  #simNativeView .defaults-host .df-chip:hover { background: var(--nv-btn-hover); }
+  #simNativeView .defaults-host .df-chevron { display: inline-flex; transition: transform 0.12s ease; }
+  #simNativeView .defaults-host .df-chevron.df-open { transform: rotate(180deg); }
+  #simNativeView .defaults-host .df-icon {
+    appearance: none; width: 22px; height: 22px; border: 0; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--nv-text-faint);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  }
+  #simNativeView .defaults-host .df-icon:hover { background: var(--nv-btn-hover); color: var(--nv-text); }
+  #simNativeView .defaults-host .df-delete:hover { color: var(--nv-danger); }
+  #simNativeView .defaults-host .df-switch {
+    appearance: none; flex: 0 0 auto; width: 36px; height: 21px; border: 0; border-radius: 999px;
+    padding: 2px; display: flex; justify-content: flex-start; cursor: pointer;
+    background: var(--nv-btn-active); transition: background 0.12s ease;
+  }
+  #simNativeView .defaults-host .df-switch[aria-checked="true"] { justify-content: flex-end; background: var(--nv-accent); }
+  #simNativeView .defaults-host .df-switch span {
+    width: 17px; height: 17px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  #simNativeView .defaults-host .df-fragment { padding: 0 0 10px; }
+  #simNativeView .defaults-host .df-fragment textarea {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border); border-radius: 8px;
+    color: var(--nv-text); font-size: 10.5px; line-height: 1.5; padding: 7px 8px;
+  }
+  #simNativeView .defaults-host .df-fragment-foot {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 6px;
+  }
+  #simNativeView .defaults-host .df-empty { padding: 22px 12px; text-align: center; }
+  #simNativeView .defaults-host .df-empty b { display: block; font: 600 12.5px/1.3 -apple-system, sans-serif; margin-bottom: 6px; }
+  #simNativeView .defaults-host .df-add { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 6px; }
+  #simNativeView .defaults-host .df-add-value { grid-template-columns: minmax(0, 1fr) auto; margin-top: 6px; }
+  #simNativeView .defaults-host .df-primary {
+    appearance: none; border: 0; cursor: pointer; background: var(--nv-accent); color: var(--nv-accent-text);
+    border-radius: 8px; font: 600 12px/1 -apple-system, sans-serif; padding: 7px 14px;
+  }
+  #simNativeView .defaults-host .df-primary.df-sm { border-radius: 7px; font-size: 11px; padding: 6px 10px; }
+  #simNativeView .defaults-host .df-secondary {
+    appearance: none; cursor: pointer; border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-accent); border-radius: 8px; font: 600 12px/1 -apple-system, sans-serif; padding: 8px;
+  }
+  #simNativeView .defaults-host .df-secondary:hover { background: var(--nv-btn-hover); }
+  #simNativeView .defaults-host .df-secondary.df-sm { font-size: 11px; padding: 6px 10px; }
+  #simNativeView .defaults-host .df-relaunch { display: flex; align-items: flex-start; gap: 10px; }
+  #simNativeView .defaults-host .df-relaunch .df-switch { margin-top: 1px; }
+  #simNativeView .defaults-host .df-relaunch-title { font: 600 12px/1.3 -apple-system, sans-serif; margin-bottom: 2px; }
+  #simNativeView .defaults-host .df-status {
+    display: flex; align-items: center; gap: 6px; margin-top: 10px;
+    color: var(--nv-text-muted); font: 500 11px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-status:empty { display: none; }
+  #simNativeView .defaults-host .df-status svg { flex: 0 0 auto; color: var(--nv-accent); }
+  #simNativeView .defaults-host .df-status.df-warn {
+    display: block; padding: 10px; border-radius: 9px; border: 1px solid var(--nv-warn); color: var(--nv-text);
+  }
+  #simNativeView .defaults-host .df-status.df-warn .df-primary { margin-top: 8px; }
+  #simNativeView .defaults-host .df-two {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px;
+  }
+
+  #simNativeView .network-host .nw-section { padding: 10px 0 8px; }
+  #simNativeView .network-host .nw-section + .nw-section {
+    border-top: 1px solid var(--nv-divider);
+  }
+  #simNativeView .network-host .nw-section-title {
+    margin: 0 0 7px; font: 600 10.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  #simNativeView .network-host .nw-pill {
+    padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-text); font: 500 11.5px/1 -apple-system, sans-serif;
+    cursor: pointer;
+  }
+  #simNativeView .network-host .nw-pill:hover:not(:disabled) { background: rgba(127,127,127,0.14); }
+  #simNativeView .network-host .nw-pill.active {
+    background: #2563eb; border-color: #2563eb; color: #fff;
+  }
+  #simNativeView .network-host .nw-pill:disabled { opacity: 0.4; cursor: default; }
+  #simNativeView .network-host .nw-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 3px 0;
+  }
+  #simNativeView .network-host .nw-row-label {
+    font: 400 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-row-control {
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  #simNativeView .network-host .nw-field {
+    width: 84px; padding: 4px 7px; text-align: right;
+    border-radius: 7px; border: 1px solid var(--nv-bar-border);
+    background: rgba(127,127,127,0.10); color: var(--nv-text);
+    font: 400 12px/1.2 -apple-system, sans-serif;
+  }
+  #simNativeView .network-host .nw-field:disabled { opacity: 0.4; }
+  #simNativeView .network-host .nw-unit {
+    width: 34px; font: 400 11px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-hint,
+  #simNativeView .network-host .nw-note {
+    margin: 6px 0 0; font: 400 10.5px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-note { padding-bottom: 4px; }
+  #simNativeView .network-host .nw-toggle {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    font: 400 12px/1.3 -apple-system, sans-serif;
+  }
+  #simNativeView .network-host .nw-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  /* The armed readout. Amber rather than the usual muted grey, because
+     this is the one state in the card someone needs to notice they left
+     on — a forgotten throttle reads as "the app is slow", not as a
+     mistake. */
+  #simNativeView .network-host .nw-state {
+    font: 500 11.5px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .network-host .nw-state.on {
+    color: #f59e0b; font-weight: 600;
+  }
+  #simNativeView .network-host .nw-clear {
+    padding: 5px 10px; border-radius: 8px;
+    border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-text); font: 500 11.5px/1 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .network-host .nw-clear:hover { background: rgba(127,127,127,0.14); }
+
+  /* Toolbar indicator. Mirrors the camera's `.streaming` dot but amber
+     and, crucially, kept in sync while the card is CLOSED — that is the
+     whole point of it. */
+  #simNativeView #nativeNetworkToggle { position: relative; }
+  #simNativeView #nativeNetworkToggle.conditioning::after {
+    content: '';
+    position: absolute; top: 3px; right: 3px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.75);
+  }
+
+  /* Location card — same floating-glass chrome as the status-bar card,
+     wider to fit the Leaflet map. The toolbar's `nativeLocationToggle`
+     flips `[data-location="open"]`. */
+  #simNativeView .location-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 360px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-location="open"] .location-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .location-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .location-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .location-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .location-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeLocationHost { padding: 10px 14px 12px; }
+  #simNativeView .location-host .loc-search {
+    display: flex; gap: 6px; margin-bottom: 10px;
+  }
+  #simNativeView .location-host .loc-search-input {
+    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 8px;
+    border: 1px solid var(--nv-divider); background: var(--nv-btn-hover);
+    color: var(--nv-text); font: 500 12px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .location-host .loc-search-input:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-icon-btn {
+    flex: 0 0 auto; width: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--nv-divider); border-radius: 8px;
+    background: var(--nv-btn-hover); color: var(--nv-text); cursor: pointer;
+  }
+  #simNativeView .location-host .loc-icon-btn:hover { color: var(--nv-accent); border-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-modes {
+    display: inline-flex; gap: 2px; padding: 2px;
+    background: var(--nv-btn-hover); border-radius: 8px; margin-bottom: 10px;
+  }
+  #simNativeView .location-host .loc-seg-btn {
+    border: 0; background: transparent; color: var(--nv-text-muted);
+    font: 600 12px/1 -apple-system, sans-serif; padding: 6px 14px;
+    border-radius: 6px; cursor: pointer;
+  }
+  #simNativeView .location-host .loc-seg-btn:hover { color: var(--nv-text); }
+  #simNativeView .location-host .loc-seg-btn.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+  }
+  #simNativeView .location-host .loc-map {
+    height: 280px; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--nv-divider); background: #2a2a30;
+  }
+  #simNativeView .location-host .loc-readout {
+    margin-top: 8px; font: 500 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-muted); min-height: 16px;
+  }
+  #simNativeView .location-host .loc-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  }
+  /* `display: flex` above outranks the UA stylesheet's `[hidden] { display:
+     none }`, so mode-specific rows (the route's Speed field) stayed on
+     screen in every tab even though `_setMode` sets `hidden`. Same trick as
+     `.companion-column[hidden]` and `.tb-arrow[hidden]` further up. */
+  #simNativeView .location-host .loc-row[hidden] { display: none; }
+  #simNativeView .location-host .loc-row-label {
+    font: 500 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .location-host .loc-field {
+    width: 72px; padding: 5px 8px; border-radius: 7px;
+    border: 1px solid var(--nv-divider); background: var(--nv-btn-hover);
+    color: var(--nv-text); font: 500 12px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .location-host .loc-field:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-unit { font: 500 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted); }
+  /* Motion toggle — sits under the readout in every mode, since motion
+     follows whatever the card is doing (walk, route, or a pinned point). */
+  #simNativeView .location-host .loc-motion { justify-content: space-between; }
+  #simNativeView .location-host .loc-motion-toggle {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    font: 500 12px/1 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .location-host .loc-motion-toggle input { accent-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-motion-state {
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-accent);
+  }
+  #simNativeView .location-host .loc-actions { display: flex; gap: 8px; margin-top: 12px; }
+  #simNativeView .location-host .loc-apply {
+    flex: 1; padding: 8px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    font: 600 12px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .location-host .loc-apply:disabled { opacity: 0.45; cursor: default; }
+  #simNativeView .location-host .loc-clear {
+    padding: 8px 14px; border: 1px solid var(--nv-divider); border-radius: 8px;
+    background: transparent; color: var(--nv-text); cursor: pointer;
+    font: 600 12px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .location-host .loc-clear:hover { background: var(--nv-btn-hover); }
+  /* CSS-only map pin (a divIcon) so no Leaflet marker PNGs are needed. */
+  #simNativeView .location-host .loc-pin-dot {
+    display: block; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--nv-accent); border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+
+  /* ---- Walk mode: joystick + compass ---- */
+  #simNativeView .location-host .loc-walk {
+    display: flex; align-items: center; gap: 16px; margin-top: 12px;
+  }
+  /* Keeps the joystick, compass and speed preset out of Point and Route —
+     see the note on `.loc-row[hidden]`. */
+  #simNativeView .location-host .loc-walk[hidden] { display: none; }
+  /* The pad. `touch-action: none` is load-bearing — without it a drag on
+     a trackpad/touchscreen scrolls the panel instead of steering. */
+  #simNativeView .location-host .loc-stick {
+    position: relative; flex: 0 0 auto;
+    width: 96px; height: 96px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, var(--nv-btn-hover) 0%, transparent 70%),
+      var(--nv-bg-elevated, rgba(255,255,255,0.03));
+    border: 1px solid var(--nv-divider);
+    cursor: grab; touch-action: none; user-select: none;
+  }
+  #simNativeView .location-host .loc-stick:active { cursor: grabbing; }
+  #simNativeView .location-host .loc-stick:focus-visible {
+    outline: 2px solid var(--nv-accent); outline-offset: 2px;
+  }
+  #simNativeView .location-host .loc-stick-axis {
+    position: absolute; background: var(--nv-divider); opacity: 0.6;
+  }
+  #simNativeView .location-host .loc-stick-axis-v {
+    left: 50%; top: 12%; bottom: 12%; width: 1px; transform: translateX(-0.5px);
+  }
+  #simNativeView .location-host .loc-stick-axis-h {
+    top: 50%; left: 12%; right: 12%; height: 1px; transform: translateY(-0.5px);
+  }
+  #simNativeView .location-host .loc-stick-thumb {
+    position: absolute; left: 50%; top: 50%;
+    width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+    background: var(--nv-accent); border: 2px solid rgba(255,255,255,0.85);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+    /* Snap home on release; while dragging JS sets transform every
+       pointermove, so the transition is imperceptible mid-drag. */
+    transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+    pointer-events: none;
+  }
+  #simNativeView .location-host .loc-walk-side {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0;
+  }
+  #simNativeView .location-host .loc-compass {
+    position: relative; width: 46px; height: 46px; border-radius: 50%;
+    border: 1px solid var(--nv-divider); background: var(--nv-btn-hover);
+  }
+  #simNativeView .location-host .loc-compass-n {
+    position: absolute; top: 1px; left: 50%; transform: translateX(-50%);
+    font: 700 7px/1 -apple-system, sans-serif; color: var(--nv-text-faint);
+  }
+  /* A needle, drawn as a CSS triangle, rotated to the live bearing.
+     Rotating about the compass centre means the transform is just the
+     bearing in degrees — no trig in the style layer. */
+  #simNativeView .location-host .loc-compass-needle {
+    position: absolute; left: 50%; top: 50%;
+    width: 0; height: 0; margin: -16px 0 0 -5px;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-bottom: 16px solid var(--nv-text-faint);
+    transform-origin: 50% 100%;
+    transition: transform 0.1s linear, border-bottom-color 0.2s ease;
+  }
+  #simNativeView .location-host .loc-compass-needle.moving { border-bottom-color: var(--nv-accent); }
+  #simNativeView .location-host .loc-course {
+    font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-muted); white-space: nowrap;
+  }
+  #simNativeView .location-host .loc-select { width: 118px; padding: 5px 6px; }
+  #simNativeView .location-host .loc-hint {
+    margin-top: 8px; font: 500 10.5px/1.4 -apple-system, sans-serif;
+    color: var(--nv-text-faint);
+  }
+  #simNativeView .location-host .loc-hint kbd {
+    display: inline-block; padding: 1px 4px; margin: 0 1px; border-radius: 4px;
+    border: 1px solid var(--nv-divider); background: var(--nv-btn-hover);
+    font: 600 9.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-muted);
+  }
+
+  /* Live 3D inspector. The rendered device occupies the main stage;
+     this compact glass card only carries model, variant, and camera
+     controls. */
+  #simNativeView .render3d-host {
+    position: fixed; top: 68px; right: 18px; bottom: 18px; z-index: 45;
+    width: 292px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 16px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(22px) saturate(1.55);
+    -webkit-backdrop-filter: blur(22px) saturate(1.55);
+    color: var(--nv-text);
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transform: translateX(12px);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s;
+  }
+  #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .render3d-host {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transform: translateX(0);
+  }
+  #simNativeView .render3d-host-head {
+    height: 42px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px 0 14px;
+    border-bottom: 1px solid var(--nv-divider);
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .render3d-host-title {
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  #simNativeView .render3d-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView #native3DHost {
+    min-height: 170px; overflow-y: auto; padding: 12px 14px 14px;
+  }
+  #simNativeView .r3d-live-stage {
+    position: relative;
+    display: none;
+    width: min(100%, calc(100vw - 24px));
+    height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
+    overflow: hidden;
+    background: transparent;
+    touch-action: none;
+  }
+  #simNativeView[data-render3d="open"] #nativeDeviceFrame { display: none; }
+  #simNativeView[data-render3d="open"] .r3d-live-stage { display: grid; place-items: center; }
+  #simNativeView .r3d-live-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    /* Focusable so it takes the keyboard. No ring, like the flat screen:
+       typing is how this surface is used, so a :focus-visible ring would
+       frame the stage whenever you type; the app's own caret shows where. */
+    outline: none;
+  }
+  #simNativeView .r3d-live-stage[data-mode="pose"] .r3d-live-canvas { cursor: grab; }
+  #simNativeView .r3d-live-stage[data-mode="pose"] .r3d-live-canvas:active {
+    cursor: grabbing;
+  }
+  #simNativeView .r3d-live-stage[data-mode="interact"] .r3d-live-canvas {
+    cursor: crosshair;
+  }
+  /* The model's hardware buttons, placed by the server over the stage;
+     shown while the pointer is on the stage, as Device Hub shows them:
+     a bare grey glyph beside the device, blue under the pointer. */
+  #simNativeView .r3d-hw-buttons { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  #simNativeView .r3d-hw-button {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px;
+    background: transparent; color: #8e8e93;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; pointer-events: auto; opacity: 0; transition: opacity 160ms ease, color 120ms ease;
+  }
+  #simNativeView #native3DStage:hover .r3d-hw-button { opacity: 1; }
+  #simNativeView .r3d-hw-button:hover { color: #2f7cf6; }
+  #simNativeView .r3d-hw-button:active { color: #1d5fd0; transform: translate(-50%, -50%) scale(0.92); }
+  /* Device Hub's pose bar, under the book: three poses and the hinge slider. */
+  #simNativeView .r3d-pose-picker {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 99px; z-index: 6;
+    background: rgba(255, 255, 255, 0.94); border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: 0 1px 6px rgba(15, 23, 42, 0.12);
+  }
+  #simNativeView .r3d-pose-picker button {
+    width: 34px; height: 26px; border: 0; border-radius: 99px; padding: 0;
+    background: transparent; color: #475569; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  #simNativeView .r3d-pose-picker button:hover { background: rgba(15, 23, 42, 0.06); }
+  #simNativeView .r3d-pose-picker button.active { background: #dbeafe; color: #2563eb; }
+  #simNativeView .r3d-pose-picker input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 120px; height: 26px; margin: 0 6px 0 4px;
+    padding-left: 10px; border-left: 1px solid rgba(15, 23, 42, 0.12); background: transparent; cursor: pointer;
+  }
+  #simNativeView .r3d-pose-picker input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px; background: rgba(15, 23, 42, 0.14);
+  }
+  #simNativeView .r3d-pose-picker input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
+    background: #fff; border: 1px solid rgba(15, 23, 42, 0.18); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  }
+  #simNativeView .r3d-pose-picker input[type="range"]:active::-webkit-slider-thumb { border-color: #2563eb; }
+  /* A booted foldable never shows the flat chrome: its view is the book. */
+  #simNativeView #nativeDeviceFrame[data-foldable] { display: none; }
+  /* Fixed 3D (a foldable's default view): straight on, no tools. */
+  #simNativeView #native3DStage[data-fixed="true"] .r3d-stage-tools,
+  #simNativeView #native3DStage[data-fixed="true"] .r3d-inspector-toggle {
+    display: none;
+  }
+  #simNativeView .r3d-stage-tools {
+    position: absolute; left: 14px; bottom: 14px; z-index: 3;
+    display: flex; gap: 4px; padding: 4px;
+    border: 1px solid rgba(15,23,42,.10); border-radius: 11px;
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 8px 24px rgba(15,23,42,.12);
+    backdrop-filter: blur(18px) saturate(1.35);
+  }
+  #simNativeView .r3d-stage-tools button,
+  #simNativeView .r3d-inspector-toggle {
+    border: 0; border-radius: 8px; min-height: 30px; padding: 0 10px;
+    background: transparent; color: #667085;
+    font: 600 11px/1 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .r3d-stage-tools button.active {
+    background: #fff; color: #1d1d1f; box-shadow: 0 1px 4px rgba(15,23,42,.12);
+  }
+  #simNativeView .r3d-inspector-toggle {
+    position: absolute; top: 14px; right: 14px; z-index: 3;
+    display: inline-grid; place-items: center; width: 34px; padding: 0;
+    border: 1px solid rgba(15,23,42,.10);
+    background: rgba(255,255,255,.82); color: #344054;
+    box-shadow: 0 8px 24px rgba(15,23,42,.12);
+    backdrop-filter: blur(18px) saturate(1.35);
+  }
+  #simNativeView[data-render3d-inspector="open"] .r3d-inspector-toggle { display: none; }
+  #simNativeView .r3d-live-state {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    padding: 20px;
+    color: #374151;
+    background: rgba(238,241,245,.78);
+    font: 600 12px/1.4 -apple-system, sans-serif;
+    text-align: center;
+  }
+  #simNativeView .r3d-live-state[hidden] { display: none; }
+  #simNativeView .r3d-live-state[data-error] { color: #991b1b; }
+  #simNativeView .r3d-live-summary {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 2px 2px 10px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .r3d-live-summary strong {
+    overflow: hidden; color: var(--nv-text);
+    font: 600 12px/1.3 -apple-system, sans-serif;
+    white-space: nowrap; text-overflow: ellipsis;
+  }
+  #simNativeView .r3d-live-summary span {
+    flex: 0 0 auto; color: #34d399;
+    font: 700 9px/1 ui-monospace, monospace;
+    letter-spacing: .05em; text-transform: uppercase;
+  }
+  #simNativeView .r3d-advanced {
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .r3d-advanced summary {
+    padding: 10px 2px; color: var(--nv-text-muted); cursor: pointer;
+    font: 600 10.5px/1 -apple-system, sans-serif; list-style: none;
+  }
+  #simNativeView .r3d-advanced summary::after {
+    content: "›"; float: right; transform: rotate(90deg);
+  }
+  #simNativeView .r3d-advanced[open] summary::after { transform: rotate(-90deg); }
+  #simNativeView .r3d-advanced .r3d-advanced-body { padding: 0 2px 11px; }
+  #simNativeView .r3d-preview {
+    position: relative; height: 190px; overflow: hidden;
+    display: grid; place-items: center;
+    border: 1px solid var(--nv-divider); border-radius: 12px;
+    background:
+      radial-gradient(circle at 50% 42%, var(--nv-btn-active), transparent 64%),
+      var(--nv-fmt-track-bg);
+  }
+  #simNativeView .r3d-preview img {
+    display: block; width: 100%; height: 100%; object-fit: contain;
+  }
+  #simNativeView .r3d-preview[data-error]::after {
+    content: attr(data-error); position: absolute; inset: auto 10px 10px;
+    padding: 6px 8px; border-radius: 7px;
+    color: #fecaca; background: rgba(127,29,29,.82);
+    font: 500 10px/1.3 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-progress {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; gap: 8px;
+    background: rgba(18,18,22,.46); color: #fff;
+    font: 600 11px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-progress[hidden] { display: none; }
+  #simNativeView .r3d-spinner {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent;
+    animation: nv-power-spin .8s linear infinite;
+  }
+  #simNativeView .r3d-model-name {
+    margin: 10px 2px 2px;
+    font: 600 12px/1.3 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-section {
+    padding: 10px 2px; border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .r3d-section > label {
+    display: block; margin-bottom: 8px; color: var(--nv-text-faint);
+    font: 700 9px/1 -apple-system, sans-serif;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  #simNativeView .r3d-choices,
+  #simNativeView .r3d-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  #simNativeView .r3d-choice,
+  #simNativeView .r3d-presets button {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 28px; padding: 0 9px;
+    border: 1px solid var(--nv-divider); border-radius: 8px;
+    background: var(--nv-fmt-track-bg); color: var(--nv-text-muted);
+    font: 600 10.5px/1 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .r3d-choice:hover,
+  #simNativeView .r3d-presets button:hover { color: var(--nv-text); background: var(--nv-btn-hover); }
+  #simNativeView .r3d-choice.active {
+    color: var(--nv-accent-text); background: var(--nv-accent);
+    border-color: transparent;
+  }
+  #simNativeView .r3d-mode.active {
+    color: var(--nv-text);
+    background: color-mix(in srgb, var(--nv-accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--nv-accent) 45%, transparent);
+  }
+  #simNativeView[data-render3d="open"] .r3d-live-stage { touch-action: none; }
+  #simNativeView .r3d-choice i {
+    width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--swatch); border: 1px solid rgba(255,255,255,.38);
+  }
+  #simNativeView .r3d-range-row {
+    display: grid; grid-template-columns: 34px 1fr 34px;
+    align-items: center; gap: 8px; margin-top: 8px;
+    color: var(--nv-text-muted); font: 500 10px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-range-row input { width: 100%; accent-color: var(--nv-accent); }
+  #simNativeView .r3d-range-row output {
+    text-align: right; color: var(--nv-text);
+    font: 500 9.5px/1 ui-monospace, Menlo, monospace;
+  }
+  #simNativeView .r3d-footer {
+    display: flex; justify-content: flex-end; gap: 7px; padding-top: 11px;
+  }
+  #simNativeView .r3d-footer button,
+  #simNativeView .r3d-empty button {
+    min-height: 30px; padding: 0 11px; border-radius: 8px; cursor: pointer;
+    font: 600 11px/1 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-download {
+    border: 1px solid var(--nv-divider); background: transparent; color: var(--nv-text);
+  }
+  #simNativeView .r3d-render,
+  #simNativeView .r3d-empty button {
+    border: 0; background: var(--nv-accent); color: var(--nv-accent-text);
+  }
+  #simNativeView .r3d-render:disabled { opacity: .5; cursor: default; }
+  #simNativeView .r3d-empty {
+    min-height: 150px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    color: var(--nv-text-muted); text-align: center;
+    font: 500 11px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .r3d-empty strong { color: var(--nv-text); }
+  #simNativeView .r3d-error > svg { width: 28px; height: 28px; }
+
+  @media (min-width: 901px) {
+    #simNativeView .device-column { transition: transform .2s ease; }
+    #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .device-column {
+      transform: translateX(-150px);
+    }
+    #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .r3d-live-stage {
+      width: min(100%, calc(100vw - 356px));
+    }
+  }
+  @media (max-width: 900px) {
+    #simNativeView .render3d-host {
+      top: auto; left: 12px; right: 12px; bottom: 12px; width: auto;
+      max-height: min(48dvh, 520px); border-radius: 18px;
+      transform: translateY(14px);
+    }
+    #simNativeView[data-render3d="open"][data-render3d-inspector="open"] .render3d-host {
+      transform: translateY(0);
+    }
+    #simNativeView .render3d-host-head { height: 46px; }
+    #simNativeView #native3DHost { max-height: calc(48dvh - 47px); }
+  }
+
+  #simNativeView .status-bar-host .sb-section {
+    padding: 10px 0; border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .status-bar-host .sb-section:last-child { border-bottom: 0; }
+  #simNativeView .status-bar-host .sb-footer { padding-bottom: 2px; }
+  #simNativeView .status-bar-host .sb-section-title {
+    color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif; letter-spacing: 0.10em; text-transform: uppercase;
+    margin: 0 0 8px;
+  }
+  #simNativeView .status-bar-host .sb-row {
+    display: flex; align-items: center; min-height: 30px; gap: 10px;
+  }
+  #simNativeView .status-bar-host .sb-row + .sb-row { margin-top: 8px; }
+  #simNativeView .status-bar-host .sb-row-label {
+    flex: 0 0 52px; color: var(--nv-text-muted);
+    font: 500 11px/1.2 -apple-system, sans-serif;
+  }
+  #simNativeView .status-bar-host .sb-row-control {
+    flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0;
+  }
+  #simNativeView .status-bar-host .sb-field {
+    appearance: none; -webkit-appearance: none;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 8px; color: var(--nv-text);
+    font: 500 12px/1 -apple-system, sans-serif; padding: 6px 8px;
+    min-width: 0; width: 100%; box-sizing: border-box;
+  }
+  #simNativeView .status-bar-host select.sb-field { cursor: pointer; }
+  #simNativeView .status-bar-host .sb-field:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .status-bar-host .sb-time {
+    width: 86px; flex: 0 0 auto; text-align: center; font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .status-bar-host .sb-mode {
+    flex: 0 0 auto; width: auto; min-width: 72px; font-size: 11px; padding: 6px 5px;
+  }
+  #simNativeView .status-bar-host .sb-chip {
+    appearance: none; border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg);
+    color: var(--nv-text); font: 600 11px/1 -apple-system, sans-serif; letter-spacing: 0.02em;
+    padding: 6px 9px; border-radius: 8px; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+  }
+  #simNativeView .status-bar-host .sb-chip:hover { background: var(--nv-btn-hover); }
+  #simNativeView .status-bar-host .sb-seg {
+    display: inline-flex; padding: 2px; gap: 2px;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-fmt-track-border);
+    border-radius: 10px; flex: 0 0 auto;
+  }
+  #simNativeView .status-bar-host .sb-seg-btn {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    width: 25px; height: 24px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--nv-fmt-btn-text); transition: background 0.12s ease, color 0.12s ease;
+  }
+  #simNativeView .status-bar-host .sb-seg-btn:hover { color: var(--nv-text); }
+  #simNativeView .status-bar-host .sb-seg-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  #simNativeView .status-bar-host .sb-seg-btn svg { display: block; }
+  #simNativeView .status-bar-host .sb-pills { display: inline-flex; gap: 4px; }
+  #simNativeView .status-bar-host .sb-pill {
+    appearance: none; border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg);
+    color: var(--nv-text-muted); font: 600 10.5px/1 -apple-system, sans-serif;
+    padding: 6px 9px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  #simNativeView .status-bar-host .sb-pill:hover { color: var(--nv-text); }
+  #simNativeView .status-bar-host .sb-pill.active {
+    background: var(--nv-accent); color: var(--nv-accent-text); border-color: transparent;
+  }
+  #simNativeView .status-bar-host .sb-level-row {
+    display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  }
+  #simNativeView .status-bar-host .sb-range {
+    -webkit-appearance: none; appearance: none; flex: 1; height: 4px;
+    border-radius: 999px; background: var(--nv-bar-border); outline: none;
+  }
+  #simNativeView .status-bar-host .sb-range::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; border: 1px solid rgba(0,0,0,0.18);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer;
+  }
+  #simNativeView .status-bar-host .sb-level-val {
+    flex: 0 0 auto; width: 34px; text-align: right;
+    color: var(--nv-text); font: 600 11px/1 ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .status-bar-host .sb-clear {
+    appearance: none; width: 100%; border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-accent); font: 600 12px/1 -apple-system, sans-serif;
+    padding: 8px; border-radius: 8px; cursor: pointer;
+  }
+  #simNativeView .status-bar-host .sb-clear:hover { background: var(--nv-btn-hover); }
+
+  /* Accessibility-inspector floating panel. Sits top-right of the
+     device column, glass-styled to match the toolbar. Hidden until
+     the user clicks an element while the inspector is enabled (the
+     toolbar's `nativeAxToggle` drives enable/disable; the panel only
+     surfaces a selection — never the toggle itself). */
+  #simNativeView .ax-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 240px;
+    padding: 12px 14px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    display: none;
+  }
+  #simNativeView .ax-host[data-open="true"] { display: block; }
+  #simNativeView .ax-host .ax-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .ax-host .ax-host-close {
+    width: 22px; height: 20px; line-height: 1;
+    color: var(--nv-text-muted);
+    background: transparent; border: 0; cursor: pointer;
+    border-radius: 5px; font: 700 14px ui-monospace, monospace;
+  }
+  #simNativeView .ax-host .ax-host-close:hover {
+    background: var(--nv-bar-border);
+  }
+  #simNativeView .ax-host .btn {
+    appearance: none; border: 1px solid var(--nv-bar-border);
+    background: transparent; color: inherit;
+    border-radius: 6px; padding: 4px 8px;
+    font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    cursor: pointer;
+  }
+  #simNativeView .ax-host .btn:hover { background: var(--nv-bar-border); }
+  #simNativeView .ax-host .btn:disabled { opacity: 0.5; cursor: default; }
+  #simNativeView .ax-host .btn-primary {
+    background: var(--nv-text); color: var(--nv-bar-bg);
+    border-color: transparent;
+  }
+
+  /* --- Right-edge rails: companion screens + plugins -----------------
+     Both rails and everything they open. This lives here, with the rest
+     of the focus chrome, rather than in families/simulator/internal/screens-rail.js / page/internal/plugins/plugins-rail.js
+     — those used to inject a stylesheet each, and a stylesheet written
+     next to its module can't see the token block, so both had to guess
+     at a fallback for every colour. The guesses were light-theme values,
+     so the rails rendered light-on-dark wherever a token didn't reach,
+     and the two rails drifted from each other and from the toolbar.
+
+     The two share every shape below. What tells them apart is one
+     thing: the plugin rail's emblem is drawn in the accent, baguette's
+     own rail's in the muted text colour. The rails being separate is
+     the trust signal (see docs/features/plugins/README.md); it doesn't need a
+     second colour system on top. */
+  #simNativeView .screens-rail,
+  #simNativeView .plugin-rail {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 8px 6px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+  }
+  /* Emblem cap — names the strip. */
+  #simNativeView .screens-rail-cap,
+  #simNativeView .plugin-rail-cap {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 24px;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .plugin-rail-cap { color: var(--nv-accent); }
+  #simNativeView .screens-rail-divider,
+  #simNativeView .plugin-rail-divider {
+    width: 20px; height: 1px; margin: 1px 0 3px;
+    background: var(--nv-divider);
+  }
+
+  /* Rail buttons are the toolbar's `.ico-btn` in a column — same box,
+     same radius, same hover / active / selected treatment. */
+  #simNativeView .screens-rail-btn,
+  #simNativeView .plugin-rail-btn {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer;
+    transition: background 0.12s ease, opacity 0.12s ease;
+  }
+  #simNativeView .screens-rail-btn:hover,
+  #simNativeView .plugin-rail-btn:hover { background: var(--nv-btn-hover); }
+  #simNativeView .screens-rail-btn:active,
+  #simNativeView .plugin-rail-btn:active { background: var(--nv-btn-active); }
+  #simNativeView .screens-rail-btn.active,
+  #simNativeView .plugin-rail-btn.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+  }
+  #simNativeView .screens-rail-btn:focus-visible,
+  #simNativeView .plugin-rail-btn:focus-visible {
+    outline: 2px solid var(--nv-accent); outline-offset: 2px;
+  }
+  #simNativeView .screens-rail-btn svg,
+  #simNativeView .plugin-rail-btn svg { display: block; }
+  /* A slot whose flyout is open, but which isn't the open panel. */
+  #simNativeView .plugin-rail-btn.expanded { background: var(--nv-btn-hover); }
+  /* Dimmed, not hidden: the button is how you find out the screen could
+     exist, and how you reach the instructions for attaching one. */
+  #simNativeView .screens-rail-btn.unavailable { opacity: 0.38; }
+  #simNativeView .screens-rail-btn.unavailable:hover { opacity: 0.7; }
+  #simNativeView .screens-rail-refresh { color: var(--nv-text-muted); }
+  #simNativeView .plugin-rail-add { color: var(--nv-accent); }
+  /* A caret on plugins that hold more than one tool: says "there is
+     more here, and it opens leftward" before you hover to find out. */
+  #simNativeView .plugin-rail-group::after {
+    content: ''; position: absolute; left: 2px; top: 50%;
+    margin-top: -3px; border: 3px solid transparent;
+    border-right-color: currentColor; opacity: 0.4;
+    transition: opacity 0.12s ease;
+  }
+  #simNativeView .plugin-rail-group:hover::after,
+  #simNativeView .plugin-rail-group.expanded::after { opacity: 0.75; }
+
+  /* The flyout listing one plugin's tools, and the companion-screens
+     card. Both are `position: fixed` and placed by their module against
+     the button that opened them, so only the surface is described here.
+     Same glass, radius and motion as the floating panels above. */
+  #simNativeView .plugin-flyout,
+  #simNativeView .screens-card {
+    position: fixed; z-index: 50;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    animation: nv-rail-pop-in 0.16s ease;
+  }
+  #simNativeView .plugin-flyout {
+    min-width: 172px; max-width: 260px;
+    padding: 5px; display: flex; flex-direction: column; gap: 1px;
+  }
+  #simNativeView .screens-card { width: 268px; }
+  @keyframes nv-rail-pop-in {
+    from { opacity: 0; transform: translateX(4px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #simNativeView .plugin-flyout,
+    #simNativeView .screens-card { animation: none; }
+  }
+  /* Micro-heading, same as the status-bar card's section titles. */
+  #simNativeView .plugin-flyout-head {
+    padding: 6px 8px 7px; margin-bottom: 3px;
+    color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    border-bottom: 1px solid var(--nv-divider);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #simNativeView .plugin-flyout-item {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 6px 8px; border: 0; border-radius: 8px; cursor: pointer;
+    background: transparent; text-align: left;
+    font: 500 12px/1.2 -apple-system, sans-serif;
+    color: var(--nv-text);
+    transition: background 0.12s ease;
+  }
+  #simNativeView .plugin-flyout-item:hover { background: var(--nv-btn-hover); }
+  #simNativeView .plugin-flyout-item.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+  }
+  #simNativeView .plugin-flyout-item:focus-visible {
+    outline: 2px solid var(--nv-accent); outline-offset: -2px;
+  }
+  #simNativeView .plugin-flyout-glyph {
+    display: inline-flex; flex: 0 0 auto; color: var(--nv-text-muted);
+  }
+  #simNativeView .plugin-flyout-item:hover .plugin-flyout-glyph,
+  #simNativeView .plugin-flyout-item.active .plugin-flyout-glyph { color: inherit; }
+  #simNativeView .plugin-flyout-label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* The open plugin panel. Anchored like the other floating panels
+     (`top: var(--nv-panel-top)`, the same height budget) but inset from the right far
+     enough to clear the rails it opens from, rather than the 24px the
+     panels that have no rail beside them use. */
+  #simNativeView .plugin-host {
+    position: fixed;
+    top: var(--nv-panel-top);
+    right: 76px;
+    z-index: 40;
+    width: 340px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+  }
+  #simNativeView .plugin-card {
+    display: flex; flex-direction: column;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    overflow: hidden;
+  }
+  #simNativeView .plugin-head,
+  #simNativeView .screens-card-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .plugin-title,
+  #simNativeView .screens-card-title {
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  /* Which plugin the panel came from. Quiet chip, not a second accent:
+     the panel is already inside the plugin system by the time you read
+     it. */
+  #simNativeView .plugin-tag {
+    border: 1px solid var(--nv-bar-border);
+    background: var(--nv-fmt-track-bg);
+    color: var(--nv-text-muted);
+    font: 600 9.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 4px 7px; border-radius: 999px;
+  }
+  #simNativeView .plugin-close,
+  #simNativeView .screens-card-close {
+    margin-left: auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 22px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text-muted); cursor: pointer;
+    font: 500 12px/1 -apple-system, sans-serif;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  #simNativeView .plugin-close:hover,
+  #simNativeView .screens-card-close:hover {
+    background: var(--nv-btn-hover); color: var(--nv-text);
+  }
+  #simNativeView .plugin-body { overflow-y: auto; }
+  #simNativeView .plugin-status {
+    padding: 12px 14px;
+    font: 400 12px/1.4 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .plugin-error { color: var(--nv-danger); }
+  #simNativeView .plugin-rows { list-style: none; margin: 0; padding: 4px 0; }
+  #simNativeView .plugin-row {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 8px 14px;
+    font: 400 12px/1.35 -apple-system, sans-serif;
+    color: var(--nv-text);
+  }
+  #simNativeView .plugin-row-clickable { cursor: pointer; }
+  #simNativeView .plugin-row-clickable:hover { background: var(--nv-btn-hover); }
+  #simNativeView .plugin-row-active { background: var(--nv-btn-active); }
+  /* Severity is an attribute rather than an inline colour, so the three
+     reds and ambers this panel can show are the page's, not a palette
+     the module carries. */
+  #simNativeView .plugin-dot {
+    width: 7px; height: 7px; border-radius: 50%; margin-top: 4px;
+    flex: 0 0 auto; background: var(--nv-text-muted);
+  }
+  #simNativeView .plugin-dot[data-severity="warn"]  { background: var(--nv-warn); }
+  #simNativeView .plugin-dot[data-severity="error"] { background: var(--nv-danger); }
+  #simNativeView .plugin-row-text {
+    display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  }
+  #simNativeView .plugin-row-sub {
+    color: var(--nv-text-muted); font-size: 11px; overflow-wrap: anywhere;
+  }
+  /* A row saying the filter matched nothing — a note, not an entry, so
+     it carries no severity dot and doesn't look clickable. */
+  #simNativeView .plugin-row-empty { cursor: default; padding-left: 14px; }
+  #simNativeView .plugin-row-empty:hover { background: none; }
+
+  /* A panel's text field (`prompt`). Sits above the rows, inside the
+     scroll container's sticky top so it stays reachable in a long list —
+     it's the control, the rows below it are the reference. Metrics are
+     shared with the add-a-bakery modal's field so the two read as the
+     same widget. */
+  #simNativeView .plugin-prompt {
+    display: flex; gap: 8px; padding: 10px 14px;
+    position: sticky; top: 0; z-index: 1;
+    background: var(--nv-bar-bg);
+    border-bottom: 1px solid var(--nv-bar-border);
+  }
+  /* The field stacks an input over a ghost layer. Both carry identical
+     box metrics and the same font, which is what lets the un-typed
+     remainder line up with the caret without measuring any text. */
+  #simNativeView .plugin-prompt-field { position: relative; flex: 1; min-width: 0; }
+  #simNativeView .plugin-prompt-input,
+  #simNativeView .plugin-prompt-ghost {
+    padding: 6px 8px; border-radius: 8px;
+    border: 1px solid transparent;
+    font: 400 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    box-sizing: border-box;
+  }
+  #simNativeView .plugin-prompt-input {
+    position: relative; width: 100%;
+    appearance: none; -webkit-appearance: none;
+    background: var(--nv-fmt-track-bg);
+    border-color: var(--nv-bar-border);
+    color: var(--nv-text);
+    min-width: 0;
+  }
+  #simNativeView .plugin-prompt-input:focus {
+    outline: none; border-color: var(--nv-accent);
+  }
+  #simNativeView .plugin-prompt-ghost {
+    position: absolute; inset: 0; z-index: 1;
+    white-space: pre; overflow: hidden;
+    pointer-events: none;
+  }
+  /* The typed half is drawn and then made invisible — it is the spacer
+     that puts the remainder under the caret. */
+  #simNativeView .plugin-prompt-typed { color: transparent; }
+  #simNativeView .plugin-prompt-rest { color: var(--nv-text-muted); opacity: 0.75; }
+  #simNativeView .plugin-prompt-go { flex: 0 0 auto; padding: 6px 12px; }
+
+  /* Tickable rows. The glyph family is chosen by the manifest but drawn
+     entirely here — a plugin names `switch` / `checkbox` / `radio` and
+     never supplies a mark of its own. */
+  /* Centring is done by the layout, not by arithmetic: the content box
+     is 12px (15 minus two 1.5px borders), so any hand-computed margin
+     has to be a half-pixel to land in the middle — and the first attempt
+     used 3px, leaving the dot a pixel high. */
+  #simNativeView .plugin-tick {
+    flex: 0 0 auto; margin-top: 1px;
+    width: 15px; height: 15px; box-sizing: border-box;
+    border: 1.5px solid var(--nv-text-muted);
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  #simNativeView .plugin-tick[data-control="checkbox"] { border-radius: 4px; }
+  #simNativeView .plugin-tick[data-control="radio"]    { border-radius: 50%; }
+  #simNativeView .plugin-tick[data-on="true"] {
+    background: var(--nv-accent); border-color: var(--nv-accent);
+  }
+  /* The checkmark / dot, drawn with a pseudo-element so the row markup
+     carries no glyph of its own. */
+  #simNativeView .plugin-tick[data-control="checkbox"][data-on="true"]::after {
+    content: ''; width: 3px; height: 7px;
+    border: solid var(--nv-accent-text);
+    border-width: 0 1.6px 1.6px 0;
+    /* A rotated tick's visual mass sits below its box centre, so the
+       geometric centre reads a pixel low. This is the one nudge that is
+       an optical correction rather than a miscalculation. */
+    margin-bottom: 2px;
+    transform: rotate(45deg);
+  }
+  #simNativeView .plugin-tick[data-control="radio"][data-on="true"]::after {
+    content: ''; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--nv-accent-text);
+  }
+  /* A switch is a pill, so it overrides the square metrics above. */
+  #simNativeView .plugin-tick[data-control="switch"] {
+    width: 26px; height: 15px; border-radius: 999px;
+    position: relative;
+  }
+  #simNativeView .plugin-tick[data-control="switch"]::after {
+    content: ''; position: absolute; top: 1.5px; left: 1.5px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--nv-text-muted);
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+  #simNativeView .plugin-tick[data-control="switch"][data-on="true"]::after {
+    background: var(--nv-accent-text); transform: translateX(11px);
+  }
+
+  /* A section heading inside a panel of controls. It carries no dot:
+     an `info` dot in the same column as a radio reads as a third,
+     disabled control state, and once every row in the gutter is a
+     circle the hierarchy is gone. Set in small caps against the
+     options rather than looking like one of them. */
+  #simNativeView .plugin-row-heading {
+    padding: 14px 14px 4px;
+    font: 600 9.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--nv-text-faint, var(--nv-text-muted));
+  }
+  #simNativeView .plugin-row-heading:first-child { padding-top: 10px; }
+  #simNativeView .plugin-row-heading .plugin-row-title { font: inherit; letter-spacing: inherit; }
+  /* An ordinary action row among controls — "Smaller" / "Larger". No
+     tick, so it aligns with the option labels instead of hanging in the
+     control column pretending to be one. */
+  #simNativeView .plugin-row-inset { padding-left: 37px; }
+  #simNativeView .plugin-row-inset .plugin-dot { display: none; }
+
+  /* A row whose tick hasn't been confirmed by the device yet. Batching
+     buys one subprocess per Apply instead of one per tick; this is the
+     price, drawn rather than hidden — a control that looks settled while
+     the device says otherwise is worse than one that's slow. */
+  #simNativeView .plugin-row-pending {
+    background: color-mix(in srgb, var(--nv-accent) 8%, transparent);
+  }
+  #simNativeView .plugin-row-pending .plugin-row-title { font-style: italic; }
+  #simNativeView .plugin-row-pending .plugin-tick {
+    border-style: dashed;
+  }
+
+  /* The batch-submit bar. Outside the scrolling body so it stays put —
+     a submit button you have to scroll to find is one you forget to
+     press, and with batching that means losing the edit. */
+  #simNativeView .plugin-apply {
+    display: flex; justify-content: flex-end;
+    padding: 10px 14px;
+    border-top: 1px solid var(--nv-bar-border);
+  }
+  #simNativeView .plugin-apply-btn { padding: 6px 14px; }
+  #simNativeView .plugin-apply-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* The box drawn over the live screen for a `highlight` row. */
+  #simNativeView .plugin-highlight {
+    position: absolute; z-index: 30; pointer-events: none;
+    border: 2px solid var(--nv-accent);
+    background: color-mix(in srgb, var(--nv-accent) 16%, transparent);
+    border-radius: 6px;
+  }
+
+  /* Companion-screens card body — the "how to attach one" instructions. */
+  #simNativeView .screens-card-body { padding: 11px 14px 13px; }
+  #simNativeView .screens-card-status {
+    margin: 0 0 8px;
+    font: 600 11px/1.35 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .screens-card-note {
+    margin: 0 0 10px;
+    font: 400 11.5px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .screens-steps {
+    margin: 0 0 11px; padding-left: 17px;
+    display: flex; flex-direction: column; gap: 6px;
+    font: 400 11.5px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text);
+  }
+  #simNativeView .screens-steps li { overflow-wrap: anywhere; }
+
+  /* The bakery-preview modal, opened from the rail's "+". */
+  #simNativeView .plugin-modal-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--nv-scrim);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  #simNativeView .plugin-modal {
+    width: min(440px, 92vw);
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    overflow: hidden;
+  }
+  #simNativeView .plugin-modal-body {
+    padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  #simNativeView .plugin-field-label {
+    font: 500 11px/1.3 -apple-system, sans-serif;
+    color: var(--nv-text-muted);
+  }
+  /* The shelf — what your trusted bakeries are offering. Sits above the
+     add-a-bakery field, because "install something you already trust"
+     is the common errand and "trust something new" is the rare one. */
+  #simNativeView .plugin-shelf {
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: 46vh; overflow-y: auto;
+  }
+  #simNativeView .plugin-shelf-label,
+  #simNativeView .plugin-source-id {
+    font: 600 9.5px/1 -apple-system, sans-serif;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--nv-text-faint, var(--nv-text-muted));
+  }
+  /* The bakery id is an identifier, not a heading — it keeps its own
+     case and its monospace so a host/owner/repo reads as one thing. */
+  #simNativeView .plugin-source-id {
+    font: 500 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: normal; text-transform: none;
+    color: var(--nv-text); overflow-wrap: anywhere;
+  }
+  #simNativeView .plugin-source {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #simNativeView .plugin-source-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  }
+  /* A plugin you already have. Deliberately not a disabled button —
+     there is no action here to be unavailable, so it reads as a fact. */
+  #simNativeView .plugin-installed {
+    font: 500 11px/1 -apple-system, sans-serif;
+    color: var(--nv-text-muted); flex: 0 0 auto;
+  }
+  #simNativeView .plugin-install-btn { padding: 5px 12px; flex: 0 0 auto; }
+  #simNativeView .plugin-modal-rule {
+    height: 1px; background: var(--nv-bar-border); margin: 2px 0;
+  }
+  #simNativeView .plugin-field-row { display: flex; gap: 8px; }
+  #simNativeView .plugin-input {
+    flex: 1; appearance: none; -webkit-appearance: none;
+    padding: 6px 8px; border-radius: 8px;
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-bar-border);
+    color: var(--nv-text);
+    font: 400 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    min-width: 0; box-sizing: border-box;
+  }
+  #simNativeView .plugin-input:focus {
+    outline: none; border-color: var(--nv-accent);
+  }
+  #simNativeView .plugin-btn,
+  #simNativeView .screens-card-btn {
+    appearance: none; padding: 8px 12px;
+    border: 0; border-radius: 8px; cursor: pointer;
+    font: 600 12px/1 -apple-system, sans-serif;
+    color: var(--nv-accent-text); background: var(--nv-accent);
+  }
+  #simNativeView .screens-card-btn { width: 100%; }
+  #simNativeView .plugin-btn:disabled,
+  #simNativeView .screens-card-btn:disabled { opacity: 0.45; cursor: default; }
+  #simNativeView .plugin-warn {
+    font: 400 12px/1.45 -apple-system, sans-serif;
+    color: var(--nv-text);
+    background: color-mix(in srgb, var(--nv-warn) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--nv-warn) 30%, transparent);
+    border-radius: 8px; padding: 10px;
+  }
+  #simNativeView .plugin-commit {
+    font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .plugin-offers {
+    list-style: none; margin: 4px 0 0; padding: 0;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #simNativeView .plugin-offer {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 8px 10px; border-radius: 8px;
+    background: var(--nv-fmt-track-bg);
+    font: 500 12px/1.2 -apple-system, sans-serif;
+    color: var(--nv-text);
+  }
+  #simNativeView .plugin-inline-error {
+    font-size: 11px; margin-left: 8px; color: var(--nv-danger);
+  }
+  /* The install command. Selectable and monospaced — it exists to be
+     read and run, so it must look like something you'd paste. */
+  #simNativeView .plugin-cmd {
+    flex: 1 1 auto; min-width: 0; overflow-x: auto; white-space: nowrap;
+    user-select: all; -webkit-user-select: all;
+    font: 500 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--nv-text-muted);
+  }
+
+  @media (max-width: 560px) {
+    #simNativeView .plugin-host { right: 12px; left: 12px; width: auto; }
+    #simNativeView .screens-card { width: auto; left: 12px; right: 12px; }
+  }
+
+  /* --- Capture: output size + recording -------------------------------
+     One picked size drives both the Screenshot button and the recorder,
+     in 2D and in 3D. The vocabulary itself lives in
+     Resources/Web/capture/ (docs/features/capture-size/README.md); this block
+     is only the focus-mode dressing.
+
+     CaptureSizeMenu ships its own stylesheet, written against a generic
+     token set with light-mode fallbacks so it can mount anywhere.
+     Binding those names to the focus-mode palette on the mount host is
+     what makes the chip and its popover follow dark/light with the rest
+     of the bar, without the module needing to know this page exists. */
+  #simNativeView #nativeCaptureSize {
+    display: inline-flex; flex: 0 0 auto;
+    --nv-panel:  var(--nv-page-bg);
+    --nv-border: var(--nv-divider);
+    --nv-btn:    var(--nv-fmt-track-bg);
+    --accent:     var(--nv-accent);
+    --text-muted: var(--nv-text-muted);
+  }
+  /* Match the toolbar's icon buttons rather than the menu's own 26px. */
+  #simNativeView #nativeCaptureSize .cap-size-chip { height: 28px; }
+  /* Gated with the icon strip: a size means nothing without a stream. */
+  #simNativeView[data-power] #nativeCaptureSize {
+    opacity: 0.35; pointer-events: none;
+  }
+
+  /* `.ico-btn` sets `display: inline-flex`, which beats the UA's
+     `[hidden] { display: none }` — the Record button hides itself when
+     the browser has no MediaRecorder, so it needs this to actually go. */
+  #simNativeView .ico-btn[hidden] { display: none; }
+
+  /* Record. The button carries the whole recording state: a red fill, a
+     pulsing glyph, and an elapsed mm:ss readout that exists only while
+     running — the focus bar has no other surface to say "still
+     recording" on. The readout widens the button, which is why
+     `updateRecordButton` re-runs the toolbar's overflow measurement. */
+  #simNativeView #nativeRecordBtn.recording {
+    width: auto; gap: 5px; padding: 0 8px;
+    background: var(--nv-danger); color: #fff;
+  }
+  #simNativeView #nativeRecordBtn.recording svg {
+    animation: nv-rec-pulse 1.2s ease-in-out infinite;
+  }
+  #simNativeView #nativeRecordBtn .rec-timer {
+    display: none;
+    font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  #simNativeView #nativeRecordBtn.recording .rec-timer { display: inline; }
+  @keyframes nv-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Finished recordings. A file that lands with no visible link is a
+     file the user loses, and focus mode has no sidebar to hang a
+     gallery off — so the dock is its own small floating card, shown
+     only once something is in it. Bottom-right, clear of the plugin /
+     screens cards at the top and the theme pill on the left. */
+  #simNativeView .rec-dock {
+    position: fixed; bottom: 18px; right: 76px; z-index: 40;
+    width: 236px;
+    display: none; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    overflow: hidden;
+  }
+  #simNativeView .rec-dock[data-open] { display: flex; }
+  #simNativeView .rec-dock-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 6px 7px 12px;
+    border-bottom: 1px solid var(--nv-divider);
+    color: var(--nv-text-muted);
+    font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.09em; text-transform: uppercase;
+  }
+  #simNativeView .rec-dock-head .rec-dock-clear {
+    margin-left: auto; padding: 3px 7px;
+    border: 0; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--nv-danger);
+    /* Reset the header's uppercase tracking: this is a control, and
+       shouting it competes with the title beside it. */
+    font: 600 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0; text-transform: none;
+  }
+  #simNativeView .rec-dock-head .rec-dock-clear:hover { background: var(--nv-btn-hover); }
+  #simNativeView .rec-dock-head .rec-dock-close { width: 22px; height: 22px; }
+  /* Why a take ended without producing a file. Sits above the list so
+     "nothing appeared" has an explanation next to where it didn't. */
+  #simNativeView .rec-dock-list .rec-note {
+    margin: 2px 6px 6px; color: var(--nv-text-muted);
+    font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .rec-dock-list {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 6px; max-height: 40vh; overflow-y: auto;
+  }
+  #simNativeView .rec-dock-list a {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 8px;
+    color: var(--nv-text); text-decoration: none;
+    font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .rec-dock-list a:hover { background: var(--nv-btn-hover); }
+  #simNativeView .rec-dock-list a svg { flex: 0 0 auto; color: var(--nv-text-muted); }
+  #simNativeView .rec-dock-list .rec-meta {
+    margin-left: auto; color: var(--nv-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 560px) {
+    #simNativeView .rec-dock { right: 12px; left: 12px; width: auto; }
+  }
+
+  /* Preview ribbon — only when opened via file:// */
+  #simNativeView .preview-banner {
+    display: none; position: fixed; top: 10px; right: 10px; z-index: 999;
+    padding: 4px 10px; border-radius: 6px;
+    background: rgba(234,179,8,.18); border: 1px solid rgba(234,179,8,.5);
+    color: #facc15; font: 700 10px -apple-system, sans-serif; letter-spacing: .14em;
+  }
+  body.preview #simNativeView .preview-banner { display: block; }
+
+  /* --- Handheld ------------------------------------------------------
+     The stream held in the hand. `[data-handheld]` on the root turns
+     the workbench off: everything but the device column and the
+     handheld controls leaves, and #nativeDeviceFrame becomes a black
+     stage over the whole view with the live screen contain-fit in it.
+
+     The bezel image and its hardware-button overlays go — the phone
+     in the hand IS the bezel. The screen's rounded clip goes too: the
+     glass it is shown on already has corners of its own.
+
+     The screen box is sized in JS (`--nv-hh-w` / `--nv-hh-h`, from
+     HandheldMode.fit) rather than here, because it has to fit the
+     ROTATED footprint in landscape, and the rotation degree lives in
+     an inline transform set by `applyOrientation`. Each `!important`
+     below beats an inline style the SDK Bezel writes, or the
+     `--nv-device-max-*` caps above, which are `!important` already. */
+  #simNativeView[data-handheld] > :not(.dual-pane):not(.handheld-ui):not(.handheld-hint),
+  #simNativeView[data-handheld] .dual-pane > :not(.device-column),
+  #simNativeView[data-handheld] .device-column > :not(#nativeDeviceFrame) {
+    display: none !important;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame {
+    position: fixed; inset: 0;
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+    overflow: hidden;
+    /* The workbench's `--nv-device-max-*` caps are on this element
+       too; the stage is the whole view, not the device's share of it. */
+    max-width: none !important;
+    max-height: none !important;
+    /* The page is a screen, not a document: no pull-to-refresh, no
+       rubber-banding, no double-tap zoom stealing a tap. */
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame > div {
+    width: var(--nv-hh-w, 100vw) !important;
+    height: var(--nv-hh-h, 100vh) !important;
+    max-width: none !important;
+    max-height: none !important;
+    flex: 0 0 auto;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame > div > img,
+  #simNativeView[data-handheld] #nativeDeviceFrame > div > button[data-btn] {
+    display: none !important;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame > div > div:first-child {
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; height: 100% !important;
+    border-radius: 0 !important;
+    cursor: default !important;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame canvas {
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  /* The way to the controls: one floating button over the stage
+     (`left` / `top` set inline from HandheldButton.place), faded while
+     idle so it reads as part of the glass rather than a control laid
+     over it. `.handheld-ui` spans the view only to carry the phone's
+     safe area as padding, which page/device-page.js reads back for the
+     button's travel; it lets every touch through except on its
+     children. */
+  #simNativeView .handheld-ui { display: none; }
+  #simNativeView[data-handheld] .handheld-ui {
+    display: block;
+    position: fixed; inset: 0;
+    z-index: 101;
+    pointer-events: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+             env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  #simNativeView .handheld-ui .hh-fab {
+    position: absolute; left: 0; top: 0;
+    width: 56px; height: 56px;
+    padding: 0;
+    display: grid; place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    background: rgba(28, 28, 32, 0.72);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    opacity: 1;
+    transition: opacity 0.4s ease, left 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+                top 0.22s cubic-bezier(0.32, 0.72, 0, 1), transform 0.12s ease;
+  }
+  /* AssistiveTouch's mark: rings around a white disc. */
+  #simNativeView .handheld-ui .hh-fab > span {
+    display: block; width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.22),
+                0 0 0 10px rgba(255, 255, 255, 0.10);
+  }
+  #simNativeView .handheld-ui .hh-fab[data-idle] { opacity: 0.4; }
+  #simNativeView .handheld-ui .hh-fab[data-dragging] { transition: none; transform: scale(1.06); }
+  #simNativeView .handheld-ui .hh-fab:active { transform: scale(0.94); }
+  #simNativeView .handheld-ui[data-open="true"] .hh-fab { opacity: 0; pointer-events: none; }
+
+  #simNativeView .handheld-ui .hh-scrim {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.32);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+  #simNativeView .handheld-ui[data-open="true"] .hh-scrim { opacity: 1; pointer-events: auto; }
+
+  #simNativeView .handheld-ui .hh-menu {
+    position: fixed; left: 50%; top: 50%;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+    padding: 12px;
+    border-radius: 30px;
+    background: rgba(24, 24, 28, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    opacity: 0; transform: translate(-50%, -50%) scale(0.86);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  #simNativeView .handheld-ui[data-open="true"] .hh-menu {
+    opacity: 1; transform: translate(-50%, -50%); pointer-events: auto;
+  }
+  #simNativeView .handheld-ui .hh-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px;
+    width: 104px; height: 96px;   /* a thumb, not a cursor */
+    padding: 0; border: 0; border-radius: 20px;
+    background: transparent; color: #f5f5f7;
+    font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #simNativeView .handheld-ui .hh-item:active { background: rgba(255, 255, 255, 0.14); }
+
+  #simNativeView .handheld-hint { display: none; }
+  #simNativeView[data-handheld] .handheld-hint:not([hidden]) {
+    display: flex; align-items: center; gap: 10px;
+    position: fixed; z-index: 101;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    width: max-content; max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    padding: 9px 8px 9px 14px;
+    border-radius: 14px;
+    background: rgba(20, 20, 24, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: #f5f5f7;
+    font: 500 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .handheld-hint b { font-weight: 650; }
+  #simNativeView .handheld-hint button {
+    flex: 0 0 auto;
+    width: 30px; height: 30px; padding: 0;
+    border: 0; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1); color: #f5f5f7;
+    font: 600 12px/1 -apple-system, sans-serif;
+    cursor: pointer;
+  }
+</style>
+
+<div id="simNativeView">
+  <span class="preview-banner">PREVIEW</span>
+
+  <div class="dual-pane">
+  <div class="device-column">
+  <div class="top-bar" role="toolbar" aria-label="Simulator controls">
+    <a class="tb-label" id="nativeBackLink" href="/devices" title="Back to devices">
+      <svg class="tb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      <span class="tb-name" id="nativeDeviceName">iPhone</span>
+      <span class="tb-os"   id="nativeDeviceOS">iOS</span>
+    </a>
+
+    <div class="tb-controls">
+      <span id="nativeStatus"></span>
+
+      <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
+        <button class="fmt-btn" data-v="avcc"  title="WebSocket: HEVC or H.264 (the codec switch), hardware-decoded. Smaller, more compressed."
+                data-action="setFormat" data-arg="avcc">WebSocket</button>
+        <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
+                data-action="setFormat" data-arg="mjpeg">MJPEG</button>
+        <button class="fmt-btn" data-v="webrtc" title="WebRTC (WHEP). HEVC or H.264 over UDP: holds up on Wi-Fi and remote links, and plays on plain HTTP."
+                data-action="setFormat" data-arg="webrtc">WebRTC</button>
+      </div>
+
+      <!-- The video codec: HEVC (falling back to H.264 when this browser
+           can't play it) or H.264 only. Shown while a video format (WebSocket,
+           WebRTC) streams; page/internal/live-view.js lights it and says when
+           HEVC fell back. -->
+      <div class="fmt-picker" id="nativeCodecPicker" role="group" aria-label="Video codec" hidden>
+        <button class="fmt-btn" data-v="hevc" data-action="setCodec" data-arg="hevc">HEVC</button>
+        <button class="fmt-btn" data-v="h264" data-action="setCodec" data-arg="h264">H.264</button>
+      </div>
+
+      <!-- Scroll-left chevron — shown only when the icon strip overflows
+           (mouse users; trackpads scroll the strip directly). Disabled at
+           the left end. Wired in page/device-page.js `wireToolbarScroll`. -->
+      <button class="tb-arrow" id="nativeScrollLeft" type="button"
+              title="Scroll controls left" aria-label="Scroll controls left" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+
+      <!-- Horizontally-scrollable icon strip. The device label, fps, and
+           format picker above stay fixed; only these controls scroll. -->
+      <div class="tb-scroll" id="nativeToolScroll">
+
+<!-- Orientation cycle button — one click advances the device
+           90° clockwise (portrait → landscape-right →
+           portrait-upside-down → landscape-left → portrait). All
+           four orientations are reachable in 1–3 clicks; keeps the
+           toolbar to a single icon. POSTs to
+           `/simulators/<udid>/orientation?value=...`. -->
+      <button class="ico-btn" id="nativeRotate"
+              title="Rotate device 90° clockwise"
+              aria-label="Rotate device"
+              data-action="rotate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- circular arrow over a phone glyph: device + rotation hint -->
+          <rect x="9" y="3" width="6" height="10" rx="1.4"/>
+          <path d="M5 14a7 7 0 0 0 13 2.5"/>
+          <polyline points="18.5 12 18 16.5 13.6 16"/>
+        </svg>
+      </button>
+
+      <!-- Live SceneKit view. The cube swaps the central 2D framebuffer
+           for a server-rendered 3D device carrying that framebuffer. -->
+      <button class="ico-btn" id="native3DToggle"
+              title="Toggle live 3D simulator"
+              aria-label="Toggle live 3D simulator"
+              data-action="toggle3D">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.6" stroke-linejoin="round" width="17" height="17">
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
+          <path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
+        </svg>
+      </button>
+
+      <!-- Handheld — the stream held in the hand. Drops the bezel,
+           toolbar and rails and gives the live screen the whole view,
+           the way the phone it is shown on would look. Built for
+           opening this page on a phone; see handheld/handheld-mode.js. -->
+      <button class="ico-btn" id="nativeHandheldToggle"
+              title="Handheld — fill this screen with the simulator"
+              aria-label="Enter handheld mode"
+              data-action="enterHandheld">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- four corners pulled outward: "fill the screen" -->
+          <path d="M4 9V5a1 1 0 0 1 1-1h4"/>
+          <path d="M15 4h4a1 1 0 0 1 1 1v4"/>
+          <path d="M20 15v4a1 1 0 0 1-1 1h-4"/>
+          <path d="M9 20H5a1 1 0 0 1-1-1v-4"/>
+        </svg>
+      </button>
+
+<!-- Accessibility-inspector toggle. When active, a translucent
+           overlay tracks the AX node under the cursor; clicking an
+           element opens the AX sheet (slides up from the bottom)
+           with selection details and Tap / Copy actions. -->
+      <button class="ico-btn" id="nativeAxToggle"
+              title="Toggle accessibility inspector"
+              aria-label="Toggle accessibility inspector"
+              data-action="toggleAx">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- crosshair-on-target glyph: outer ring + inner dot + axes -->
+          <circle cx="12" cy="12" r="7.5"/>
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
+          <line x1="12" y1="2.5" x2="12" y2="6"/>
+          <line x1="12" y1="18"  x2="12" y2="21.5"/>
+          <line x1="2.5" y1="12" x2="6"  y2="12"/>
+          <line x1="18"  y1="12" x2="21.5" y2="12"/>
+        </svg>
+      </button>
+
+<!-- Status-bar toggle. Opens a floating glass card (mirror of
+           the camera card) that overrides time / carrier / network /
+           signal / battery via `simctl status_bar`. Active = card open.
+           Signal-bars glyph matches the card's title + segmented
+           controls. -->
+      <button class="ico-btn" id="nativeStatusBarToggle"
+              title="Status bar overrides"
+              aria-label="Toggle status bar overrides"
+              data-action="toggleStatusBar">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
+          <rect x="3"  y="13" width="3" height="6"  rx="1"/>
+          <rect x="8"  y="10" width="3" height="9"  rx="1"/>
+          <rect x="13" y="7"  width="3" height="12" rx="1"/>
+          <rect x="18" y="4"  width="3" height="15" rx="1"/>
+        </svg>
+      </button>
+
+<!-- Network-conditioning toggle. Opens a card that throttles what
+           the simulator's apps see of the network. Unlike the other
+           toggles, `.conditioning` is kept in sync even while the card is
+           shut: a forgotten throttle presents as "the app is slow", so the
+           toolbar has to keep saying one is on. -->
+      <button class="ico-btn" id="nativeNetworkToggle"
+              title="Network conditioning"
+              aria-label="Toggle network conditioning"
+              data-action="toggleNetwork">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+          <!-- Globe with a meridian — "the network", not "the signal". -->
+          <circle cx="12" cy="12" r="8.5"/>
+          <path d="M3.5 12h17"/>
+          <path d="M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5s-1.2 6.1-3.4 8.5"/>
+          <path d="M12 3.5C9.8 5.9 8.6 8.9 8.6 12s1.2 6.1 3.4 8.5"/>
+        </svg>
+      </button>
+
+<!-- Defaults toggle. Opens a card that reads and edits an installed
+           app's persisted UserDefaults (standard, App Group or own suite),
+           typed. Active = card open. Toggle-switch glyph. -->
+      <button class="ico-btn" id="nativeDefaultsToggle"
+              title="App defaults"
+              aria-label="Toggle app defaults"
+              data-action="toggleDefaults">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+          <rect x="2.5" y="7" width="19" height="10" rx="5"/>
+          <circle cx="16.5" cy="12" r="2.6" fill="currentColor"/>
+        </svg>
+      </button>
+
+      <button class="ico-btn" id="nativeLocationToggle"
+              title="Simulated location"
+              aria-label="Toggle simulated location"
+              data-action="toggleLocation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+          <!-- Map-pin glyph. -->
+          <path d="M12 21s7-5.5 7-11a7 7 0 0 0-14 0c0 5.5 7 11 7 11z"/>
+          <circle cx="12" cy="10" r="2.5"/>
+        </svg>
+      </button>
+
+<!-- Notify toggle. Opens a card that delivers a remote notification to
+           an app, as if APNs had sent it. Active = card open. Bell glyph. -->
+      <button class="ico-btn" id="nativeNotifyToggle"
+              title="Remote notification"
+              aria-label="Toggle remote notification"
+              data-action="toggleNotify">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+          <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/>
+          <path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>
+        </svg>
+      </button>
+
+      <div class="tb-actions">
+<!-- Camera toggle. Mirrors the logs-sheet pattern: click flips
+             `[data-camera="open"]` on `#simNativeView`, the bottom
+             sheet slides up. While the camera is streaming the
+             button's `.streaming` class lights a green dot in the
+             corner so the user sees the camera is on without
+             opening the sheet. -->
+        <button class="ico-btn" id="nativeCameraToggle" title="Toggle camera control"
+                aria-label="Toggle camera control"
+                data-action="toggleCamera">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <!-- Video-camera glyph: rectangle body + triangular lens flare. -->
+            <rect x="3" y="6.5" width="13" height="11" rx="2"/>
+            <path d="M16 10.5 21 8v8l-5-2.5z"/>
+          </svg>
+        </button>
+        <button class="ico-btn" id="nativeLogsToggle" title="Toggle live log sheet"
+                aria-label="Toggle live log sheet"
+                data-action="toggleLogs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <!-- "console / lines" glyph: a panel with three text rows. -->
+            <rect x="3" y="4" width="18" height="16" rx="2.4"/>
+            <line x1="6.5" y1="9"  x2="14"  y2="9"/>
+            <line x1="6.5" y1="13" x2="17.5" y2="13"/>
+            <line x1="6.5" y1="17" x2="11"  y2="17"/>
+          </svg>
+        </button>
+        <button class="ico-btn" id="nativeHome" title="Home" data-action="home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <path d="M3 11.2 12 4l9 7.2"/>
+            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+          </svg>
+        </button>
+        <button class="ico-btn" id="nativeScreenshot" title="Screenshot" data-action="screenshot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+          </svg>
+        </button>
+        <!-- Record — the moving-picture sibling of Screenshot, and the
+             other half of what the size chip drives. Captures the live
+             view in the browser (MediaRecorder over a compose canvas,
+             no server round-trip) in whichever mode is showing: 2D
+             records the bezel composite plus the pinch dots, 3D records
+             the server-rendered device frame as it already is. Hidden
+             outright where MediaRecorder doesn't exist — a Record
+             button that can't record is worse than none. -->
+        <button class="ico-btn" id="nativeRecordBtn" title="Record video"
+                aria-label="Start recording" aria-pressed="false"
+                data-action="record">
+          <!-- Ring around a filled dot — the universal record glyph.
+               The whole mark pulses while a recording is running. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <circle cx="12" cy="12" r="8.5"/>
+            <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>
+          </svg>
+          <span class="rec-timer" id="nativeRecordTimer"></span>
+        </button>
+        <button class="ico-btn" id="nativeAppSwitcher" title="App switcher"
+                aria-label="Open app switcher"
+                data-action="appSwitcher">
+          <!-- "App-switcher" glyph mirroring the native Simulator
+               toolbar's third icon — two overlapping rounded squares.
+               The click fires the `app-switcher` virtual button,
+               which the Swift `IndigoHIDInput` decomposes into two
+               consecutive home `IndigoHIDMessageForButton` presses
+               ~150 ms apart — the recipe SpringBoard listens for
+               (works on Face ID iPhones with no physical home
+               button). The slower swipe-and-hold gesture is still
+               available on the wire as `swipe-to-app-switcher`. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
+            <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
+          </svg>
+        </button>
+        <!-- Shake — fires a UIKit motionShake on the frontmost app
+             (shake-to-undo, shake-to-report). Momentary, like Home /
+             App switcher. POSTs to `/simulators/<udid>/shake`; the
+             server delegates to `simulator.shake().shake()`, backed by
+             `simctl spawn notifyutil`. -->
+        <button class="ico-btn" id="nativeShake" title="Shake device"
+                aria-label="Shake device"
+                data-action="shake">
+          <!-- Phone glyph flanked by motion arcs — reads as a device
+               shaking side to side. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="9" y="3" width="6" height="18" rx="1.6"/>
+            <path d="M5 8.5c-1.2 2-1.2 5 0 7"/>
+            <path d="M19 8.5c1.2 2 1.2 5 0 7"/>
+          </svg>
+        </button>
+      </div>
+      </div><!-- /.tb-scroll -->
+
+      <!-- Scroll-right chevron — mirror of the left one. -->
+      <button class="tb-arrow" id="nativeScrollRight" type="button"
+              title="Scroll controls right" aria-label="Scroll controls right" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+
+      <!-- Capture output size — the chip that says "App Store 6.9″" /
+           "Square" / "Native" for both Screenshot and Record. Mounted
+           by CaptureSizeMenu (page/device-page.js `mountCaptureUI`), so it
+           stays an empty zero-width box until then.
+
+           Deliberately OUTSIDE `#nativeToolScroll`, even though it
+           belongs with the actions at that strip's right end: the strip
+           is an `overflow-x: auto` container, and the popover this chip
+           opens would be clipped at its edge. -->
+      <div id="nativeCaptureSize"></div>
+    </div>
+  </div>
+
+    <div id="nativeDeviceFrame"></div>
+    <div id="native3DStage" class="r3d-live-stage" aria-label="Live 3D simulator"></div>
+  </div>
+
+  <!-- Companion screens. Both start hidden: they are shown only when
+       the screens rail (families/simulator/internal/screens-rail.js) opens one, and only when the
+       host says the screen is actually attached. `hidden` rather than a
+       CSS-only hide so the canvases stay out of layout entirely while
+       nothing is streaming into them. -->
+  <div class="companion-column" id="nativeCarPlayColumn" aria-label="External display" hidden>
+    <div class="companion-label">External display</div>
+    <div id="nativeCarPlayFrame" class="carplay-frame" data-frame-brand="plain" tabindex="0">
+      <canvas id="nativeCarPlayCanvas" width="800" height="480"></canvas>
+    </div>
+  </div>
+
+  <div class="companion-column" id="nativeWatchColumn" aria-label="Apple Watch" hidden>
+    <div class="companion-label" id="nativeWatchLabel">Apple Watch</div>
+    <div id="nativeWatchFrame" class="watch-frame" tabindex="0">
+      <canvas id="nativeWatchCanvas" width="410" height="502"></canvas>
+    </div>
+    <!-- The watch's two hardware buttons. A watch pane is a bare rect
+         with no bezel chrome to hang overlay buttons off, and without
+         these the only way to leave an app is to know that the crown
+         exists — which is exactly what someone new to watchOS doesn't.
+         Named and captioned rather than drawn in their real positions:
+         a realistic right-edge crown teaches the hardware, but a label
+         teaches what the control does, and that's the useful half. -->
+    <div class="watch-buttons" role="group" aria-label="Apple Watch buttons">
+      <button type="button" class="watch-btn"
+              title="Digital Crown — press for the watch face, again for the app grid. Hold for Siri."
+              data-action="watchButton" data-arg="digital-crown">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" width="14" height="14" aria-hidden="true">
+          <circle cx="12" cy="12" r="5.5"/>
+          <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2"/>
+          <path d="M5.4 5.4 7 7M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/>
+        </svg>
+        Crown
+      </button>
+      <button type="button" class="watch-btn"
+              title="Side button — opens Control Centre. Double-press for Wallet, hold for the power menu."
+              data-action="watchButton" data-arg="side-button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <rect x="9.5" y="4" width="5" height="16" rx="2.5"/>
+        </svg>
+        Side
+      </button>
+    </div>
+  </div>
+  </div>
+
+  <!-- Right-edge rail stack. Both rails are drawn by JS and stacked
+       here so they can't land on top of each other: baguette's own
+       screens rail above, the plugins rail below. No `transform` on this
+       container — a transformed ancestor would become the containing
+       block for the `position: fixed` plugin panel and flyout inside it,
+       which is why it centres with `justify-content` instead. -->
+  <!-- Handheld controls. In handheld mode nothing but the screen is
+       on the glass, so its controls hang off one floating button — the
+       AssistiveTouch idiom an iPhone user already knows. It rests
+       faded against a side edge; drag it anywhere and it settles on the
+       nearer side (HandheldButton, handheld/handheld-button.js). A tap
+       opens the menu over a scrim, so a tap aimed at the menu never
+       lands on the simulator. Shown only while `[data-handheld]` is on
+       the root; page/device-page.js places it and wires the drag. -->
+  <div class="handheld-ui" id="nativeHandheldUI" data-open="false">
+    <div class="hh-scrim"
+         data-action="handheldMenu" data-arg="false"></div>
+    <button class="hh-fab" id="nativeHandheldFab" type="button"
+            aria-label="Handheld controls" aria-haspopup="menu" aria-expanded="false"><span></span></button>
+    <div class="hh-menu" role="menu" aria-label="Handheld controls">
+      <button class="hh-item" type="button" role="menuitem"
+              data-action="handheldAction" data-arg="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <path d="M3 11.2 12 4l9 7.2"/>
+          <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+        </svg>
+        <span>Home</span>
+      </button>
+      <button class="hh-item" type="button" role="menuitem"
+              data-action="handheldAction" data-arg="app-switcher">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <rect x="3" y="6" width="8" height="12" rx="1.6"/>
+          <rect x="13" y="6" width="8" height="12" rx="1.6"/>
+        </svg>
+        <span>App Switcher</span>
+      </button>
+      <button class="hh-item" type="button" role="menuitem"
+              data-action="handheldAction" data-arg="rotate" data-needs="orientation">
+        <!-- A plain clockwise arrow: at this size the toolbar's
+             phone-over-arc glyph reads as a microphone. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+          <polyline points="20 4 20 9 15 9"/>
+        </svg>
+        <span>Rotate</span>
+      </button>
+      <button class="hh-item" type="button" role="menuitem"
+              data-action="handheldAction" data-arg="exit">
+        <!-- four corners pulled inward: "back to the window" -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <path d="M9 4v4a1 1 0 0 1-1 1H4"/>
+          <path d="M20 9h-4a1 1 0 0 1-1-1V4"/>
+          <path d="M15 20v-4a1 1 0 0 1 1-1h4"/>
+          <path d="M4 15h4a1 1 0 0 1 1 1v4"/>
+        </svg>
+        <span>Exit Handheld</span>
+      </button>
+    </div>
+  </div>
+  <!-- Said once, on an iPhone in a browser tab: the bars around the
+       screen can only go by launching from a Home Screen icon. -->
+  <div class="handheld-hint" id="nativeHandheldHint" role="status" hidden>
+    <span>For full screen, tap <b>Share</b> → <b>Add to Home Screen</b>.</span>
+    <button type="button" aria-label="Dismiss"
+            data-action="handheldHintClose">✕</button>
+  </div>
+
+  <div class="right-rails" id="nativeRightRails"></div>
+
+  <!-- Accessibility-inspector host. page/device-page.js mounts an
+       AXInspector into this element after the surface is ready;
+       the inspector renders its own toggle + selection info here. -->
+  <div id="nativeAxHost" class="ax-host"></div>
+
+  <aside id="native3DSheet" class="render3d-host" aria-hidden="true">
+    <header class="render3d-host-head">
+      <span class="render3d-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.6" stroke-linejoin="round" width="15" height="15">
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
+          <path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>
+        </svg>
+        Live 3D
+      </span>
+      <button class="ico-btn" title="Hide 3D inspector"
+              aria-label="Hide 3D inspector"
+              data-action="toggle3DInspector">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" width="14" height="14">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+          <path d="M14 4v16"/>
+        </svg>
+      </button>
+    </header>
+    <div id="native3DHost"></div>
+  </aside>
+
+  <button class="sidebar-view-toggle" id="nativeSidebarViewToggle"
+          title="Open sidebar view"
+          aria-label="Open sidebar view"
+          data-action="openSidebarView">
+    <!-- Layout-with-sidebar glyph: a panel split by a vertical
+         divider, signalling "device + sidebar" inline view. -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <rect x="3" y="4" width="18" height="16" rx="2.2"/>
+      <line x1="14" y1="4" x2="14" y2="20"/>
+    </svg>
+  </button>
+
+  <button class="theme-toggle" id="nativeThemeToggle" title="Toggle theme"
+          aria-label="Toggle light or dark theme"
+          data-action="toggleTheme">
+    <!-- Sun (visible in light theme). -->
+    <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2"/><path d="M12 20v2"/>
+      <path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
+      <path d="M2 12h2"/><path d="M20 12h2"/>
+      <path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/>
+    </svg>
+    <!-- Moon (visible in dark theme). -->
+    <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+    </svg>
+  </button>
+
+  <!-- Live-log sheet — slides up from the bottom, hosts a LogPanel
+       built by panels/logs/internal/log-view.js. Hidden by default; toolbar's
+       `nativeLogsToggle` flips `[data-logs="open"]` on the root. -->
+  <aside id="nativeLogsSheet" class="logs-sheet" aria-hidden="true">
+    <header class="logs-sheet-header">
+      <strong>Live logs</strong>
+      <button class="ico-btn logs-sheet-close" title="Close logs"
+              aria-label="Close logs"
+              data-action="toggleLogs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeLogsHost" class="logs-sheet-body"></div>
+  </aside>
+
+  <!-- Camera control card — floating glass panel, anchored top-left
+       of the device column (mirror of `.ax-host` on the right). The
+       toolbar's `nativeCameraToggle` flips `[data-camera="open"]`
+       on the root; CSS fades the card in/out. The CameraPanel
+       (sim-camera.js) is lazy-mounted on first open and retained
+       across subsequent toggles so the WS + selected camera survive
+       a close→reopen cycle. -->
+  <aside id="nativeCameraSheet" class="camera-host" aria-hidden="true">
+    <header class="camera-host-head">
+      <span>Camera</span>
+      <button class="ico-btn camera-host-close" title="Close camera"
+              aria-label="Close camera"
+              data-action="toggleCamera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeCameraHost"></div>
+  </aside>
+
+  <!-- Status-bar override card — floating glass panel anchored
+       top-right of the device column. The toolbar's
+       `nativeStatusBarToggle` flips `[data-statusbar="open"]` on the
+       root; CSS fades the card in/out. StatusBarPanel (sim-status-bar.js)
+       is lazy-mounted into #nativeStatusBarHost on first open. -->
+  <aside id="nativeStatusBarSheet" class="status-bar-host" aria-hidden="true">
+    <header class="status-bar-host-head">
+      <span class="status-bar-host-title">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+          <rect x="3" y="13" width="3" height="6" rx="1"/><rect x="8" y="10" width="3" height="9" rx="1"/>
+          <rect x="13" y="7" width="3" height="12" rx="1"/><rect x="18" y="4" width="3" height="15" rx="1"/>
+        </svg>
+        Status Bar
+      </span>
+      <button class="ico-btn status-bar-host-close" title="Close status bar overrides"
+              aria-label="Close status bar overrides"
+              data-action="toggleStatusBar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeStatusBarHost"></div>
+  </aside>
+
+  <!-- Network-conditioning card — floating glass panel. The toolbar's
+       `nativeNetworkToggle` flips `[data-network="open"]` on the root; CSS
+       fades the card in/out. NetworkPanel (sim-network.js) is lazy-mounted
+       into #nativeNetworkHost on first open. -->
+  <aside id="nativeNetworkSheet" class="network-host" aria-hidden="true" inert>
+    <header class="network-host-head">
+      <span class="network-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/>
+          <path d="M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5s-1.2 6.1-3.4 8.5"/>
+          <path d="M12 3.5C9.8 5.9 8.6 8.9 8.6 12s1.2 6.1 3.4 8.5"/>
+        </svg>
+        Network
+      </span>
+      <button class="ico-btn network-host-close" title="Close network conditioning"
+              aria-label="Close network conditioning"
+              data-action="toggleNetwork">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeNetworkHost"></div>
+  </aside>
+
+  <!-- Defaults card. DefaultsPanel (sim-defaults.js) is lazy-mounted into
+       #nativeDefaultsHost on first open; `[data-defaults="open"]` on the root
+       fades it in. -->
+  <aside id="nativeDefaultsSheet" class="defaults-host" aria-hidden="true" inert>
+    <header class="defaults-host-head">
+      <span class="defaults-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             width="14" height="14" aria-hidden="true">
+          <rect x="2.5" y="7" width="19" height="10" rx="5"/>
+          <circle cx="16.5" cy="12" r="2.6" fill="currentColor"/>
+        </svg>
+        Defaults
+      </span>
+      <button class="ico-btn defaults-host-close" title="Close app defaults"
+              aria-label="Close app defaults"
+              data-action="toggleDefaults">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeDefaultsHost"></div>
+  </aside>
+
+  <!-- Notify card. NotifyPanel (sim-notify.js) is lazy-mounted into
+       #nativeNotifyHost on first open; `[data-notify="open"]` on the root
+       fades it in. -->
+  <aside id="nativeNotifySheet" class="notify-host" aria-hidden="true" inert>
+    <header class="notify-host-head">
+      <span class="notify-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>
+        </svg>
+        Notification
+      </span>
+      <button class="ico-btn notify-host-close" title="Close remote notification"
+              aria-label="Close remote notification"
+              data-action="toggleNotify">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeNotifyHost"></div>
+  </aside>
+
+  <!-- Simulated-location card — floating glass panel with a Leaflet map.
+       The toolbar's `nativeLocationToggle` flips `[data-location="open"]`
+       on the root; CSS fades the card in/out. LocationPanel
+       (sim-location.js) is lazy-mounted into #nativeLocationHost on first
+       open. -->
+  <aside id="nativeLocationSheet" class="location-host" aria-hidden="true">
+    <header class="location-host-head">
+      <span class="location-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <path d="M12 21s7-5.5 7-11a7 7 0 0 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>
+        </svg>
+        Location
+      </span>
+      <button class="ico-btn location-host-close" title="Close simulated location"
+              aria-label="Close simulated location"
+              data-action="toggleLocation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeLocationHost"></div>
+  </aside>
+
+  <!-- Recordings dock. A MediaRecorder artifact only exists as a Blob
+       URL in this tab, so if nothing on the page links to it the
+       recording is simply gone. The dock opens itself when the first
+       one lands and lists them newest-first; closing it revokes every
+       URL it was holding, which is what keeps a long session from
+       accumulating video in memory. -->
+  <aside class="rec-dock" id="nativeRecordDock" aria-label="Recordings">
+    <header class="rec-dock-head">
+      <span>Recordings</span>
+      <!-- Two separate verbs, because they are not the same act. The ✕
+           puts the card away and keeps every file; "Clear" revokes the
+           Blob URLs, which destroys anything not yet downloaded with no
+           undo — so it is spelled out rather than hidden behind the
+           dismiss glyph people click without reading. -->
+      <button class="rec-dock-clear" title="Discard these recordings and free the memory they hold"
+              aria-label="Discard recordings"
+              data-action="clearRecordings">Clear</button>
+      <button class="ico-btn rec-dock-close" title="Hide recordings"
+              aria-label="Hide recordings"
+              data-action="hideRecordings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div class="rec-dock-list" id="nativeRecordList"></div>
+  </aside>
+</div>
+
+<script>
+  // Preview bootstrap — only when the file is opened directly. Lets
+  // designers iterate on the chrome without booting a simulator.
+  (function () {
+    if (location.protocol !== 'file:') return;
+    document.body.classList.add('preview');
+    document.body.style.cssText = 'margin:0;background:#1a1a1f';
+    document.getElementById('nativeDeviceName').textContent = 'iPhone 17 Pro Max';
+    document.getElementById('nativeDeviceOS').textContent = 'iOS 26.4';
+    var host = document.getElementById('nativeDeviceFrame');
+    var img = document.createElement('img');
+    img.src = '../frames/iPhone 17 Pro Max.png';
+    img.style.cssText = 'display:block;height:88vh;max-height:calc(100vh - 72px);pointer-events:none';
+    host.appendChild(img);
+    document.querySelector('.fmt-btn[data-v="avcc"]').classList.add('active');
+    document.getElementById('nativeStatus').textContent = '60 fps';
+  })();
+</script>
+</body>
+</html>

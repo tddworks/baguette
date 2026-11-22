@@ -11,6 +11,8 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
 
     private let devicectl: Devicectl
     private var listing: RecentListing<PhysicalPhone>!
+    /// A phone streams its screen to one receiver, so its viewers share one.
+    private let screens = SharedScreens()
 
     init(
         devicectl: Devicectl = Devicectl(),
@@ -22,7 +24,7 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
     }
 
     var all: [any Device] {
-        listing.items.map { CoreDevicePhone($0, devicectl: devicectl) }
+        listing.items.map { CoreDevicePhone($0, devicectl: devicectl, screens: screens) }
     }
 
     func find(id: DeviceID) throws -> (any Device)? {
@@ -53,11 +55,13 @@ struct CoreDevicePhone: Device {
     private let phone: PhysicalPhone
     private let devicectl: Devicectl
     private let screenRoute: PhoneScreenRoute
+    private let screens: SharedScreens
 
-    init(_ phone: PhysicalPhone, devicectl: Devicectl,
+    init(_ phone: PhysicalPhone, devicectl: Devicectl, screens: SharedScreens = SharedScreens(),
          screenRoute: PhoneScreenRoute = PhoneScreenRoute(environment: ProcessInfo.processInfo.environment)) {
         self.phone = phone
         self.devicectl = devicectl
+        self.screens = screens
         self.screenRoute = screenRoute
     }
 
@@ -78,10 +82,14 @@ struct CoreDevicePhone: Device {
         if let identifier = phone.coreDeviceIdentifier, CoreDeviceFramework.isAvailable {
             // Live through CoreDevice, turned into pictures by the receiver
             // `PhoneScreenRoute` picks; without CoreDevice, stills.
-            let route = screenRoute
+            // One live screen per phone, whoever watches it: a second stream
+            // asked of the phone would take its picture from the first.
+            let (route, screens, id) = (screenRoute, screens, self.id)
             abilities.register(.screen) {
-                CoreDeviceScreen(identifier: identifier, devicectl: devicectl, tunnel: tunnel,
-                                 makeReceiver: { try route.receiver() })
+                screens.view(of: id) {
+                    CoreDeviceScreen(identifier: identifier, devicectl: devicectl, tunnel: tunnel,
+                                     makeReceiver: { try route.receiver() })
+                }
             }
         } else {
             abilities.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }

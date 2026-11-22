@@ -129,7 +129,7 @@ Test-first, each slice green on its own:
 3. **Render scale**: `should rasterize a chrome PDF at three pixels per chrome point`, while the size stays in points.
 4. **Hold-back**: `should show a behind-the-case button only where the case is fully transparent`.
 5. **Crown sprite**: bake the ridges into the merged bezel and `/chrome-button/digital-crown.png`.
-6. **Page**: mask the actionable overlay with the case's transparent area; `captureSourceSize` (`sim-stream.js`) reads the bezel's pixel width and must switch to layout size.
+6. **Page**: mask the actionable overlay with the case's transparent area; `captureSourceSize` (`page/devices-stream.js`) reads the bezel's pixel width and must switch to layout size.
 7. **Rest positions**: only after a crisp reference settles open question 3.
 
 ## How it was measured

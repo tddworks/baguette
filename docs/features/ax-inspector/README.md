@@ -15,8 +15,8 @@ that one is for scripts and agents, this one is for humans asking "why is
 
 ## Quick start
 
-1. `baguette serve`, then open `http://127.0.0.1:8421/simulators`.
-2. **Sidebar mode** (`/simulators`): tick the checkbox on the "Accessibility"
+1. `baguette serve`, then open `http://127.0.0.1:8421/devices`.
+2. **Sidebar mode** (`/devices`): tick the checkbox on the "Accessibility"
    card in the right-hand sidebar; the selection shows inline in that card.
    **Focus mode** (`/devices/<UDID>`): click the inspector icon in the
    toolbar, next to the bezel-actionable toggle; the selection shows in a
@@ -46,7 +46,7 @@ survives a layout reflow.
 ## WebSocket
 
 No new endpoints or connections: the inspector rides the existing stream socket
-`WS /simulators/<UDID>/stream`, which already carries binary frames and JSON text.
+`WS /devices/<UDID>/stream`, which already carries binary frames and JSON text.
 
 ```json
 { "type": "describe_ui" }

@@ -22,7 +22,7 @@ screen shows a **Boot** button.
 |---------|-----|
 | CLI | `baguette boot --udid <UDID>` |
 | Focus mode | Open `/devices/<UDID>` on a shutdown device; the screen shows **Boot** |
-| List page | `/simulators`: boot / shutdown buttons per row |
+| List page | `/devices`: boot / shutdown buttons per row |
 | Device farm | `/farm`: per-tile and bulk boot ([device farm](../device-farm/README.md)) |
 
 ## Focus mode

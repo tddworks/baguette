@@ -8,8 +8,8 @@ import Mockable
 @Mockable
 protocol DisplayConfiguration: Sendable {
     var main: UInt32 { get }
-    /// Each listed display's origin; nil when the list can't be read.
-    func origins() -> [UInt32: Point]?
+    /// Where each listed display is; nil when the list can't be read.
+    func bounds() -> [UInt32: Rect]?
     func place(_ origins: [UInt32: Point])
 }
 
@@ -31,14 +31,16 @@ struct MainDisplayMove {
         self.pause = pause
     }
 
-    func makeMain(_ display: UInt32) -> Bool {
+    /// `freeing`: the Dock's side, when the display should have nothing
+    /// beside that edge (a share made main); nil only shifts the arrangement.
+    func makeMain(_ display: UInt32, freeing edge: DockEdge? = nil) -> Bool {
         for attempt in 0..<Self.tries {
             if configuration.main == display {
                 if attempt > 0 { log("[mac] display \(display) is main after \(attempt) tries") }
                 return true
             }
-            if let now = configuration.origins(), now[display] != nil,
-               let moved = DisplayOrigins.makingMain(display, in: now) {
+            if let now = configuration.bounds(), now[display] != nil,
+               let moved = DisplayOrigins.makingMain(display, in: now, freeing: edge) {
                 configuration.place(moved)
             } else if attempt % 10 == 0 {
                 log("[mac] display \(display) not listed yet (main \(configuration.main))")

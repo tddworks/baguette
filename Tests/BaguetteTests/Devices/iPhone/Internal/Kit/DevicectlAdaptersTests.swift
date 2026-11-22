@@ -313,8 +313,24 @@ struct CoreDevicePhonesTests {
                               coreDeviceIdentifier: UUID()),
                 devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: route)
 
-            #expect(try phone.require(.screen) is CoreDeviceScreen)
+            let view = try #require(try phone.require(.screen) as? SharedScreenView)
+            #expect(view.shared.make() is CoreDeviceScreen)
         }
+    }
+
+    // A phone streams its screen to one receiver: a second stream asked of it
+    // takes the picture from the first, and its goodbye ends it for both.
+    @Test(.enabled(if: CoreDeviceFramework.isAvailable))
+    func `should show every viewer of a phone one live screen, however often the phone is looked up`() throws {
+        let screens = SharedScreens()
+        let phone = PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
+                                  marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
+                                  coreDeviceIdentifier: UUID())
+        let devicectl = Devicectl(makeSubprocess: FakeDevicectl().make)
+        let first = try #require(try CoreDevicePhone(phone, devicectl: devicectl, screens: screens).require(.screen) as? SharedScreenView)
+        let second = try #require(try CoreDevicePhone(phone, devicectl: devicectl, screens: screens).require(.screen) as? SharedScreenView)
+
+        #expect(first.shared === second.shared)
     }
 
     @Test func `should take no touch on a phone CoreDevice gave no identifier`() {

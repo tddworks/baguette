@@ -6,7 +6,7 @@ description: Why the browser recorder composites the live view client-side while
 
 ## Path
 
-- **Browser**: Record button (`sim-stream.js`, `sim-native.js`, `farm-focus.js`)
+- **Browser**: Record button (`page/devices-stream.js`, `page/device-page.js`, `farm-focus.js`)
   → `BrowserRecorder` (`recorder.js`) → `CaptureComposer` paints bezel / screen /
   overlay onto a compose canvas → `compose.captureStream(fps)` → `MediaRecorder`.
   No server endpoints.
@@ -61,8 +61,8 @@ Recording is old enough to predate the vocabulary — `sim.html` and the device
 farm both used it before any of this existed — so a hard failure there would have
 broken working pages for the sake of an option they never passed. `recorder.js`
 is loaded by exactly two pages — `sim.html` and `farm/farm.html`. The native view
-has no script tag of its own: `sim-native.html` is a *template* that
-`sim-native.js` extracts into the live page, and `sim.html` loads both. Each page
+has no script tag of its own: `page/device-page.html` is a *template* that
+`page/device-page.js` extracts into the live page, and `sim.html` loads both. Each page
 loads the `capture/` trio first, so `CaptureSize`, `CaptureSettings` and
 `CaptureComposer` are on `window.Baguette` before `start()`.
 
@@ -440,7 +440,7 @@ file is the wrong way round.
 
 ## Lifecycle on the page
 
-### `sim-stream.js`
+### `page/devices-stream.js`
 
 ```js
 const recordingState = {
@@ -462,7 +462,7 @@ between them — the selection is a property of "what I want out of this
 device", not of which button produced it, so a screenshot and a clip
 taken a second apart come out at the same dimensions.
 
-### `sim-native.js`
+### `page/device-page.js`
 
 The native (focus-mode) view had no Record button at all until the
 size vocabulary landed; screenshots were its only capture. It now

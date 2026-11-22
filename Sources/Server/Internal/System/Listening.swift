@@ -8,7 +8,7 @@ extension Server {
 
     func run() async throws {
         let router = makeRouter()
-        log("listening on http://\(host):\(port)/simulators")
+        log("listening on \(Self.devicesPage(host: host, port: port))")
 
         let app = Application(
             router: router,

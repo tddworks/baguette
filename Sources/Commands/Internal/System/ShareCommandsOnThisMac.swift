@@ -13,7 +13,8 @@ extension VirtualDisplayCommand {
 
 extension MainDisplayCommand {
     func run() throws {
-        try makeMain(with: CoreGraphicsDisplayConfiguration())
+        try makeMain(with: CoreGraphicsDisplayConfiguration(),
+                     dockOrientation: { UserDefaults(suiteName: "com.apple.dock")?.string(forKey: "orientation") })
     }
 }
 

@@ -22,7 +22,7 @@ phone it is shown on.
 2. On the phone, open `http://<mac-ip>:8421/devices/<UDID>` and tap
    **⛶ Handheld** next to the 3D cube in the toolbar.
 
-Or link straight to it: `http://<mac-ip>:8421/simulators/<UDID>?handheld=1`.
+Or link straight to it: `http://<mac-ip>:8421/devices/<UDID>?handheld=1`.
 
 ## Truly full screen
 

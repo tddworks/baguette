@@ -1,4 +1,5 @@
 import BaguetteDevice
+import WebRTCKit
 import CoreGraphics
 import Foundation
 import HTTPTypes
@@ -39,9 +40,9 @@ import NIOCore
 ///   WS   /devices/:udid/stream?format=      → physical-device mirror frames
 ///   GET  /<file>.{html,js,css}              → static UI asset
 ///
-/// Static UI siblings live at the *root* (e.g. `GET /sim-list.js`)
-/// so the page at `/simulators` resolves `<script src="sim-list.js">`
-/// to a sibling — no prefix juggling, no conflict with the
+/// Static UI lives at the *root* (`GET /sim.html`) and in the folders
+/// `staticAssetSubdirectories` lists (`GET /page/devices-list.js`), each
+/// with a literal route — no prefix juggling, no conflict with the
 /// `/simulators/:udid` resource tree (UDIDs don't end in `.js`).
 struct Server: Sendable {
     let simulators: any Simulators
@@ -172,7 +173,10 @@ struct Server: Sendable {
             }
 
         // List page (HTML + sibling assets).
-        router.get("/") { _, _ in Self.redirect(to: "/simulators") }
+        // The devices list: every device, whatever its kind. `/simulators`
+        // is its old spelling, kept so links and bookmarks still land.
+        router.get("/") { _, _ in Self.redirect(to: "/devices") }
+        router.get("/devices") { _, _ in Self.staticAsset("sim.html") }
         router.get("/simulators") { _, _ in Self.staticAsset("sim.html") }
         router.get("/simulators.json") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
@@ -521,12 +525,35 @@ struct Server: Sendable {
         "carplay-frames",
         "carplay-frames/cupra",
         "carplay-frames/plain",
-        "defaults",
-        "sim-list",
+        "device",
+        "families",
+        "families/android",
+        "families/mac",
+        "families/mac/internal",
+        "families/phone",
+        "families/simulator",
+        "families/simulator/internal",
         "farm",
         "handheld",
-        "network",
-        "screens",
+        "page",
+        "page/internal",
+        "page/internal/plugins",
+        "panels",
+        "panels/camera",
+        "panels/camera/internal",
+        "panels/defaults",
+        "panels/defaults/internal",
+        "panels/location",
+        "panels/location/internal",
+        "panels/logs",
+        "panels/logs/internal",
+        "panels/network",
+        "panels/network/internal",
+        "panels/notify",
+        "panels/notify/internal",
+        "panels/status-bar",
+        "panels/status-bar/internal",
+        "stream",
         "toolbar",
         "vendor/leaflet",
     ]
@@ -1932,6 +1959,9 @@ struct Server: Sendable {
             udid: udidParam(request),
             format: request.uri.queryParameters.get("format")
                 .flatMap { StreamFormat(rawValue: $0) } ?? .mjpeg,
+            // `?codec=h265|auto`: an AVCC stream in HEVC when this Mac encodes it; H.264 otherwise.
+            codec: Codecs.asked(request.uri.queryParameters.get("codec").flatMap { CodecChoice(rawValue: String($0)) },
+                                encodable: Codecs.encodable),
             displayQuery: request.uri.queryParameters.get("display"),
             panelQuery: request.uri.queryParameters.get("panel").map { String($0) },
             requireExistingDisplay: requireExistingDisplay,
@@ -1945,6 +1975,7 @@ struct Server: Sendable {
     private static func streamWS(
         udid: String,
         format: StreamFormat,
+        codec: any Codec = H264Codec(),
         displayQuery: String?,
         panelQuery: String? = nil,
         requireExistingDisplay: Bool = false,
@@ -1984,7 +2015,7 @@ struct Server: Sendable {
         }
 
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
+        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5, codec: codec)
         let screen = bound.screen
         // One input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride. A device

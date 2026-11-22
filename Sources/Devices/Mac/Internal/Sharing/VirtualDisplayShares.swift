@@ -42,7 +42,7 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
         let main = use == .main ? arrangement.main : nil
         guard let display = displays.create(named: Self.name(viewer), shape: shape, serial: serial) else { return nil }
         var previousMain: UInt32?
-        if let main, arrangement.makeMain(display.id) { previousMain = main }
+        if let main, arrangement.makeMain(display.id, freeingDock: true) { previousMain = main }
         lock.withLock {
             shares[display.uuid] = Share(viewer: viewer, serial: serial, use: use, shape: shape, display: display,
                                          previousMain: previousMain)
@@ -67,7 +67,7 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
         // macOS removes the main display slowly — it chooses another and moves
         // everything first — so main goes back before the old display does.
         let wasMain = arrangement.main == share.display.id
-        if wasMain, let previousMain = share.previousMain { _ = arrangement.makeMain(previousMain) }
+        if wasMain, let previousMain = share.previousMain { _ = arrangement.makeMain(previousMain, freeingDock: false) }
         let old = share.display.id
         share.display.remove()
         guard let display = displays.create(named: Self.name(share.viewer), shape: shape, serial: share.serial) else {
@@ -78,7 +78,7 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
             }
             return false
         }
-        if wasMain { _ = arrangement.makeMain(display.id) }
+        if wasMain { _ = arrangement.makeMain(display.id, freeingDock: true) }
         share.display = display
         share.shape = shape
         lock.withLock {
@@ -96,7 +96,7 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
         work.lock(); defer { work.unlock() }
         guard let share = lock.withLock({ shares.removeValue(forKey: id) }) else { return }
         if arrangement.main == share.display.id, let previousMain = share.previousMain {
-            _ = arrangement.makeMain(previousMain)
+            _ = arrangement.makeMain(previousMain, freeingDock: false)
         }
         lock.withLock { handBack(from: share.display.id, to: share.previousMain) }
         share.display.remove()

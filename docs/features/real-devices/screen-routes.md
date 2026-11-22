@@ -23,6 +23,28 @@ Tested through `MockScreenReceiver`, `MockTunnel`, `MockMediaStreamStarter`, `Mo
 
 **Why no fallback to stills.** A start that fails is a failure to see, not one to paper over: the screenshot fallback once hid a dead tunnel as "first open shows stale screenshots until a refresh". Whether a phone can stream live at all is known before anything starts — it has CoreDevice or it doesn't — so the phone registers `CoreDeviceScreen` or `DevicectlScreen`, never both.
 
+## Many viewers, one stream — `SharedScreen` (`Device/Abilities/Screen/`)
+
+**The phone streams its screen to one receiver.** A second `startMediaStream` takes the picture from the first, and the second's goodbye ends the stream for both. Measured on 2026-11-22, before the fix: viewer A streaming, viewer B opened then closed. From B's goodbye on, A's session logged `0 packets, 0 frames` through every swipe, while its encoder re-sent the last picture on the refresh beat (the page read 39 fps, frozen). Restarting A, for example by switching codec, brought it back. A simulator never had this: its screen is a framebuffer in this Mac's memory, and every viewer subscribes to it on its own.
+
+So a phone's viewers never each start a `CoreDeviceScreen`. They share one:
+
+```
+ Tab A ──► stream A ─┐
+                     ├─► SharedScreen(phone) ──► one CoreDeviceScreen ◄── RTP ── iPhone
+ Tab B ──► stream B ─┘        │
+                              ├─ first viewer joins  → start the phone's stream once
+                              ├─ every picture       → shown to every viewer
+                              ├─ late viewer joins   → gets the newest picture at once
+                              ├─ a viewer leaves     → stream keeps running
+                              └─ last viewer leaves  → goodbye to the phone, stream stops
+```
+
+- **`SharedScreens` outlives the phone value.** `CoreDevicePhones` makes a `CoreDevicePhone` afresh on every lookup, so it holds the one `SharedScreens` (one `SharedScreen` per phone), and every lookup's `.screen` is a viewer of it.
+- **Start under the lock.** A second viewer waits for the first one's start rather than starting a second stream. A start that throws reaches that viewer and leaves nothing running, so the next viewer tries again.
+- **Measured after:** four viewers on one phone, one stream (`decoder configured` once); a viewer closing left the others' pictures moving.
+- Tested in `SharedScreenTests` (against `MockScreen`) and `CoreDevicePhonesTests`.
+
 ## `rtp` — `RTPReceiver`, baguette's own (`Screen/CoreDevice/RTP/`)
 
 ```
