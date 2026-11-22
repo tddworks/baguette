@@ -32,6 +32,24 @@ public enum VideoCodec: Equatable, Hashable, Sendable {
         }
     }
 
+    /// Its `a=rtpmap` encoding name and clock rate.
+    public var rtpmap: String {
+        switch self {
+        case .h264: "H264/90000"
+        case .h265: "H265/90000"
+        }
+    }
+
+    /// Its `a=fmtp` parameters, as the answer gives them: what the sender sends.
+    public var fmtp: String {
+        switch self {
+        case let .h264(_, profileLevelID):
+            "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=\(profileLevelID)"
+        case let .h265(_, profileID, levelID, tier):
+            "level-id=\(levelID);profile-id=\(profileID);tier-flag=\(tier);tx-mode=SRST"
+        }
+    }
+
     public var packetizer: any RTPPacketizer {
         switch self {
         case .h264: H264Packetizer()

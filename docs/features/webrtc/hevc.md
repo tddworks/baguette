@@ -4,9 +4,10 @@ description: Design for sending H.265 (HEVC) to a WebRTC viewer — why and when
 
 # HEVC over WebRTC — "the same picture in fewer bits, when the viewer can take it"
 
-**Status:** DESIGNED, not built. Today every WebRTC viewer gets High-profile
-H.264. H.265 stays **opt-in** (`?codec=h265`) until slice 6 measures it winning;
-if it doesn't, the default never changes.
+**Status:** the kit's part is BUILT (K1–K3: packetizer, codec choice, offer
+and answer); baguette's isn't (slices 4–7), so every viewer still gets
+High-profile H.264. H.265 stays **opt-in** (`?codec=h265`) until slice 6
+measures it winning; if it doesn't, the default never changes.
 
 This document owns **why baguette would send H.265, how the live view asks for
 it and encodes it, and how it is decided**. The codec choice, the SDP and the
@@ -43,7 +44,7 @@ What the stack has, checked 2026-11-22:
  page      whep-session.js: H.264 first in setCodecPreferences, every other    ✓ an offer already
            codec after it                                                        carries H.265
  baguette  VideoToolboxSession: kCMVideoCodecType_H264 only                    ✗ slice 4
- kit       H.264 only; an offer without it is refused                          ✗ slices K1–K3
+ kit       reads and answers H.265, cuts it per RFC 7798 — when asked            ✓ K1–K3 built
 ```
 
 ## The one sentence
@@ -138,8 +139,9 @@ then:
 
 ## 6 · Open questions
 
-- **Does iPhone Safari offer and decode H.265 over WebRTC?** Settled by slice
-  K3's captured offer.
+- **Does iPhone Safari offer and decode H.265 over WebRTC?** Chrome 157's offer
+  carries it (captured); an iPhone's is still to capture — the first thing
+  slice 5 does, on the device.
 - **Does H.265 recover from loss as well as H.264?** Both wait for a keyframe
   after a lost reference. The repo's note that HEVC "mosaics under motion" is
   about Apple's own phone stream, not this encoder — slice 6 drops packets on

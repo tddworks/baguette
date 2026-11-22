@@ -153,6 +153,17 @@ struct WebRTCSenderTests {
         #expect(rig.packets.map(\.marker) == [false, true])
     }
 
+    @Test func `should cut its pictures with the packetizer of the codec its session chose`() throws {
+        // A 2397-byte NAL unit: 2 H.264 fragments (1198 bytes of room each), 3 H.265 ones (1197).
+        let nal = Data([0x26, 0x01] + (2..<2397).map { UInt8(truncatingIfNeeded: $0) })
+        let frame = EncodedFrame(avcc: Data([0x00, 0x00, 0x09, 0x5D]) + nal, isKeyframe: false)
+        let h265 = Rig(offer: try SessionDescription(offer: chrome157Offer, asked: .h265, sendable: [.h264, .h265]))
+        let h264 = Rig(offer: try SessionDescription(offer: chrome157Offer))
+        for rig in [h265, h264] { rig.goLive(); rig.sender.send(frame) }
+        #expect(h265.packets.map(\.payloadType) == [49, 49, 49])
+        #expect(h264.packets.map(\.payloadType) == [118, 118])
+    }
+
     @Test func `should resend a lost packet once for reports that repeat a moment apart`() {
         let rig = Rig()
         rig.goLive()

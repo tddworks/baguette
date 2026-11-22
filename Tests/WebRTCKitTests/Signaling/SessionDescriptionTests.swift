@@ -69,15 +69,15 @@ struct SessionDescriptionTests {
         let description = try SessionDescription(offer: chromeOffer)
 
         #expect(description.payloadType == 112)
-        #expect(description.profileLevelID == "64001f")
+        #expect(description.codec == .h264(payloadType: 112, profileLevelID: "64001f"))
     }
 
     @Test func `should refuse an offer with no H.264 the encoder can send`() {
         // Baseline only, or High in packetization mode 0: neither carries what the encoder makes.
         let baselineOnly = offer { !$0.contains("profile-level-id=64001f") }
-        #expect(throws: SessionDescription.Refusal.noH264) { try SessionDescription(offer: baselineOnly) }
+        #expect(throws: SessionDescription.Refusal.noSendableVideo) { try SessionDescription(offer: baselineOnly) }
         let vp8Only = offer { !$0.contains("H264") && !$0.hasPrefix("a=fmtp:1") }
-        #expect(throws: SessionDescription.Refusal.noH264) { try SessionDescription(offer: vp8Only) }
+        #expect(throws: SessionDescription.Refusal.noSendableVideo) { try SessionDescription(offer: vp8Only) }
     }
 
     @Test func `should refuse an offer with no video in it`() {
@@ -146,8 +146,8 @@ extension SessionDescriptionTests {
 extension SessionDescriptionTests {
     @Test func `should say why it refused an offer, in words a page can show`() {
         #expect(SessionDescription.Refusal.noVideo.description == "the offer has no video")
-        #expect(SessionDescription.Refusal.noH264.description
-            == "the offer has no High-profile H.264 in packetization mode 1, the only video baguette sends")
+        #expect(SessionDescription.Refusal.noSendableVideo.description
+            == "the offer has no video baguette can send: High-profile H.264 in packetization mode 1, or Main-profile H.265 when asked for")
         #expect(SessionDescription.Refusal.noICECredentials.description == "the offer has no ICE username or password")
         #expect(SessionDescription.Refusal.noFingerprint.description == "the offer names no DTLS certificate fingerprint")
     }
@@ -324,5 +324,46 @@ extension SessionDescriptionTests {
         #expect(answer.contains(
             "a=candidate:1 1 udp 2130706431 192.168.1.5 50000 typ host\r\n"
             + "a=candidate:2 1 udp 16777215 198.51.100.4 50001 typ relay raddr 0.0.0.0 rport 0\r\n"))
+    }
+}
+
+/// The codec a session sends, read from a real browser's offer: every H.264
+/// and H.265 it carries, the choice `CodecChoice` makes, and the answer naming it.
+@Suite("SessionDescription codec")
+struct SessionDescriptionCodecTests {
+    @Test func `should read every H.264 and H.265 a browser offers`() throws {
+        let description = try SessionDescription(offer: chrome157Offer)
+        #expect(description.offered.contains(.h264(payloadType: 118, profileLevelID: "64001f")))
+        #expect(description.offered.contains(.h265(payloadType: 49, profileID: 1, levelID: 180, tier: 0)))
+        #expect(description.offered.contains(.h265(payloadType: 51, profileID: 2, levelID: 180, tier: 0)))
+        #expect(!description.offered.contains { if case let .h264(pt, _) = $0 { pt == 104 } else { false } })   // mode 0
+    }
+
+    @Test func `should answer H.265 when asked for, offered in Main profile and sendable`() throws {
+        let description = try SessionDescription(offer: chrome157Offer, asked: .h265, sendable: [.h264, .h265])
+        #expect(description.codec == .h265(payloadType: 49, profileID: 1, levelID: 180, tier: 0))
+        let answer = description.answer(ice: ICECredentials(ufrag: "u", password: "p"), fingerprint: "sha-256 AA",
+                                         ssrc: 1, rtxSSRC: 2, candidates: [])
+        #expect(answer.contains("m=video 9 UDP/TLS/RTP/SAVPF 49 50\r\n"))
+        #expect(answer.contains("a=rtpmap:49 H265/90000\r\n"))
+        #expect(answer.contains("a=fmtp:49 level-id=180;profile-id=1;tier-flag=0;tx-mode=SRST\r\n"))
+        #expect(answer.contains("a=fmtp:50 apt=49\r\n"))
+        #expect(!answer.contains("H264"))
+    }
+
+    @Test func `should answer High-profile H.264 to the same offer when nothing is asked`() throws {
+        let description = try SessionDescription(offer: chrome157Offer)
+        #expect(description.codec == .h264(payloadType: 118, profileLevelID: "64001f"))
+        let answer = description.answer(ice: ICECredentials(ufrag: "u", password: "p"), fingerprint: "sha-256 AA",
+                                        ssrc: 1, candidates: [])
+        #expect(answer.contains("a=rtpmap:118 H264/90000\r\n"))
+        #expect(answer.contains("a=fmtp:118 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f\r\n"))
+        #expect(!answer.contains("H265"))
+    }
+
+    @Test func `should refuse an offer with no video the owner can send`() {
+        #expect(throws: SessionDescription.Refusal.noSendableVideo) {
+            try SessionDescription(offer: chrome157Offer, asked: .h265, sendable: [])
+        }
     }
 }

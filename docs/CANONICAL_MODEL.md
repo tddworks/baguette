@@ -193,7 +193,7 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | one viewer, one encoder: each viewer owns its stream, and hanging up stops it | `WebRTCViewer` |
 | a viewer the browser stops answering — no STUN check for 30 s — hangs up | `WebRTCSender` |
 | a STUN check is answered only when it names the viewer's username fragment and is signed with its ICE password | `STUNMessage` |
-| an offer with no H.264 the encoder can send — High profile, packetization mode 1 — is refused, never answered with another codec | `SessionDescription` |
+| a viewer receives H.265 only when its owner asked for it (or `auto`), its offer carries Main-profile H.265 and the owner can send it; otherwise High-profile H.264 in packetization mode 1; neither → refused, never answered with another codec. Asking never refuses a viewer that can take H.264 | `CodecChoice` (read by `SessionDescription`) |
 | no RTP packet carries more than 1200 bytes of payload, so it fits a 1280-byte tunnel | `H264Packetizer` |
 | a viewer is found by its id until it hangs up, and only through the device it watches; an unknown id, or one asked for through another device, is a refusal naming it | `WebRTCViewers` |
 | a viewer's encoder targets the lower of the delay-based and loss-based bandwidth estimates, between a floor (300 kbps) and its starting bitrate. A reported cut means that target fell, and carries the signal that limited it | `BandwidthEstimate` |

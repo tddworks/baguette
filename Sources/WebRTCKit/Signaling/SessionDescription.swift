@@ -1,20 +1,21 @@
 import Foundation
 
 /// What a browser's WHEP offer (SDP, RFC 8866) tells a viewer, and the answer
-/// it writes back. The offer must carry High-profile H.264 in packetization
-/// mode 1 — what the encoder makes and `H264Packetizer` cuts — or it is
-/// refused; a viewer never answers with another codec.
+/// it writes back. Every H.264 (packetization mode 1) and H.265 the offer
+/// carries is read; `CodecChoice` picks the one sent — High-profile H.264
+/// unless H.265 was asked for, is offered in Main profile and the owner can
+/// send it — and an offer with nothing the owner can send is refused.
 public struct SessionDescription: Equatable, Sendable {
     public enum Refusal: Error, Equatable, CustomStringConvertible {
         case noVideo
-        case noH264
+        case noSendableVideo
         case noICECredentials
         case noFingerprint
 
         public var description: String {
             switch self {
             case .noVideo: "the offer has no video"
-            case .noH264: "the offer has no High-profile H.264 in packetization mode 1, the only video baguette sends"
+            case .noSendableVideo: "the offer has no video baguette can send: High-profile H.264 in packetization mode 1, or Main-profile H.265 when asked for"
             case .noICECredentials: "the offer has no ICE username or password"
             case .noFingerprint: "the offer names no DTLS certificate fingerprint"
             }
@@ -27,8 +28,11 @@ public struct SessionDescription: Equatable, Sendable {
     public let browserFingerprint: String
     /// The media section's id, echoed in the answer's BUNDLE.
     public let mid: String
-    public let payloadType: UInt8
-    public let profileLevelID: String
+    /// Every H.264 (packetization mode 1) and H.265 the offer carries, in its order.
+    public let offered: [VideoCodec]
+    /// The codec this session sends, as `CodecChoice` picked it.
+    public let codec: VideoCodec
+    public var payloadType: UInt8 { codec.payloadType }
     /// The header-extension id the offer gives the transport-wide sequence
     /// number, or nil when the browser offers no transport-cc congestion control
     /// (the extension, a one-byte id, and `transport-cc` feedback on our H.264).
@@ -50,7 +54,10 @@ public struct SessionDescription: Equatable, Sendable {
 
     /// `rtx: false` takes no resend format even when the offer pairs one, so
     /// resends go as they were sent — the bench's baseline (`?rtx=off`).
-    public init(offer sdp: String, rtx: Bool = true) throws {
+    /// `asked` / `sendable`: what the owner asked for (`?codec=`) and what its
+    /// encoder can make; by default H.264 only, as before H.265 existed.
+    public init(offer sdp: String, rtx: Bool = true, asked: CodecChoice? = nil,
+                sendable: Set<VideoCodec.Kind> = [.h264]) throws {
         let lines = sdp.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         guard let video = lines.firstIndex(where: { $0.hasPrefix("m=video ") }) else { throw Refusal.noVideo }
         let next = lines[(video + 1)...].firstIndex { $0.hasPrefix("m=") } ?? lines.endIndex
@@ -63,12 +70,16 @@ public struct SessionDescription: Equatable, Sendable {
         }
         guard let ufrag = value("ice-ufrag"), let password = value("ice-pwd") else { throw Refusal.noICECredentials }
         guard let fingerprint = value("fingerprint") else { throw Refusal.noFingerprint }
-        guard let (payloadType, profile) = Self.highProfileH264(in: section) else { throw Refusal.noH264 }
+        let offered = Self.videoCodecs(in: section)
+        guard let codec = CodecChoice.codec(asked: asked, offered: offered, sendable: sendable) else {
+            throw Refusal.noSendableVideo
+        }
+        let payloadType = codec.payloadType
         browser = ICECredentials(ufrag: ufrag, password: password)
         browserFingerprint = fingerprint
         mid = value("mid") ?? "0"
-        self.payloadType = payloadType
-        profileLevelID = profile
+        self.offered = offered
+        self.codec = codec
         // a=extmap:<id>[/<direction>] <uri>: only an id a one-byte header
         // (RFC 8285 §4.2) carries — 1 to 14, all `RTPPacket` writes — that the
         // browser will receive (no `inactive` or `sendonly`, RFC 8285 §7), and
@@ -100,30 +111,38 @@ public struct SessionDescription: Equatable, Sendable {
         }.first
     }
 
-    /// The H.264 format the encoder can feed: High profile (profile_idc 0x64),
-    /// packetization mode 1.
-    private static func highProfileH264(in section: [String]) -> (UInt8, String)? {
-        let h264 = section.compactMap { line -> UInt8? in
-            guard line.hasPrefix("a=rtpmap:"), line.uppercased().hasSuffix(" H264/90000") else { return nil }
-            return UInt8(line.dropFirst(9).prefix { $0 != " " })
-        }
-        for type in h264 {
-            guard let fmtp = section.first(where: { $0.hasPrefix("a=fmtp:\(type) ") }) else { continue }
-            let params = Dictionary(
+    /// Every H.264 in packetization mode 1 and every H.265 the section offers,
+    /// with what its `fmtp` says (RFC 7798's defaults where H.265's is silent:
+    /// profile 1, level 93, tier 0).
+    private static func videoCodecs(in section: [String]) -> [VideoCodec] {
+        func parameters(_ type: UInt8) -> [String: String] {
+            guard let fmtp = section.first(where: { $0.hasPrefix("a=fmtp:\(type) ") }) else { return [:] }
+            return Dictionary(
                 fmtp.split(separator: " ", maxSplits: 1).last!.split(separator: ";").compactMap { pair in
                     let kv = pair.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
                     return kv.count == 2 ? (kv[0].lowercased(), kv[1]) : nil
                 },
                 uniquingKeysWith: { first, _ in first })
-            guard params["packetization-mode"] == "1", let profile = params["profile-level-id"],
-                  profile.lowercased().hasPrefix("64") else { continue }
-            return (type, profile)
         }
-        return nil
+        return section.compactMap { line -> VideoCodec? in
+            guard line.hasPrefix("a=rtpmap:"), let type = UInt8(line.dropFirst(9).prefix { $0 != " " }) else { return nil }
+            let name = line.uppercased()
+            let params = parameters(type)
+            if name.hasSuffix(" H264/90000") {
+                guard params["packetization-mode"] == "1", let profile = params["profile-level-id"] else { return nil }
+                return .h264(payloadType: type, profileLevelID: profile)
+            }
+            if name.hasSuffix(" H265/90000") {
+                return .h265(payloadType: type, profileID: params["profile-id"].flatMap(Int.init) ?? 1,
+                             levelID: params["level-id"].flatMap(Int.init) ?? 93,
+                             tier: params["tier-flag"].flatMap(Int.init) ?? 0)
+            }
+            return nil
+        }
     }
 
     /// The answer: an ICE-lite agent at `candidates`, DTLS passive (the browser
-    /// connects), sending this one H.264 format from `ssrc`, with the feedback
+    /// connects), sending its one chosen codec from `ssrc`, with the feedback
     /// the viewer acts on (NACK, PLI, FIR) and whatever lines its congestion
     /// control needs (`CongestionControl.answerLines`).
     public func answer(
@@ -144,9 +163,9 @@ public struct SessionDescription: Equatable, Sendable {
             "a=fingerprint:\(fingerprint)", "a=setup:passive",
         ] + congestion
         lines += [
-            "a=rtpmap:\(pt) H264/90000",
+            "a=rtpmap:\(pt) \(codec.rtpmap)",
             "a=rtcp-fb:\(pt) nack", "a=rtcp-fb:\(pt) nack pli", "a=rtcp-fb:\(pt) ccm fir",
-            "a=fmtp:\(pt) level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=\(profileLevelID)",
+            "a=fmtp:\(pt) \(codec.fmtp)",
         ]
         if let rtx {
             lines += ["a=rtpmap:\(rtx.format) rtx/90000", "a=fmtp:\(rtx.format) apt=\(pt)"]
