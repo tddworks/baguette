@@ -6,7 +6,7 @@ import Foundation
 /// the Mac's keyboard, the wheel its scroll. What each gesture becomes is
 /// `DisplayEvents`'; this tells the window server, and remembers where two
 /// fingers last were while they're down.
-struct MacInput: Touch, Scroll, Key, Typing {
+struct MacInput: Touch, Pointer, Scroll, Key, Typing {
     let display: DisplayEvents
     let events: any HostEvents
     private let fingers = TwoFingers()
@@ -38,6 +38,10 @@ struct MacInput: Touch, Scroll, Key, Typing {
     func twoFingerPath(start1: Point, end1: Point, start2: Point, end2: Point, size: Size, duration: Double) -> Bool {
         let scrolled = display.twoFingerScroll(from: (start1, start2), to: (end1, end2), size: size)
         return scrolled.isEmpty || events.post(scrolled)
+    }
+
+    func move(to point: Point, size: Size) -> Bool {
+        events.post(display.hover(at: point, size: size))
     }
 
     func scroll(deltaX: Double, deltaY: Double) -> Bool {

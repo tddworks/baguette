@@ -396,7 +396,12 @@
       // A Mac display streams without its pointer; the page draws it, so it
       // never trails the hand (docs/features/mac-screen/README.md).
       if (devicePlatform === 'macOS' && window.Baguette && window.Baguette._LocalPointer && sim.screenArea) {
-        window.Baguette._LocalPointer.attach(sim.screenArea);
+        // A shared display (watched from another device) follows the hover
+        // too; a physical one watched from this Mac would fight its own pointer.
+        window.Baguette._LocalPointer.attach(sim.screenArea, sharedMac() && can('pointer') ? {
+          onHover: (at) => sim.screen.hover(at),
+          size: () => sim.screen.size,
+        } : {});
       }
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);

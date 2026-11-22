@@ -90,6 +90,16 @@ One-shot. `cx`/`cy` is the centre; spreads are finger separation in points (grow
 
 One-shot: both fingers move by `(dx, dy)` points. For apps that ignore one-finger pans (Maps).
 
+### `hover`
+
+```json
+{"type":"hover","x":120,"y":300,"width":603,"height":1311}
+```
+
+The pointer moves with no button down. Only a device with a pointer of its own
+takes it (a Mac display, the `pointer` ability); a newer hover replaces one still
+waiting. → [mac-screen](features/mac-screen/README.md#input)
+
 ### `scroll`
 
 ```json

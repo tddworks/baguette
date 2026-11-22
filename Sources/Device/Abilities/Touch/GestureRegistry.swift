@@ -52,6 +52,7 @@ public final class GestureRegistry {
         r.register(Swipe.self)
         r.register(ButtonPress.self)
         r.register(WheelEvent.self)
+        r.register(Hover.self)
         r.register(Pinch.self)
         r.register(Pan.self)
         r.register(Keystroke.self)

@@ -23,6 +23,7 @@ final class CGEventHostEvents: HostEvents, @unchecked Sendable {
             case let .mouseDown(at): mouse(.leftMouseDown, at, source)
             case let .mouseDragged(at): mouse(.leftMouseDragged, at, source)
             case let .mouseUp(at): mouse(.leftMouseUp, at, source)
+            case let .mouseMoved(at): mouse(.mouseMoved, at, source)
             case let .scroll(at, dx, dy):
                 let scroll = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
                                      wheel1: Int32(dy.rounded()), wheel2: Int32(dx.rounded()), wheel3: 0)

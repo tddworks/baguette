@@ -27,6 +27,8 @@ The server trusts only loopback `Host` / `Origin` values, so a request through a
 | `GET` | `/` | 302 → `/simulators` | |
 | `GET` | `/simulators` | device list page | |
 | `GET` | `/simulators.json` | `{running, available}`, same as `baguette list --json` | |
+| `GET` | `/mac/share` *with `--share-mac`* | the page that shares this Mac to the device it's opened on | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
+| `POST` · `PUT` · `DELETE` | `/mac/shares`, `/mac/shares/:id` *with `--share-mac`* | start, reshape, end a share: a display of the viewer's shape | [mac-screen](features/mac-screen/README.md#share-to-your-device) |
 | `GET` | `/mac-frames.json?width=&height=` | `{frames}`: the installed Mac frames a display of that size fits | [mac-screen](features/mac-screen/README.md#frames) |
 | `GET` | `/devices.json` | `{devices}`: every device of every family, its kind (platform, reality, model, OS), state and abilities; what the list page reads | |
 | `GET` | `/devices/:udid` | focus-mode page, for any device (`/simulators/:udid` serves it too) | [baguette-sdk](features/baguette-sdk/README.md) |

@@ -31,6 +31,10 @@ struct DisplayEventsTests {
         #expect(events.filter { if case .mouseDragged = $0 { true } else { false } }.count == 3)
     }
 
+    @Test func `should move the Mac's pointer where a hover is, with no button down`() {
+        #expect(display.hover(at: Point(x: 100, y: 200), size: size) == [.mouseMoved(Point(x: 1612, y: 200))])
+    }
+
     @Test func `should follow one finger as a press, a drag and a release`() {
         let at = Point(x: 10, y: 20)
         #expect(display.touch1(phase: .down, at: at, size: size) == [.mouseDown(Point(x: 1522, y: 20))])

@@ -7,6 +7,8 @@ enum HostEvent: Equatable, Sendable {
     case mouseDown(Point)
     case mouseDragged(Point)
     case mouseUp(Point)
+    /// The pointer moving with no button down.
+    case mouseMoved(Point)
     /// Content scrolls by `deltaX` / `deltaY` points; positive is up / left,
     /// the window server's sense. At a point the scroll lands on the window
     /// there (and the pointer moves there, as for a click); with none, on the
@@ -46,6 +48,11 @@ struct DisplayEvents: Equatable, Sendable {
                     .mouseDragged(Point(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t))]
         }
         return [.mouseDown(from)] + drags + [.mouseUp(to)]
+    }
+
+    /// The pointer moved with no button down: hover effects follow it.
+    func hover(at point: Point, size: Size) -> [HostEvent] {
+        [.mouseMoved(place(point, size))]
     }
 
     func touch1(phase: GesturePhase, at point: Point, size: Size) -> [HostEvent] {

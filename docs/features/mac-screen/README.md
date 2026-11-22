@@ -47,6 +47,7 @@ none; `CGDisplayBounds` has them) or the stream's frame size both work.
 | Gesture | On the Mac |
 |---|---|
 | `tap` · `swipe` · `touch1-*` | a left click · a drag · press / drag / release |
+| `hover` | the pointer moves with no button down — hover effects, tooltips, an auto-hidden Dock |
 | `scroll` | the scroll wheel, in pixels, on the window under the pointer (the envelope has no point) |
 | `key` | the Mac's key, with its modifiers held around it |
 | `type` | the text, typed as it is; the wire takes US-ASCII only, as on every device ([keyboard](../keyboard/design.md)) |
@@ -55,6 +56,36 @@ none; `CGDisplayBounds` has them) or the stream's frame size both work.
 
 ```json
 {"type":"tap","x":640,"y":360,"width":2560,"height":1440}
+```
+
+**The pointer is drawn by the page**, never streamed: on the stream it would
+trail the hand by the whole round trip. A mouse or trackpad shows the browser's
+own arrow; a finger gets one drawn where it touches. A pointer move still
+waiting to reach the Mac is replaced by a newer one, so it never falls behind;
+clicks, keys and scrolls keep their order. A shared display also follows the
+pointer as it hovers; a physical one doesn't, since from this Mac it would
+fight the Mac's own pointer.
+
+## Share to your device
+
+With `serve --share-mac`, open **/mac/share** on a phone, tablet or another
+Mac. This Mac makes a display **the shape of that screen** and shows it there,
+full size, over WebRTC:
+
+| Choice | Means |
+|---|---|
+| **Room** — Larger text · Standard · More space | the Mac's points are 1×, 1.5× or 2× the viewer's; Standard is the viewer's own pixels on a 3× phone |
+| **Use as** — Main display · Extended display | main moves the menu bar, the Dock and new windows onto it, and gives main back when the share ends |
+
+Turning the device remakes the display in the new shape (about 2 s); leaving
+the page removes it. From a Home Screen icon the page has no browser bars, so
+the display is the whole screen. Every display is 2× (HiDPI), at most 4096
+pixels on its long side.
+
+```
+POST   /mac/shares        {"viewer":"iPhone","width":440,"height":956,"scale":3,"room":"standard","use":"main"} → 201 {"id"}
+PUT    /mac/shares/<id>   {"width":956,"height":440,"scale":3}   ← the device turned
+DELETE /mac/shares/<id>                                          ← it left
 ```
 
 ## Frames
@@ -85,6 +116,10 @@ GET /devices/<UUID>/screenshot-bezel.png?chrome=iMac%2027-inch   → the screen 
 ```
 
 ## Gotchas
+
+- **The server must run from an app with the permissions.** Screen Recording
+  and Accessibility belong to the app that starts `baguette serve` (iTerm,
+  Terminal, …); started from one without them it can list, but not watch or drive.
 
 - **Anyone who reaches the port controls this Mac.** `serve` binds
   `127.0.0.1`; with `--host 0.0.0.0 --share-mac` the desktop is on the network.

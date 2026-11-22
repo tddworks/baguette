@@ -62,6 +62,7 @@ struct MacDisplay: Device {
         let input = MacInput(display: DisplayEvents(bounds: info.bounds), events: events)
         abilities.register(.screen) { MacScreen(display: info, feed: feed(), madePixels: madePixels(info.uuid)) }
         abilities.register(.touch) { input }
+        abilities.register(.pointer) { input }
         abilities.register(.scroll) { input }
         abilities.register(.key) { input }
         abilities.register(.typing) { input }

@@ -89,6 +89,9 @@
       this.transport.swipe({ from, to, duration });
     }
 
+    /** The pointer over the screen with no button down, in screen points. */
+    hover(point) { this.transport.hover(point); }
+
     touchDown(fingers, opts) { this.transport.touchDown(fingers, opts); }
     touchMove(fingers, opts) { this.transport.touchMove(fingers, opts); }
     touchUp  (fingers, opts) { this.transport.touchUp  (fingers, opts); }

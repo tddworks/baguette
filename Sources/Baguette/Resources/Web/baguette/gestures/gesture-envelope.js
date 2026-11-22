@@ -21,6 +21,11 @@
       return envelope;
     }
 
+    /** The pointer moving with no button down — a Mac display's hover. */
+    static hover({ x, y }, size) {
+      return { type: 'hover', x, y, ...size };
+    }
+
     static swipe({ from, to, duration = 0.25 }, size) {
       return {
         type: 'swipe',

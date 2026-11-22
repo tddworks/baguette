@@ -93,6 +93,36 @@ pictures ship in `scripts/mac-frames/` (MacBook Pro 14-inch (M4), iMac
 27-inch; ~4.4 MB each) and `scripts/install-mac-frames.sh` copies them into the
 folder; the rest of the measured frames are known by geometry only.
 
+## Sharing to a viewer's shape
+
+A share is a virtual display made to the viewer's screen (`SharedScreenShape`:
+its points × the room, drawn at 2×, the long side ≤ 4096 px), streamed as any
+Mac display. What macOS 27 does, measured, and what it made us build:
+
+| Measured | So |
+|---|---|
+| A process can choose the mode of only the **first** virtual display it makes; later ones are invisible to its own CoreGraphics | each display lives in a `baguette virtual-display` process of its own (`ChildVirtualDisplays`); ending the share ends the process, and the display goes within ½ s |
+| A display starts on its **1×** mode though offered a 2× one | the process chooses the 2× mode by name (`SharedScreenShape.isMode`) |
+| A display takes its modes **once**; neither new settings nor `rotation` change it | turning makes it again in the new shape, under the same serial, so its UUID — its device id — holds |
+| Once a process **changes the arrangement**, displays added later never appear in its own list | `baguette main-display` makes a display main; the server only reads |
+| Removing the **main** display is slow: macOS picks another and moves everything first | a turned main display hands main back before it goes |
+| A long-running process reads a just-made display **stale** (1×) — CoreGraphics, AppKit and ScreenCaptureKit alike | a display baguette made is captured at the pixels it made it with (`MacScreen.madePixels`) |
+| The UUID follows from vendor `0xBA6E`, product and serial | two viewers get two serials |
+
+## The pointer
+
+What makes a native remote desktop feel instant, and what baguette took from
+Apple's Screen Sharing (as an open client reads its protocol): the pointer is
+not in the picture — the viewer draws it at once — and pointer moves are
+latest-wins. `showsCursor` is off for Mac displays and the page draws the arrow
+(`local-pointer.js`); a stream socket posts a move rather than awaiting it, and
+`PendingGestures` replaces a waiting move with a newer one (clicks, keys and
+scrolls keep their order). Measured: 200 moves 2 ms apart reach the Mac's
+pointer as the last is sent, before and after — the lag you feel is the picture's
+round trip, which the local pointer takes out. Not yet: the pointer's real
+shape. A long-running process reads `NSCursor.currentSystem` once and never
+again; one whose run loop runs follows it, so it needs a helper process.
+
 ## Measured
 
 On a 2560 × 1440 display at 1× (an external Dell beside a portrait one, so at

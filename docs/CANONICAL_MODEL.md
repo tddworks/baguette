@@ -219,6 +219,10 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | this Mac's displays are reached only when asked for — `serve --share-mac`, `list --mac`, or a display's UUID given to `--udid` — and listing them asks for no permission; only watching one asks for Screen Recording | `MacDisplays` · `DeviceKinds` |
 | a Mac display's feed hands on complete pictures only, at most 4096 pixels on the long side; an unchanged one repeats the last | `MacScreen` · `DisplayCaptureSize` |
 | a Mac frame fits a display only of its screen's shape, within 2%; a display shows with no frame until one is picked | `MacFrame.fits` · `MacDisplayLooks` |
+| a pointer move still waiting is replaced by a newer one; anything else keeps its order and is never dropped, nor jumped by a move | `PendingGestures` (a stream socket posts moves, `GestureQueues` drains them) |
+| only a device with a pointer of its own takes a hover (`Pointer`, the `pointer` ability) — a Mac display; a Mac display streams without its pointer and the page draws it | each family's `Abilities` · `ScreenCaptureKitFeed` |
+| a shared display is the viewer's shape — its points × the room, drawn at 2×, the long side ≤ 4096 px — made again in a new shape when the viewer turns, under the same id; main gives the previous main back, before it goes | `SharedScreenShape` · `ScreenShares` |
+| a display baguette made is captured at the pixels it made it with, never as a long-running process reads it | `MacScreen` |
 | a gesture on a Mac display lands at the same fraction of where it sits on the desktop; a key's modifiers are held around it and released in reverse; a second finger sends nothing | `DisplayEvents` |
 | a phone keeps streaming only while it hears back: a report each second, an ack per picture, a control packet every 50 ms, a keyframe request every 300 ms while one is wanted | `ReceiverFeedback` |
 | a phone's accessibility service serves one session at a time; reads of one phone share the one in flight, never open a second | `SharedRead` |
@@ -301,7 +305,7 @@ and `Sources/Server/`. `Tests/BaguetteTests/` mirrors `Sources/`
 | **Logs** | *what is the device saying?* | ◆ `LogStream` · `Subprocess` |
 | **Plugin** · **Bakery** | *what extends the page?* | ◆ `Plugins` · `Checkout` |
 | **Companion** | *a physical phone's twin, through the companion app* | ◆ `CompanionPhones` · `CompanionDevices` (its source of `Devices`) |
-| **Mac** | *what is this Mac's display, and how is it watched and driven?* | ◇ `MacDisplayInfo` `DisplayCaptureSize` `DisplayEvents` `HostEvent` · ◆ `DisplayFeed` `HostEvents` · `MacDisplays` (its source of `Devices`) |
+| **Mac** | *what is this Mac's display, and how is it watched, driven and shared?* | ◇ `MacDisplayInfo` `DisplayCaptureSize` `DisplayEvents` `HostEvent` `SharedScreenShape` `ShareRequest` · ◆ `DisplayFeed` `HostEvents` `ScreenShares` `VirtualDisplays` `DisplayArrangement` · `MacDisplays` (its source of `Devices`) |
 | **CoreDevice** | *what is a phone on a cable, and how do its services talk?* | ◇ `PhysicalPhone` · `MediaStreamOffer` `ReceiverFeedback` `VideoDepacketizer` (its screen; `RTPPacket` is WebRTCKit's) · `ServiceDirectory` `XPCObject` `HTTP2Frame` `DTXMessage` `AXTreeDump` (its services) · `CoreDevicePhones` (its source of `Devices`, Infrastructure) |
 
 ## 6 · Where the code is still behind

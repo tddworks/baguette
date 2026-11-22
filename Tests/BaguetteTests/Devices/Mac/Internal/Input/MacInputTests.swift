@@ -69,6 +69,12 @@ struct MacInputTests {
         #expect(desktop.posted == [.scroll(at: Point(x: 25, y: 40), deltaX: 0, deltaY: -60)])
     }
 
+    @Test func `should move the Mac's pointer as it hovers`() {
+        let desktop = Desktop()
+        #expect(input(on: desktop).move(to: Point(x: 7, y: 8), size: size))
+        #expect(desktop.posted == [.mouseMoved(Point(x: 7, y: 8))])
+    }
+
     @Test func `should press a key on the Mac's keyboard`() {
         let desktop = Desktop()
         let a = KeyboardKey(hidUsage: HIDUsage(page: 7, usage: 0x04))

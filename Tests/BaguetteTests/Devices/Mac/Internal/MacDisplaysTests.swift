@@ -43,9 +43,9 @@ struct MacDisplaysTests {
         #expect(try devices([Self.builtIn]).find(id: "nope") == nil)
     }
 
-    @Test func `should let a display be watched, touched, scrolled and typed on`() {
+    @Test func `should let a display be watched, touched, hovered, scrolled and typed on`() {
         let display = devices([Self.studio]).all[0]
-        #expect(display.abilities.names == ["screen", "touch", "scroll", "key", "type"])
+        #expect(display.abilities.names == ["screen", "touch", "pointer", "scroll", "key", "type"])
     }
 
     @Test func `should land a display's touches on its own place on the desktop`() throws {

@@ -42,6 +42,10 @@
       this._dispatch(root.Baguette._GestureEnvelope.swipe(args, this._size()));
     }
 
+    hover(point) {
+      this._dispatch(root.Baguette._GestureEnvelope.hover(point, this._size()));
+    }
+
     touchDown(fingers, opts)  { this._touch('down', fingers, opts); }
     touchMove(fingers, opts)  { this._touch('move', fingers, opts); }
     touchUp  (fingers, opts)  { this._touch('up',   fingers, opts); }
