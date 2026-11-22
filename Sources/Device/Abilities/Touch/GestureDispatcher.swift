@@ -45,6 +45,16 @@ public final class GestureDispatcher: @unchecked Sendable {
         }
     }
 
+    /// Whether `line` is a pointer move (`Gesture.isMotion`) — read, not run, so
+    /// a newer move may replace it while it waits. Anything that doesn't
+    /// parse is not one.
+    public func isMotion(line: String) -> Bool {
+        guard let data = line.data(using: .utf8),
+              let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let gesture = try? registry.parse(dict) else { return false }
+        return gesture.isMotion
+    }
+
     /// The ack of a gesture that parsed but that its device didn't take — no
     /// reason given, as a malformed or refused one has.
     public static let notTaken = "{\"ok\":false}"

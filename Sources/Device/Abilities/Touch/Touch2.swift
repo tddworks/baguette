@@ -5,6 +5,9 @@ public struct Touch2: Gesture, Equatable {
     public static let wireType = "touch2"
 
     public let phase: GesturePhase
+
+    /// Two fingers moving are a motion; landing and lifting are not.
+    public var isMotion: Bool { phase == .move }
     public let first: Point
     public let second: Point
     public let size: Size

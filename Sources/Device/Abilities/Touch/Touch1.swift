@@ -9,6 +9,9 @@ public struct Touch1: Gesture, Equatable {
     public static let wireType = "touch1"
 
     public let phase: GesturePhase
+
+    /// A finger moving is a motion; landing and lifting are not.
+    public var isMotion: Bool { phase == .move }
     public let at: Point
     public let size: Size
     public let edge: DeviceEdge?

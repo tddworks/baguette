@@ -72,4 +72,41 @@ struct GestureQueuesTests {
         private(set) var steps: [Int] = []
         func append(_ step: Int) { lock.lock(); steps.append(step); lock.unlock() }
     }
+
+    /// A lane held busy until the test lets it go, so gestures wait behind it.
+    private final class Gate: @unchecked Sendable {
+        let open = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var _ran: [String] = []
+        var ran: [String] { lock.withLock { _ran } }
+        func record(_ name: String) { lock.withLock { _ran.append(name) } }
+    }
+
+    @Test func `should land only the newest of pointer moves that waited together`() async {
+        let queues = GestureQueues()
+        let gate = Gate()
+        async let busy: Bool = queues.run(on: "MAC") { gate.open.wait(); return true }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        for i in 1...5 { queues.post(on: "MAC") { gate.record("move\(i)") } }
+        gate.open.signal()
+        _ = await busy
+        _ = await queues.run(on: "MAC") { true }
+        #expect(gate.ran == ["move5"])
+    }
+
+    @Test func `should land a click between pointer moves in its place`() async {
+        let queues = GestureQueues()
+        let gate = Gate()
+        async let busy: Bool = queues.run(on: "MAC") { gate.open.wait(); return true }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        queues.post(on: "MAC") { gate.record("move1") }
+        async let click: Bool = queues.run(on: "MAC") { gate.record("click"); return true }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        queues.post(on: "MAC") { gate.record("move2") }
+        queues.post(on: "MAC") { gate.record("move3") }
+        gate.open.signal()
+        _ = await (busy, click)
+        _ = await queues.run(on: "MAC") { true }
+        #expect(gate.ran == ["move1", "click", "move3"])
+    }
 }

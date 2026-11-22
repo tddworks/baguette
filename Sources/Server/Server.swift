@@ -2314,6 +2314,13 @@ struct Server: Sendable {
             default: break
             }
         }
+        // A pointer move is posted, not awaited: the next message is read at
+        // once, and a newer move replaces this one while it waits — so the
+        // pointer keeps up with the hand. Anything else lands before the next.
+        if dispatcher.isMotion(line: line) {
+            gestureQueues.post(on: udid) { _ = dispatcher.dispatch(line: line) }
+            return
+        }
         _ = await gestureQueues.run(on: udid) { dispatcher.dispatch(line: line) }
     }
 

@@ -393,6 +393,11 @@
     try {
       sim = await useSimulator(deviceDefinitionURL);
       sim.mount(document.getElementById('nativeDeviceFrame'));
+      // A Mac display streams without its pointer; the page draws it, so it
+      // never trails the hand (docs/features/mac-screen/README.md).
+      if (devicePlatform === 'macOS' && window.Baguette && window.Baguette._LocalPointer && sim.screenArea) {
+        window.Baguette._LocalPointer.attach(sim.screenArea);
+      }
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;

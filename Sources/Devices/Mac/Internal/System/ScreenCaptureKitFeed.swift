@@ -36,7 +36,7 @@ final class ScreenCaptureKitFeed: NSObject, DisplayFeed, SCStreamOutput, SCStrea
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         config.queueDepth = 6
-        config.showsCursor = true
+        config.showsCursor = false   // the page draws the pointer: in the stream it trails the hand
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         lock.withLock { self.stream = stream; self.onPicture = onPicture; self.onEnd = onEnd }

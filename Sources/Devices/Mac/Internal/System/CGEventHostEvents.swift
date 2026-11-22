@@ -4,12 +4,18 @@ import CoreGraphics
 import Foundation
 
 /// The Mac's window server, told events through `CGEvent`. Refuses — posts
-/// nothing — while this process isn't trusted for Accessibility, and asks for
-/// it once. Integration-only: what each gesture becomes is `DisplayEvents`'.
-struct CGEventHostEvents: HostEvents {
+/// nothing — while this process isn't trusted for Accessibility, asking once;
+/// once trusted it isn't asked again, and one event source serves every event
+/// (a pointer move costs ~0.2 ms, not the ~1.4 ms of asking each time).
+/// Integration-only: what each gesture becomes is `DisplayEvents`'.
+final class CGEventHostEvents: HostEvents, @unchecked Sendable {
+    private let lock = NSLock()
+    private var isTrusted = false
+    private var asked = false
+    private let source = CGEventSource(stateID: .hidSystemState)
+
     func post(_ events: [HostEvent]) -> Bool {
         guard trusted() else { return false }
-        let source = CGEventSource(stateID: .hidSystemState)
         for event in events {
             switch event {
             case let .pause(seconds):
@@ -55,11 +61,15 @@ struct CGEventHostEvents: HostEvents {
     }
 
     private func trusted() -> Bool {
+        if lock.withLock({ isTrusted }) { return true }
+        let ask = lock.withLock { defer { asked = true }; return !asked }
         let prompt = "AXTrustedCheckOptionPrompt"  // kAXTrustedCheckOptionPrompt, a global Swift 6 won't read
-        guard AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary) else {
+        let now = ask ? AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary) : AXIsProcessTrusted()
+        guard now else {
             log("[mac] input refused: allow the app that runs baguette in System Settings › Privacy & Security › Accessibility")
             return false
         }
+        lock.withLock { isTrusted = true }
         return true
     }
 }

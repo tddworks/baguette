@@ -154,3 +154,17 @@ private struct EscapingError: Error, CustomStringConvertible {
         "quote \" backslash \\ newline \n tab \t backspace \u{08} formfeed \u{0C} control \u{01}"
     }
 }
+
+/// Which wire lines are a pointer moving — the gestures a newer one may replace.
+@Suite("GestureDispatcher motion")
+struct GestureDispatcherMotionTests {
+    @Test func `should call a finger moving a motion, and its landing and lifting not`() {
+        let dispatcher = GestureDispatcher(input: Abilities(device: "Mac"))
+        #expect(dispatcher.isMotion(line: #"{"type":"touch1-move","x":1,"y":2,"width":10,"height":10}"#))
+        #expect(dispatcher.isMotion(line: #"{"type":"touch2-move","x1":1,"y1":2,"x2":3,"y2":4,"width":10,"height":10}"#))
+        #expect(!dispatcher.isMotion(line: #"{"type":"touch1-down","x":1,"y":2,"width":10,"height":10}"#))
+        #expect(!dispatcher.isMotion(line: #"{"type":"touch1-up","x":1,"y":2,"width":10,"height":10}"#))
+        #expect(!dispatcher.isMotion(line: #"{"type":"tap","x":1,"y":2,"width":10,"height":10}"#))
+        #expect(!dispatcher.isMotion(line: "not json"))
+    }
+}
