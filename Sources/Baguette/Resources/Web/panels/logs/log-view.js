@@ -1,4 +1,4 @@
-// sim-logs.js — live unified-log subscriber for the simulator pages.
+// log-view.js — the device's live unified log, in a host: the logs panel's view (panels/logs/logs-panel.js).
 //
 // Hangs `window.LogPanel` on the global so the focus-mode page
 // (sim-native.js) and the sidebar-mode page (sim-stream.js) can

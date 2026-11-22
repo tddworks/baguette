@@ -532,6 +532,8 @@ struct Server: Sendable {
         "farm",
         "handheld",
         "network",
+        "page",
+        "panels/logs",
         "screens",
         "toolbar",
         "vendor/leaflet",

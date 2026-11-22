@@ -58,7 +58,8 @@
   let screensRail = null;   // ScreensRail — which companion screens are shown
   const openCompanions = new Set();
   let sim = null;           // Baguette SDK Simulator
-  let logPanel = null;
+  // The page's panels and their sheet rule (page/page-panels.js); made at boot.
+  let panels = null;
   let axInspector = null;
   let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
   let cameraPanel = null;   // CameraPanel — Mac webcam → /tmp/SimCam.bgra
@@ -354,6 +355,7 @@
       storage: localStorage,
       address: location.search,
     });
+    panels = window.Baguette._PagePanels.on({ element: (id) => document.getElementById(id) });
     const meta = await device.describe();
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
@@ -2419,7 +2421,7 @@
     window.__nativeToggleTheme = () => {
       setTheme(currentTheme() === 'light' ? 'dark' : 'light');
     };
-    window.__nativeToggleLogs = () => toggleLogs();
+    window.__nativeToggleLogs = () => panels.toggle('logs', device);
     window.__nativeToggleCamera = () => toggleCamera();
     window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleLocation = () => toggleLocation();
@@ -2530,31 +2532,6 @@
           getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
         }
     );
-  }
-
-  // Log sheet: lazy-mount on first open, leave the LogPanel attached
-  // across subsequent toggles so a "close → reopen" doesn't drop the
-  // backlog. Only `unmount` on page unload (or explicit close button
-  // — same code path). The toolbar button toggles the
-  // `[data-logs="open"]` attribute on `#simNativeView`; CSS handles
-  // the slide-up animation and visibility.
-  function toggleLogs() {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('nativeLogsHost');
-    const btn  = document.getElementById('nativeLogsToggle');
-    const open = view && view.getAttribute('data-logs') === 'open';
-    if (!view || !host) return;
-    if (open) {
-      view.removeAttribute('data-logs');
-      if (btn) btn.classList.remove('active');
-    } else {
-      view.setAttribute('data-logs', 'open');
-      if (btn) btn.classList.add('active');
-      if (!logPanel && window.LogPanel && udid) {
-        host.innerHTML = '';
-        logPanel = new window.LogPanel(host, { udid, level: 'info' });
-      }
-    }
   }
 
   // Camera sheet — same lazy-mount pattern as logs. The CameraPanel
