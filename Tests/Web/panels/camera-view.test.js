@@ -1,15 +1,9 @@
-'use strict';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { CameraPanel } from '../../../Sources/Baguette/Resources/Web/panels/camera/internal/camera-view.js';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const path = require('node:path');
-const { loadBrowserModule } = require('./helpers/load-browser-module.js');
 
-const { CameraPanel } = loadBrowserModule(path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web', 'panels', 'camera', 'internal', 'camera-view.js'
-));
-
-test('failed cleanup offers an explicit stop retry and cannot start another source', () => {
+test('should offer a stop retry and start no other source when cleanup failed', () => {
   const panel = new CameraPanel();
   const sent = [];
   const status = { style: {} };

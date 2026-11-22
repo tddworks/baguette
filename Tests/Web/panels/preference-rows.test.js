@@ -1,20 +1,13 @@
-'use strict';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { PreferenceRows } from '../../../Sources/Baguette/Resources/Web/panels/defaults/internal/preference-rows.js';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const path = require('node:path');
-const { loadBrowserModule } = require('./helpers/load-browser-module.js');
-
-const MODULE_PATH = path.join(
-  __dirname, '..', '..', 'Sources', 'Baguette', 'Resources', 'Web',
-  'panels', 'defaults', 'internal', 'preference-rows.js'
-);
 
 function Rows() {
-  return loadBrowserModule(MODULE_PATH).Baguette._PreferenceRows;
+  return PreferenceRows;
 }
 
-test('a read becomes one row per key, in key order, each with the control its type needs', () => {
+test('should make a read one row per key, in key order, each with the control its type needs', () => {
   const rows = Rows().fromRead({
     bundleId: 'com.x',
     values: {
@@ -37,7 +30,7 @@ test('a read becomes one row per key, in key order, each with the control its ty
   assert.equal(rows[2].text, '2');
 });
 
-test('a collection row carries the plist text the server sent, and how many entries it has', () => {
+test('should carry a collection row\'s plist text as the server sent it, and how many entries it has', () => {
   const [flags, tags] = Rows().fromRead({
     values: {
       tags: { type: 'array', value: [{ type: 'int', value: 1 }], plist: '<array><integer>1</integer></array>' },
@@ -48,17 +41,17 @@ test('a collection row carries the plist text the server sent, and how many entr
   assert.deepEqual([tags.control, tags.summary, tags.text], ['plist', '1 item', '<array><integer>1</integer></array>']);
 });
 
-test('a data row shows its size, not its bytes', () => {
+test('should show a data row\'s size, not its bytes', () => {
   const [blob] = Rows().fromRead({ values: { blob: { type: 'data', value: 'A'.repeat(2868) } } });
   assert.deepEqual([blob.control, blob.summary], ['data', '2.1 KB']);
 });
 
-test('a read with nothing stored has no rows', () => {
+test('should have no rows when nothing is stored', () => {
   assert.deepEqual(Rows().fromRead({ bundleId: 'com.x', values: {} }), []);
   assert.deepEqual(Rows().fromRead(null), []);
 });
 
-test('a write posts the value as the type it was read as', () => {
+test('should post a write as the type the value was read as', () => {
   const R = Rows();
   assert.deepEqual(
     R.writeBody({ bundleId: 'com.x', suite: null, key: 'n', type: 'int', value: '4', relaunch: true }),
@@ -70,7 +63,7 @@ test('a write posts the value as the type it was read as', () => {
   );
 });
 
-test('a collection is written back as plist text', () => {
+test('should write a collection back as plist text', () => {
   assert.deepEqual(
     Rows().writeBody({ bundleId: 'com.x', key: 'tags', type: 'array', value: '<array/>', relaunch: false }).type,
     'plist'
@@ -81,7 +74,7 @@ test('a collection is written back as plist text', () => {
   );
 });
 
-test('the read, delete and groups queries name the app, the suite and the key', () => {
+test('should name the app, the suite and the key in the read, delete and groups queries', () => {
   const R = Rows();
   assert.equal(R.query({ bundleId: 'com.x', suite: null, plist: true }), 'bundleId=com.x&plist=1');
   assert.equal(
@@ -90,7 +83,7 @@ test('the read, delete and groups queries name the app, the suite and the key', 
   );
 });
 
-test('an import posts the values of an export, or a bare map as it is', () => {
+test('should import an export\'s values, or a bare map as it is', () => {
   const R = Rows();
   const values = { seen: { type: 'bool', value: false } };
   assert.deepEqual(
@@ -103,13 +96,13 @@ test('an import posts the values of an export, or a bare map as it is', () => {
   );
 });
 
-test('an export file is named for the app and suite it came from', () => {
+test('should name an export file for the app and suite it came from', () => {
   const R = Rows();
   assert.equal(R.exportFileName({ bundleId: 'com.x', suite: null }), 'com.x.defaults.json');
   assert.equal(R.exportFileName({ bundleId: 'com.x', suite: 'group.x' }), 'com.x.group.x.defaults.json');
 });
 
-test('a failure reads as a card-level notice by its HTTP status', () => {
+test('should read a failure as a card-level notice by its HTTP status', () => {
   const R = Rows();
   assert.deepEqual(R.notice(409, 'the simulator is not booted (run `baguette boot`)'),
     { tone: 'danger', text: 'the simulator is not booted (run `baguette boot`)', action: 'boot' });
@@ -118,7 +111,7 @@ test('a failure reads as a card-level notice by its HTTP status', () => {
   assert.deepEqual(R.notice(500, ''), { tone: 'danger', text: 'Request failed (500)', action: null });
 });
 
-test('a setting the running app reads but nothing stores becomes a row that says where its value comes from', () => {
+test('should show a setting the running app reads but nothing stores as a row saying where its value comes from', () => {
   const rows = Rows().unsetFromRead({
     values: {},
     lookups: {
@@ -144,7 +137,7 @@ test('a setting the running app reads but nothing stores becomes a row that says
   assert.equal(rows[3].checked, true);
 });
 
-test('a setting the app only read untyped asks for its type before a value', () => {
+test('should ask for a type before a value when the app only read a setting untyped', () => {
   const [token, recent] = Rows().unsetFromRead({
     lookups: { answered: true, unset: [{ key: 'token' }, { key: 'recent', type: 'plist' }] },
   });
@@ -152,21 +145,21 @@ test('a setting the app only read untyped asks for its type before a value', () 
   assert.deepEqual([recent.control, recent.type], ['pick', 'plist']);
 });
 
-test('a read tells whether the running app answered which settings it reads', () => {
+test('should tell whether the running app answered which settings it reads', () => {
   assert.equal(Rows().answered({ lookups: { answered: true, unset: [] } }), true);
   assert.equal(Rows().answered({ lookups: { answered: false } }), false);
   assert.equal(Rows().answered({ values: {} }), false);
   assert.deepEqual(Rows().unsetFromRead({ lookups: { answered: false } }), []);
 });
 
-test('an edit can ask to relaunch only when the running app would not see it', () => {
+test('should offer a relaunch with an edit only when the running app would not see it', () => {
   const R = Rows();
   assert.equal(R.writeBody({ bundleId: 'com.x', key: 'k', type: 'bool', value: true, relaunch: 'whenNeeded' }).relaunch, 'whenNeeded');
   assert.equal(R.importBody({ bundleId: 'com.x', file: {}, relaunch: 'whenNeeded' }).relaunch, 'whenNeeded');
   assert.equal(R.query({ bundleId: 'com.x', key: 'k', relaunch: 'whenNeeded' }), 'bundleId=com.x&key=k&relaunch=whenNeeded');
 });
 
-test('a row the running app watches is marked live, stored or not', () => {
+test('should mark a row live when the running app watches it, stored or not', () => {
   const read = {
     values: { 'unveil-ios-glass': { type: 'string', value: 'Tinted' }, desk: { type: 'string', value: 'rows' } },
     lookups: { answered: true, live: ['unveil-ios-glass', 'unveil-ios-appearance'], unset: [{ key: 'unveil-ios-appearance', type: 'string' }, { key: 'shelf.preview', type: 'bool' }] },
@@ -176,7 +169,7 @@ test('a row the running app watches is marked live, stored or not', () => {
   assert.deepEqual(R.unsetFromRead(read).map((r) => [r.key, r.live]), [['unveil-ios-appearance', true], ['shelf.preview', false]]);
 });
 
-test('a re-read names the stored values that changed since the last one', () => {
+test('should name the stored values that changed since the last read', () => {
   const R = Rows();
   const before = R.fromRead({ values: { desk: { type: 'string', value: 'rows' }, seen: { type: 'bool', value: false } } });
   const after = R.fromRead({ values: { desk: { type: 'string', value: 'board' }, seen: { type: 'bool', value: false }, added: { type: 'int', value: 1 } } });
@@ -184,7 +177,7 @@ test('a re-read names the stored values that changed since the last one', () => 
   assert.deepEqual(R.changedKeys([], after), []);
 });
 
-test('a filter keeps the rows whose key or type matches, ignoring case', () => {
+test('should keep the rows whose key or type matches the filter, ignoring case', () => {
   const R = Rows();
   const rows = R.fromRead({ values: { 'unveil-ios-glass': { type: 'string', value: 'x' }, onboarded: { type: 'bool', value: true } } });
   assert.deepEqual(R.filter(rows, 'GLASS').map((r) => r.key), ['unveil-ios-glass']);

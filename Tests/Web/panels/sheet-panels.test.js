@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cameraPanel } from '../../../Sources/Baguette/Resources/Web/panels/camera/camera-panel.js';
-import { statusBarPanel } from '../../../Sources/Baguette/Resources/Web/panels/status-bar/status-bar-panel.js';
-import { networkPanel } from '../../../Sources/Baguette/Resources/Web/panels/network/network-panel.js';
-import { notifyPanel } from '../../../Sources/Baguette/Resources/Web/panels/notify/notify-panel.js';
-import { defaultsPanel } from '../../../Sources/Baguette/Resources/Web/panels/defaults/defaults-panel.js';
-import { locationPanel } from '../../../Sources/Baguette/Resources/Web/panels/location/location-panel.js';
+import { cameraPanel, cameraPanelWith } from '../../../Sources/Baguette/Resources/Web/panels/camera/camera-panel.js';
+import { statusBarPanel, statusBarPanelWith } from '../../../Sources/Baguette/Resources/Web/panels/status-bar/status-bar-panel.js';
+import { networkPanel, networkPanelWith } from '../../../Sources/Baguette/Resources/Web/panels/network/network-panel.js';
+import { notifyPanel, notifyPanelWith } from '../../../Sources/Baguette/Resources/Web/panels/notify/notify-panel.js';
+import { defaultsPanel, defaultsPanelWith } from '../../../Sources/Baguette/Resources/Web/panels/defaults/defaults-panel.js';
+import { locationPanel, locationPanelWith } from '../../../Sources/Baguette/Resources/Web/panels/location/location-panel.js';
 
 // The page's sheet panels: each needs its ability, sits in its sheet, and
 // mounts its view on the device; some say more on their control.
@@ -36,62 +36,54 @@ async function withWindow(globals, body) {
 }
 
 const each = [
-  [cameraPanel, 'camera', 'camera', 'Camera', 'CameraPanel'],
-  [statusBarPanel, 'statusBar', 'statusBar', 'StatusBar', 'StatusBarPanel'],
-  [networkPanel, 'network', 'network', 'Network', 'NetworkPanel'],
-  [notifyPanel, 'notify', 'notify', 'Notify', 'NotifyPanel'],
-  [defaultsPanel, 'defaults', 'defaults', 'Defaults', 'DefaultsPanel'],
-  [locationPanel, 'location', 'location', 'Location', 'LocationPanel'],
+  [cameraPanelWith, 'camera', 'camera', 'Camera'],
+  [statusBarPanelWith, 'statusBar', 'statusBar', 'StatusBar'],
+  [networkPanelWith, 'network', 'network', 'Network'],
+  [notifyPanelWith, 'notify', 'notify', 'Notify'],
+  [defaultsPanelWith, 'defaults', 'defaults', 'Defaults'],
+  [locationPanelWith, 'location', 'location', 'Location'],
 ];
 
-for (const [panel, name, needs, slot, view] of each) {
-  test(`should open the ${name} panel in its sheet, when the device has ${needs}, its view on the device`, async () => {
+for (const [panelWith, name, needs, slot] of each) {
+  test(`should open the ${name} panel in its sheet, when the device has ${needs}, its view on the device`, () => {
+    const calls = [];
+    const panel = panelWith(viewClass(calls));
     assert.equal(panel.name, name);
     assert.equal(panel.needs, needs);
     assert.equal(panel.slot, slot);
-    const calls = [];
-    await withWindow({ [view]: viewClass(calls) }, () => {
-      const host = {};
-      const handle = panel.mount(host, { device: { id: 'D' }, control: control() });
-      handle.detach();
-      assert.deepEqual(calls.filter((c) => c[0] !== 'refresh'), [['attach', host, 'D'], ['detach']]);
-    });
+    const host = {};
+    panel.mount(host, { device: { id: 'D' }, control: control() }).detach();
+    assert.deepEqual(calls.filter((c) => c[0] !== 'refresh'), [['attach', host, 'D'], ['detach']]);
   });
 }
 
-test('should refresh what the network, defaults and location panels show each time they open again', async () => {
-  for (const [panel, , , , view] of each.filter(([p]) => [networkPanel, defaultsPanel, locationPanel].includes(p))) {
+test('should refresh what the network, defaults and location panels show each time they open again', () => {
+  for (const panelWith of [networkPanelWith, defaultsPanelWith, locationPanelWith]) {
     const calls = [];
-    await withWindow({ [view]: viewClass(calls) }, () => {
-      panel.mount({}, { device: { id: 'D' }, control: control() }).reopened();
-      assert.deepEqual(calls.at(-1), ['refresh']);
-    });
+    panelWith(viewClass(calls)).mount({}, { device: { id: 'D' }, control: control() }).reopened();
+    assert.deepEqual(calls.at(-1), ['refresh']);
   }
 });
 
-test('should mark the camera control while the camera streams', async () => {
+test('should mark the camera control while the camera streams', () => {
   let view;
-  await withWindow({ CameraPanel: class { attach() { view = this; } } }, () => {
-    const marked = control();
-    cameraPanel.mount({}, { device: { id: 'D' }, control: marked });
-    view.onPhaseChange('streaming');
-    assert.ok(marked.classes.has('streaming'));
-    view.onPhaseChange('idle');
-    assert.ok(!marked.classes.has('streaming'));
-  });
+  const marked = control();
+  cameraPanelWith(class { attach() { view = this; } }).mount({}, { device: { id: 'D' }, control: marked });
+  view.onPhaseChange('streaming');
+  assert.ok(marked.classes.has('streaming'));
+  view.onPhaseChange('idle');
+  assert.ok(!marked.classes.has('streaming'));
 });
 
-test('should mark the network control armed, in words too, when a throttle is on', async () => {
+test('should mark the network control armed, in words too, when a throttle is on', () => {
   let view;
-  await withWindow({ NetworkPanel: class { attach() { view = this; } } }, () => {
-    const marked = control();
-    networkPanel.mount({}, { device: { id: 'D' }, control: marked });
-    view.onArmedChange({ isConditioning: true, describe: () => '3G' });
-    assert.ok(marked.classes.has('conditioning'));
-    assert.equal(marked.attributes['aria-label'], 'Network conditioning on — 3G');
-    view.onArmedChange({ isConditioning: false, describe: () => '' });
-    assert.equal(marked.attributes.title, 'Network conditioning off');
-  });
+  const marked = control();
+  networkPanelWith(class { attach() { view = this; } }).mount({}, { device: { id: 'D' }, control: marked });
+  view.onArmedChange({ isConditioning: true, describe: () => '3G' });
+  assert.ok(marked.classes.has('conditioning'));
+  assert.equal(marked.attributes['aria-label'], 'Network conditioning on — 3G');
+  view.onArmedChange({ isConditioning: false, describe: () => '' });
+  assert.equal(marked.attributes.title, 'Network conditioning off');
 });
 
 test('should watch the device for a throttle armed elsewhere, before the network panel ever opens', async () => {

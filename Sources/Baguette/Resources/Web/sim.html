@@ -106,20 +106,12 @@
 <script src="/capture/recorder.js"></script>
 <script src="/stream/stream-session.js"></script>
 <script src="/stream/whep-session.js"></script>
-<script src="/panels/logs/internal/log-view.js"></script>
 <script src="/page/internal/accessibility-inspector.js"></script>
-<script src="/panels/camera/internal/camera-view.js"></script>
-<script src="/panels/status-bar/internal/status-bar-view.js"></script>
 <!-- Network conditioning. `network/network-condition-form.js` is the value
      type (which of the three mutually exclusive sources a request states);
      `sim-network.js` is the card that draws it, and must load after it. -->
-<script src="/panels/network/internal/network-condition-form.js"></script>
-<script src="/panels/network/internal/network-view.js"></script>
 <!-- App defaults. `defaults/preference-rows.js` shapes rows and request
      bodies; `sim-defaults.js` is the card that draws them, and loads after. -->
-<script src="/panels/defaults/internal/preference-rows.js"></script>
-<script src="/panels/defaults/internal/defaults-view.js"></script>
-<script src="/panels/notify/internal/notify-view.js"></script>
 <script src="/page/internal/file-drop.js"></script>
 <script src="/page/internal/device-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +
@@ -142,7 +134,6 @@
      before sim-location.js, which is itself lazy-used by page/device-page.js
      on first open of the location card. -->
 <script src="/vendor/leaflet/leaflet.js"></script>
-<script src="/panels/location/internal/location-view.js"></script>
 <!-- Baguette SDK (the new shape — see Resources/Web/baguette/). The
      page-level scripts below (page/devices-stream.js, page/device-page.js) consume the
      SDK via `Baguette.use({...}).mount(...)`. Load order matters:

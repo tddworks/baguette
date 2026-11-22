@@ -1,14 +1,16 @@
 // The logs panel: the device's unified log, live, from info up — its view is
-// `LogPanel` (log-view.js, a classic script the old sidebar page shares).
+// `LogPanel` (internal/log-view.js; the old sidebar page shares it).
+import { LogPanel } from './internal/log-view.js';
 
-export const logsPanel = {
-  name: 'logs',
-  needs: 'logs',
-  slot: 'Logs',
-  attribute: 'logs',
-  cluster: 'inspect',
-  label: 'Logs',
-  mount(host, { device }) {
-    return new window.LogPanel(host, { udid: device.id, level: 'info' });
-  },
-};
+/** The panel over `View` — its real view below, a stand-in in tests. */
+export function logsPanelWith(View) {
+  return {
+    name: 'logs', needs: 'logs', slot: 'Logs', attribute: 'logs',
+    cluster: 'inspect', label: 'Logs',
+    mount(host, { device }) {
+      return new View(host, { udid: device.id, level: 'info' });
+    },
+  };
+}
+
+export const logsPanel = logsPanelWith(LogPanel);
