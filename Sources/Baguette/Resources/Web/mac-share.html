@@ -6,81 +6,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Share this Mac — Baguette</title>
 <style>
-  :root { --bg: #f8fafc; --card: #fff; --ink: #1f2937; --muted: #64748b; --line: #e2e8f0;
-          --accent: #2563eb; --accent-soft: #eff6ff; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1115; --card: #181b22; --ink: #e5e7eb; --muted: #94a3b8; --line: #2a2f3a;
-            --accent: #60a5fa; --accent-soft: #1e293b; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 16px;
-         background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, Inter, sans-serif; }
-  main { width: min(420px, 100%); background: var(--card); border: 1px solid var(--line);
-         border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 18px; }
-  h1 { margin: 0; font-size: 20px; }
-  p { margin: 0; color: var(--muted); }
-  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-  legend { font-weight: 700; margin-bottom: 8px; }
-  label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line);
-          border-radius: 10px; cursor: pointer; }
-  label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  label small { display: block; color: var(--muted); }
-  input[type=radio] { margin-top: 3px; accent-color: var(--accent); }
-  button { height: 46px; border: 0; border-radius: 12px; background: var(--accent); color: #fff;
-           font: inherit; font-weight: 700; cursor: pointer; }
-  button:disabled { opacity: .6; cursor: default; }
-  #error { color: #dc2626; min-height: 1em; }
+  /* The page around the card: the card brings its own look (families/mac/share-card.js). */
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 16px; background: #f8fafc; }
+  @media (prefers-color-scheme: dark) { body { background: #0f1115; } }
+  main { width: min(420px, 100%); }
 </style>
 </head>
 <body>
-<main>
-  <h1>Share this Mac</h1>
-  <p>This Mac makes a display the shape of this screen and shows it here, to watch and control. It goes away when you leave.</p>
-  <form id="share">
-    <fieldset>
-      <legend>Room</legend>
-      <label><input type="radio" name="room" value="largerText"><span>Larger text<small>The Mac's text is the size of this device's</small></span></label>
-      <label><input type="radio" name="room" value="standard" checked><span>Standard<small>Sharp on this screen: its own pixels</small></span></label>
-      <label><input type="radio" name="room" value="moreSpace"><span>More space<small>The most room, the smallest text</small></span></label>
-    </fieldset>
-    <fieldset style="margin-top:16px">
-      <legend>Use as</legend>
-      <label><input type="radio" name="use" value="main" checked><span>Main display<small>The menu bar, the Dock and new windows open here</small></span></label>
-      <label><input type="radio" name="use" value="extra"><span>Extended display<small>One more display beside the Mac's own</small></span></label>
-    </fieldset>
-    <button type="submit" style="width:100%;margin-top:18px">Share</button>
-  </form>
-  <p id="error" role="alert"></p>
-</main>
+<main id="share"></main>
 <script type="module">
-  import { MacShare } from '/families/mac/share.js';
-  (function () {
-    'use strict';
-    const form = document.getElementById('share');
-    const error = document.getElementById('error');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const button = form.querySelector('button');
-      button.disabled = true;
-      error.textContent = '';
-      const body = MacShare.request({
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        pixelRatio: window.devicePixelRatio,
-        userAgent: navigator.userAgent,
-        room: form.room.value,
-        use: form.use.value,
-      });
-      try {
-        const response = await fetch('/mac/shares', { method: 'POST', body: JSON.stringify(body) });
-        const answer = await response.json().catch(() => ({}));
-        if (!response.ok || !answer.id) throw new Error(answer.error || 'The Mac didn’t make the display');
-        location.replace(MacShare.pageAddress(answer.id, body.room, new URLSearchParams(location.search).get('codec')));
-      } catch (failure) {
-        error.textContent = failure.message;
-        button.disabled = false;
-      }
-    });
-  })();
+  // Kept for compatibility: the same card the devices page shows.
+  import { mountShareCard, pageBrowser } from '/families/mac/share-card.js';
+  mountShareCard(document.getElementById('share'), pageBrowser(), (url) => location.replace(url));
 </script>
 </body>
 </html>
