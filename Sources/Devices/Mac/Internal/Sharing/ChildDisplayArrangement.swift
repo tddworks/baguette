@@ -24,12 +24,12 @@ final class ChildDisplayArrangement: DisplayArrangement, @unchecked Sendable {
 
     var main: UInt32 { readMain() }
 
-    func makeMain(_ display: UInt32) -> Bool {
+    func makeMain(_ display: UInt32, freeingDock: Bool) -> Bool {
         let process = makeProcess()
         let finished = DispatchSemaphore(value: 0)
         let status = Status()
         do {
-            try process.run(executable: executable, arguments: ["main-display", "--display", String(display)],
+            try process.run(executable: executable, arguments: ["main-display", "--display", String(display)] + (freeingDock ? ["--free-dock"] : []),
                             onBytes: { _ in }, onExit: { status.set($0); finished.signal() })
         } catch {
             return false

@@ -41,17 +41,23 @@ struct ChildDisplayArrangementTests {
 
     @Test func `should make a display main through a process of its own`() {
         let child = Child(exits: 0)
-        #expect(child.arrangement().makeMain(47))
+        #expect(child.arrangement().makeMain(47, freeingDock: false))
         #expect(child.arguments == ["main-display", "--display", "47"])
     }
 
+    @Test func `should ask the process to keep the Dock's edge free when a share is made main`() {
+        let child = Child(exits: 0)
+        #expect(child.arrangement().makeMain(47, freeingDock: true))
+        #expect(child.arguments == ["main-display", "--display", "47", "--free-dock"])
+    }
+
     @Test func `should say the display didn't become main when its process says so`() {
-        #expect(!Child(exits: 1).arrangement().makeMain(47))
+        #expect(!Child(exits: 1).arrangement().makeMain(47, freeingDock: false))
     }
 
     @Test func `should give up on a process that doesn't finish in time, ending it`() {
         let child = Child(exits: nil)
-        #expect(!child.arrangement(wait: 0.05).makeMain(47))
+        #expect(!child.arrangement(wait: 0.05).makeMain(47, freeingDock: false))
         #expect(child.terminated == 1)
     }
 }

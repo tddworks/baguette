@@ -28,5 +28,7 @@ protocol VirtualDisplay: AnyObject, Sendable {
 @Mockable
 protocol DisplayArrangement: Sendable {
     var main: UInt32 { get }
-    func makeMain(_ display: UInt32) -> Bool
+    /// `freeingDock`: keep nothing beside the Dock's edge of `display` — a
+    /// share made main, so an auto-hidden Dock can come up on it.
+    func makeMain(_ display: UInt32, freeingDock: Bool) -> Bool
 }

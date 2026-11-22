@@ -7,13 +7,14 @@ import Foundation
 struct CoreGraphicsDisplayConfiguration: DisplayConfiguration {
     var main: UInt32 { CGMainDisplayID() }
 
-    func origins() -> [UInt32: Point]? {
+    func bounds() -> [UInt32: Rect]? {
         var count: UInt32 = 0
         guard CGGetActiveDisplayList(0, nil, &count) == .success else { return nil }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return nil }
         return Dictionary(uniqueKeysWithValues: ids.prefix(Int(count)).map { id in
-            (id, Point(x: CGDisplayBounds(id).origin.x, y: CGDisplayBounds(id).origin.y))
+            (id, Rect(origin: Point(x: CGDisplayBounds(id).origin.x, y: CGDisplayBounds(id).origin.y),
+                      size: Size(width: CGDisplayBounds(id).width, height: CGDisplayBounds(id).height)))
         })
     }
 

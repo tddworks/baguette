@@ -58,8 +58,8 @@ struct VirtualDisplaySharesTests {
                 return made
             }
             given(arrangement).main.willProduce { [self] in lock.withLock { _main } }
-            given(arrangement).makeMain(.any).willProduce { [self] id in
-                lock.withLock { _main = id; _events.append("main \(id)") }
+            given(arrangement).makeMain(.any, freeingDock: .any).willProduce { [self] id, freeing in
+                lock.withLock { _main = id; _events.append("main \(id)" + (freeing ? " freeing the Dock" : "")) }
                 return true
             }
         }
@@ -76,6 +76,14 @@ struct VirtualDisplaySharesTests {
         #expect(!shares.reshape(id, to: Self.turned))
         #expect(!shares.isSharing(id))
         #expect(mac.removed == 1)
+    }
+
+    @Test func `should free the Dock's edge when a share is made main, and not when main is given back`() {
+        let mac = Mac()
+        let shares = mac.shares
+        let id = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .main)!
+        shares.end(id)
+        #expect(mac.events.filter { $0.hasPrefix("main") } == ["main 7 freeing the Dock", "main 1"])
     }
 
     @Test func `should keep a later main share main when an earlier one ends, and give main back when the last one does`() {
@@ -176,7 +184,7 @@ struct VirtualDisplaySharesTests {
         let shares = mac.shares
         let id = shares.start(viewer: "iPhone", shape: Self.iPhone, use: .main)!
         _ = shares.reshape(id, to: Self.turned)
-        #expect(mac.events == ["create 7", "main 7", "main 1", "remove 7", "create 8", "main 8"])
+        #expect(mac.events == ["create 7", "main 7 freeing the Dock", "main 1", "remove 7", "create 8", "main 8 freeing the Dock"])
     }
 
     @Test func `should give each viewer's display its own serial, so each has its own id`() {
