@@ -43,14 +43,11 @@
   const can = (ability) => deviceAbilities === null || deviceAbilities.includes(ability);
 
   // --- State -------------------------------------------------------
-  let session = null;
   let sim = null;           // Baguette SDK Simulator
   // The page's panels and their sheet rule (page/page-panels.js); made at boot.
   let panels = null;
   let axInspector = null;
   let pluginPanels = null;   // PluginPanels — manifest-declared plugin UI
-  let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
-  let lastPaintedSize = { w: 0, h: 0 };
   let deviceName = '';
 
   // The device frame drawn turned (page/internal/rotation-view.js), made on
@@ -188,7 +185,7 @@
 
     // 5. Settle the codec picker — it's on screen even when no session
     //    ever starts, so a shutdown device can't be left offering H.264.
-    reflectFormat(currentFormat());
+    live().reflectFormat(live().currentFormat());
 
     // 6. Open stream — but only if there's a guest to stream. A
     //    shutdown device has no framebuffer, no HID, and no
@@ -207,7 +204,7 @@
     wireUnload();
     // A share's page follows its viewer: the Mac family's role.
     if (device.share) device.share.follow(pageBrowser());
-    applyStoredTheme();
+    themeUI().applyStoredTheme();
 
     // No flat screen to hand over (a foldable's main view is the 3D
     // book; no definition means no screen at all) — no Handheld button.
@@ -284,7 +281,7 @@
       get foldable() { return foldable; },
       get sim() { return sim; },
       refreshToolbarScroll: (...args) => refreshToolbarScroll(...args),
-      toggle3D: (...args) => toggle3D(...args),
+      toggle3D: (...args) => live().toggle3D(...args),
     }));
   }
 
@@ -303,8 +300,8 @@
           : device.orientation.toPortrait(payload, rotation().current);
         const view = document.getElementById('simNativeView');
         if (view && view.getAttribute('data-render3d') === 'open' &&
-            render3DPanel && render3DPanel.send(out)) return;
-        if (session) session.send(out);
+            live().render3DPanel && live().render3DPanel.send(out)) return;
+        if (live().session) live().session.send(out);
       },
       getOrientation: () => rotation().current,
       log: (msg) => console.log('[native]', msg),
@@ -329,154 +326,37 @@
     if (can('orientation') && device.orientation) device.orientation.turn('portrait');
   }
 
-  // Theme toggle. Three logical states — "auto" (no manual pin,
-  // follow OS via prefers-color-scheme), "light", "dark". The pill
-  // in the bottom-right corner cycles light ↔ dark; we don't
-  // expose "auto" from the click cycle because the icon set has
-  // only two states. The user can reset to auto by deleting the
-  // localStorage key in DevTools if needed.
-  const THEME_KEY = 'baguette.simTheme';
-  const FORMAT_KEY = 'asc.simFormat';
-
-  function applyStoredTheme() {
-    const stored = localStorage.getItem(THEME_KEY);
-    if (stored === 'light' || stored === 'dark') {
-      setTheme(stored);
-    }
+  // theme (page/internal/theme.js), made on first use — after the modules have loaded — over
+  // the page's port.
+  let themeUIUI = null;
+  function themeUI() {
+    return themeUIUI || (themeUIUI = window.Baguette._Theme.theme({
+      get render3DPanel() { return live().render3DPanel; },
+    }));
   }
 
-  function currentTheme() {
-    const root = document.getElementById('simNativeView');
-    const pinned = root && root.getAttribute('data-theme');
-    if (pinned === 'light' || pinned === 'dark') return pinned;
-    return window.matchMedia('(prefers-color-scheme: light)').matches
-        ? 'light' : 'dark';
+  // liveView (page/internal/live-view.js), made on first use — after the modules have loaded — over
+  // the page's port.
+  let liveUI = null;
+  function live() {
+    return liveUI || (liveUI = window.Baguette._LiveView.liveView({
+      get udid() { return udid; },
+      get device() { return device; },
+      get sim() { return sim; },
+      get foldable() { return foldable; },
+      get axInspector() { return axInspector; },
+      get pluginPanels() { return pluginPanels; },
+      get companionsUI() { return companionsUI; },
+      capture: (...args) => capture(...args),
+      power: (...args) => power(...args),
+      rotation: (...args) => rotation(...args),
+      themeUI: (...args) => themeUI(...args),
+      mountAxInspector: (...args) => mountAxInspector(...args),
+      mountPlugins: (...args) => mountPlugins(...args),
+    }));
   }
 
-  function live3DBackground() {
-    const root = document.getElementById('simNativeView');
-    const computed = root
-        ? getComputedStyle(root).getPropertyValue('--nv-page-bg').trim()
-        : '';
-    if (/^#[0-9a-f]{6}$/i.test(computed)) return computed;
-    return currentTheme() === 'light' ? '#f1f3f6' : '#1a1a1f';
-  }
-
-  function setTheme(theme) {
-    const root = document.getElementById('simNativeView');
-    if (!root) return;
-    if (theme === 'light' || theme === 'dark') {
-      root.setAttribute('data-theme', theme);
-      localStorage.setItem(THEME_KEY, theme);
-    } else {
-      root.removeAttribute('data-theme');
-      localStorage.removeItem(THEME_KEY);
-    }
-    if (render3DPanel && root.getAttribute('data-render3d') === 'open') {
-      render3DPanel.setBackground(live3DBackground());
-    }
-  }
-
-  // Open (or reopen) a StreamSession on the existing surface for a
-  // given wire format. Tearing down + restarting is the cheapest way
-  // to swap formats — the WS protocol is per-connection and the
-  // server's makeStream(...) is keyed at session open.
-  // Same text-frame router as page/devices-stream.js: hand JSON envelopes to
-  // the inspector first, then claim paste_result; anything nobody
-  // claims falls through to the decoder's error logger.
-  function routeStreamText(env) {
-    if (env && env.type === 'hinge') return true;   // the 3D scene follows the hinge
-    if (axInspector && axInspector.handleEnvelope(env)) return true;
-    if (env && env.type === 'paste_result') {
-      if (!env.ok) console.warn('[native] paste failed:', env.error || 'unknown');
-      return true;
-    }
-    if (env && env.type === 'copy_result') {
-      console.log(env.ok
-        ? '[native] copied sim pasteboard to host clipboard'
-        : '[native] copy failed: ' + (env.error || 'unknown'));
-      return true;
-    }
-    return false;
-  }
-
-  function sessionCallbacks(onFirstPaint) {
-    let painted = false;
-    return {
-      onSize: (w, h) => {
-        lastPaintedSize = { w, h };
-        // First frame after a boot — the guest is genuinely up, so
-        // drop the power card and hand the screen back to the stream.
-        power().hidePowerCard();
-        if (!painted) { painted = true; if (onFirstPaint) onFirstPaint(); }
-      },
-      onFps:  (fps) => {
-        const el = document.getElementById('nativeStatus');
-        if (el) el.textContent = fps + ' fps';
-      },
-      onLog: (msg) => console.log('[native]', msg),
-      onText: routeStreamText,
-    };
-  }
-
-  function startSession(format) {
-    // A recording samples the canvas this session paints into; a
-    // restart (format swap, 3D close, device re-open) leaves it blank
-    // for however long the new socket takes to land its first frame.
-    if (session) capture().cancelRecording('stream restarted');
-    if (session) { try { session.stop(); } catch (_) {} session = null; }
-    // WebRTC is the phone plane only; a refused offer falls back to the
-    // best socket format, as an undecodable one does below.
-    const Session = format === 'webrtc' && window.WhepSession ? window.WhepSession : window.StreamSession;
-    session = new Session(Object.assign({
-      udid, format, version: 'v2',
-      display: 'phone',
-      canvas: sim.canvas,
-      // `?congestion=remb|transport-cc|off` on the page picks how a WebRTC
-      // viewer's bitrate follows the link (default: the server's choice).
-      congestion: new URLSearchParams(location.search).get('congestion') || undefined,
-      // `?codec=h264|h265|auto` on the page picks the codec (default: auto, H.265 when offered).
-      codec: new URLSearchParams(location.search).get('codec') || undefined,
-      onError: format === 'webrtc' ? () => {
-        // A shared Mac's tab keeps its own choice: the socket from now on.
-        const MacShare = sharedMac();
-        if (MacShare) {
-          try { sessionStorage.setItem(SHARE_FORMAT_KEY, MacShare.afterRefusal); } catch { /* the socket this once */ }
-        } else {
-          localStorage.removeItem(FORMAT_KEY);
-        }
-        startSession(MacShare ? window.StreamFormat.pick(MacShare.afterRefusal, decodeCapabilities()).id : currentFormat());
-      } : undefined,
-    }, sessionCallbacks()));
-    // `boot()` runs this before wiring the toolbar and unload handler,
-    // so a throw here killed the whole page, not just the canvas (#71).
-    try {
-      session.start();
-    } catch (err) {
-      console.warn('[native] ' + format + ' stream failed to start:',
-          (err && err.message) || err);
-      try { session.stop(); } catch (_) { /* ignore */ }
-      session = null;
-      if (format !== 'mjpeg') {
-        localStorage.removeItem(FORMAT_KEY);
-        startSession('mjpeg');
-      }
-      return;
-    }
-    // Companion panes are the user's standing choice, not this
-    // session's — but their sockets don't survive a phone-session
-    // restart's teardown, so reopen whichever are showing.
-    if (companionsUI) companionsUI.resume(socketFormat());
-    reflectFormat(format);
-    // Restore the cached orientation across format-swap remounts,
-    // so reopening the session doesn't snap the device back to
-    // portrait while the simulator is still landscape.
-    if (rotation().current !== 'portrait') rotation().apply(rotation().current);
-    mountAxInspector();
-    // Once only — `startSession` re-runs on every format swap, and
-    // re-mounting would append a second copy of every rail button.
-    if (!pluginPanels) mountPlugins();
-  }
+  // --- end of the live view ---
 
   // --- Companion screens ---------------------------------------------
   //
@@ -502,7 +382,7 @@
   function companionsPort() {
     return {
       get udid() { return udid; },
-      socketFormat: (...args) => socketFormat(...args),
+      socketFormat: (...args) => live().socketFormat(...args),
       refreshToolbarScroll: (...args) => refreshToolbarScroll(...args),
       rightRails: (...args) => rightRails(...args),
     };
@@ -542,14 +422,14 @@
     if (foldable) {
       const frame = document.getElementById('nativeDeviceFrame');
       if (frame) frame.setAttribute('data-foldable', '');
-      toggle3D({ fixed: true });
+      live().toggle3D({ fixed: true });
       // The unfolded panel is landscape-left by the guest's choice and
       // the cover portrait; the rotate button cycles from there.
       const start = currentLitPanel === 'secondary' ? 'landscape-left' : 'portrait';
       rotation().startAt(start);
       return;
     }
-    startSession(currentFormat());
+    live().startSession(live().currentFormat());
   }
 
   // Lazy-mounts the AXInspector once a surface + session are ready.
@@ -571,7 +451,7 @@
     axInspector = new window.AXInspector({
       // No `host` — toolbar drives enable/disable, panel surfaces selection.
       screenArea: sim.screenArea,
-      send: (payload) => session && session.send(payload),
+      send: (payload) => live().session && live().session.send(payload),
       // AX inspector reads `{w, h}`; SDK Screen exposes `{width, height}`.
       getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
       onSelect: (node) => renderAxPanel(panel, node),
@@ -622,9 +502,9 @@
   // row's frame already arrives in that space, so there's nothing to
   // convert.
   function tapForPlugin(point) {
-    if (!session || !sim || !sim.screen || !sim.screen.size) return;
+    if (!live().session || !sim || !sim.screen || !sim.screen.size) return;
     const size = sim.screen.size;
-    session.send({
+    live().session.send({
       type: 'tap',
       x: point.x, y: point.y,
       width: size.width, height: size.height,
@@ -654,22 +534,21 @@
     box.style.height = (frame.height * scaleY) + 'px';
   }
 
-  // Which pill is lit, and which isn't offerable at all.
-  function reflectFormat(format) {
-    const caps = decodeCapabilities();
-    document.querySelectorAll('#nativeFormatPicker .fmt-btn').forEach((b) => {
-      b.classList.toggle('active', b.dataset.v === format);
-      const fmt = window.StreamFormat && window.StreamFormat.named(b.dataset.v);
-      const playable = !fmt || fmt.isPlayable(caps);
-      if (b.dataset.titleDefault == null) {
-        b.dataset.titleDefault = b.getAttribute('title') || '';
+  // --- Helpers -----------------------------------------------------
+  /** Reload this page — on a shared Mac's, keeping its share. */
+  function reloadPage(params) {
+    const MacShare = live().sharedMac();
+    let to = location;
+    if (params) {
+      const url = new URL(location.href);
+      for (const [key, value] of Object.entries(params)) {
+        if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
       }
-      b.disabled = !playable;
-      b.title = playable ? b.dataset.titleDefault : fmt.whyUnplayable;
-    });
+      to = { reload: () => location.assign(url.href) };
+    }
+    if (MacShare) MacShare.reloadKeepingShare(to); else to.reload();
   }
 
-  // --- Helpers -----------------------------------------------------
   let _templatePromise = null;
   function fetchTemplate() {
     if (_templatePromise) return _templatePromise;
@@ -690,66 +569,6 @@
     return _templatePromise;
   }
 
-
-  // The format every surface in this page streams at — phone, CarPlay,
-  // watch and the 3D panel alike. Companions used to be pinned to MJPEG
-  // independently of the phone, which meant a session the user had set to
-  // H.264 still carried uncapped full JPEGs on its companion sockets.
-  //
-  // `StreamFormat` filters the stored value against what this browser
-  // can decode, so nothing unplayable reaches the socket.
-  /// The format asked for: a shared Mac's tab picks its own, WebRTC until it
-  /// does, leaving the saved choice for every other device alone.
-  const SHARE_FORMAT_KEY = 'asc.shareFormat';
-  function sharedMac() {
-    return device && device.share ? window.Baguette._MacShare : null;
-  }
-  /** Reload this page — on a shared Mac's, keeping its share. */
-  function reloadPage(params) {
-    const MacShare = sharedMac();
-    let to = location;
-    if (params) {
-      const url = new URL(location.href);
-      for (const [key, value] of Object.entries(params)) {
-        if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
-      }
-      to = { reload: () => location.assign(url.href) };
-    }
-    if (MacShare) MacShare.reloadKeepingShare(to); else to.reload();
-  }
-
-  function storedFormat() {
-    const MacShare = sharedMac();
-    if (!MacShare) return localStorage.getItem(FORMAT_KEY);
-    let picked = null;
-    try { picked = sessionStorage.getItem(SHARE_FORMAT_KEY); } catch { /* none picked */ }
-    return MacShare.format(picked);
-  }
-
-  function currentFormat() {
-    if (!window.StreamFormat) return 'mjpeg';
-    return window.StreamFormat
-        .pick(storedFormat(), decodeCapabilities()).id;
-  }
-
-  /** What a surface that only has a stream socket — CarPlay, the watch,
-   *  the 3D panel — streams at: the page's format, or for WebRTC the best
-   *  socket format. */
-  function socketFormat() {
-    if (!window.StreamFormat) return 'mjpeg';
-    return window.StreamFormat
-        .pick(storedFormat(), decodeCapabilities())
-        .forSockets(decodeCapabilities()).id;
-  }
-
-  /** What this browser can play, as `StreamFormat` wants to be told it. */
-  function decodeCapabilities() {
-    return {
-      hardwareDecoder: !!(window.FrameDecoder
-          && window.FrameDecoder.isHardwareAvailable()),
-      webrtc: typeof window.RTCPeerConnection === 'function' && !!window.WhepSession,
-    };
-  }
 
   // Toolbar icon strip scrolls horizontally when the window is too narrow
   // to fit every control. Trackpads scroll it natively; the two chevron
@@ -906,27 +725,27 @@
       // Storing an undecodable format wedges the origin (#71). The
       // button is already disabled; this is the second lock.
       const wanted = window.StreamFormat && window.StreamFormat.named(next);
-      if (!wanted || !wanted.isPlayable(decodeCapabilities())) return;
-      const current = currentFormat();
+      if (!wanted || !wanted.isPlayable(live().decodeCapabilities())) return;
+      const current = live().currentFormat();
       const view = document.getElementById('simNativeView');
-      if (current === wanted.id && (session ||
+      if (current === wanted.id && (live().session ||
           (view && view.getAttribute('data-render3d') === 'open'))) return;
-      if (sharedMac()) {
-        try { sessionStorage.setItem(SHARE_FORMAT_KEY, wanted.id); } catch { /* the tab forgets */ }
+      if (live().sharedMac()) {
+        try { sessionStorage.setItem(live().SHARE_FORMAT_KEY, wanted.id); } catch { /* the tab forgets */ }
       } else {
-        localStorage.setItem(FORMAT_KEY, wanted.id);
+        localStorage.setItem(live().FORMAT_KEY, wanted.id);
       }
-      reflectFormat(wanted.id);
+      live().reflectFormat(wanted.id);
       if (view && view.getAttribute('data-render3d') === 'open') {
-        if (render3DPanel) render3DPanel.setFormat(wanted.forSockets(decodeCapabilities()).id);
+        if (live().render3DPanel) live().render3DPanel.setFormat(wanted.forSockets(live().decodeCapabilities()).id);
       } else {
-        startSession(wanted.id);
+        live().startSession(wanted.id);
       }
     });
     actions.on('toggleTheme', () => {
-      setTheme(currentTheme() === 'light' ? 'dark' : 'light');
+      themeUI().setTheme(themeUI().currentTheme() === 'light' ? 'dark' : 'light');
     });
-    actions.on('toggle3D', () => toggle3D());
+    actions.on('toggle3D', () => live().toggle3D());
     actions.on('enterHandheld', () => handheldUIView().enterHandheld());
     actions.on('handheldMenu', (open) => handheldUIView().setHandheldMenu(!!open));
     actions.on('handheldHintClose', () => handheldUIView().hideHomeScreenHint());
@@ -936,7 +755,7 @@
       else if (action === 'rotate') window.__nativeRotate();
       else if (sim) sim.pressButton(action);
     });
-    actions.on('toggle3DInspector', () => toggle3DInspector());
+    actions.on('toggle3DInspector', () => live().toggle3DInspector());
     // The watch's hardware buttons. Same `button` envelope the phone's
     // bezel buttons use, but down the watch's own socket — the press
     // has to reach the watch's HID, not the phone we happen to be
@@ -970,7 +789,7 @@
       // A foldable's book turns in 3D, as the flat chrome would.
       if (foldable) {
         rotation().startAt(value);
-        if (render3DPanel) render3DPanel.setInterfaceOrientation(value);
+        if (live().render3DPanel) live().render3DPanel.setInterfaceOrientation(value);
         device.orientation.turn(value);
         return;
       }
@@ -1021,103 +840,10 @@
         panel.querySelector('[data-role="ax-body"]'),
         node,
         {
-          send: (payload) => session && session.send(payload),
+          send: (payload) => live().session && live().session.send(payload),
           getDeviceSize: () => ({ w: sim.screen.size.width, h: sim.screen.size.height }),
         }
     );
-  }
-
-  // Live 3D is a main-view mode, not a duplicate preview. Its WebSocket
-  // replaces the 2D StreamSession while open and carries both MJPEG
-  // frames and the same inbound input/control envelopes.
-  function toggle3D(opts) {
-    const view = document.getElementById('simNativeView');
-    const host = document.getElementById('native3DHost');
-    const stage = document.getElementById('native3DStage');
-    const btn = document.getElementById('native3DToggle');
-    const open = view && view.getAttribute('data-render3d') === 'open';
-    if (!view || !host || !stage || !sim) return;
-    const fixed = !!(opts && opts.fixed);
-    // A foldable lives in 3D: the cube turns the book, or sets it back
-    // straight, rather than leaving for the flat stream.
-    if (open && foldable && render3DPanel && !fixed) {
-      render3DPanel.setFixed(!render3DPanel.fixed);
-      if (btn) btn.classList.toggle('active', !render3DPanel.fixed);
-      const inspector = !render3DPanel.fixed && localStorage.getItem('asc.3dInspector') !== 'closed';
-      if (inspector) view.setAttribute('data-render3d-inspector', 'open');
-      else view.removeAttribute('data-render3d-inspector');
-      const sheet = document.getElementById('native3DSheet');
-      if (sheet) sheet.setAttribute('aria-hidden', inspector ? 'false' : 'true');
-      return;
-    }
-    // The canvas being recorded is about to be swapped for the other
-    // mode's, and the two are different surfaces at different sizes.
-    capture().cancelRecording('switched between 2D and 3D');
-    // `open` is the state we're LEAVING, so it doubles as "will be 2D".
-    capture().reflect3DCaptureControls(open);
-    if (open) {
-      view.removeAttribute('data-render3d');
-      view.removeAttribute('data-render3d-inspector');
-      if (btn) btn.classList.remove('active');
-      if (render3DPanel) render3DPanel.stop();
-      startSession(currentFormat());
-    } else {
-      if (session) {
-        session.stop();
-        session = null;
-      }
-      view.setAttribute('data-render3d', 'open');
-      const inspectorOpen = !fixed && localStorage.getItem('asc.3dInspector') !== 'closed';
-      if (inspectorOpen) {
-        view.setAttribute('data-render3d-inspector', 'open');
-      }
-      const sheet = document.getElementById('native3DSheet');
-      if (sheet) sheet.setAttribute('aria-hidden', inspectorOpen ? 'false' : 'true');
-      if (btn) btn.classList.toggle('active', !fixed);
-      const status = document.getElementById('nativeStatus');
-      if (status) status.textContent = '3D live';
-      // Told BEFORE the stream starts: a picked size raises the
-      // stream's pixel budget (Sim3DPanel.streamBudget), so setting it
-      // afterwards would open at the ordinary budget and restart.
-      if (render3DPanel && typeof render3DPanel.setCaptureSettings === 'function') {
-        render3DPanel.setCaptureSettings(capture().captureSettings());
-      }
-      if (!render3DPanel && window.Sim3DPanel && udid) {
-        render3DPanel = new window.Sim3DPanel();
-        render3DPanel.setCaptureSettings(capture().captureSettings());
-        render3DPanel.attach(host, stage, udid, {
-          deviceSize: { width: sim.screen.size.width, height: sim.screen.size.height },
-          format: socketFormat(),
-          background: live3DBackground(),
-          fixed,
-          onFps: (fps) => {
-            const status = document.getElementById('nativeStatus');
-            if (status) status.textContent = fps + ' fps · 3D';
-          },
-        });
-      } else if (render3DPanel) {
-        render3DPanel.background = live3DBackground();
-        if (render3DPanel.fixed !== fixed) render3DPanel.setFixed(fixed, { silent: true });
-        render3DPanel.start();
-      }
-    }
-  }
-
-  // The inspector is a tool surface, not the 3D session owner. Collapsing it
-  // must leave the model, decoder, socket, pose, zoom, and variant untouched.
-  function toggle3DInspector() {
-    const view = document.getElementById('simNativeView');
-    const sheet = document.getElementById('native3DSheet');
-    if (!view || view.getAttribute('data-render3d') !== 'open') return;
-    const open = view.getAttribute('data-render3d-inspector') === 'open';
-    if (open) {
-      view.removeAttribute('data-render3d-inspector');
-      localStorage.setItem('asc.3dInspector', 'closed');
-    } else {
-      view.setAttribute('data-render3d-inspector', 'open');
-      localStorage.setItem('asc.3dInspector', 'open');
-    }
-    if (sheet) sheet.setAttribute('aria-hidden', open ? 'true' : 'false');
   }
 
   /// The page as a share's follow sees it (families/mac/internal/share-follow.js).
@@ -1140,12 +866,12 @@
       try { power().hidePowerCard(); } catch (_) { /* ignore */ }
       try { capture().cancelRecording('page unloading'); } catch (_) { /* ignore */ }
       try { capture().clearRecordings(); } catch (_) { /* ignore */ }
-      try { if (session) session.stop(); } catch (_) { /* ignore */ }
+      try { if (live().session) live().session.stop(); } catch (_) { /* ignore */ }
       try { if (companionsUI) companionsUI.detach(); } catch (_) { /* ignore */ }
       try { if (sim) sim.detach(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
       try { panels.detach(); } catch (_) { /* ignore */ }
-      try { if (render3DPanel) render3DPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (live().render3DPanel) live().render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
   }
 
@@ -1158,10 +884,10 @@
       can: (ability) => can(ability),
       get device() { return device; },
       get deviceName() { return deviceName; },
-      get session() { return session; },
+      get session() { return live().session; },
       get sim() { return sim; },
-      get render3DPanel() { return render3DPanel; },
-      toggle3D: (opts) => toggle3D(opts),
+      get render3DPanel() { return live().render3DPanel; },
+      toggle3D: (opts) => live().toggle3D(opts),
       refreshToolbarScroll: () => refreshToolbarScroll(),
     }));
   }
