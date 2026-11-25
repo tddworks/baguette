@@ -50,6 +50,16 @@ struct DigitizerInputTests {
         #expect(xs == xs.sorted())
     }
 
+    @Test func `should drag a long swipe in moves no more than ten points apart`() {
+        let (input, digitizer) = makeInput()
+
+        _ = input.swipe(from: Point(x: 200, y: 0), to: Point(x: 200, y: 800), size: size, duration: 0.2)
+
+        let ys = digitizer.reports.dropLast().map { $0.contacts[0].y * size.height }
+        let strides = zip(ys, ys.dropFirst()).map { $1 - $0 }
+        #expect(strides.allSatisfy { $0 <= 10.000001 })
+    }
+
     @Test func `should mark a touch that starts at an edge as a swipe in from that edge`() {
         let (input, digitizer) = makeInput()
 

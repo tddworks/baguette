@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+- `swipe` drags like a real finger: one move per 10 points or per 1/120 s, whichever is more, instead of a fixed 10 (simulator) or 12 (phone). A long swipe now dismisses a UIKit zoom transition (`preferredTransition = .zoom`). ([#158](https://github.com/tddworks/baguette/issues/158))
+
 ---
 
 ## [0.3.2] - 2026-11-22

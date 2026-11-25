@@ -9,9 +9,6 @@ struct DigitizerTouch: Touch {
     private let digitizer: any Digitizer
     private let pause: @Sendable (Double) -> Void
 
-    /// Reports in a drag, spread over its duration (Indigo's swipe uses 10).
-    private static let steps = 12
-
     init(digitizer: any Digitizer, pause: @escaping @Sendable (Double) -> Void = { Thread.sleep(forTimeInterval: $0) }) {
         self.digitizer = digitizer
         self.pause = pause
@@ -43,9 +40,10 @@ struct DigitizerTouch: Touch {
     /// Fingers down at their starts, moved together to their ends, lifted there.
     private func drag(_ paths: [(Point, Point)], size: Size, duration: Double) -> Bool {
         let total = duration > 0 ? duration : 0.25
-        let interval = total / Double(Self.steps)
-        for step in 0...Self.steps {
-            let t = Double(step) / Double(Self.steps)
+        let steps = paths.map { FingerPace.moves(from: $0.0, to: $0.1, duration: total) }.max() ?? 1
+        let interval = total / Double(steps)
+        for step in 0...steps {
+            let t = Double(step) / Double(steps)
             let fingers = paths.map { start, end in
                 Point(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t).contact(on: size)
             }
