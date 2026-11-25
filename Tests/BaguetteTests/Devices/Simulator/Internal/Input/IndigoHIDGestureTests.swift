@@ -171,15 +171,28 @@ struct IndigoHIDGestureTests {
         #expect(log.steps == warmUp + [touch(0.25, 0.25, .up)])
     }
 
-    @Test func `should drag a swipe through ten even steps and lift where it ended`() {
+    @Test func `should drag a swipe through even steps and lift where it ended`() {
         let (input, log) = Rig.make()
 
-        #expect(input.swipe(from: Point(x: 0, y: 0), to: Point(x: 400, y: 800), size: screen, duration: 0.12))
+        #expect(input.swipe(from: Point(x: 0, y: 0), to: Point(x: 0, y: 100), size: screen, duration: 0.12))
 
-        let moves = (1...10).flatMap { i -> [Step] in
-            [.wait(10_000), touch(Double(i) / 10, Double(i) / 10, .move)]
+        let moves = (1...15).flatMap { i -> [Step] in
+            [.wait(8_000), touch(0, Double(i) / 15 * 0.125, .move)]
         }
-        #expect(log.steps == warmUp + [touch(0, 0, .down)] + moves + [.wait(10_000), touch(1, 1, .up)])
+        #expect(log.steps == warmUp + [touch(0, 0, .down)] + moves + [.wait(8_000), touch(0, 0.125, .up)])
+    }
+
+    @Test func `should drag a long swipe in moves no more than ten points apart`() {
+        let (input, log) = Rig.make()
+
+        _ = input.swipe(from: Point(x: 201, y: 150), to: Point(x: 201, y: 650), size: screen, duration: 0.64)
+
+        let ys = log.steps.compactMap { step -> Double? in
+            if case .message(.touch(let point, _, _, _, _)) = step { return point.y * screen.height }
+            return nil
+        }
+        let strides = zip(ys, ys.dropFirst()).map { $1 - $0 }
+        #expect(strides.allSatisfy { $0 <= 10.000001 })
     }
 
     @Test func `should never step a swipe faster than 8 ms`() {
@@ -196,7 +209,7 @@ struct IndigoHIDGestureTests {
 
         #expect(!input.swipe(from: Point(x: 0, y: 0), to: Point(x: 400, y: 0), size: screen, duration: 0.25))
         #expect(log.messages.count == 2 + 3 + 1)
-        #expect(log.steps.last == touch(0.2, 0, .up))
+        #expect(log.steps.last == touch(0.05, 0, .up))
     }
 
     @Test func `should keep one finger identity from down to up of a streamed touch`() {

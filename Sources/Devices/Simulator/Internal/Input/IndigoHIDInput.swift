@@ -114,7 +114,7 @@ final class IndigoHIDInput: HID, @unchecked Sendable {
     func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool {
         guard ensureWarm() else { return false }
         let total = duration > 0 ? duration : 0.25
-        let steps = 10
+        let steps = FingerPace.moves(from: start, to: end, duration: total)
         let stepMs = UInt32((total * 1000) / Double(steps + 2))
         return stroke(
             from: normalise(start, in: size), to: normalise(end, in: size),
