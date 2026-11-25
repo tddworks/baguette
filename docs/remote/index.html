@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baguette Remote — your coding agents, in your pocket</title>
+<link rel="canonical" href="https://baguette.tddworks.com/remote/">
+<meta name="description" content="Leave Claude Code or Codex working on your Mac and steer it from your iPhone: a Mac screen shaped to your phone, dictation and the keys an agent asks for, and the simulators, iPhones and Android emulators on that Mac to try the build. Nothing to install on the Mac.">
+<meta property="og:title" content="Baguette Remote — your coding agents, in your pocket">
+<meta property="og:description" content="Steer Claude Code or Codex on your Mac from your iPhone, and try the build on its simulators and devices.">
+<meta property="og:image" content="https://baguette.tddworks.com/remote/static/logo.png">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/png" href="static/logo.png">
+<style>
+  :root {
+    --text: #FFFFFF; --label2: rgba(235,235,245,.62); --label3: rgba(235,235,245,.32);
+    --accent: #5ED3BF; --on-accent: #04241E; --sep: rgba(255,255,255,.14);
+    --glass: rgba(255,255,255,.12); --glass-hi: rgba(255,255,255,.20); --edge: rgba(255,255,255,.24);
+    --board: #141516;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--board); color: var(--text); font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+         -webkit-font-smoothing: antialiased; padding: 32px 16px 64px; }
+  header { max-width: 1280px; margin: 0 auto 26px; }
+  header h1 { font-size: 28px; letter-spacing: -.02em; }
+  header p { color: rgba(255,255,255,.6); margin-top: 8px; max-width: 860px; line-height: 1.55; font-size: 15px; }
+  .flow { display: flex; gap: 34px; overflow-x: auto; padding: 8px 4px 26px; }
+  .step { flex: 0 0 auto; width: 300px; }
+  .label { display: flex; gap: 10px; align-items: baseline; margin-bottom: 12px; }
+  .label b { color: var(--accent); font-size: 13px; }
+  .label span { font-size: 15px; font-weight: 600; }
+  .why { color: rgba(255,255,255,.55); font-size: 13px; line-height: 1.55; margin-top: 14px; }
+
+  /* A real iPhone: Unveil's 3D iPhone seen from the front (film/capture.sh 'frame-*', cut out by
+     film/frame.cjs), with the screen, 393 × 852 points drawn at 0.733, laid on its glass:
+     the glass is 92.593% × 97.123% of the body, 3.704% in and 1.438% down. */
+  .device { width: 311px; height: 645px; padding: 9.3px 11.5px 0; border-radius: 52px;
+            background: url(static/iphone.png) center / 100% 100% no-repeat; box-shadow: 0 30px 70px rgba(0,0,0,.55); }
+  .phone { width: 393px; height: 852px; zoom: .7328; border-radius: 61px; overflow: hidden; position: relative;
+           background: #000; display: flex; flex-direction: column; }
+  .ambient { position: absolute; inset: -60px; z-index: 0;
+             background:
+               radial-gradient(80% 38% at 50% 0%, rgba(126,230,212,.95), transparent 72%),
+               radial-gradient(60% 40% at 0% 42%, rgba(46,140,122,.55), transparent 70%),
+               radial-gradient(70% 45% at 90% 78%, rgba(28,96,82,.5), transparent 70%),
+               linear-gradient(180deg, #2f7a6c 0%, #17423a 36%, #0d211d 70%, #08120f 100%);
+             animation: drift 16s ease-in-out infinite alternate; }
+  .ambient.mac { background:
+               radial-gradient(80% 45% at 30% 10%, rgba(120,170,255,.75), transparent 70%),
+               radial-gradient(60% 40% at 90% 40%, rgba(94,211,191,.45), transparent 70%),
+               linear-gradient(180deg, #1d2c46 0%, #121925 50%, #07090d 100%); }
+  @keyframes drift { to { transform: translate(16px,-12px) scale(1.05); } }
+  .phone > *:not(.ambient):not(.layer):not(.sheet) { position: relative; z-index: 1; }
+
+  /* status bar, Dynamic Island, home indicator */
+  .status { height: 54px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 6px 30px 0 44px; }
+  .status .time { font: 600 17px/1 -apple-system, "SF Pro Text", sans-serif; letter-spacing: -.01em; }
+  .status .icons { display: flex; gap: 6px; align-items: center; }
+  .island { position: absolute !important; top: 11px; left: 50%; transform: translateX(-50%); width: 125px; height: 37px; border-radius: 20px; background: #000; z-index: 9 !important; }
+  .homeind { position: absolute !important; bottom: 8px; left: 50%; transform: translateX(-50%); width: 139px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.9); z-index: 9 !important; }
+  svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Liquid Glass */
+  .glass { background: var(--glass); border: .5px solid var(--edge);
+           backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%);
+           box-shadow: inset 0 1px 0 rgba(255,255,255,.30), inset 0 -1px 0 rgba(0,0,0,.15), 0 8px 24px rgba(0,0,0,.22); }
+  .circle { width: 44px; height: 44px; border-radius: 22px; display: grid; place-items: center; font-size: 19px; flex: none; }
+  .flow { gap: 34px; }
+  h2.rowtitle { max-width: 1280px; margin: 34px auto 6px; font-size: 20px; letter-spacing: -.01em; }
+  p.rowwhy { max-width: 1280px; margin: 0 auto 14px; color: rgba(255,255,255,.6); font-size: 14px; line-height: 1.55; }
+  .tapmap { margin: 14px 0 0; padding-left: 18px; color: rgba(255,255,255,.62); font-size: 13px; line-height: 1.55; }
+  .tapmap li { margin-bottom: 6px; } .tapmap b { color: #fff; }
+  .new { display: inline-block; font-size: 10px; font-weight: 700; color: var(--on-accent); background: var(--accent); border-radius: 6px; padding: 1px 5px; margin-left: 6px; vertical-align: 2px; letter-spacing: .02em; }
+  .phone > .pic { position: absolute !important; inset: 0; z-index: 0 !important; }
+
+  /* the Mac's picture, edge to edge */
+  .pic { background: linear-gradient(160deg, #1d3a5f 0%, #203a52 40%, #2b2440 100%); overflow: hidden; }
+  .pic .menubar { height: 54px; background: rgba(30,30,34,.85); display: flex; align-items: center; gap: 12px; padding: 4px 22px 0 26px; font-size: 12px; color: #ddd; }
+  .pic .menubar .notch { width: 132px; flex: none; } .pic .menubar .clock { margin-left: auto; color: #bbb; }
+  .pic .win { position: absolute; left: 16px; right: 16px; top: 80px; height: 300px; border-radius: 12px; background: #1E1F23; box-shadow: 0 10px 30px rgba(0,0,0,.5); overflow: hidden; }
+  .pic .win .bar { height: 28px; background: #2A2B30; display: flex; gap: 7px; align-items: center; padding: 0 11px; }
+  .pic .win .bar i { width: 11px; height: 11px; border-radius: 6px; } 
+  .pic .win .code { padding: 14px; font: 12px/1.75 ui-monospace, Menlo, monospace; color: #9DA3AE; }
+  .pic .win .code em { color: var(--accent); font-style: normal; }
+  .pic .win .code .caret { display: inline-block; width: 7px; height: 14px; background: #fff; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0 } }
+  .pic .dock { position: absolute; left: 50%; bottom: 14px; translate: -50% 0; display: flex; gap: 9px; padding: 8px 10px; border-radius: 18px; background: rgba(255,255,255,.14); }
+  .pic .dock span { width: 34px; height: 34px; border-radius: 9px; }
+  .pointer { position: absolute; width: 18px; height: 26px; z-index: 3; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+  .ball { position: absolute !important; right: 8px; top: 600px; width: 58px; height: 58px; border-radius: 17px; z-index: 8 !important;
+          background: rgba(28,28,31,.72); backdrop-filter: blur(14px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 12px 24px rgba(0,0,0,.45); display: grid; place-items: center; }
+  .ball::after { content: ""; width: 30px; height: 30px; border-radius: 15px; background: rgba(255,255,255,.55); box-shadow: 0 0 0 6px rgba(255,255,255,.10); }
+
+  /* the tray the ball opens */
+  .tray { position: absolute !important; left: 8px; right: 8px; bottom: 8px; z-index: 9 !important; border-radius: 34px; padding: 14px; }
+  .tray .head { display: flex; align-items: center; gap: 10px; padding: 2px 4px 14px; }
+  .tray .head b { display: block; font-size: 16px; } .tray .head small { color: var(--label2); font-size: 12px; }
+  .pill { height: 36px; padding: 0 14px; border-radius: 18px; display: grid; place-items: center; font-size: 14px; font-weight: 600; flex: none; }
+  .actions4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .act4 { border-radius: 22px; padding: 14px 4px 10px; text-align: center; font-size: 12px; font-weight: 600; color: rgba(255,255,255,.9); }
+  .act4 .sym { font-size: 24px; height: 30px; display: grid; place-items: center; margin-bottom: 4px; }
+  .act4.lit { background: rgba(94,211,191,.22); color: var(--accent); }
+
+  /* typing: the words box, the keys over the keyboard, the system keyboard */
+  .compose { position: absolute !important; left: 8px; right: 8px; z-index: 9 !important; border-radius: 30px; padding: 12px; }
+  .compose .top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .seg { height: 34px; border-radius: 17px; padding: 2px; display: grid; grid-template-columns: 1fr 1fr; background: rgba(0,0,0,.28); flex: 1; }
+  .seg div { display: grid; place-items: center; font-size: 13px; font-weight: 600; border-radius: 15px; color: rgba(255,255,255,.7); }
+  .seg div.on { background: rgba(255,255,255,.2); color: #fff; }
+  .x { width: 34px; height: 34px; border-radius: 17px; display: grid; place-items: center; font-size: 15px; flex: none; }
+  .area { min-height: 104px; border-radius: 20px; padding: 12px 14px; background: rgba(0,0,0,.30); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+          font-size: 17px; line-height: 23px; position: relative; }
+  .area .cur { display: inline-block; width: 2px; height: 20px; background: var(--accent); vertical-align: -4px; animation: blink 1s steps(1) infinite; }
+  .area .ph { color: var(--label3); }
+  .area .mark { background: rgba(94,211,191,.25); border-bottom: 2px solid var(--accent); }
+  .send { position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border-radius: 20px; background: var(--accent); color: var(--on-accent);
+          display: grid; place-items: center; font-size: 20px; font-weight: 700; box-shadow: 0 6px 16px rgba(94,211,191,.35); }
+  .how { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 0 4px; color: var(--label2); font-size: 12px; }
+  .how b { color: #fff; font-weight: 600; }
+  .trail { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .trail span { font: 600 13px ui-monospace, Menlo, monospace; padding: 4px 7px; border-radius: 8px; background: rgba(255,255,255,.12); }
+  .trail span.fresh { background: rgba(94,211,191,.3); color: #dffbf5; }
+  .trail .fade1 { opacity: .35 } .trail .fade2 { opacity: .6 }
+  .keysbar { position: absolute !important; left: 0; right: 0; z-index: 9 !important; display: flex; gap: 6px; padding: 7px 8px; overflow: hidden; }
+  .k { min-width: 40px; height: 36px; padding: 0 9px; border-radius: 12px; display: grid; place-items: center; font: 600 14px ui-monospace, Menlo, monospace; color: rgba(255,255,255,.9); flex: none; }
+  .k.held { background: var(--accent); color: var(--on-accent); }
+  .kb { position: absolute !important; left: 0; right: 0; bottom: 0; height: 336px; z-index: 9 !important; background: rgba(40,42,44,.86); backdrop-filter: blur(30px);
+        border-radius: 26px 26px 0 0; padding: 8px 4px 0; }
+  .kb .sugg { height: 42px; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; text-align: center; font-size: 16px; color: #eee; margin-bottom: 6px; }
+  .kb .sugg div + div { border-left: 1px solid rgba(255,255,255,.15); }
+  .kb .r { display: flex; gap: 6px; justify-content: center; margin-bottom: 11px; }
+  .kb .r i { width: 33px; height: 43px; border-radius: 7px; background: rgba(255,255,255,.28); font-style: normal; display: grid; place-items: center; font-size: 21px; color: #fff; }
+  .kb .r i.w { width: 46px; background: rgba(255,255,255,.14); font-size: 16px; }
+  .kb .r i.sp { width: 186px; font-size: 15px; } .kb .r i.ret { width: 90px; background: rgba(255,255,255,.14); font-size: 15px; }
+  .kb .r.mid { padding: 0 18px; }
+  .kb .bot { display: flex; justify-content: space-between; padding: 6px 26px 0; font-size: 22px; color: #ddd; }
+
+  /* toast */
+  .toast { position: absolute !important; left: 50%; top: 64px; translate: -50% 0; z-index: 10 !important; height: 40px; padding: 0 16px; border-radius: 20px;
+           display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .toast .tick { width: 20px; height: 20px; border-radius: 10px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 12px; }
+
+  /* the guide: a sheet of glass groups */
+  .gsheet { position: absolute !important; left: 0; right: 0; bottom: 0; top: 56px; z-index: 9 !important; border-radius: 38px 38px 0 0;
+            background: rgba(22,30,28,.80); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%);
+            border-top: .5px solid rgba(255,255,255,.22); display: flex; flex-direction: column; overflow: hidden; }
+  .grab { width: 38px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.35); margin: 7px auto 0; flex: none; }
+  .gbar { height: 58px; display: flex; align-items: center; justify-content: center; position: relative; flex: none; }
+  .gbar b { font-size: 17px; } .gbar .done { position: absolute; right: 14px; height: 38px; padding: 0 16px; border-radius: 19px; display: grid; place-items: center;
+            background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 15px; }
+  .gbody { flex: 1; overflow: hidden; padding: 0 16px; }
+  .gseg { height: 38px; border-radius: 19px; padding: 3px; display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 8px; }
+  .gseg div { display: grid; place-items: center; font-size: 14px; font-weight: 600; border-radius: 16px; color: rgba(255,255,255,.75); }
+  .gseg div.on { background: rgba(255,255,255,.2); color: #fff; }
+  .inuse { color: var(--label2); font-size: 12px; padding: 2px 16px 8px; display: flex; align-items: center; gap: 6px; }
+  .gsec { color: var(--label2); font-size: 13px; font-weight: 600; padding: 10px 16px 7px; text-transform: uppercase; letter-spacing: .02em; }
+  .glist { border-radius: 26px; overflow: hidden; }
+  .gl { min-height: 66px; display: flex; align-items: center; gap: 14px; padding: 9px 14px; position: relative; }
+  .gl + .gl::before { content: ""; position: absolute; top: 0; left: 94px; right: 0; height: .5px; background: var(--sep); }
+  .gl b { display: block; font-size: 16px; font-weight: 600; letter-spacing: -.3px; }
+  .gl small { display: block; color: var(--label2); font-size: 13px; line-height: 17px; }
+
+  /* a gesture, drawn: a small pad, the fingers as light, the Mac's pointer */
+  .pad { width: 66px; height: 46px; border-radius: 13px; flex: none; position: relative; overflow: hidden;
+         background: rgba(0,0,0,.28); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+  .f { position: absolute; width: 13px; height: 13px; border-radius: 7px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .ptr { position: absolute; width: 9px; height: 13px; }
+  .pad .ring { position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--accent); }
+  @keyframes tap1 { 0%,30%,100% { transform: scale(0); opacity: 0 } 8% { transform: scale(1); opacity: 1 } 20% { transform: scale(.85); opacity: .9 } }
+  .tap .f { left: 18px; top: 17px; animation: tap1 1.6s infinite; }
+  .tap2 .f:nth-child(1) { left: 14px; top: 17px; animation: tap1 1.6s infinite; } .tap2 .f:nth-child(2) { left: 31px; top: 15px; animation: tap1 1.6s infinite; }
+  .tap3 .f:nth-child(1) { left: 8px; top: 18px; animation: tap1 1.6s infinite; } .tap3 .f:nth-child(2) { left: 24px; top: 14px; animation: tap1 1.6s infinite; } .tap3 .f:nth-child(3) { left: 40px; top: 18px; animation: tap1 1.6s infinite; }
+  .ptrflash { animation: flash 1.6s infinite; } @keyframes flash { 0%,6%,40%,100% { opacity: .55 } 10%,30% { opacity: 1; transform: scale(.85) } }
+  @keyframes slide1 { 0%,10% { transform: translate(0,0) } 60%,100% { transform: translate(26px,-8px) } }
+  .slide .f { left: 10px; top: 24px; animation: slide1 2s ease-in-out infinite; } .slide .ptr { left: 26px; top: 14px; animation: slide1 2s ease-in-out infinite; }
+  @keyframes holdring { 0% { transform: scale(1.8); opacity: 0 } 25% { transform: scale(1); opacity: 1 } 45%,100% { transform: scale(1); opacity: 0 } }
+  @keyframes holddrag { 0%,35% { transform: translate(0,0) } 80%,100% { transform: translate(24px,-6px) } }
+  .hold .f, .hold .ring { animation: holddrag 2.4s ease-in-out infinite; } .hold .f { left: 10px; top: 22px; } .hold .ring { left: 5.5px; top: 17.5px; animation: holdring 2.4s infinite; }
+  .hold .doc { position: absolute; left: 30px; top: 9px; width: 10px; height: 13px; border-radius: 2px; background: rgba(255,255,255,.75); animation: holddrag 2.4s ease-in-out infinite; }
+  @keyframes scr { 0%,10% { transform: translateY(8px) } 70%,100% { transform: translateY(-8px) } }
+  @keyframes lines { 0%,10% { transform: translateY(0) } 70%,100% { transform: translateY(-14px) } }
+  .scroll .f { top: 18px; animation: scr 1.8s ease-in-out infinite; } .scroll .f:nth-child(1) { left: 8px } .scroll .f:nth-child(2) { left: 22px }
+  .scroll .lines { position: absolute; right: 7px; top: 6px; width: 22px; height: 60px; animation: lines 1.8s ease-in-out infinite;
+                   background: repeating-linear-gradient(rgba(255,255,255,.5) 0 2px, transparent 2px 7px); }
+  @keyframes up3 { 0%,10% { transform: translateY(10px); opacity: 0 } 25% { opacity: 1 } 70% { transform: translateY(-8px); opacity: 1 } 100% { transform: translateY(-8px); opacity: 0 } }
+  .swup .f { top: 20px; animation: up3 1.8s ease-in-out infinite; } .swup .f:nth-child(1) { left: 14px } .swup .f:nth-child(2) { left: 27px } .swup .f:nth-child(3) { left: 40px }
+  .swup .spaces { position: absolute; left: 6px; right: 6px; top: 5px; display: flex; gap: 3px; } .swup .spaces i { flex: 1; height: 9px; border-radius: 2px; background: rgba(255,255,255,.3); }
+  .swup .spaces i:nth-child(2) { background: rgba(94,211,191,.6); }
+  @keyframes side3 { 0%,10% { transform: translateX(14px); opacity: 0 } 25% { opacity: 1 } 70% { transform: translateX(-12px); opacity: 1 } 100% { transform: translateX(-12px); opacity: 0 } }
+  .swside .f { left: 34px; animation: side3 1.8s ease-in-out infinite; } .swside .f:nth-child(1) { top: 7px } .swside .f:nth-child(2) { top: 17px } .swside .f:nth-child(3) { top: 27px }
+  @keyframes pinchA { 0%,10% { transform: translate(0,0) } 60%,100% { transform: translate(-9px,6px) } }
+  @keyframes pinchB { 0%,10% { transform: translate(0,0) } 60%,100% { transform: translate(9px,-6px) } }
+  .pinch .f:nth-child(1) { left: 22px; top: 18px; animation: pinchA 1.8s ease-in-out infinite alternate; } .pinch .f:nth-child(2) { left: 32px; top: 14px; animation: pinchB 1.8s ease-in-out infinite alternate; }
+  .ballmini { position: absolute; left: 24px; top: 14px; width: 18px; height: 18px; border-radius: 6px; background: rgba(28,28,31,.9); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); display: grid; place-items: center; }
+  .ballmini::after { content: ""; width: 9px; height: 9px; border-radius: 5px; background: rgba(255,255,255,.6); }
+  .edge .f { left: 2px; top: 17px; animation: edgein 1.8s ease-in-out infinite; } @keyframes edgein { 0%,10% { transform: translateX(-6px); opacity: 0 } 30% { opacity: 1 } 70%,100% { transform: translateX(24px); opacity: 1 } }
+  .gfoot { color: var(--label2); font-size: 13px; line-height: 18px; padding: 12px 16px 0; }
+
+  /* first time watching: one card, over the picture only until it's dismissed */
+  .coach { position: absolute !important; left: 16px; right: 16px; bottom: 96px; z-index: 9 !important; border-radius: 30px; padding: 18px; }
+  .coach .demo { height: 112px; border-radius: 20px; background: rgba(0,0,0,.28); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); position: relative; overflow: hidden; margin-bottom: 14px; }
+  .coach .demo .f { width: 26px; height: 26px; border-radius: 13px; left: 50px; top: 70px; animation: coachf 3s ease-in-out infinite; }
+  .coach .demo .ptr { width: 16px; height: 23px; left: 150px; top: 40px; animation: coachp 3s ease-in-out infinite; }
+  @keyframes coachf { 0%,10% { transform: translate(0,0) } 55%,100% { transform: translate(120px,-30px) } }
+  @keyframes coachp { 0%,10% { transform: translate(0,0) } 55%,100% { transform: translate(80px,-20px) } }
+  .coach b { font-size: 20px; display: block; letter-spacing: -.3px; } .coach p { color: var(--label2); font-size: 15px; line-height: 20px; margin: 4px 0 14px; }
+  .coach .btns { display: flex; gap: 10px; } .coach .btns div { flex: 1; height: 48px; border-radius: 24px; display: grid; place-items: center; font-weight: 600; font-size: 16px; }
+  .coach .btns .pri { background: rgba(255,255,255,.94); color: #0b0b0b; }
+  .dots { display: flex; gap: 6px; justify-content: center; margin-bottom: 12px; } .dots i { width: 7px; height: 7px; border-radius: 4px; background: rgba(255,255,255,.3); } .dots i.on { background: #fff; width: 18px; }
+
+  .tries { display: flex; align-items: center; gap: 16px; margin: -4px 0 16px; font-size: 15px; color: var(--label2); }
+  .tries .lead { font-weight: 600; color: var(--label3); text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
+  .try { display: flex; align-items: center; gap: 5px; font-weight: 500; }
+  .try i { width: 18px; height: 18px; border-radius: 9px; border: 1.5px dashed rgba(255,255,255,.35); font-style: normal; display: grid; place-items: center; font-size: 9px; }
+  .try.done { color: var(--accent); font-weight: 700; } .try.done i { background: var(--accent); border: 0; color: var(--on-accent); font-size: 11px; font-weight: 800; box-shadow: 0 0 8px var(--accent); }
+  .coach .demo .lines2 { position: absolute; right: 40px; top: 14px; width: 120px; height: 260px; animation: lines2 2.4s ease-in-out infinite;
+                         background: repeating-linear-gradient(rgba(255,255,255,.35) 0 4px, transparent 4px 18px); -webkit-mask: linear-gradient(90deg,#000 70%,transparent); }
+  @keyframes lines2 { 0%,15% { transform: translateY(0) } 70%,100% { transform: translateY(-80px) } }
+  .coach .demo .f2 { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: var(--accent); box-shadow: 0 0 14px var(--accent); top: 70px; animation: f2 2.4s ease-in-out infinite; }
+  @keyframes f2 { 0%,15% { transform: translateY(0) } 70%,100% { transform: translateY(-50px) } }
+  .coach .demo .mini-ball { position: absolute; right: 26px; top: 50px; width: 42px; height: 42px; border-radius: 13px; background: rgba(28,28,31,.85); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); display: grid; place-items: center; }
+  .coach .demo .mini-ball::after { content: ""; width: 20px; height: 20px; border-radius: 10px; background: rgba(255,255,255,.6); }
+  .coach .demo .mini-tray { position: absolute; left: 18px; right: 82px; top: 34px; display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+  .coach .demo .mini-tray i { height: 52px; border-radius: 13px; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); display: grid; place-items: center; font-style: normal; font-size: 18px; }
+  .ball.spot { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 0 0 4px rgba(94,211,191,.55), 0 0 0 14px rgba(94,211,191,.16); animation: spot 1.6s ease-in-out infinite; }
+  @keyframes spot { 50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 0 0 6px rgba(94,211,191,.7), 0 0 0 20px rgba(94,211,191,.08); } }
+  .coach.top { bottom: auto; top: 150px; }
+  /* the live first-time flow */
+  .livepic { cursor: none; }
+  .livepic .files { transition: transform .15s ease-out; }
+  .livepic .files div { padding: 0 6px; border-radius: 5px; }
+  .livepic .files div.sel { background: #2f6fde; color: #fff; }
+  .ctx { position: absolute; width: 150px; border-radius: 10px; background: rgba(40,40,44,.96); box-shadow: 0 8px 24px rgba(0,0,0,.5); padding: 6px; font-size: 13px; color: #eee; line-height: 26px; z-index: 4; display: none; }
+  .ctx div { padding: 0 8px; border-radius: 5px; } .ctx div:nth-child(2) { background: #2f6fde; }
+  .ripple { position: absolute; width: 34px; height: 34px; margin: -17px; border-radius: 50%; border: 2px solid var(--accent); z-index: 4; pointer-events: none; animation: rip .4s ease-out forwards; }
+  @keyframes rip { from { transform: scale(.4); opacity: 1 } to { transform: scale(1.5); opacity: 0 } }
+  .try { transition: color .25s; } .try i { transition: background .25s, border-color .25s; }
+  .try.done i { animation: pop .3s ease-out; } @keyframes pop { 50% { transform: scale(1.35) } }
+  .coach { transition: top .35s cubic-bezier(.2,.8,.2,1), bottom .35s, opacity .25s; }
+  .coach.gone { opacity: 0; pointer-events: none; }
+  .again { margin-top: 12px; height: 36px; padding: 0 16px; border-radius: 18px; background: #2a2c2f; color: #fff; border: 0; font: 600 13px -apple-system, sans-serif; cursor: pointer; }
+  .livetray { display: none; }
+  .notes { max-width: 1280px; margin: 34px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .notes div { background: #1c1d1f; border-radius: 18px; padding: 16px 18px; font-size: 14px; line-height: 1.6; color: rgba(255,255,255,.72); }
+  .notes b { color: #fff; display: block; margin-bottom: 6px; font-size: 15px; } .notes code { font: 600 12.5px ui-monospace, Menlo, monospace; color: var(--accent); }
+
+  /* typing v3: no box — only what an input method is composing waits on the phone */
+  .composing { position: absolute !important; left: 8px; right: 8px; z-index: 9 !important; border-radius: 22px; padding: 10px 14px;
+               display: flex; align-items: center; gap: 10px; }
+  .composing .m { font-size: 19px; font-weight: 600; color: #dffbf5; border-bottom: 2px solid var(--accent); padding-bottom: 1px; letter-spacing: .02em; }
+  .composing small { margin-left: auto; color: var(--label2); font-size: 12px; white-space: nowrap; }
+  .kb .cand { height: 42px; display: flex; align-items: center; gap: 18px; padding: 0 14px; font-size: 19px; color: #fff; margin-bottom: 6px; white-space: nowrap; overflow: hidden; }
+  .kb .cand b { color: var(--accent); font-weight: 600; } .kb .cand span { color: #ddd; }
+  .k.act { color: var(--accent); }
+  .k.sep { min-width: 1px; width: 1px; padding: 0; background: var(--sep); height: 22px; align-self: center; border-radius: 0; }
+  .note { position: absolute !important; left: 50%; translate: -50% 0; z-index: 10 !important; padding: 8px 14px; border-radius: 16px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .pic .win .code .just { color: #fff; background: rgba(94,211,191,.22); border-radius: 3px; }
+  table.cmp { max-width: 1280px; margin: 10px auto 0; border-collapse: collapse; font-size: 14px; line-height: 1.5; }
+  table.cmp th, table.cmp td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--sep); vertical-align: top; }
+  table.cmp th { color: var(--label2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  table.cmp td:first-child { color: #fff; font-weight: 600; white-space: nowrap; }
+  table.cmp td { color: rgba(255,255,255,.72); }
+
+  /* the ball: tap to type, hold for the rest */
+  /* the ball is round, and its own face says what a tap does — no badge stuck on its corner */
+  .ball { border-radius: 50%; }
+  .ball.key::after { width: 36px; height: 36px; border-radius: 18px; background: rgba(255,255,255,.82); box-shadow: 0 0 0 6px rgba(255,255,255,.10); }
+  .ball svg.face { position: absolute; inset: 0; margin: auto; width: 22px; height: 22px; z-index: 1; fill: none; stroke: #1c1c1f; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .ball.glow { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 0 0 3px var(--accent), 0 0 22px var(--accent); }
+  .ball.pressed { transform: scale(1.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.3), 0 0 0 10px rgba(255,255,255,.10), 0 12px 24px rgba(0,0,0,.45); }
+  .lesson { position: absolute !important; left: 22px; right: 22px; z-index: 9 !important; border-radius: 28px; padding: 18px; }
+  .lesson h4 { font-size: 19px; letter-spacing: -.01em; margin-bottom: 6px; }
+  .lesson p { color: var(--label2); font-size: 14px; line-height: 1.45; }
+  .lesson .row { display: flex; gap: 10px; margin-top: 14px; align-items: center; font-size: 14px; }
+  .lesson .dot { width: 22px; height: 22px; border-radius: 11px; border: 1.5px solid var(--edge); flex: none; }
+  .lesson .dot.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .picrow { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; height: 34px; border-radius: 17px; padding: 2px; background: rgba(0,0,0,.28); margin: 0 0 12px; }
+  .picrow div { display: grid; place-items: center; font-size: 13px; font-weight: 600; border-radius: 15px; color: rgba(255,255,255,.7); }
+  .picrow div.on { background: rgba(255,255,255,.2); color: #fff; }
+
+  /* keys with fingers: a held key applies to the next gesture; keys float on the picture */
+  .map { background: #e9e4d8; }
+  .map .menubar { background: rgba(30,30,34,.85); }
+  .map .land { position: absolute; inset: 54px 0 0 0; overflow: hidden;
+               background:
+                 linear-gradient(115deg, transparent 46%, #fff 46%, #fff 47.4%, transparent 47.4%),
+                 linear-gradient(28deg, transparent 58%, #fff 58%, #fff 59.2%, transparent 59.2%),
+                 linear-gradient(170deg, transparent 30%, #f6d98a 30%, #f6d98a 31.6%, transparent 31.6%),
+                 radial-gradient(60% 26% at 22% 30%, #bfe3b4 0 60%, transparent 61%),
+                 radial-gradient(40% 18% at 78% 72%, #bfe3b4 0 60%, transparent 61%),
+                 radial-gradient(70% 22% at 70% 12%, #a8d4f2 0 60%, transparent 61%),
+                 #ece7db; }
+  .fkey { position: absolute !important; z-index: 8 !important; min-width: 50px; height: 46px; padding: 0 12px; border-radius: 15px; display: grid; place-items: center;
+          font: 600 17px ui-monospace, Menlo, monospace; color: #fff; background: rgba(28,28,31,.72); backdrop-filter: blur(14px);
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), 0 10px 22px rgba(0,0,0,.4); }
+  .fkey.held { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 4px rgba(94,211,191,.28), 0 10px 22px rgba(0,0,0,.4); }
+  .fkey.locked::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 6px; height: 3px; border-radius: 2px; background: var(--on-accent); }
+  .fkey.ghost { background: rgba(94,211,191,.18); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); border: 0; }
+  .tip { position: absolute !important; z-index: 10 !important; width: 58px; height: 58px; border-radius: 29px; background: rgba(28,28,31,.30);
+         box-shadow: 0 0 0 2.5px rgba(255,255,255,.95), 0 6px 16px rgba(0,0,0,.4); }
+  .pic.map ~ .note { background: rgba(28,28,31,.80); }
+  .pic.map ~ .keysbar.glass { background: rgba(28,28,31,.62); }
+  .pic.map ~ .move { color: #1c1c1f; text-shadow: 0 0 6px rgba(255,255,255,.9); }
+  .tip.small { width: 46px; height: 46px; border-radius: 23px; }
+  .move { position: absolute !important; z-index: 10 !important; color: #fff; font-size: 26px; font-weight: 700; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  .path { position: absolute !important; z-index: 9 !important; border-top: 2.5px dashed var(--accent); transform-origin: left center; }
+  .k.gone { opacity: .25; }
+
+  /* ---- the page (the phones above are the app's own mockup styles) ---- */
+  html { scroll-behavior: smooth; }
+  body { padding: 0; background: #070d0c; font-family: -apple-system, "SF Pro Display", "SF Pro Text", system-ui, sans-serif; line-height: 1.5; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+  .top { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+         background: rgba(7,13,12,.72); border-bottom: 1px solid rgba(255,255,255,.07); }
+  .top .wrap { display: flex; align-items: center; height: 64px; gap: 28px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .brand img { width: 32px; height: 32px; border-radius: 8px; }
+  .top nav { margin-left: auto; display: flex; gap: 26px; font-size: 14.5px; color: rgba(255,255,255,.62); }
+  .top nav a:hover { color: #fff; }
+  .btn { display: inline-flex; align-items: center; height: 46px; padding: 0 22px; border-radius: 23px; font-weight: 650; font-size: 15.5px;
+         background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 26px rgba(94,211,191,.28); transition: transform .15s, box-shadow .15s; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(94,211,191,.38); }
+  .btn.small { height: 36px; padding: 0 16px; font-size: 14px; }
+  .btn.ghost { background: rgba(255,255,255,.08); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+
+  .hero { position: relative; overflow: hidden; max-width: none; margin: 0; }
+  .hero::before { content: ""; position: absolute; inset: -20% -10% auto -10%; height: 130%; z-index: 0;
+                  background: radial-gradient(60% 55% at 74% 34%, rgba(94,211,191,.34), transparent 70%),
+                              radial-gradient(45% 40% at 12% 8%, rgba(46,140,122,.30), transparent 70%); }
+  .hero .wrap { position: relative; z-index: 1; display: flex; align-items: center; gap: 56px; padding-top: 84px; padding-bottom: 96px; }
+  .hero .say { flex: 1; min-width: 0; }
+  .tag { display: inline-block; font: 600 12.5px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .09em; text-transform: uppercase;
+         color: var(--accent); padding: 7px 12px; border-radius: 999px; background: rgba(94,211,191,.10); box-shadow: inset 0 0 0 1px rgba(94,211,191,.28); }
+  .hero h1 { margin-top: 22px; font-size: clamp(44px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -.035em; font-weight: 750; }
+  .hero h1 span { color: var(--accent); }
+  .hero p.lead { margin-top: 22px; font-size: 19.5px; color: rgba(255,255,255,.68); max-width: 520px; }
+  .hero .go { margin-top: 30px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .facts { margin-top: 44px; display: flex; gap: 34px; flex-wrap: wrap; padding-top: 26px; border-top: 1px solid rgba(255,255,255,.09); }
+  .facts div { max-width: 170px; }
+  .facts b { display: block; font-size: 15.5px; }
+  .facts span { display: block; margin-top: 3px; font-size: 13.5px; color: rgba(255,255,255,.52); }
+  .hero .show { flex: none; width: 386px; height: 800px; display: grid; place-items: center; }
+  .hero .show .device { transform: scale(1.24); transform-origin: center; }
+
+  section.block { padding: 96px 0; border-top: 1px solid rgba(255,255,255,.06); }
+  .kicker { font: 600 12.5px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  h2 { margin-top: 12px; font-size: clamp(30px, 4vw, 44px); line-height: 1.1; letter-spacing: -.028em; font-weight: 720; max-width: 760px; }
+  .sub { margin-top: 14px; font-size: 18px; color: rgba(255,255,255,.62); max-width: 640px; }
+
+  .feature { display: flex; align-items: center; gap: 72px; margin-top: 84px; }
+  .feature:nth-of-type(even) { flex-direction: row-reverse; }
+  .feature .words { flex: 1; min-width: 0; }
+  .feature .num { font: 600 13px ui-monospace, "SF Mono", Menlo, monospace; color: var(--accent); letter-spacing: .1em; }
+  .feature h3 { margin-top: 10px; font-size: 30px; line-height: 1.15; letter-spacing: -.022em; font-weight: 700; }
+  .feature p { margin-top: 14px; font-size: 17.5px; color: rgba(255,255,255,.66); max-width: 470px; }
+  .feature ul { margin: 18px 0 0; padding: 0; list-style: none; }
+  .feature li { position: relative; padding-left: 20px; margin-top: 9px; font-size: 15.5px; color: rgba(255,255,255,.72); }
+  .feature li::before { content: ""; position: absolute; left: 0; top: 10px; width: 8px; height: 2px; border-radius: 1px; background: var(--accent); }
+  .feature kbd { font: 600 13px ui-monospace, "SF Mono", Menlo, monospace; padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.10); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+  .feature .frame { flex: none; width: 380px; display: grid; place-items: center; padding: 34px 0; border-radius: 34px;
+                    background: radial-gradient(90% 70% at 50% 30%, rgba(94,211,191,.16), rgba(255,255,255,.03) 70%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+
+  .steps { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .step2 { padding: 26px; border-radius: 24px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .step2 .n { width: 34px; height: 34px; border-radius: 17px; display: grid; place-items: center; font: 700 14px ui-monospace, "SF Mono", Menlo, monospace;
+              color: var(--on-accent); background: var(--accent); }
+  .step2 h4 { margin-top: 16px; font-size: 19px; letter-spacing: -.01em; }
+  .step2 p { margin-top: 8px; font-size: 15px; color: rgba(255,255,255,.62); }
+
+  .quiet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; }
+  .quiet div { padding: 22px 24px; border-radius: 20px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .quiet b { display: block; font-size: 17px; }
+  .quiet span { display: block; margin-top: 6px; font-size: 14.5px; color: rgba(255,255,255,.58); }
+
+  .join { text-align: center; padding: 110px 0; position: relative; overflow: hidden; border-top: 1px solid rgba(255,255,255,.06); }
+  .join::before { content: ""; position: absolute; inset: 0; background: radial-gradient(50% 70% at 50% 100%, rgba(94,211,191,.26), transparent 70%); }
+  .join > * { position: relative; }
+  .join img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+  .join h2 { margin: 26px auto 0; }
+  .join p { margin: 14px auto 28px; color: rgba(255,255,255,.62); font-size: 18px; max-width: 520px; }
+  footer { padding: 34px 0 48px; border-top: 1px solid rgba(255,255,255,.06); color: rgba(255,255,255,.42); font-size: 12.5px; text-align: center; }
+
+  @media (max-width: 900px) {
+    .top nav { display: none; }
+    .hero .wrap, .feature, .feature:nth-of-type(even) { flex-direction: column; gap: 40px; text-align: left; }
+    .hero .wrap { padding-top: 56px; padding-bottom: 64px; }
+    .hero .show { width: 311px; height: 645px; } .hero .show .device { transform: none; }
+    .feature .frame { width: 100%; }
+    .steps, .quiet { grid-template-columns: 1fr; }
+    section.block { padding: 72px 0; }
+  }
+
+  /* ---- screens drawn for this page: an agent in a terminal, the devices list, a simulator touched ---- */
+  .term { position: absolute !important; left: 12px; right: 12px; top: 68px; height: 470px; border-radius: 14px; background: #0d0f12; box-shadow: 0 12px 34px rgba(0,0,0,.55); overflow: hidden; }
+  .term .bar { height: 28px; background: #1c1e23; display: flex; gap: 7px; align-items: center; padding: 0 11px; font-size: 11px; color: #8b9099; }
+  .term .bar i { width: 11px; height: 11px; border-radius: 6px; } .term .bar span { margin-left: 8px; }
+  .term pre { margin: 0; padding: 16px 14px 0; font: 13.5px/1.85 ui-monospace, "SF Mono", Menlo, monospace; color: #b9c0cb; white-space: pre-wrap; }
+  .term .ok { color: var(--accent); } .term .dim { color: #6c7380; } .term .ask { color: #fff; font-weight: 600; }
+  .term .pick { display: block; margin: 0 -6px; padding: 0 6px; border-radius: 6px; background: rgba(94,211,191,.16); color: #dffbf5; }
+  .devs { position: absolute !important; inset: 0; padding: 64px 16px 0; }
+  .devs h5 { font-size: 34px; letter-spacing: -.02em; font-weight: 750; margin: 0; }
+  .devs .chips { display: flex; gap: 8px; margin: 14px 0 18px; }
+  .devs .chips span { height: 32px; padding: 0 13px; border-radius: 16px; display: grid; place-items: center; font-size: 13.5px; font-weight: 600; background: rgba(255,255,255,.12); }
+  .devs .chips span.on { background: #fff; color: #10201d; }
+  .devs .mac { font: 600 11.5px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; color: var(--label2); margin: 0 4px 8px; }
+  .devs .row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 20px; margin-bottom: 9px; }
+  .devs .thumb { width: 34px; height: 56px; border-radius: 9px; flex: none; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35); }
+  .devs .row b { display: block; font-size: 15.5px; } .devs .row small { display: block; font-size: 12.5px; color: var(--label2); margin-top: 1px; }
+  .devs .state { margin-left: auto; height: 30px; padding: 0 12px; border-radius: 15px; display: grid; place-items: center; font-size: 13px; font-weight: 650; background: rgba(255,255,255,.14); }
+  .devs .state.on { background: rgba(94,211,191,.22); color: var(--accent); }
+  .sim { position: absolute !important; inset: 0; background: #f4f5f7; color: #14161a; padding: 70px 22px 0; }
+  .sim .where { position: absolute; left: 0; right: 0; top: 0; height: 54px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-size: 12px; color: #7a808a; }
+  .sim h5 { margin: 0; font-size: 30px; letter-spacing: -.02em; font-weight: 750; }
+  .sim .line { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #e2e4e9; font-size: 16px; }
+  .sim .line b { font-weight: 650; }
+  .sim .pay { margin-top: 26px; height: 54px; border-radius: 16px; background: #14161a; color: #fff; display: grid; place-items: center; font-size: 17px; font-weight: 650; }
+  .sim .fresh { margin-top: 12px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-size: 17px; font-weight: 650; color: #0b6b5c; background: rgba(94,211,191,.28); box-shadow: inset 0 0 0 1.5px #5ED3BF; }
+  .pair { display: flex; gap: 22px; align-items: center; justify-content: center; }
+  .feature .frame.wide { width: 540px; }
+  .feature .frame.wide .device { transform: scale(.82); margin: -57px -27px; }
+  .feature code { white-space: nowrap; font: 600 13.5px ui-monospace, "SF Mono", Menlo, monospace; padding: 2px 8px; border-radius: 7px; background: rgba(94,211,191,.12); color: var(--accent); }
+  @media (max-width: 900px) { .feature .frame.wide { width: 100%; } .pair { gap: 0; } .feature .frame.wide .device:last-child { display: none; } }
+
+  /* ---- the screens move: each shows the thing being done, on a loop ---- */
+  .term .ln { opacity: 0; animation: 12s linear infinite both; }
+  .term .l1 { animation-name: at2; } .term .l2 { animation-name: at9; } .term .l3 { animation-name: at16; } .term .l4 { animation-name: at24; }
+  .term .l5 { animation-name: at34; } .term .l6 { animation-name: at58; } .term .l7 { animation-name: at70; }
+  @keyframes at2  { 0%, 1.9%  { opacity: 0 } 2%,  96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at9  { 0%, 8.9%  { opacity: 0 } 9%,  96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at16 { 0%, 15.9% { opacity: 0 } 16%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at24 { 0%, 23.9% { opacity: 0 } 24%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at34 { 0%, 33.9% { opacity: 0 } 34%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at58 { 0%, 57.9% { opacity: 0 } 58%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at70 { 0%, 69.9% { opacity: 0 } 70%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  /* the finger answers the question with return */
+  .tap-enter { opacity: 0; animation: tapEnter 12s ease-in-out infinite; }
+  @keyframes tapEnter { 0%, 42% { opacity: 0; transform: translate(26px, 44px) scale(1.1) } 47% { opacity: 1; transform: none } 51% { transform: scale(.82) } 55% { opacity: 1; transform: none } 60%, 100% { opacity: 0; transform: translate(26px, 44px) scale(1.1) } }
+  .fkey.enter { animation: keyLit 12s linear infinite; }
+  @keyframes keyLit { 0%, 49% { background: rgba(28,28,31,.72); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), 0 10px 22px rgba(0,0,0,.4) }
+                      51%, 57% { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 4px rgba(94,211,191,.28), 0 10px 22px rgba(0,0,0,.4) }
+                      60%, 100% { background: rgba(28,28,31,.72); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), 0 10px 22px rgba(0,0,0,.4) } }
+
+  .typed { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; width: 0; color: #fff; animation: typing 7s steps(14, end) infinite; }
+  @keyframes typing { 0%, 8% { width: 0 } 62%, 92% { width: 14ch } 100% { width: 0 } }
+
+  .state.swap { position: relative; min-width: 52px; animation: stateOn 8s linear infinite; }
+  .state.swap span { grid-area: 1 / 1; } .state.swap .a { animation: fadeOut 8s linear infinite; } .state.swap .b { opacity: 0; animation: fadeIn 8s linear infinite; }
+  @keyframes stateOn { 0%, 39% { background: rgba(255,255,255,.14); color: #fff } 42%, 92% { background: rgba(94,211,191,.22); color: var(--accent) } 100% { background: rgba(255,255,255,.14); color: #fff } }
+  @keyframes fadeOut { 0%, 39% { opacity: 1 } 42%, 92% { opacity: 0 } 100% { opacity: 1 } }
+  @keyframes fadeIn  { 0%, 39% { opacity: 0 } 42%, 92% { opacity: 1 } 100% { opacity: 0 } }
+  .tap-boot { opacity: 0; animation: tapOnce 8s ease-in-out infinite; }
+  .tap-pay { opacity: 0; animation: tapOnce 8s ease-in-out infinite; animation-delay: 4s; }
+  @keyframes tapOnce { 0%, 26% { opacity: 0; transform: translate(18px, 36px) scale(1.1) } 33% { opacity: 1; transform: none } 38% { transform: scale(.82) } 43% { opacity: 1; transform: none } 52%, 100% { opacity: 0; transform: translate(18px, 36px) scale(1.1) } }
+  .sim .fresh { animation: paid 8s linear infinite; animation-delay: 4s; }
+  @keyframes paid { 0%, 38% { background: rgba(94,211,191,.28); color: #0b6b5c } 41%, 90% { background: #5ED3BF; color: #04241E } 100% { background: rgba(94,211,191,.28); color: #0b6b5c } }
+
+  /* gestures: 0–33% pinch, 33–66% turn, 66–100% scroll; the map answers each, then comes back */
+  /* the map is bigger than its window, so turning and sliding it never shows an edge — and it stays under the menu bar */
+  .landclip { position: absolute; inset: 54px 0 0 0; overflow: hidden; }
+  .pic.map .landclip .land.moving { inset: -34% -60%; transform-origin: 50% 50%; animation: land 12s ease-in-out infinite; }
+  @keyframes land { 0%, 5% { transform: none } 22%, 28% { transform: scale(1.55) } 33% { transform: none }
+                    38% { transform: none } 56%, 61% { transform: rotate(32deg) scale(1.12) } 66% { transform: none }
+                    71% { transform: none } 89%, 94% { transform: translateY(96px) } 100% { transform: none } }
+  .finger-a, .finger-b { left: 168px; top: 300px; }
+  .finger-a { animation: fingerA 12s ease-in-out infinite; } .finger-b { animation: fingerB 12s ease-in-out infinite; }
+  @keyframes fingerA { 0% { opacity: 0; transform: translate(-22px, 22px) } 5% { opacity: 1; transform: translate(-22px, 22px) } 22% { opacity: 1; transform: translate(-74px, 74px) } 28% { opacity: 0; transform: translate(-74px, 74px) }
+                       33%, 36% { opacity: 0; transform: translate(-62px, 0) } 38% { opacity: 1; transform: translate(-62px, 0) } 56% { opacity: 1; transform: translate(-52px, -34px) } 61%, 69% { opacity: 0; transform: translate(-52px, -34px) }
+                       70% { opacity: 0; transform: translate(-40px, 60px) } 71% { opacity: 1; transform: translate(-40px, 60px) } 89% { opacity: 1; transform: translate(-40px, 156px) } 94%, 100% { opacity: 0; transform: translate(-40px, 156px) } }
+  @keyframes fingerB { 0% { opacity: 0; transform: translate(22px, -22px) } 5% { opacity: 1; transform: translate(22px, -22px) } 22% { opacity: 1; transform: translate(74px, -74px) } 28% { opacity: 0; transform: translate(74px, -74px) }
+                       33%, 36% { opacity: 0; transform: translate(62px, 0) } 38% { opacity: 1; transform: translate(62px, 0) } 56% { opacity: 1; transform: translate(52px, 34px) } 61%, 69% { opacity: 0; transform: translate(52px, 34px) }
+                       70% { opacity: 0; transform: translate(40px, 60px) } 71% { opacity: 1; transform: translate(40px, 60px) } 89% { opacity: 1; transform: translate(40px, 156px) } 94%, 100% { opacity: 0; transform: translate(40px, 156px) } }
+  .said { position: absolute !important; left: 0; right: 0; top: 74px; z-index: 10 !important; display: grid; justify-items: center; }
+  .said span { grid-area: 1 / 1; padding: 8px 14px; border-radius: 16px; font-size: 13.5px; font-weight: 650; color: #fff; background: rgba(28,28,31,.82); opacity: 0; animation: 12s linear infinite; }
+  .said .g1 { animation-name: say1; } .said .g2 { animation-name: say2; } .said .g3 { animation-name: say3; }
+  @keyframes say1 { 0%, 2% { opacity: 0 } 5%, 28% { opacity: 1 } 32%, 100% { opacity: 0 } }
+  @keyframes say2 { 0%, 35% { opacity: 0 } 38%, 61% { opacity: 1 } 65%, 100% { opacity: 0 } }
+  @keyframes say3 { 0%, 68% { opacity: 0 } 71%, 94% { opacity: 1 } 98%, 100% { opacity: 0 } }
+
+  .picrow.cycling div { animation: pick 8s linear infinite; }
+  .picrow.cycling div:nth-child(2) { animation-delay: 2s; } .picrow.cycling div:nth-child(3) { animation-delay: 4s; } .picrow.cycling div:nth-child(4) { animation-delay: 6s; }
+  .picrow.cycling div:nth-child(1) { animation-delay: 0s; }
+  @keyframes pick { 0%, 23% { background: rgba(255,255,255,.2); color: #fff } 25%, 100% { background: transparent; color: rgba(255,255,255,.7) } }
+
+
+  /* the hero: the next instruction typed on iOS's own keyboard, under the agent's session */
+  .term.short { height: 388px; }
+  .kb .r { align-items: flex-start; } .kb .r i { flex: none; }
+  .term .caret { display: inline-block; width: 8px; height: 15px; background: #fff; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  .term .lp { animation-name: at30; } .term .ln1 { animation-name: at64; } .term .ln2 { animation-name: at76; }
+  @keyframes at30 { 0%, 29.9% { opacity: 0 } 30%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at64 { 0%, 63.9% { opacity: 0 } 64%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes at76 { 0%, 75.9% { opacity: 0 } 76%, 96% { opacity: 1 } 100% { opacity: 0 } }
+  .typed.say { animation: saying 12s steps(25, end) infinite; }
+  @keyframes saying { 0%, 32% { width: 0 } 52%, 96% { width: 25ch } 100% { width: 0 } }
+  .tap-return { opacity: 0; animation: tapReturn 12s ease-in-out infinite; }
+  @keyframes tapReturn { 0%, 52% { opacity: 0; transform: translate(18px, 30px) scale(1.1) } 56% { opacity: 1; transform: none } 59% { transform: scale(.82) } 62% { opacity: 1; transform: none } 67%, 100% { opacity: 0; transform: translate(18px, 30px) scale(1.1) } }
+  .kb .r i.ret.lit { animation: retLit 12s linear infinite; }
+  @keyframes retLit { 0%, 58% { background: rgba(255,255,255,.14); color: #fff } 59%, 63% { background: var(--accent); color: var(--on-accent) } 66%, 100% { background: rgba(255,255,255,.14); color: #fff } }
+
+  /* connecting: the Macs found, one tapped, the sign-in, its screen */
+  .macthumb { width: 46px; height: 46px; border-radius: 13px; flex: none; position: relative; background: rgba(255,255,255,.12); display: grid; place-items: center; font-size: 24px; font-weight: 300; color: var(--accent); }
+  .macthumb:not(.plus)::before { content: ""; width: 26px; height: 9px; border-radius: 3px; background: #d9dde3; box-shadow: 0 0 0 .5px rgba(0,0,0,.3); }
+  .macthumb.book::before { width: 26px; height: 17px; border-radius: 3px 3px 0 0; background: linear-gradient(160deg,#3a6ea5,#1d2c46); box-shadow: inset 0 0 0 1.5px #d9dde3, 0 3px 0 -0.5px #d9dde3; }
+  .signin { position: absolute !important; left: 8px; right: 8px; bottom: 8px; z-index: 7 !important; border-radius: 40px; padding: 24px 16px 16px; text-align: center;
+            background: rgba(34,37,41,.94); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.22), 0 -20px 50px rgba(0,0,0,.45); animation: sheetUp 12s cubic-bezier(.3,.8,.3,1) infinite; }
+  .signin h6 { margin: 0; font-size: 20px; font-weight: 700; } .signin p { margin: 2px 0 14px; font-size: 14px; color: var(--label2); }
+  .signin .fld { display: flex; justify-content: space-between; align-items: center; height: 50px; padding: 0 16px; margin-top: 8px; border-radius: 16px; background: rgba(255,255,255,.08); font-size: 16px; }
+  .signin .fld span { color: var(--label2); } .signin .fld b { font-weight: 500; }
+  .typed.pw { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0; animation: password 12s steps(8, end) infinite; }
+  .seg2 { margin-top: 12px; height: 40px; border-radius: 20px; padding: 3px; display: grid; grid-template-columns: 1fr 1fr; background: rgba(0,0,0,.3); }
+  .seg2 div { display: grid; place-items: center; border-radius: 17px; font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.65); } .seg2 div.on { background: rgba(255,255,255,.2); color: #fff; }
+  .gobtn { margin-top: 14px; height: 52px; border-radius: 26px; display: grid; place-items: center; font-size: 17px; font-weight: 700; background: var(--accent); color: var(--on-accent); }
+  .arrive { position: absolute !important; inset: 0; z-index: 8 !important; opacity: 0; animation: arrive 12s ease-in-out infinite; }
+  .hud { position: absolute; left: 50%; top: 62px; translate: -50% 0; height: 34px; padding: 0 14px; border-radius: 17px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .hud i { width: 7px; height: 7px; border-radius: 4px; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .tap-mac { opacity: 0; animation: tapMac 12s ease-in-out infinite; } .tap-sign { opacity: 0; animation: tapSign 12s ease-in-out infinite; }
+  @keyframes tapMac { 0%, 8% { opacity: 0; transform: translate(18px, 30px) scale(1.1) } 12% { opacity: 1; transform: none } 15% { transform: scale(.82) } 18% { opacity: 1; transform: none } 23%, 100% { opacity: 0; transform: translate(18px, 30px) scale(1.1) } }
+  @keyframes sheetUp { 0%, 17% { transform: translateY(110%) } 24%, 58% { transform: none } 65%, 100% { transform: translateY(110%) } }
+  @keyframes password { 0%, 28% { width: 0 } 42%, 96% { width: 8ch } 100% { width: 0 } }
+  @keyframes tapSign { 0%, 45% { opacity: 0; transform: translate(18px, 30px) scale(1.1) } 49% { opacity: 1; transform: none } 52% { transform: scale(.82) } 55% { opacity: 1; transform: none } 60%, 100% { opacity: 0; transform: translate(18px, 30px) scale(1.1) } }
+  @keyframes arrive { 0%, 60% { opacity: 0 } 66%, 95% { opacity: 1 } 100% { opacity: 0 } }
+
+  /* someone who asked for less motion sees each screen at rest, complete */
+  @media (prefers-reduced-motion: reduce) {
+    .term .ln, .typed, .land.moving, .finger-a, .finger-b, .said span, .picrow.cycling div, .tap-enter, .tap-boot, .tap-pay, .fkey.enter, .state.swap, .state.swap span, .sim .fresh { animation: none !important; }
+    .term .ln { opacity: 1; } .typed { width: 14ch; } .said .g1 { opacity: 1; } .finger-a { transform: translate(-40px, 30px); } .finger-b { transform: translate(40px, -30px); }
+    .picrow.cycling div:first-child { background: rgba(255,255,255,.2); color: #fff; }
+    .tap-return, .kb .r i.ret.lit, .signin, .arrive, .tap-mac, .tap-sign, .typed.pw, .typed.say { animation: none !important; }
+    .typed.say { width: 25ch; } .typed.pw { width: 8ch; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="status" viewBox="0 0 74 13">
+    <rect x="0" y="8" width="3" height="4.5" rx="1" fill="#fff"/><rect x="5" y="5.5" width="3" height="7" rx="1" fill="#fff"/>
+    <rect x="10" y="3" width="3" height="9.5" rx="1" fill="#fff"/><rect x="15" y=".5" width="3" height="12" rx="1" fill="#fff"/>
+    <path d="M32 12l2.3-2.6a3.2 3.2 0 00-4.6 0zM27.6 7.4a6.2 6.2 0 018.8 0l1.4-1.5a8.2 8.2 0 00-11.6 0zM24.6 4.1a10.4 10.4 0 0114.8 0l.6-.7A11.6 11.6 0 0024 3.4z" fill="#fff"/>
+    <rect x="46.5" y=".5" width="23" height="12" rx="3.5" stroke="rgba(255,255,255,.5)" fill="none"/><rect x="48" y="2" width="20" height="9" rx="2" fill="#fff"/>
+  </symbol>
+  <symbol id="arrow" viewBox="0 0 18 26"><path d="M1 1v21l5.5-5.2 3.6 8 3.4-1.5-3.5-7.8H17z" fill="#fff" stroke="#000" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="#"><img src="static/logo.png" alt="">Baguette Remote</a>
+  <nav><a href="#coding">Remote coding</a><a href="#devices">Simulators and devices</a><a href="#mac">The whole Mac</a><a href="#setup">Set-up</a></nav>
+  <a class="btn small" href="TESTFLIGHT_PUBLIC_LINK">Join the beta</a>
+</div></div>
+
+<header class="hero"><div class="wrap">
+  <div class="say">
+    <span class="tag">Public beta on TestFlight</span>
+    <h1>Your coding agents,<br><span>in your pocket.</span></h1>
+    <p class="lead">Leave Claude Code or Codex working on your Mac. Baguette Remote puts that Mac on your iPhone, shaped to fit it, so you can watch the work, answer a question, say the next instruction and try the build on a simulator, from wherever you are.</p>
+    <div class="go"><a class="btn" href="TESTFLIGHT_PUBLIC_LINK">Join the beta on TestFlight</a><a class="btn ghost" href="#coding">See how it works</a></div>
+    <div class="facts">
+      <div><b>Nothing on the Mac</b><span>It uses macOS’s own Screen Sharing.</span></div>
+      <div><b>From anywhere</b><span>Your Wi-Fi, or Tailscale when you are out.</span></div>
+      <div><b>No account</b><span>No sign-up, no analytics.</span></div>
+    </div>
+  </div>
+  <div class="show"><div class="device"><div class="phone">
+    <div class="pic"><div class="menubar"><b>Terminal</b><span>Shell</span><span>Edit</span><span class="notch"></span><span class="clock">9:41</span></div></div>
+    <div class="island"></div>
+    <div class="term short"><div class="bar"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i><span>shop — agent</span></div>
+<pre><span class="ln l1"><span class="dim">~/shop $</span> claude</span>
+<span class="ln l2"><span class="ok">●</span> Read CheckoutView.swift</span>
+<span class="ln l3"><span class="ok">●</span> Edited 2 files</span>
+<span class="ln l4"><span class="ok">●</span> Ran tests <span class="dim">41 passed</span></span>
+
+<span class="ln lp"><span class="ask">&gt; </span><span class="typed say">add Apple Pay to checkout</span><span class="caret"></span></span>
+
+<span class="ln ln1"><span class="ok">●</span> Editing CheckoutView.swift</span>
+<span class="ln ln2"><span class="ok">●</span> Running tests <span class="dim">…</span></span></pre></div>
+    <div class="keysbar glass" style="bottom:336px"><div class="k glass">fn</div><div class="k sep"></div><div class="k glass">esc</div><div class="k glass">⇥</div><div class="k glass">⌘</div><div class="k glass">⌥</div><div class="k glass">⌃</div><div class="k glass">⇧</div><div class="k glass">←</div><div class="k glass">↑</div><div class="k glass">↓</div><div class="k glass">→</div></div>
+    <div class="kb">
+      <div class="sugg" style="color:var(--label3)"><div></div><div style="white-space:nowrap"></div><div></div></div>
+      <div class="r"><i>q</i><i>w</i><i>e</i><i>r</i><i>t</i><i>y</i><i>u</i><i>i</i><i>o</i><i>p</i></div>
+      <div class="r mid"><i>a</i><i>s</i><i>d</i><i>f</i><i>g</i><i>h</i><i>j</i><i>k</i><i>l</i></div>
+      <div class="r"><i class="w">⇧</i><i>z</i><i>x</i><i>c</i><i>v</i><i>b</i><i>n</i><i>m</i><i class="w">⌫</i></div>
+      <div class="r"><i class="w">123</i><i class="w"><svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5h.01M15 9.5h.01"/></svg></i><i class="sp">space</i><i class="ret lit">return</i></div>
+      <div class="bot"><span><svg class="i" viewBox="0 0 24 24" style="width:22px;height:22px"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg></span><span><svg class="i" viewBox="0 0 24 24" style="width:24px;height:24px"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg></span></div>
+    </div>
+  
+    <div class="ball key" style="top:396px"><svg class="face" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><path d="M6.2 10h.01M9.8 10h.01M13.4 10h.01M17 10h.01M6.2 13h.01M17.8 13h.01M9 14.6h6"/></svg></div>
+    <div class="tip small tap-return" style="left:321px;top:733px"></div>
+  </div></div></div>
+</div></header>
+
+<section class="block" id="coding"><div class="wrap">
+  <div class="kicker">Remote coding</div>
+  <h2>The agent keeps working. You keep it on course.</h2>
+  <p class="sub">A long task doesn’t have to keep you at your desk. Look in from the sofa, the train or the queue for coffee.</p>
+
+  <div class="feature">
+    <div class="words"><div class="num">01</div><h3>A terminal that fits your phone</h3>
+      <p>Your Mac makes a screen the exact shape of this iPhone, so the agent’s session fills it edge to edge at Retina sharpness. No squinting at a desktop.</p>
+      <ul><li>Watch files change and tests run as they happen</li><li>Answer a question with one tap: <kbd>esc</kbd> <kbd>⏎</kbd> <kbd>⌃C</kbd> and the arrows float on the screen</li><li>On a weak connection the Basic picture keeps text sharp</li></ul></div>
+    <div class="frame"><div class="device"><div class="phone">
+    <div class="pic"><div class="menubar"><b>Terminal</b><span>Shell</span><span>Edit</span><span class="notch"></span><span class="clock">9:41</span></div></div>
+    <div class="island"></div>
+    <div class="term"><div class="bar"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i><span>shop — agent</span></div>
+<pre><span class="ln l1"><span class="dim">~/shop $</span> claude</span>
+<span class="ln l2"><span class="ok">●</span> Read CheckoutView.swift</span>
+<span class="ln l3"><span class="ok">●</span> Edited 2 files</span>
+<span class="ln l4"><span class="ok">●</span> Ran tests <span class="dim">41 passed</span></span>
+
+<span class="ln l5"><span class="ask">Run the app on the simulator?</span></span>
+<span class="ln l5"><span class="pick">&gt; 1. Yes</span></span><span class="ln l5">  2. Yes, and don’t ask again</span>
+<span class="ln l5">  3. No, tell it what to do</span>
+
+<span class="ln l6"><span class="ok">●</span> Building shop <span class="dim">12 s</span></span>
+<span class="ln l7"><span class="ok">●</span> Running on iPhone 18 Pro</span></pre></div>
+    <div class="fkey" style="left:14px;top:612px">esc</div>
+    <div class="fkey enter" style="left:14px;top:668px">⏎</div><div class="tip small tap-enter" style="left:16px;top:668px"></div>
+    <div class="fkey" style="left:76px;top:668px">⌃C</div>
+    <div class="ball key"><svg class="face" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><path d="M6.2 10h.01M9.8 10h.01M13.4 10h.01M17 10h.01M6.2 13h.01M17.8 13h.01M9 14.6h6"/></svg></div>
+  </div></div></div>
+  </div>
+
+  <div class="feature">
+    <div class="words"><div class="num">02</div><h3>Say the next instruction</h3>
+      <p>Hold Dictate and talk. Your words are recognised on the phone and typed where the Mac’s cursor is.</p>
+      <ul><li>Or type on iOS’s own keyboard, each key landing on the Mac as you press it</li><li>Paste from iPhone types what you copied: an error, a link, a prompt you wrote earlier</li><li><kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>⌃</kbd> <kbd>⇧</kbd> hold for your next key, click or scroll</li></ul></div>
+    <div class="frame"><div class="device"><div class="phone">
+    <div class="pic"><div class="menubar"><b>Notes</b><span>File</span><span>Edit</span><span class="notch"></span><span class="clock">9:41</span></div>
+      <div class="win" style="height:210px"><div class="bar"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+        <div class="code" style="color:#d8dbe2;font-size:14px">Dear team,<br>the build is <span class="typed">ready to ship.</span><span class="caret"></span></div></div>
+    </div>
+    <div class="island"></div><div class="keysbar" style="bottom:384px;justify-content:flex-end;gap:8px;padding:0 8px"><div class="k glass act" style="font-family:inherit">Paste from iPhone</div><div class="k glass" style="font-family:inherit">⌄</div></div><div class="keysbar glass" style="bottom:336px"><div class="k glass">fn</div><div class="k sep"></div><div class="k glass">esc</div><div class="k glass">⇥</div><div class="k glass">⌘</div><div class="k glass">⌥</div><div class="k glass">⌃</div><div class="k glass">⇧</div><div class="k glass">←</div><div class="k glass">↑</div><div class="k glass">↓</div><div class="k glass">→</div></div><div class="kb">
+      <div class="sugg" style="color:var(--label3)"><div></div><div style="white-space:nowrap"></div><div></div></div>
+      <div class="r"><i>q</i><i>w</i><i>e</i><i>r</i><i>t</i><i>y</i><i>u</i><i>i</i><i>o</i><i>p</i></div>
+      <div class="r mid"><i>a</i><i>s</i><i>d</i><i>f</i><i>g</i><i>h</i><i>j</i><i>k</i><i>l</i></div>
+      <div class="r"><i class="w">⇧</i><i>z</i><i>x</i><i>c</i><i>v</i><i>b</i><i>n</i><i>m</i><i class="w">⌫</i></div>
+      <div class="r"><i class="w">123</i><i class="w"><svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5h.01M15 9.5h.01"/></svg></i><i class="sp">space</i><i class="ret">return</i></div>
+      <div class="bot"><span><svg class="i" viewBox="0 0 24 24" style="width:22px;height:22px"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg></span><span><svg class="i" viewBox="0 0 24 24" style="width:24px;height:24px"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg></span></div>
+    </div>
+  </div></div></div>
+  </div>
+</div></section>
+
+<section class="block" id="devices"><div class="wrap">
+  <div class="kicker">Simulators and devices</div>
+  <h2>Then try what it built.</h2>
+  <p class="sub">The simulators, Android emulators and iPhones on your Mac are one tap away, and you touch them as if they were in your hand.</p>
+
+  <div class="feature">
+    <div class="words"><div class="num">03</div><h3>Every device your Mac runs</h3>
+      <p>iPhone and iPad simulators, Android emulators, and real iPhones plugged into the Mac, in one list.</p>
+      <ul><li>Boot one or shut it down from your phone</li><li>Tap, slide and type on it directly: no pointer in the way</li><li>Needs <a href="https://github.com/tddworks/baguette" style="color:var(--accent)">baguette</a>, open source, running on the Mac: <code>baguette serve</code></li></ul></div>
+    <div class="frame wide"><div class="pair"><div class="device"><div class="phone">
+    <div class="ambient"></div>
+    <div class="island"></div>
+    <div class="devs">
+      <h5>Devices</h5>
+      <div class="chips"><span class="on">All</span><span>On</span><span>iPhone</span><span>Real</span></div>
+      <div class="mac">MAC MINI</div>
+      <div class="row glass"><div class="thumb" style="background:linear-gradient(160deg,#3a6ea5,#1d2c46)"></div><div><b>iPhone 18 Pro</b><small>iOS 26.4 · Simulator</small></div><div class="state on">On</div></div>
+      <div class="row glass"><div class="thumb" style="background:linear-gradient(160deg,#5fae7a,#1f4a36)"></div><div><b>Pixel 9</b><small>Android 16 · Emulator</small></div><div class="state swap"><span class="a">Boot</span><span class="b">On</span></div></div>
+      <div class="tip small tap-boot" style="left:312px;top:300px"></div>
+      <div class="row glass"><div class="thumb" style="background:linear-gradient(160deg,#8b6fc4,#2b2440)"></div><div><b>Test iPhone</b><small>iOS 26.4 · USB</small></div><div class="state on">On</div></div>
+      <div class="row glass"><div class="thumb" style="background:linear-gradient(160deg,#c9955a,#4a3320);width:44px"></div><div><b>iPad Pro 13-inch</b><small>Simulator · Off</small></div><div class="state">Boot</div></div>
+    </div>
+  </div></div><div class="device"><div class="phone">
+    <div class="sim"><div class="where">iPhone 18 Pro · Simulator</div>
+      <h5>Checkout</h5>
+      <div class="line"><span>Sourdough loaf</span><b>$7.50</b></div>
+      <div class="line"><span>Butter croissant × 2</span><b>$6.00</b></div>
+      <div class="line"><span>Total</span><b>$13.50</b></div>
+      <div class="pay">Pay with card</div>
+      <div class="fresh">Pay in one tap</div>
+    </div>
+    <div class="island"></div>
+    <div class="tip tap-pay" style="left:168px;top:452px"></div>
+  </div></div></div></div>
+  </div>
+</div></section>
+
+<section class="block" id="mac"><div class="wrap">
+  <div class="kicker">The whole Mac</div>
+  <h2>And everything else on your Mac, the way a Mac works.</h2>
+
+  <div class="feature">
+    <div class="words"><div class="num">04</div><h3>The Mac’s own gestures</h3>
+      <p>The glass is the Mac’s trackpad. Your fingers mean what they mean on a MacBook.</p>
+      <ul><li>Slide to point, tap to click, two fingers to scroll and right-click</li><li>Pinch to zoom a map or a page, turn two fingers to rotate it</li><li>Three fingers up for Mission Control, sideways for desktops</li></ul></div>
+    <div class="frame"><div class="device"><div class="phone">
+    <div class="pic map"><div class="menubar"><b>Maps</b><span>File</span><span>View</span><span class="notch"></span><span class="clock">9:41</span></div><div class="landclip"><div class="land moving"></div></div></div>
+    <div class="island"></div>
+    <div class="said"><span class="g1">Pinch to zoom</span><span class="g2">Turn to rotate</span><span class="g3">Two fingers to scroll</span></div>
+    <div class="tip finger-a"></div><div class="tip finger-b"></div>
+    <div class="ball key"><svg class="face" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><path d="M6.2 10h.01M9.8 10h.01M13.4 10h.01M17 10h.01M6.2 13h.01M17.8 13h.01M9 14.6h6"/></svg></div>
+  </div></div></div>
+  </div>
+
+  <div class="feature">
+    <div class="words"><div class="num">05</div><h3>A picture that gets through</h3>
+      <p>Choose how much network to spend: Best, Light, Low or Basic.</p>
+      <ul><li>Best is full video on your own Wi-Fi</li><li>Light and Low hold the Mac to 8 and 4 Mbps for a slower link</li><li>Basic needs no video at all; over Tailscale it is where you start</li></ul></div>
+    <div class="frame"><div class="device"><div class="phone">
+    <div class="pic"><div class="menubar"><b>Notes</b><span>File</span><span>Edit</span><span class="notch"></span><span class="clock">9:41</span></div>
+      <div class="win" style="height:210px"><div class="bar"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+        <div class="code" style="color:#d8dbe2;font-size:14px">Dear team,<br>the build is <span class="caret"></span></div></div>
+      <div class="dock"><span style="background:#5d86c4"></span><span style="background:#e7a33e"></span><span style="background:#5ED3BF"></span><span style="background:#c45d86"></span><span style="background:#8a8f99"></span></div>
+      <svg class="pointer" style="left:150px;top:150px"><use href="#arrow"/></svg>
+    </div>
+    <div class="island"></div><div class="ball key pressed" style="top:330px"><svg class="face" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><path d="M6.2 10h.01M9.8 10h.01M13.4 10h.01M17 10h.01M6.2 13h.01M17.8 13h.01M9 14.6h6"/></svg></div><div class="tray glass">
+      <div class="head"><div style="flex:1"><b>Mac mini</b><small><span style="width:7px;height:7px;border-radius:4px;background:var(--accent);display:inline-block;margin-right:5px;box-shadow:0 0 6px var(--accent)"></span>Phone-Sized Screen · Best</small></div>
+        <div class="pill glass">Center</div><div class="pill glass">Leave</div></div>
+      <div class="picrow cycling"><div>Best</div><div>Light</div><div>Low</div><div>Basic</div></div>
+      <div class="actions4">
+        <div class="act4 glass"><div class="sym"><svg class="i" viewBox="0 0 24 24" style="width:24px;height:24px"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg></div>Dictate</div>
+        <div class="act4 glass"><div class="sym">⌘</div>Shortcuts</div>
+        <div class="act4 glass"><div class="sym"><svg class="i" viewBox="0 0 24 24" style="width:24px;height:24px"><path d="M8 12V5.5a1.5 1.5 0 013 0V11M11 10.5v-6a1.5 1.5 0 013 0V11M14 6.5a1.5 1.5 0 013 0V13M17 9.5a1.5 1.5 0 013 0V15a7 7 0 01-7 7h-1.2a6 6 0 01-4.6-2.2L4.3 16a1.6 1.6 0 012.4-2L8 15.2"/></svg></div>Gestures</div>
+        <div class="act4 glass"><div class="sym">◔</div>Stats</div>
+      </div>
+    </div>
+  </div></div></div>
+  </div>
+</div></section>
+
+<section class="block" id="setup"><div class="wrap">
+  <div class="kicker">Set-up</div>
+  <h2>Three steps. The first is the only one the Mac needs.</h2>
+  <div class="feature">
+    <div class="words"><div class="num">06</div><h3>Connecting is one sign-in</h3>
+      <p>Open the app and your Macs are already there. Tap one, sign in with the name and password you log in to that Mac with, and its screen is on your phone.</p>
+      <ul><li>Macs on your Wi-Fi are found for you</li><li>Away from home, enter the Mac’s address or its Tailscale name once</li><li>The password is kept in this iPhone’s Keychain, nowhere else</li></ul></div>
+    <div class="frame"><div class="device"><div class="phone">
+    <div class="ambient"></div>
+    <div class="island"></div>
+    <div class="devs">
+      <h5>Macs</h5>
+      <div class="mac" style="margin-top:18px">ON YOUR NETWORK</div>
+      <div class="row glass"><div class="macthumb"></div><div><b>Mac mini</b><small>Screen Sharing is on</small></div><div class="state">Sign In</div></div>
+      <div class="row glass"><div class="macthumb book"></div><div><b>MacBook Pro</b><small>studio.tail1a2b.ts.net · Tailscale</small></div><div class="state on">Watch</div></div>
+      <div class="row glass"><div class="macthumb plus">+</div><div><b>Enter an Address</b><small>mac.local or 192.168.1.20</small></div></div>
+    </div>
+    <div class="tip small tap-mac" style="left:314px;top:150px"></div>
+    <div class="signin">
+      <h6>Sign In</h6><p>Mac mini</p>
+      <div class="fld"><span>Account</span><b>alex</b></div>
+      <div class="fld"><span>Password</span><b><span class="typed pw">••••••••</span></b></div>
+      <div class="seg2"><div class="on">Phone-Sized Screen</div><div>Mac’s Own Screen</div></div>
+      <div class="gobtn">Sign In</div>
+    </div>
+    <div class="tip small tap-sign" style="left:174px;top:772px"></div>
+    <div class="arrive"><div class="pic" style="position:absolute;inset:0"><div class="menubar"><b>Finder</b><span>File</span><span>Edit</span><span class="notch"></span><span class="clock">9:41</span></div>
+      <div class="win" style="top:112px;height:230px"><div class="bar"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+        <div class="code" style="color:#d8dbe2;font-size:13px">shop<br>&nbsp;&nbsp;CheckoutView.swift<br>&nbsp;&nbsp;CartView.swift<br>&nbsp;&nbsp;Tests</div></div>
+      <div class="dock"><span style="background:#5d86c4"></span><span style="background:#e7a33e"></span><span style="background:#5ED3BF"></span><span style="background:#c45d86"></span><span style="background:#8a8f99"></span></div></div>
+      <div class="hud glass"><i></i>Mac mini · Phone-Sized Screen</div>
+    </div>
+  </div></div></div>
+  </div>
+  <div class="steps">
+    <div class="step2"><div class="n">1</div><h4>Turn on Screen Sharing</h4><p>On the Mac: System Settings, General, Sharing, Screen Sharing. Nothing of ours is installed.</p></div>
+    <div class="step2"><div class="n">2</div><h4>Open the app and sign in</h4><p>It finds Macs on your Wi-Fi; away from home, type the Mac’s address or Tailscale name. Your password stays in this iPhone’s Keychain.</p></div>
+    <div class="step2"><div class="n">3</div><h4>For simulators and phones</h4><p>Run <code style="font:600 13px ui-monospace,Menlo,monospace;color:var(--accent)">baguette serve</code> on the Mac and they appear in the Devices tab.</p></div>
+  </div>
+</div></section>
+
+<section class="block" id="private"><div class="wrap">
+  <div class="kicker">Privacy</div>
+  <h2>Between your phone and your Mac. Nobody else.</h2>
+  <div class="quiet">
+    <div><b>No account</b><span>Nothing to sign up for, nothing to log in to but your own Mac.</span></div>
+    <div><b>No analytics</b><span>The app collects no data. Your code and your screen go to your phone and nowhere else.</span></div>
+    <div><b>No relay of ours</b><span>The phone talks to the Mac directly, over your network or your own Tailscale.</span></div>
+  </div>
+</div></section>
+
+<section class="join"><div class="wrap">
+  <img src="static/logo.png" alt="">
+  <h2>Try the public beta.</h2>
+  <p>Free while in beta, for iPhone and iPad on iOS 26 or later.</p>
+  <a class="btn" href="TESTFLIGHT_PUBLIC_LINK">Join the beta on TestFlight</a>
+</div></section>
+
+<footer><div class="wrap">© 2026 Baguette Remote. An independent app, not affiliated with Apple, Anthropic, OpenAI, Google or Tailscale. Mac, macOS, iPhone, iPad and TestFlight are trademarks of Apple Inc. Claude is a trademark of Anthropic, PBC. Codex is a trademark of OpenAI. Android is a trademark of Google LLC. Tailscale is a trademark of Tailscale Inc.</div></footer>
+</body>
+</html>
