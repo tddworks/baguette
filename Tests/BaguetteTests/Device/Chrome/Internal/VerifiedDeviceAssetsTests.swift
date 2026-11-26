@@ -115,8 +115,8 @@ private extension VerifiedDeviceAssetsTests {
 }
 
 // An asset Apple ships inside Xcode — iPhone Duo's `V68.usdz` in
-// DeviceKit's plug-in — is read from the selected Xcode, the way the 2D
-// chromes are read from `/Library/Developer/DeviceKit`.
+// DeviceKit's plug-in — is read in place from the selected Xcode, or from
+// another installed Xcode when the selected one predates it.
 extension VerifiedDeviceAssetsTests {
     @Test func `should resolve an asset that lives in Xcode under the selected Xcode's Contents`() throws {
         let scratch = try Self.makeScratch()
@@ -130,22 +130,65 @@ extension VerifiedDeviceAssetsTests {
         let assets = VerifiedDeviceAssets(
             cacheRoot: scratch.appending(path: "cache"),
             fetch: { _ in Data() },
-            developerDir: { contents.appending(path: "Developer").path }
+            xcodes: { [contents.deletingLastPathComponent()] }
         )
 
         #expect(try assets.resolve(Self.model(directory: scratch, xcodeResource: resource)) == asset)
     }
 
-    @Test func `should name the resource it looked for when an Xcode asset is missing`() throws {
+    /// Xcode 27.0 has no iPhone Duo model; 27.1 and 27.2 ship it. A Mac
+    /// that builds with 27.0 selected still renders a Duo from the newer
+    /// Xcode beside it — the same file, never a look-alike.
+    @Test func `should find an Xcode asset in another installed Xcode when the selected one lacks it`() throws {
         let scratch = try Self.makeScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
+        let resource = "SharedFrameworks/DeviceKit.framework/Resources/V68.usdz"
+        let selected = scratch.appending(path: "Xcode-27.0.app")
+        let newer = scratch.appending(path: "Xcode-27.2.app")
+        let asset = try Self.place(resource, in: newer)
+        let assets = VerifiedDeviceAssets(
+            cacheRoot: scratch.appending(path: "cache"), fetch: { _ in Data() },
+            xcodes: { [selected, newer] })
+
+        #expect(try assets.resolve(Self.model(directory: scratch, xcodeResource: resource)) == asset)
+    }
+
+    @Test func `should take the selected Xcode's copy when several Xcodes have the asset`() throws {
+        let scratch = try Self.makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let resource = "SharedFrameworks/DeviceKit.framework/Resources/V68.usdz"
+        let selected = scratch.appending(path: "Xcode-27.1.app")
+        let other = scratch.appending(path: "Xcode-27.2.app")
+        let chosen = try Self.place(resource, in: selected)
+        _ = try Self.place(resource, in: other)
+        let assets = VerifiedDeviceAssets(
+            cacheRoot: scratch.appending(path: "cache"), fetch: { _ in Data() },
+            xcodes: { [selected, other] })
+
+        #expect(try assets.resolve(Self.model(directory: scratch, xcodeResource: resource)) == chosen)
+    }
+
+    private static func place(_ resource: String, in xcode: URL) throws -> URL {
+        let asset = xcode.appending(path: "Contents").appending(path: resource)
+        try FileManager.default.createDirectory(
+            at: asset.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("USDZ".utf8).write(to: asset)
+        return asset
+    }
+
+    @Test func `should name the resource and every Xcode it looked in when no Xcode has the asset`() throws {
+        let scratch = try Self.makeScratch()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let selected = scratch.appending(path: "Xcode-27.0.app")
+        let other = scratch.appending(path: "Xcode-26.4.app")
         let assets = VerifiedDeviceAssets(
             cacheRoot: scratch.appending(path: "cache"),
             fetch: { _ in Data() },
-            developerDir: { scratch.appending(path: "Xcode.app/Contents/Developer").path }
+            xcodes: { [selected, other] }
         )
 
-        #expect(throws: DeviceModelError.localAssetNotFound("Plugins/V68.usdz")) {
+        #expect(throws: DeviceModelError.xcodeResourceNotFound(
+            "Plugins/V68.usdz", searched: [selected.path, other.path])) {
             try assets.resolve(Self.model(directory: scratch, xcodeResource: "Plugins/V68.usdz"))
         }
     }

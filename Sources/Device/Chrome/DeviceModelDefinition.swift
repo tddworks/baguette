@@ -405,6 +405,8 @@ public enum DeviceModelError: Error, Equatable, LocalizedError {
     case malformedDefinition(String)
     case assetOutsideBundle(String)
     case localAssetNotFound(String)
+    /// An asset Apple ships inside Xcode that no installed Xcode has.
+    case xcodeResourceNotFound(String, searched: [String])
     case invalidOutputSize
     case invalidRotation
     case invalidUSDIdentifier(String)
@@ -441,6 +443,9 @@ public extension DeviceModelError {
             "The hinge angle must be finite and between 0 and 180 degrees."
         case .screenImageInvalid:
             "The screen image is not a readable PNG or JPEG."
+        case .xcodeResourceNotFound(let resource, let searched):
+            "No installed Xcode has \(resource) (looked in \(searched.joined(separator: ", "))). "
+                + "Install an Xcode that ships this device's model."
         default:
             String(describing: self)
         }
