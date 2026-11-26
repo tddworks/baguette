@@ -11,7 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Changed
-- The guest helper `HingeControl` is now four programs, one per Apple subsystem baguette drives inside a simulator: `CoreMotionAngle` (the hinge angle), `DeviceHubControls` (Device Hub's hinge slider and orientation picker), `HIDButtons` (a foldable's keys and buttons) and `AXPFrontmost` (the frontmost app). Each verb and its output is unchanged; each builds and fails on its own, so an accessibility read no longer depends on the hinge's binary. → [design](docs/features/injected-programs/design.md)
+- `HingeControl` is now four programs, one per Apple subsystem: `CoreMotionAngle`, `DeviceHubControls`, `HIDButtons`, `AXPFrontmost`. Verbs and output are unchanged; each builds and fails on its own. → [design](docs/features/injected-programs/design.md)
 - `CoreSimulators(injectedPrograms:)` takes a library host's copy of each program (`InjectedPrograms`). `CoreSimulators(hingeControl:)` still works for this release, deprecated: the one binary answers every program's verbs.
 - `BAGUETTE_HINGECONTROL_TOOL` is replaced by one override per program: `BAGUETTE_COREMOTIONANGLE_TOOL`, `BAGUETTE_DEVICEHUBCONTROLS_TOOL`, `BAGUETTE_HIDBUTTONS_TOOL`, `BAGUETTE_AXPFRONTMOST_TOOL`.
 - `HingeControlReply` is `InjectedProgramReply`, and `HingeAngle.parse(hingeControlLine:)` is `parse(coreMotionAngleLine:)`; the old names stay, deprecated.
