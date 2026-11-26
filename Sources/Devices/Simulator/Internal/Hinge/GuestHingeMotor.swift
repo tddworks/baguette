@@ -54,12 +54,15 @@ final class GuestHingeMotor: HingeMotor, DeviceKeys, @unchecked Sendable {
     nonisolated(unsafe) private static var registry: [DeviceKey: GuestHingeMotor] = [:]
     private static let registryLock = NSLock()
 
-    static func forDevice(_ udid: String, deviceSetPath: String? = nil) -> GuestHingeMotor {
+    static func forDevice(
+        _ udid: String, deviceSetPath: String? = nil,
+        tool: @escaping () -> String? = { InjectedDylibInstaller.installIfNeeded(.hingeControl) }
+    ) -> GuestHingeMotor {
         let key = DeviceKey(deviceSetPath: deviceSetPath, udid: udid)
         registryLock.lock()
         defer { registryLock.unlock() }
         if let existing = registry[key] { return existing }
-        let made = GuestHingeMotor(udid: udid, deviceSetPath: deviceSetPath)
+        let made = GuestHingeMotor(udid: udid, deviceSetPath: deviceSetPath, tool: tool)
         registry[key] = made
         return made
     }

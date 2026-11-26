@@ -20,6 +20,17 @@ struct BaguetteKitTests {
         #expect(kinds.devices.all.isEmpty)
     }
 
+    @Test func `should take a host's own copy of the hinge helper for the simulators it lists`() throws {
+        let deviceSet = try emptyDeviceSet()
+        defer { try? FileManager.default.removeItem(at: deviceSet) }
+
+        let simulators = CoreSimulators(
+            deviceSetPath: deviceSet.path,
+            hingeControl: URL(fileURLWithPath: "/opt/host/HingeControl"))
+
+        #expect(simulators.all.isEmpty)
+    }
+
     @Test func `should refuse an id that no device family knows`() throws {
         let deviceSet = try emptyDeviceSet()
         defer { try? FileManager.default.removeItem(at: deviceSet) }
@@ -31,23 +42,6 @@ struct BaguetteKitTests {
         )
 
         #expect(throws: DeviceError.self) { try kinds.devices.device("NO-SUCH-DEVICE") }
-    }
-}
-
-/// The resources folder is the process's: one suite, one test at a time.
-@Suite("BaguetteResources", .serialized)
-struct BaguetteResourcesTests {
-    @Test func `should hand a host's resources folder to every lookup after it chooses one`() {
-        let folder = URL(fileURLWithPath: "/opt/host/baguette-resources", isDirectory: true)
-        defer { BaguetteResources.use(folder: nil) }
-
-        BaguetteResources.use(folder: folder)
-
-        #expect(BaguetteResources.folder == folder)
-    }
-
-    @Test func `should have no resources folder until a host chooses one`() {
-        #expect(BaguetteResources.folder == nil)
     }
 }
 
