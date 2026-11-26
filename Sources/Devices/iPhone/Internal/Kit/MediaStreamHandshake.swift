@@ -7,16 +7,22 @@ import Foundation
 /// through CoreDevice's own `Decodable` `StartRequest`; the
 /// `StartResponse` comes back as JSON. The calls themselves are
 /// CoreDevice's (`MediaStreamFunctions.swift`), handed in.
-struct MediaStreamHandshake {
+package struct MediaStreamHandshake {
     let requestType: Decodable.Type
     let responseType: Any.Type
     let supportType: Any.Type
+
+    package init(requestType: Decodable.Type, responseType: Any.Type, supportType: Any.Type) {
+        self.requestType = requestType
+        self.responseType = responseType
+        self.supportType = supportType
+    }
 
     /// - Parameters:
     ///   - supportInfo: writes a `supportType` into the address it is given.
     ///   - start: reads the request at its second address, writes a
     ///     `responseType` into its first.
-    func run(
+    package func run(
         supportInfo: (UnsafeMutableRawPointer) async throws -> Void,
         start: (UnsafeMutableRawPointer, UnsafeRawPointer) async throws -> Void,
         makeRequest: () throws -> [String: Any]

@@ -5,7 +5,7 @@ import Mockable
 /// reports. Decides nothing — when to open it, and when to try again, is
 /// `CoreDeviceDigitizer`'s. The real one is `CoreDeviceUniversalHID`.
 @Mockable
-protocol UniversalHID: Sendable {
+package protocol UniversalHID: Sendable {
     /// Whether this Xcode's UniversalHID still has the shape a touch
     /// report needs.
     var buildsTouchReports: Bool { get }

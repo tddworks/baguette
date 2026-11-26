@@ -23,8 +23,8 @@ final class CoreDeviceDigitizer: Digitizer, @unchecked Sendable {
     private static let retryAfter: TimeInterval = 10
 
     /// - Parameter identifier: CoreDevice's identifier for the phone (not its UDID).
-    init(identifier: UUID, hid: any UniversalHID = CoreDeviceUniversalHID(),
-         tunnel: any Tunnel = CoreDeviceTunnel(),
+    init(identifier: UUID, hid: any UniversalHID,
+         tunnel: any Tunnel,
          now: @escaping @Sendable () -> Date = { Date() }) {
         self.identifier = identifier
         self.hid = hid

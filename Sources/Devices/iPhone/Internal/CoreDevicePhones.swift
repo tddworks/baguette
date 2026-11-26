@@ -10,21 +10,24 @@ final class CoreDevicePhones: Devices, @unchecked Sendable {
     typealias Refresh = RecentListing<PhysicalPhone>.Refresh
 
     private let devicectl: Devicectl
+    private let coreDevice: CoreDeviceAccess
     private var listing: RecentListing<PhysicalPhone>!
     /// A phone streams its screen to one receiver, so its viewers share one.
     private let screens = SharedScreens()
 
     init(
         devicectl: Devicectl = Devicectl(),
+        coreDevice: CoreDeviceAccess = .absent,
         clock: @escaping @Sendable () -> Date = Date.init,
         refresh: @escaping Refresh = { work in DispatchQueue.global(qos: .utility).async(execute: work) }
     ) {
         self.devicectl = devicectl
+        self.coreDevice = coreDevice
         listing = RecentListing(clock: clock, refresh: refresh) { [devicectl] in Self.list(devicectl) }
     }
 
     var all: [any Device] {
-        listing.items.map { CoreDevicePhone($0, devicectl: devicectl, screens: screens) }
+        listing.items.map { CoreDevicePhone($0, devicectl: devicectl, screens: screens, coreDevice: coreDevice) }
     }
 
     func find(id: DeviceID) throws -> (any Device)? {
@@ -56,13 +59,16 @@ struct CoreDevicePhone: Device {
     private let devicectl: Devicectl
     private let screenRoute: PhoneScreenRoute
     private let screens: SharedScreens
+    private let coreDevice: CoreDeviceAccess
 
     init(_ phone: PhysicalPhone, devicectl: Devicectl, screens: SharedScreens = SharedScreens(),
-         screenRoute: PhoneScreenRoute = PhoneScreenRoute(environment: ProcessInfo.processInfo.environment)) {
+         screenRoute: PhoneScreenRoute = PhoneScreenRoute(environment: ProcessInfo.processInfo.environment),
+         coreDevice: CoreDeviceAccess = .absent) {
         self.phone = phone
         self.devicectl = devicectl
         self.screens = screens
         self.screenRoute = screenRoute
+        self.coreDevice = coreDevice
     }
 
     var id: DeviceID { DeviceID(phone.udid) }
@@ -75,11 +81,11 @@ struct CoreDevicePhone: Device {
     }
 
     var abilities: Abilities {
-        let (udid, devicectl) = (phone.udid, devicectl)
+        let (udid, devicectl, coreDevice) = (phone.udid, devicectl, coreDevice)
         var abilities = Abilities(device: phone.name)
         // One tunnel for every service reached through it.
-        let tunnel = CoreDeviceTunnel(devicectl: devicectl)
-        if let identifier = phone.coreDeviceIdentifier, CoreDeviceFramework.isAvailable {
+        let tunnel = CoreDeviceTunnel(devicectl: devicectl, connect: coreDevice.connect)
+        if let identifier = phone.coreDeviceIdentifier, coreDevice.isAvailable() {
             // Live through CoreDevice, turned into pictures by the receiver
             // `PhoneScreenRoute` picks; without CoreDevice, stills.
             // One live screen per phone, whoever watches it: a second stream
@@ -88,6 +94,7 @@ struct CoreDevicePhone: Device {
             abilities.register(.screen) {
                 screens.view(of: id) {
                     CoreDeviceScreen(identifier: identifier, devicectl: devicectl, tunnel: tunnel,
+                                     starter: coreDevice.mediaStream,
                                      makeReceiver: { try route.receiver() })
                 }
             }
@@ -95,7 +102,7 @@ struct CoreDevicePhone: Device {
             abilities.register(.screen) { DevicectlScreen(udid: udid, devicectl: devicectl) }
         }
         if let identifier = phone.coreDeviceIdentifier {
-            abilities.register(.touch) { DigitizerTouch(digitizer: CoreDeviceDigitizer(identifier: identifier, tunnel: tunnel)) }
+            abilities.register(.touch) { DigitizerTouch(digitizer: CoreDeviceDigitizer(identifier: identifier, hid: coreDevice.universalHID, tunnel: tunnel)) }
             // Its own accessibility service, over the tunnel.
             abilities.register(.accessibility) { RemoteAXAccessibility(identifier: identifier, tunnel: tunnel) }
         }

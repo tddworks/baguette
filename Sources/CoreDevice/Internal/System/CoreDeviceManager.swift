@@ -1,3 +1,4 @@
+import BaguetteDeviceFamilies
 import Foundation
 
 #if COREDEVICE

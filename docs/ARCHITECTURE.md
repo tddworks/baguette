@@ -100,13 +100,19 @@ families and the plugins; they depend on `BaguetteDevice`, which
 depends on nothing of baguette's — only Foundation / IOSurface (public
 Apple types) and Mockable.
 
-The package ships two products. `baguette` is the CLI: Commands, Server
+The package ships three products. `baguette` is the CLI: Commands, Server
 and Plugins around `@main`. `BaguetteKit` is the library for a host that
 drives devices itself (SimKit): it re-exports `BaguetteDevice` and
 `BaguetteDeviceFamilies`, so it carries every device family and none of
 the CLI, the HTTP server or the plugins.
 [`examples/ListSimulators`](../examples/ListSimulators) depends on it,
-and CI builds it.
+and CI builds it. `BaguetteCoreDevice` adds a phone on a cable live —
+its screen, touch and tunnel through Xcode's CoreDevice — as
+`CoreDeviceAccess.live`, which a host passes to `DeviceKinds`. It is its
+own product because CoreDevice is weak-linked with linker flags SwiftPM
+accepts only from a dependency pinned by revision, branch or path: kept
+out of `BaguetteKit`, they leave that one pinnable by version. Without
+it, a phone's screen is devicectl stills and it takes no touch.
 
 ```
 Sources/
@@ -128,6 +134,9 @@ Sources/
 │   ├── Abilities/<ability>/  one role and its values (Touch, Press, Key,
 │   │                       Screen, Capture, UI, Apps, Location, …)
 │   └── Internal/           host I/O every family shares (subprocess, Xcode, log)
+├── CoreDevice/         module BaguetteCoreDevice — Xcode's CoreDevice bound
+│                       with @_silgen_name, weak-linked: CoreDeviceAccess.live
+├── CoreDeviceABI/      the one CoreDevice call Swift can't spell, in C
 ├── BaguetteKit/        module BaguetteKit — the library product: re-exports
 │                       BaguetteDevice and BaguetteDeviceFamilies
 └── Baguette/           `@main` (RootCommand) and Resources/Web/ for `serve`

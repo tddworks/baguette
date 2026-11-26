@@ -4,11 +4,11 @@ import Foundation
 /// CoreDevice's calls are `async`; the adapters that make them are not, so
 /// each call runs on a detached task while the caller blocks for at most a
 /// while — a phone asleep or a stalled tunnel never answers.
-enum CoreDeviceAnswer {
+package enum CoreDeviceAnswer {
     /// `call`'s answer, or what it failed with; `CoreDeviceError.noAnswer`
     /// once `seconds` pass without one. A late answer is dropped: the task
     /// keeps what `call` holds alive until then.
-    static func wait<Value>(
+    package static func wait<Value>(
         upTo seconds: Double, for what: String,
         _ call: sending @escaping () async throws -> Value
     ) throws -> Value {

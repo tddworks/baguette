@@ -1,3 +1,4 @@
+import BaguetteDeviceFamilies
 import Foundation
 
 /// The phone connected through CoreDevice: `RemoteDevice.connect()`, which
