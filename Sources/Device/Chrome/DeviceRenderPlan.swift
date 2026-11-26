@@ -61,9 +61,14 @@ public struct DeviceRenderPlan: Equatable, Sendable {
     /// image turns back to its panel's buffer and `rotation` includes the
     /// roll that stands the capture upright; without it neither happens.
     public let screenOrientation: DeviceOrientation?
+    /// The panel a live foldable says it lights (`Hinge.litPanel`). The
+    /// angle only suggests one — SpringBoard can keep the cover lit at
+    /// 100° after a slow fold — so when the device has said, the picture
+    /// goes there; a pose with no device behind it goes by the angle.
+    public let litPanel: IntegratedPanel?
 
     public var screenPanel: IntegratedPanel? {
-        hingeDegrees.map { HingeAngle(degrees: $0).litPanel }
+        litPanel ?? hingeDegrees.map { HingeAngle(degrees: $0).litPanel }
     }
 
     public var screenRotation: ScreenRotation {
@@ -85,7 +90,8 @@ public struct DeviceRenderPlan: Equatable, Sendable {
         background: DeviceRenderBackground = .transparent,
         screenGlass: Bool = false,
         hingeDegrees: Double? = nil,
-        screenOrientation: DeviceOrientation? = nil
+        screenOrientation: DeviceOrientation? = nil,
+        litPanel: IntegratedPanel? = nil
     ) throws -> DeviceRenderPlan {
         guard outputSize.width > 0, outputSize.height > 0 else {
             throw DeviceModelError.invalidOutputSize
@@ -109,10 +115,12 @@ public struct DeviceRenderPlan: Equatable, Sendable {
         }
         // A foldable left at its rest pose lies flat, its inner screen lit;
         // a phone's one panel turns like a cover.
-        let litPanel = model.definition.scene.fold == nil
+        let folds = model.definition.scene.fold != nil
+        let deviceLit = folds ? litPanel : nil
+        let rollPanel = !folds
             ? IntegratedPanel.primary
-            : HingeAngle(degrees: hingeDegrees ?? 180).litPanel
-        let roll = screenOrientation.map { InterfaceRoll.degrees($0, litPanel: litPanel) } ?? 0
+            : deviceLit ?? HingeAngle(degrees: hingeDegrees ?? 180).litPanel
+        let roll = screenOrientation.map { InterfaceRoll.degrees($0, litPanel: rollPanel) } ?? 0
         return DeviceRenderPlan(
             model: model,
             variants: try model.definition.resolveVariants(variants),
@@ -122,11 +130,12 @@ public struct DeviceRenderPlan: Equatable, Sendable {
             background: background,
             screenGlass: screenGlass,
             hingeDegrees: hingeDegrees,
-            screenOrientation: screenOrientation
+            screenOrientation: screenOrientation,
+            litPanel: deviceLit
         )
     }
 
-    public init(model: InstalledDeviceModel, variants: [DeviceVariantSelection], rotation: DeviceRotation, outputSize: RenderDimensions, fit: DeviceScreenFit, background: DeviceRenderBackground, screenGlass: Bool, hingeDegrees: Double?, screenOrientation: DeviceOrientation?) {
+    public init(model: InstalledDeviceModel, variants: [DeviceVariantSelection], rotation: DeviceRotation, outputSize: RenderDimensions, fit: DeviceScreenFit, background: DeviceRenderBackground, screenGlass: Bool, hingeDegrees: Double?, screenOrientation: DeviceOrientation?, litPanel: IntegratedPanel? = nil) {
         self.model = model
         self.variants = variants
         self.rotation = rotation
@@ -136,5 +145,6 @@ public struct DeviceRenderPlan: Equatable, Sendable {
         self.screenGlass = screenGlass
         self.hingeDegrees = hingeDegrees
         self.screenOrientation = screenOrientation
+        self.litPanel = litPanel
     }
 }

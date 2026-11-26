@@ -399,7 +399,7 @@ struct Server: Sendable {
                 } catch {
                     return errorJSON("screen capture failed: \(error)", status: .internalServerError)
                 }
-                guard let sourceSize = Self.imageDimensions(screenImage) else {
+                guard let sourceSize = RenderDimensions(image: screenImage) else {
                     return errorJSON("captured screen image is invalid", status: .internalServerError)
                 }
                 switch Self.render3D(
@@ -767,34 +767,17 @@ struct Server: Sendable {
         guard !udid.isEmpty, let device = (try? devices.find(id: DeviceID(udid))) ?? nil else {
             return .unknownDevice
         }
-        let installed: InstalledDeviceModel
         do {
-            guard let model = try device.model3D(in: models) else {
-                return .noModel
-            }
-            installed = model
-        } catch {
+            return .rendered(try device.render3D(
+                screenImage: screenImage, sourceSize: sourceSize,
+                models: models, renderer: renderer, options: options
+            ).png)
+        } catch DeviceModelError.noModelForDevice, DeviceModelError.ambiguousMatch {
             return .noModel
-        }
-        let plan: DeviceRenderPlan
-        do {
-            plan = try DeviceRenderPlan.build(
-                model: installed,
-                variants: options.variants,
-                rotation: options.rotation,
-                outputSize: options.outputSize(source: sourceSize),
-                fit: options.fit,
-                background: options.background,
-                screenGlass: options.screenGlass
-            )
-        } catch {
+        } catch DeviceModelError.screenImageInvalid {
+            return .failed
+        } catch is DeviceModelError {
             return .invalidConfiguration
-        }
-        do {
-            return .rendered(try renderer.render(
-                plan: plan,
-                screenImage: screenImage
-            ))
         } catch {
             return .failed
         }
@@ -968,18 +951,6 @@ struct Server: Sendable {
             "displayName": definition.displayName,
             "variantSets": sets,
         ]
-    }
-
-    private static func imageDimensions(_ image: Data) -> RenderDimensions? {
-        guard let source = CGImageSourceCreateWithData(image as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(
-                  source, 0, nil
-              ) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
-            return nil
-        }
-        return RenderDimensions(width: width, height: height)
     }
 
     // MARK: - sized captures

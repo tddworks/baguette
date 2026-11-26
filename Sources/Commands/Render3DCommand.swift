@@ -112,10 +112,14 @@ struct Render3DCommand: AsyncParsableCommand {
                 }
                 installed = found
             } else {
-                guard let found = try simulator.model3D(in: models) else {
-                    throw DeviceModelError.noModelForDevice(simulator.kind.model)
-                }
-                installed = found
+                // The device's own model, posed as it stands: a foldable at
+                // its hinge, its picture on the panel it lights. A device
+                // with no screen is refused the way every command refuses.
+                _ = try orExit { try simulator.abilities.require(.screen) }
+                let render = try await simulator.snapshot3D(
+                    models: models, renderer: renderer, options: renderOptions())
+                try write(render.png)
+                return
             }
             // The screen as it is, booted or not: the capture says why it failed.
             screenImage = try await ScreenSnapshot.capture(
@@ -129,7 +133,9 @@ struct Render3DCommand: AsyncParsableCommand {
         // A ratio (`square`, `3:2`) has no meaning until there is a source
         // to grow against, and that source is the screenshot we just took —
         // the same image `native` would render at 1:1.
-        let sourceSize = try Self.pixelSize(of: screenImage)
+        guard let sourceSize = RenderDimensions(image: screenImage) else {
+            throw DeviceModelError.screenImageInvalid
+        }
         let captureSize = try size.map(DeviceRenderArguments.captureSize) ?? .native
         let outputSize = captureSize.resolve(source: sourceSize)
         let plan = try DeviceRenderPlan.build(
@@ -145,7 +151,10 @@ struct Render3DCommand: AsyncParsableCommand {
             hingeDegrees: hingeDegrees,
             screenOrientation: screenOrientation
         )
-        let png = try renderer.render(plan: plan, screenImage: screenImage)
+        try write(try renderer.render(plan: plan, screenImage: screenImage))
+    }
+
+    private func write(_ png: Data) throws {
         if let output {
             try png.write(to: URL(fileURLWithPath: output), options: .atomic)
         } else {
@@ -153,15 +162,15 @@ struct Render3DCommand: AsyncParsableCommand {
         }
     }
 
-    private static func pixelSize(of image: Data) throws -> RenderDimensions {
-        guard let source = CGImageSourceCreateWithData(image as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(
-                  source, 0, nil
-              ) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
-            throw DeviceModelError.screenImageInvalid
-        }
-        return RenderDimensions(width: width, height: height)
+    private func renderOptions() throws -> DeviceRenderOptions {
+        DeviceRenderOptions(
+            rotation: try DeviceRenderArguments.rotation(rotation),
+            variants: try DeviceRenderArguments.variants(variants),
+            captureSize: try size.map(DeviceRenderArguments.captureSize) ?? .native,
+            fit: DeviceScreenFit(rawValue: fit) ?? .cover,
+            background: background == "transparent" ? .transparent : .color(background),
+            screenGlass: screenGlass
+        )
     }
+
 }
