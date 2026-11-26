@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// An Android device's buttons and keyboard through `adb shell input` —

@@ -5,17 +5,17 @@ import Foundation
 /// is a clear picture the display's own size (in points), the screen filling
 /// it — so the page draws the stream alone, at the display's shape, the way
 /// it draws any bezel. A display is found by its name, which is its model.
-final class MacDisplayLooks: Chromes, @unchecked Sendable {
+public final class MacDisplayLooks: Chromes, @unchecked Sendable {
     private let displays: @Sendable () -> [MacDisplayInfo]
     private let clearPicture: @Sendable (Size) -> Data?
 
-    init(displays: @escaping @Sendable () -> [MacDisplayInfo],
+    public init(displays: @escaping @Sendable () -> [MacDisplayInfo],
          clearPicture: @escaping @Sendable (Size) -> Data? = ClearPicture.png) {
         self.displays = displays
         self.clearPicture = clearPicture
     }
 
-    func assets(forDeviceName name: String) -> DeviceChromeAssets? {
+    public func assets(forDeviceName name: String) -> DeviceChromeAssets? {
         guard let display = displays().first(where: { $0.name == name }) else { return nil }
         let size = display.bounds.size
         guard let picture = clearPicture(size) else { return nil }
@@ -25,11 +25,11 @@ final class MacDisplayLooks: Chromes, @unchecked Sendable {
         return DeviceChromeAssets(chrome: unframed, composite: ChromeImage(data: picture, size: size))
     }
 
-    func assets(forDeviceName name: String, panel: IntegratedPanel) -> DeviceChromeAssets? {
+    public func assets(forDeviceName name: String, panel: IntegratedPanel) -> DeviceChromeAssets? {
         panel == .primary ? assets(forDeviceName: name) : nil
     }
 
-    func panels(forDeviceName name: String) -> [IntegratedPanel] {
+    public func panels(forDeviceName name: String) -> [IntegratedPanel] {
         displays().contains { $0.name == name } ? [.primary] : []
     }
 }

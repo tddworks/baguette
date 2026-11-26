@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// A stream session binds to a display kind from the `display` query

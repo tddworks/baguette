@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Foundation
 
 /// Production `Plugins` — plugins are directories on disk, each with a

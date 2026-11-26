@@ -3,6 +3,7 @@ import IOSurface
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// A simulator screen as SimulatorKit composites it: callbacks on every

@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// After a read, the display is checked again so frames never describe

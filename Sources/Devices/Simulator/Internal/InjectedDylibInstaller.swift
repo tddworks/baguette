@@ -13,9 +13,9 @@ import Foundation
 ///
 /// Generalised from the camera's installer when motion became a second
 /// injected dylib: everything here was identical except the file name.
-enum InjectedDylibInstaller {
+public enum InjectedDylibInstaller {
 
-    static var defaultSupportDir: String {
+    @usableFromInline static var defaultSupportDir: String {
         ("~/Library/Application Support/Baguette" as NSString).expandingTildeInPath
     }
 
@@ -80,7 +80,7 @@ enum InjectedDylibInstaller {
     /// Read the bundled bytes, compute the install plan, apply it
     /// (idempotent), return the destination path. Returns `nil` if the dylib
     /// isn't bundled in this build configuration.
-    static func installIfNeeded(
+    public static func installIfNeeded(
         _ dylib: InjectedDylib,
         supportDir: String = defaultSupportDir,
         environment: [String: String] = ProcessInfo.processInfo.environment,

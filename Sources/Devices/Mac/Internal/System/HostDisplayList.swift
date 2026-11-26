@@ -5,8 +5,8 @@ import CoreGraphics
 /// The displays attached to this Mac, as CoreGraphics lists them — none of
 /// this asks for Screen Recording. Integration-only: the decisions are in
 /// `MacDisplays` and `MacDisplayInfo`.
-enum HostDisplayList {
-    static func all() -> [MacDisplayInfo] {
+public enum HostDisplayList {
+    public static func all() -> [MacDisplayInfo] {
         var count: UInt32 = 0
         guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
@@ -22,10 +22,10 @@ enum HostDisplayList {
     }
 
     /// The main display now: where the menu bar, the Dock and new windows are.
-    @Sendable static func main() -> UInt32 { CGMainDisplayID() }
+    @usableFromInline @Sendable static func main() -> UInt32 { CGMainDisplayID() }
 
     /// Whether the Mac lists the display `id` now.
-    @Sendable static func isListed(_ id: UInt32) -> Bool {
+    @usableFromInline @Sendable static func isListed(_ id: UInt32) -> Bool {
         var count: UInt32 = 0
         guard CGGetActiveDisplayList(0, nil, &count) == .success else { return false }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))

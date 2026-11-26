@@ -6,8 +6,8 @@ import UniformTypeIdentifiers
 
 /// A fully transparent PNG of a size — the picture a display with no frame is
 /// drawn in. Integration-only: what it's for is `MacDisplayLooks`'.
-enum ClearPicture {
-    static func png(_ size: Size) -> Data? {
+@usableFromInline enum ClearPicture {
+    @usableFromInline static func png(_ size: Size) -> Data? {
         let (width, height) = (Int(size.width), Int(size.height))
         guard width > 0, height > 0,
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,

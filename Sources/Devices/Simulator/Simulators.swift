@@ -10,7 +10,7 @@ import Mockable
 /// CoreSimulator. Class-bound (`AnyObject`) because the production
 /// impl `CoreSimulators` is reference-typed.
 @Mockable
-protocol Simulators: AnyObject, Sendable {
+public protocol Simulators: AnyObject, Sendable {
     var all: [any Simulator] { get }
     func find(udid: String) -> (any Simulator)?
 }
@@ -31,7 +31,7 @@ extension Simulators {
     /// JSON projection consumed by the `/simulators.json` endpoint.
     /// Sorted keys keep diffs and snapshot tests readable; the
     /// section split mirrors the page's RUNNING / AVAILABLE layout.
-    var listJSON: String {
+    public var listJSON: String {
         let dict: [String: Any] = [
             "running":   running.map(\.dictionary),
             "available": available.map(\.dictionary),

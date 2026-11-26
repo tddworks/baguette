@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// One display plane of a simulator: which framebuffer it binds, which

@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Given a display binding and live surface sizes, pick which plane to

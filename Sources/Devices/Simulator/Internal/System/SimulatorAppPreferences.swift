@@ -12,10 +12,10 @@ import Foundation
 ///
 /// The preferences domain and the bundle identifier are the same string
 /// — Simulator.app stores its settings under its own bundle id.
-enum SimulatorAppPreferences {
+public enum SimulatorAppPreferences {
     /// Simulator.app's bundle identifier, which doubles as its
     /// CFPreferences domain.
-    static let domain = "com.apple.iphonesimulator"
+    public static let domain = "com.apple.iphonesimulator"
 
     private static var domainID: CFString { domain as CFString }
 
@@ -24,7 +24,7 @@ enum SimulatorAppPreferences {
     /// Keys that are absent stay absent in the plist handed to
     /// `SimulatorLifetime.from` — the value type is what decides that
     /// absence means shutdown.
-    static func lifetime() -> SimulatorLifetime {
+    public static func lifetime() -> SimulatorLifetime {
         var plist: [String: Any] = [:]
         for key in [SimulatorLifetime.windowCloseKey, SimulatorLifetime.appQuitKey] {
             let value = CFPreferencesCopyValue(
@@ -42,7 +42,7 @@ enum SimulatorAppPreferences {
     ///
     /// Writes go to the current user, any host — the same location
     /// `defaults write com.apple.iphonesimulator …` targets.
-    static func write(_ lifetime: SimulatorLifetime) throws {
+    public static func write(_ lifetime: SimulatorLifetime) throws {
         for (key, value) in lifetime.plistPatch {
             CFPreferencesSetValue(
                 key as CFString,
@@ -64,7 +64,7 @@ enum SimulatorAppPreferences {
     /// Whether Simulator.app is running right now — it may hold a
     /// cached copy of these keys, so a write while it is up isn't
     /// reliably live.
-    static var simulatorAppIsRunning: Bool {
+    public static var simulatorAppIsRunning: Bool {
         !NSRunningApplication
             .runningApplications(withBundleIdentifier: domain)
             .isEmpty

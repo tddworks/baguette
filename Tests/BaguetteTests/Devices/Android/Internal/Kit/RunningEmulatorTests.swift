@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// A running emulator's discovery file, read as where its control API is.
 @Suite("RunningEmulator")

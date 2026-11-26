@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import WebRTCKit
 import CoreGraphics
 import Foundation

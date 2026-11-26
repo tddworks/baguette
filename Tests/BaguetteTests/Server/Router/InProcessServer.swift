@@ -8,6 +8,7 @@ import Mockable
 import NIOCore
 import NIOEmbedded
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// `baguette serve` driven in-process: the real router, every middleware

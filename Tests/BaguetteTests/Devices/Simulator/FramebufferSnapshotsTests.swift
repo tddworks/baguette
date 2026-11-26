@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Live IOSurface sizes join to Connected Screens by closest pixel size

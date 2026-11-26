@@ -1,3 +1,4 @@
+@testable import BaguetteDeviceFamilies
 import CoreVideo
 import Foundation
 import IOSurface

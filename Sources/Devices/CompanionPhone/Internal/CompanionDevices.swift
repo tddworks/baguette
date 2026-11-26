@@ -4,20 +4,20 @@ import Foundation
 /// The companion family as a source of `Devices`: each phone whose
 /// companion app is connected. It can show its screen once its video
 /// has arrived; input waits on the Twin runner.
-final class CompanionDevices: Devices, @unchecked Sendable {
+public final class CompanionDevices: Devices, @unchecked Sendable {
     private let phones: any CompanionPhones
     private let screens: TwinScreens
 
-    init(phones: any CompanionPhones, screens: TwinScreens) {
+    public init(phones: any CompanionPhones, screens: TwinScreens) {
         self.phones = phones
         self.screens = screens
     }
 
-    var all: [any Device] {
+    public var all: [any Device] {
         phones.all.map { CompanionDevice(phone: $0, screens: screens) }
     }
 
-    func find(id: DeviceID) throws -> (any Device)? {
+    public func find(id: DeviceID) throws -> (any Device)? {
         all.first { $0.id == id }
     }
 }

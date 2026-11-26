@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Foundation
 
 /// How a pose change ends a command. 3 is documented with the exit codes

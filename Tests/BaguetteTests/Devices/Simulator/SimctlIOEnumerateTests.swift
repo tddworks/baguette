@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// `simctl io enumerate` Connected Screens is the live topology:

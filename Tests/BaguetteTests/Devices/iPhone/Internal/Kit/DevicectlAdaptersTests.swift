@@ -3,6 +3,7 @@ import IOSurface
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// A `Subprocess` stand-in for `xcrun devicectl`: records every argv and

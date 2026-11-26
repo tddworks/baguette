@@ -7,16 +7,16 @@ import Foundation
 /// opens its device's hub; browser stream sockets find it; the video
 /// socket closing tears it down. Reconnects replace the hub — the old
 /// decoder session belongs to the dead connection.
-final class TwinScreens: @unchecked Sendable {
+public final class TwinScreens: @unchecked Sendable {
     private let lock = NSLock()
     private var hubs: [String: TwinScreen] = [:]
     private let makeDecoder: @Sendable () -> any H264Decoder
 
-    init(makeDecoder: @escaping @Sendable () -> any H264Decoder = { VTH264Decoder() }) {
+    public init(makeDecoder: @escaping @Sendable () -> any H264Decoder = { VTH264Decoder() }) {
         self.makeDecoder = makeDecoder
     }
 
-    func open(udid: String) -> TwinScreen {
+    public func open(udid: String) -> TwinScreen {
         let hub = TwinScreen(decoder: makeDecoder())
         lock.lock()
         let replaced = hubs[udid]
@@ -26,13 +26,13 @@ final class TwinScreens: @unchecked Sendable {
         return hub
     }
 
-    func find(udid: String) -> TwinScreen? {
+    public func find(udid: String) -> TwinScreen? {
         lock.lock()
         defer { lock.unlock() }
         return hubs[udid]
     }
 
-    func close(udid: String) {
+    public func close(udid: String) {
         lock.lock()
         let hub = hubs.removeValue(forKey: udid)
         lock.unlock()

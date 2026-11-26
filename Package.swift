@@ -45,6 +45,14 @@ let coreDeviceDefine: [SwiftSetting] = hasCoreDevice ? [.define("COREDEVICE")] :
 let package = Package(
     name: "Baguette",
     platforms: [.macOS(.v15)],
+    products: [
+        // The CLI: `baguette` and `baguette serve`.
+        .executable(name: "baguette", targets: ["Baguette"]),
+        // The library for a host that drives devices itself (SimKit):
+        // the device model and every device family, without the CLI or
+        // the HTTP server. Its one public face is `BaguetteKit`.
+        .library(name: "BaguetteKit", targets: ["BaguetteKit"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
         // `@Mockable` auto-generates `MockXxx` classes from `@Mockable`
@@ -56,7 +64,7 @@ let package = Package(
         // BoringSSL, for a WebRTC viewer's DTLS-SRTP handshake: the only
         // DTLS on macOS that exports SRTP keys. Already in the graph through
         // Hummingbird; imported as its C module, CNIOBoringSSL.
-        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.37.6"),
     ],
     targets: [
         // The one CoreDevice call Swift can't spell: a typed-throws send
@@ -95,10 +103,44 @@ let package = Package(
                 .define("MOCKING", .when(configuration: .debug)),
             ]
         ),
+        // Every device family — simulators, phones on a cable, companion
+        // phones, Android, this Mac — each with its source and adapters
+        // (docs/features/devices/design.md). Families never import each
+        // other; the CLI and BaguetteKit both reach them through here.
+        .target(
+            name: "BaguetteDeviceFamilies",
+            dependencies: [
+                "BaguetteDevice",
+                "WebRTCKit",
+                "CoreDeviceABI",
+                .product(name: "Mockable", package: "Mockable"),
+            ],
+            path: "Sources/Devices",
+            swiftSettings: [
+                .define("MOCKING", .when(configuration: .debug)),
+            ] + coreDeviceDefine,
+            linkerSettings: coreDeviceLinking + [
+                .linkedFramework("IOSurface"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("CoreVideo"),
+                .linkedFramework("VideoToolbox"),
+            ]
+        ),
+        // What a package that depends on the `BaguetteKit` product
+        // imports: the device model and the device families, re-exported.
+        .target(
+            name: "BaguetteKit",
+            dependencies: [
+                "BaguetteDevice",
+                "BaguetteDeviceFamilies",
+            ],
+            path: "Sources/BaguetteKit"
+        ),
         .executableTarget(
             name: "Baguette",
             dependencies: [
                 "BaguetteDevice",
+                "BaguetteDeviceFamilies",
                 "WebRTCKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Mockable", package: "Mockable"),
@@ -106,13 +148,13 @@ let package = Package(
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
                 "CoreDeviceABI",
             ],
-            // The two ways in (Commands, Server), the device families
-            // (Devices) and the plugins, around the one `@main` in
-            // Sources/Baguette, which also keeps the resources.
+            // The two ways in (Commands, Server) and the plugins, around
+            // the one `@main` in Sources/Baguette, which also keeps the
+            // resources. The device families are their own target.
             path: "Sources",
             // Their own targets; listed so this one doesn't warn about them.
-            exclude: ["Device", "CoreDeviceABI", "WebRTCKit"],
-            sources: ["Baguette/RootCommand.swift", "Commands", "Server", "Devices", "Plugins"],
+            exclude: ["Device", "Devices", "BaguetteKit", "CoreDeviceABI", "WebRTCKit"],
+            sources: ["Baguette/RootCommand.swift", "Commands", "Server", "Plugins"],
             resources: [
                 // Static HTML/CSS/JS for `baguette serve`. Each file is
                 // self-contained — open in a browser via file:// for a
@@ -161,6 +203,17 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "BaguetteKitTests",
+            dependencies: [
+                "BaguetteKit",
+                .product(name: "Mockable", package: "Mockable"),
+            ],
+            path: "Tests/BaguetteKitTests",
+            swiftSettings: [
+                .define("MOCKING"),
+            ]
+        ),
+        .testTarget(
             name: "WebRTCKitTests",
             dependencies: [
                 "WebRTCKit",
@@ -176,6 +229,7 @@ let package = Package(
             dependencies: [
                 "Baguette",
                 "BaguetteDevice",
+                "BaguetteDeviceFamilies",
                 "WebRTCKit",
                 .product(name: "Mockable", package: "Mockable"),
                 // In-process router + socket drivers for the serve routes.

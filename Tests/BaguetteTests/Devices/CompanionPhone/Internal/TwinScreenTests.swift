@@ -4,6 +4,7 @@ import IOSurface
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 final class LockedChunks: @unchecked Sendable {

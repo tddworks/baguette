@@ -2,7 +2,7 @@ import Foundation
 import Mockable
 
 /// How a shared display sits among the Mac's others.
-enum ShareUse: String, Sendable {
+public enum ShareUse: String, Sendable {
     /// The main display while shared: menu bar, Dock and new windows there.
     case main
     /// One more display beside the Mac's own; the main display stays.
@@ -20,7 +20,7 @@ enum ShareUse: String, Sendable {
 /// reshaped as the viewer turns, ended when it leaves. The real one is
 /// `VirtualDisplayShares`.
 @Mockable
-protocol ScreenShares: Sendable {
+public protocol ScreenShares: Sendable {
     /// Share the Mac to `viewer` through a new display of `shape`; its id, or
     /// nil when the Mac won't make the display.
     func start(viewer: String, shape: SharedScreenShape, use: ShareUse) -> String?

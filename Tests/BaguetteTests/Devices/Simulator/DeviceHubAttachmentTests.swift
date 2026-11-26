@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Xcode 27's Device Hub attaches a guest HID daemon (`dtuhidd`) to every

@@ -9,7 +9,7 @@ import ObjectiveC
 ///
 /// Constructed once per CLI invocation with an optional custom device set
 /// path; the default Xcode set is used when `deviceSetPath` is `nil`.
-final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
+public final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     private let deviceSetPath: String?
     private let serviceContext: @Sendable () -> NSObject?
     private let now: @Sendable () -> TimeInterval
@@ -21,11 +21,20 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     private let lock = NSLock()
     private var remembered: [String: (device: NSObject, foundAt: TimeInterval)] = [:]
 
+    /// The simulators of `deviceSetPath`, or of Xcode's default set when nil,
+    /// through the active Xcode's CoreSimulator.
+    public convenience init(deviceSetPath: String? = nil) {
+        self.init(
+            deviceSetPath: deviceSetPath,
+            serviceContext: {
+                CoreSimulatorFramework.sharedContext(developerDir: CoreSimulators.developerDir())
+            }
+        )
+    }
+
     init(
         deviceSetPath: String? = nil,
-        serviceContext: @escaping @Sendable () -> NSObject? = {
-            CoreSimulatorFramework.sharedContext(developerDir: CoreSimulators.developerDir())
-        },
+        serviceContext: @escaping @Sendable () -> NSObject?,
         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         self.deviceSetPath = deviceSetPath
@@ -37,7 +46,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     /// Whether the guest is shut down or gone, per a fresh listing of
     /// the device set this host resolves to. Camera cleanup treats only
     /// that as proof that a failed disarm no longer matters.
-    func hasTerminated(udid: String, xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")) throws -> Bool {
+    public func hasTerminated(udid: String, xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")) throws -> Bool {
         guard let set = resolveSet() else { throw DeviceSetUnavailable() }
         return try SimctlCameraGuest.hasTerminated(udid: udid, deviceSetPath: set.path, xcrun: xcrun)
     }
@@ -48,7 +57,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         }
     }
 
-    var all: [any Simulator] {
+    public var all: [any Simulator] {
         guard let set = resolveSet() else { return [] }
         return availableDevices(in: set.object).map { device in
             coreSimulator(from: device, deviceSetPath: set.path)
@@ -59,7 +68,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     /// before reading anything else: every gesture looks its device up, and
     /// building every installed simulator (name, runtime, model — dozens of
     /// reads into CoreSimulator each) to keep one cost each tap ~4 ms.
-    func find(udid: String) -> (any Simulator)? {
+    public func find(udid: String) -> (any Simulator)? {
         guard let set = resolveSet() else { return nil }
         return availableDevices(in: set.object)
             .first { ($0.value(forKey: "UDID") as? NSUUID)?.uuidString == udid }
@@ -70,7 +79,7 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
 
     /// Look up the underlying `SimDevice` ObjC object for a UDID.
     /// Used by the Screen/Input adapters as well, hence `internal`.
-    func resolveDevice(udid: String) -> NSObject? {
+    public func resolveDevice(udid: String) -> NSObject? {
         let time = now()
         lock.lock()
         let known = remembered[udid]
@@ -228,5 +237,5 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     }
 
     /// The Xcode whose SimulatorKit this process drives.
-    static func developerDir() -> String { Xcode.developerDir() }
+    public static func developerDir() -> String { Xcode.developerDir() }
 }

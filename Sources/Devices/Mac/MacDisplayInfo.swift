@@ -4,7 +4,7 @@ import Foundation
 /// One display attached to this Mac, as CoreGraphics lists it — no Screen
 /// Recording asked. `id` is this boot's `CGDirectDisplayID`; `uuid` is the
 /// display's own, the same across reboots, and names it as a device.
-struct MacDisplayInfo: Equatable, Sendable {
+public struct MacDisplayInfo: Equatable, Sendable {
     let id: UInt32
     let uuid: String
     let name: String

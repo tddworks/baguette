@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Where every display sits once one of them is made main: the main display is

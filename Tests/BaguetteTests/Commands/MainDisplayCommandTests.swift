@@ -3,6 +3,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// `baguette main-display`, which `serve --share-mac` runs to make a shared

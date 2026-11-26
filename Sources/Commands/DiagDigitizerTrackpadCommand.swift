@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import ArgumentParser
 import Foundation
 import Mockable

@@ -5,6 +5,7 @@ import Mockable
 import NIOCore
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// `/mac/shares`: sharing this Mac to a viewer's device through a display of

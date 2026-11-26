@@ -3,6 +3,7 @@ import Mockable
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// What the simulator's input decides, with SimulatorKit's Indigo channel

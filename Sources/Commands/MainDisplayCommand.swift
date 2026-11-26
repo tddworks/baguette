@@ -1,5 +1,6 @@
 import ArgumentParser
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Foundation
 
 /// `baguette main-display --display <id>` — not for people: `serve --share-mac`

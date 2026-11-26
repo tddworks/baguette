@@ -12,7 +12,7 @@ import IOSurface
 /// `MJPEGStream` / `AVCCStream` / recording bind to a physical device
 /// with no changes. A view that joins late immediately receives the
 /// latest decoded surface so it never stares at a blank canvas.
-final class TwinScreen: @unchecked Sendable {
+public final class TwinScreen: @unchecked Sendable {
     private let decoder: any H264Decoder
     private let now: @Sendable () -> TimeInterval
     private let lock = NSLock()
@@ -53,7 +53,7 @@ final class TwinScreen: @unchecked Sendable {
     /// One binary WebSocket message from the companion's video socket.
     /// Malformed chunks are logged and dropped — they carry no frame a
     /// viewer could miss.
-    func ingest(chunk: Data) {
+    public func ingest(chunk: Data) {
         guard let (tag, payload) = AVCCEnvelope.unwrap(chunk) else {
             log("[device] dropping malformed video chunk (\(chunk.count) bytes)")
             return
@@ -97,7 +97,7 @@ final class TwinScreen: @unchecked Sendable {
     /// decode, no re-encode, N viewers share the same bytes. The
     /// cached description replays on attach; video resumes at the
     /// next keyframe.
-    func attachBytes(id: UUID, sink: @escaping @Sendable (Data) -> Void) {
+    public func attachBytes(id: UUID, sink: @escaping @Sendable (Data) -> Void) {
         lock.lock()
         guard !closed else {
             lock.unlock()
@@ -109,7 +109,7 @@ final class TwinScreen: @unchecked Sendable {
         if let replay { sink(replay) }
     }
 
-    func detachBytes(id: UUID) {
+    public func detachBytes(id: UUID) {
         lock.lock()
         byteSubscribers[id] = nil
         lock.unlock()
@@ -140,7 +140,7 @@ final class TwinScreen: @unchecked Sendable {
     }
 
     /// A per-stream `Screen` over this device's decoded frames.
-    func view() -> any Screen {
+    public func view() -> any Screen {
         TwinScreenView(hub: self)
     }
 

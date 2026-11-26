@@ -3,6 +3,7 @@ import Mockable
 import Testing
 
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Behaviour spec for the CameraSession state machine. The session

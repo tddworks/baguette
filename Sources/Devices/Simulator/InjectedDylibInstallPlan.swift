@@ -10,7 +10,7 @@ import CryptoKit
 /// mechanism (`InjectedDylibs`) and one `DYLD_INSERT_LIBRARIES`; one
 /// handed only to the app baguette launches, `DefaultsLookups`; and one
 /// executable, `HingeControl`, run with `simctl spawn`.
-struct InjectedDylib: Equatable, Sendable {
+public struct InjectedDylib: Equatable, Sendable {
     enum Kind: Sendable { case dylib, executable }
 
     /// Base name; the file on disk is `<name>.dylib`, or `<name>` for an
@@ -38,7 +38,7 @@ struct InjectedDylib: Equatable, Sendable {
     /// time rather than at build time.
     var sourceTreePath: String { "Injected/\(name)/\(fileName)" }
 
-    static let camera = InjectedDylib(
+    public static let camera = InjectedDylib(
         name: "VirtualCamera", environmentOverride: "BAGUETTE_VIRTUALCAMERA_DYLIB")
     static let motion = InjectedDylib(
         name: "VirtualMotion", environmentOverride: "BAGUETTE_VIRTUALMOTION_DYLIB")

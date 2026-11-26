@@ -9,7 +9,7 @@ import Foundation
 /// is there and explains one that isn't, so "absent" is an answer this
 /// type carries rather than an error the caller has to interpret — a
 /// device with neither is the common case, not a failure.
-struct CompanionScreens: Sendable, Equatable {
+public struct CompanionScreens: Sendable, Equatable {
     /// The size of the external display that actually bound, if one did.
     ///
     /// Deliberately not "is CarPlay connected". The plane binds *the
@@ -22,7 +22,12 @@ struct CompanionScreens: Sendable, Equatable {
     let externalSize: Size?
     let watch: PairedWatch?
 
-    var json: String {
+    public init(externalSize: Size?, watch: PairedWatch?) {
+        self.externalSize = externalSize
+        self.watch = watch
+    }
+
+    public var json: String {
         var watchField: [String: Any] = ["available": watch != nil]
         if let watch {
             watchField["udid"] = watch.udid

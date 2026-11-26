@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// Which way a phone's live screen reaches the Mac: baguette's own RTP
 /// receiver, or AVConference's, chosen by BAGUETTE_PHONE_SCREEN.

@@ -29,8 +29,8 @@ enum TwinEnvelope: Equatable, Sendable {
 
 /// The companion's self-introduction — the identity baguette lists a
 /// physical device under.
-struct TwinHello: Equatable, Sendable {
-    let udid: String
+public struct TwinHello: Equatable, Sendable {
+    public let udid: String
     let name: String
     let model: String
     let capabilities: [String]
@@ -47,7 +47,7 @@ struct TwinHello: Equatable, Sendable {
 
 /// One gyroscope sample: the phone's attitude plus the sender's
 /// monotonic timestamp (seconds), used to drop late-arriving samples.
-struct AttitudeSample: Equatable, Sendable {
+public struct AttitudeSample: Equatable, Sendable {
     let attitude: Attitude
     let timestamp: Double
 
@@ -74,11 +74,11 @@ struct AttitudeSample: Equatable, Sendable {
 /// The video socket's opening declaration — dimensions in device
 /// pixels, the capture orientation, and the codec of the binary frames
 /// that follow.
-struct VideoFormat: Equatable, Sendable {
-    let width: Int
-    let height: Int
+public struct VideoFormat: Equatable, Sendable {
+    public let width: Int
+    public let height: Int
     let orientation: DeviceOrientation
-    let codec: String
+    public let codec: String
 
     static func parse(_ dict: [String: Any]) throws -> VideoFormat {
         let orientation: DeviceOrientation

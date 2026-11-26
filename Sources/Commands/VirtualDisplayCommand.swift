@@ -1,5 +1,6 @@
 import ArgumentParser
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Foundation
 
 /// `baguette virtual-display --name … --width … --height … --serial …` —

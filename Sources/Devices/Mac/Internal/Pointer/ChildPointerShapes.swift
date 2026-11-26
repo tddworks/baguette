@@ -9,7 +9,7 @@ import Foundation
 /// last leaves; a viewer who joins hears the shape now at once. Each shape's
 /// image is kept by id, for a page to fetch once.
 /// Design: docs/features/mac-screen/design.md#the-pointer.
-final class ChildPointerShapes: PointerShapes, @unchecked Sendable {
+public final class ChildPointerShapes: PointerShapes, @unchecked Sendable {
     private let executable: URL
     private let makeProcess: @Sendable () -> any Subprocess
     private let lock = NSLock()
@@ -19,13 +19,13 @@ final class ChildPointerShapes: PointerShapes, @unchecked Sendable {
     private var images: [String: Data] = [:]
     private var viewers: [UUID: @Sendable (PointerShape) -> Void] = [:]
 
-    init(executable: URL, makeProcess: @escaping @Sendable () -> any Subprocess) {
+    public init(executable: URL, makeProcess: @escaping @Sendable () -> any Subprocess) {
         self.executable = executable
         self.makeProcess = makeProcess
     }
 
     /// Hear every new shape — and the shape now, at once, when there is one.
-    func watch(_ hear: @escaping @Sendable (PointerShape) -> Void) -> PointerWatch {
+    public func watch(_ hear: @escaping @Sendable (PointerShape) -> Void) -> PointerWatch {
         let id = UUID()
         // The helper is reserved under the lock, so viewers arriving together start one.
         let (now, start) = lock.withLock { () -> (PointerShape?, (any Subprocess)?) in
@@ -41,7 +41,7 @@ final class ChildPointerShapes: PointerShapes, @unchecked Sendable {
     }
 
     /// The image of the shape `id`, once it has been seen.
-    func image(id: String) -> Data? {
+    public func image(id: String) -> Data? {
         lock.withLock { images[id] }
     }
 

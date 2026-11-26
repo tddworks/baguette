@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// An emulator turned on and off: its AVD started headless, its console told
 /// to stop — with adb's and the emulator's processes stood in for.

@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// What `emulator -list-avds` prints, read as the installed AVDs' names.
 @Suite("AVDListing")

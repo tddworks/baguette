@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// The phone's tunnel through CoreDevice, with the connect call, devicectl
 /// and this Mac's addresses stood in for: when it is brought up, and where

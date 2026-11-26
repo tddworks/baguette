@@ -2,7 +2,7 @@ import Foundation
 
 /// What a `baguette virtual-display` process says, once, on its own line: the
 /// display it made — its `CGDirectDisplayID` and UUID — or why it made none.
-enum VirtualDisplayAnnouncement: Equatable, Sendable {
+public enum VirtualDisplayAnnouncement: Equatable, Sendable {
     case ready(id: UInt32, uuid: String)
     case failed(String)
 
@@ -21,7 +21,7 @@ enum VirtualDisplayAnnouncement: Equatable, Sendable {
     }
 
     /// The line the process says it in.
-    var line: String {
+    public var line: String {
         switch self {
         case let .ready(id, uuid): "ready \(id) \(uuid)"
         case let .failed(reason): "failed \(reason)"

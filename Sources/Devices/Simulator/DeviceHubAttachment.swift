@@ -22,13 +22,17 @@ import Foundation
 /// has been shadowed at least once in this backboardd's lifetime, which is
 /// exactly the condition that needs healing. Per AGENTS.md's one-shot-fetch
 /// split, the parse lives here; the spawn is `SimctlInputSurface`'s.
-struct DeviceHubAttachment: Equatable, Sendable {
+public struct DeviceHubAttachment: Equatable, Sendable {
     /// The Darwin notify key `dtuhidd` sets to `1` on start. Spelling is the
     /// contract with Apple: a typo reads a key nothing sets, forever `0`.
     static let stateKey = "com.apple.coredevice.dtuhidd.active"
 
     /// Device Hub's HID daemon has claimed this simulator.
-    var attached: Bool
+    public var attached: Bool
+
+    public init(attached: Bool) {
+        self.attached = attached
+    }
 
     /// Interpret `notifyutil -g <stateKey>` output — `<key> <state>` on one
     /// line. Anything else (a runtime that never published the key, a
@@ -47,7 +51,7 @@ struct DeviceHubAttachment: Equatable, Sendable {
     /// One line telling the user what is about to go wrong and the command
     /// that fixes it — an advisory that only describes the problem is
     /// noise.
-    func advisory(udid: String) -> String? {
+    public func advisory(udid: String) -> String? {
         guard attached else { return nil }
         return """
             Device Hub has attached to this simulator, which shadows the input surface \
