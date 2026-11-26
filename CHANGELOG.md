@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.5.1] - 2026-11-26
+
 ### Changed
 - `HingeControl` is now four programs, one per Apple subsystem: `CoreMotionAngle`, `DeviceHubControls`, `HIDButtons`, `AXPFrontmost`. Verbs and output are unchanged; each builds and fails on its own. → [design](docs/features/injected-programs/design.md)
 - `CoreSimulators(injectedPrograms:)` takes a library host's copy of each program (`InjectedPrograms`). `CoreSimulators(hingeControl:)` still works for this release, deprecated: the one binary answers every program's verbs.
@@ -42,5 +46,6 @@ For releases prior to this changelog, see the
 
 [0.4](docs/changelog/0.4.md) · [0.3](docs/changelog/0.3.md) · [0.2](docs/changelog/0.2.md) · [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/tddworks/baguette/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/tddworks/baguette/compare/v0.4.0...v0.5.0
