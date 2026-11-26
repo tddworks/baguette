@@ -26,19 +26,24 @@ public struct HingeAngle: Equatable, Sendable {
         degrees >= Self.openBoundaryDegrees ? .secondary : .primary
     }
 
-    /// One line of `HingeControl read-angle` / `watch-angle` output, a
+    /// One line of `CoreMotionAngle read-angle` / `watch-angle` output, a
     /// sample the guest's CoreMotion flagged valid:
     ///
     ///     angle 130
     ///
     /// The first sample carries the current angle and arrives before any
     /// motion, so one line is a reading.
-    public static func parse(hingeControlLine line: String) -> HingeAngle? {
+    public static func parse(coreMotionAngleLine line: String) -> HingeAngle? {
         let words = line.split(separator: " ", omittingEmptySubsequences: false)
         guard words.count == 2, words[0] == "angle",
               let degrees = Double(words[1]), degrees.isFinite
         else { return nil }
         return HingeAngle(degrees: degrees)
+    }
+
+    @available(*, deprecated, renamed: "parse(coreMotionAngleLine:)")
+    public static func parse(hingeControlLine line: String) -> HingeAngle? {
+        parse(coreMotionAngleLine: line)
     }
 
     public init(degrees: Double) {

@@ -16,8 +16,8 @@ import CoreGraphics
 /// Recipe (per call):
 ///
 ///   1. Find the frontmost PID. `describeAll` asks the bridge first and
-///      falls back to a fresh `HingeControl frontmost` process
-///      (`GuestFrontmost`) when the bridge can't read the app
+///      falls back to a fresh `AXPFrontmost frontmost` process
+///      (`AXPTranslatorFrontmost`) when the bridge can't read the app
 ///      (`AXFrontmostRead`): on iOS 26.5 its frontmost request can answer
 ///      empty, and a freshly launched app shows it an empty tree until a
 ///      guest accessibility client has connected. Point queries always
@@ -74,7 +74,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     private let recheckGeometry: @Sendable () throws -> DisplayGeometry
 
     /// The guest's current frontmost PID for a udid and device set;
-    /// `GuestFrontmost.pid` in production, a stub in tests.
+    /// `AXPTranslatorFrontmost.pid` in production, a stub in tests.
     private let frontmostPID: @Sendable (String, String?) throws -> Int32
 
     init(
@@ -82,7 +82,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         host: any DeviceHost,
         deviceSetPath: String? = nil,
         frontmostPID: @escaping @Sendable (String, String?) throws -> Int32 = {
-            try GuestFrontmost.pid(udid: $0, deviceSetPath: $1)
+            try AXPTranslatorFrontmost.pid(udid: $0, deviceSetPath: $1)
         },
         recheckGeometry: (@Sendable () throws -> DisplayGeometry)? = nil,
         displayGeometry: @escaping @Sendable () throws -> DisplayGeometry

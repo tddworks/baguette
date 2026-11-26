@@ -10,7 +10,15 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- The guest helper `HingeControl` is now four programs, one per Apple subsystem baguette drives inside a simulator: `CoreMotionAngle` (the hinge angle), `DeviceHubControls` (Device Hub's hinge slider and orientation picker), `HIDButtons` (a foldable's keys and buttons) and `AXPFrontmost` (the frontmost app). Each verb and its output is unchanged; each builds and fails on its own, so an accessibility read no longer depends on the hinge's binary. → [design](docs/features/injected-programs/design.md)
+- `CoreSimulators(injectedPrograms:)` takes a library host's copy of each program (`InjectedPrograms`). `CoreSimulators(hingeControl:)` still works for this release, deprecated: the one binary answers every program's verbs.
+- `BAGUETTE_HINGECONTROL_TOOL` is replaced by one override per program: `BAGUETTE_COREMOTIONANGLE_TOOL`, `BAGUETTE_DEVICEHUBCONTROLS_TOOL`, `BAGUETTE_HIDBUTTONS_TOOL`, `BAGUETTE_AXPFRONTMOST_TOOL`.
+- `HingeControlReply` is `InjectedProgramReply`, and `HingeAngle.parse(hingeControlLine:)` is `parse(coreMotionAngleLine:)`; the old names stay, deprecated.
+- A key that fails on a foldable says `HIDButtons` failed, no longer a hinge error.
+
 ### Fixed
+- On a foldable whose lit panel Core Device couldn't name, the fresh hinge read now uses a library host's own `CoreMotionAngle` rather than looking only for the CLI's.
 - `describe-ui` on an Apple Watch (or another guest that isn't iOS) no longer fails with a dyld error. The `HingeControl` guest helper is built for the iOS simulator, so it isn't spawned in other guests, and a read keeps what the host bridge read when the helper can't run.
 
 ---

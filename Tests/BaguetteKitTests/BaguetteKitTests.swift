@@ -20,13 +20,17 @@ struct BaguetteKitTests {
         #expect(kinds.devices.all.isEmpty)
     }
 
-    @Test func `should take a host's own copy of the hinge helper for the simulators it lists`() throws {
+    @Test func `should take a host's own copies of the programs it runs in the guest`() throws {
         let deviceSet = try emptyDeviceSet()
         defer { try? FileManager.default.removeItem(at: deviceSet) }
 
         let simulators = CoreSimulators(
             deviceSetPath: deviceSet.path,
-            hingeControl: URL(fileURLWithPath: "/opt/host/HingeControl"))
+            injectedPrograms: InjectedPrograms(
+                coreMotionAngle: URL(fileURLWithPath: "/opt/host/CoreMotionAngle"),
+                deviceHubControls: URL(fileURLWithPath: "/opt/host/DeviceHubControls"),
+                hidButtons: URL(fileURLWithPath: "/opt/host/HIDButtons"),
+                axpFrontmost: URL(fileURLWithPath: "/opt/host/AXPFrontmost")))
 
         #expect(simulators.all.isEmpty)
     }

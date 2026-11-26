@@ -86,7 +86,7 @@ public protocol Subprocess: AnyObject, Sendable {
     /// Like `run(executable:arguments:onBytes:onExit:)`, but keeps the
     /// child's standard input open for `write(_:)` — for a child that
     /// serves commands line by line and lives as long as its owner
-    /// (`HingeControl serve`). A conformer that cannot may throw
+    /// (`DeviceHubControls serve`, `HIDButtons serve`). A conformer that cannot may throw
     /// `SubprocessError.notInteractive`.
     func runInteractive(
         executable: URL,

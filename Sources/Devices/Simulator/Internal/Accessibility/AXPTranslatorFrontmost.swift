@@ -1,27 +1,30 @@
 import BaguetteDevice
 import Foundation
 
-/// Resolves the current window-server frontmost in a fresh guest AX context.
-enum GuestFrontmost {
+/// The frontmost app, asked of the guest's own accessibility server through
+/// AXPTranslator: `xcrun simctl spawn <udid> <AXPFrontmost> frontmost`, a fresh
+/// accessibility context per query, which also wakes a freshly launched app's
+/// tree for the host's next read.
+enum AXPTranslatorFrontmost {
     enum Failure: Error, Equatable, LocalizedError {
-        case toolMissing
-        /// The helper is built for the iOS simulator; this guest runs another OS.
+        case programMissing
+        /// `AXPFrontmost` is built for the iOS simulator; this guest runs another OS.
         case unsupportedRuntime(String)
         case invalidResponse(udid: String, cause: String)
 
         var errorDescription: String? {
             switch self {
-            case .toolMissing:
-                "The bundled HingeControl guest helper is missing; rebuild Baguette with its resource bundle."
+            case .programMissing:
+                "The bundled AXPFrontmost program is missing; rebuild Baguette with its resource bundle."
             case .unsupportedRuntime(let runtime):
-                "The HingeControl guest helper runs only in an iOS simulator, not \(runtime)."
+                "AXPFrontmost runs only in an iOS simulator, not \(runtime)."
             case .invalidResponse(let udid, let cause):
                 "Frontmost application query for \(udid) returned invalid data: \(cause)"
             }
         }
     }
 
-    /// Whether the helper can run in a guest of this runtime (`iOS 27.1`,
+    /// Whether `AXPFrontmost` can run in a guest of this runtime (`iOS 27.1`,
     /// `watchOS 11.2`): it is built for the iOS simulator only.
     static func runs(onRuntime runtime: String) -> Bool {
         DeviceKind.Platform(runtime: runtime) == .iOS
@@ -31,15 +34,15 @@ enum GuestFrontmost {
         udid: String,
         deviceSetPath: String? = nil,
         runtime: String? = nil,
-        tool: () -> String? = { InjectedDylibInstaller.installIfNeeded(.hingeControl) },
+        path: () -> String? = { InjectedDylibInstaller.installIfNeeded(.axpFrontmost) },
         xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun")
     ) throws -> Int32 {
         if let runtime, !runs(onRuntime: runtime) { throw Failure.unsupportedRuntime(runtime) }
-        guard let tool = tool() else { throw Failure.toolMissing }
+        guard let path = path() else { throw Failure.programMissing }
         let output = try SimctlCapture.run(
             udid: udid,
             arguments: ["simctl"] + (deviceSetPath.map { ["--set", $0] } ?? [])
-                + ["spawn", udid, tool, "frontmost"],
+                + ["spawn", udid, path, "frontmost"],
             // Guest AX is bounded to 4s after main starts. Allow separate time
             // for simctl/dyld startup and pipe drain.
             xcrun: xcrun, timeout: 10

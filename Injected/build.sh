@@ -18,8 +18,10 @@ for script in */build.sh; do
     name=$(dirname "$script")
     "./$script"
 
-    # A dylib to inject, or — HingeControl — an executable to spawn in
-    # the guest. Either way the product is named for its directory.
+    # A dylib to inject, or an executable to spawn in the guest
+    # (CoreMotionAngle, DeviceHubControls, HIDButtons, AXPFrontmost).
+    # Either way the product is named for its directory; Shared/ holds
+    # headers only and has no build.sh.
     dylib="$name/$name.dylib"
     if [ ! -f "$dylib" ]; then dylib="$name/$name"; fi
 

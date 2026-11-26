@@ -8,8 +8,8 @@ import Mockable
 /// its framebuffer and digitizer through it. Single-panel devices have
 /// no hinge and never ask.
 ///
-/// Read through `GuestHinge`; driven through `HingeMotor`, which
-/// runs `HingeControl` in the guest to send the pose events Device Hub
+/// Read through `CoreMotionHinge`; driven through `HingeMotor`, which
+/// runs `DeviceHubControls` in the guest to send the pose events Device Hub
 /// sends. `SharedHinge` composes the two.
 @Mockable
 public protocol Hinge: Sendable {
@@ -33,7 +33,7 @@ public protocol Hinge: Sendable {
 
     /// Move the hinge to `degrees` over `duration` seconds — Device Hub's
     /// pose picker, from baguette. Throws when the device cannot be
-    /// driven (no `HingeControl`, or the guest refused).
+    /// driven (no `DeviceHubControls`, or the guest refused).
     func fold(to degrees: Double, over duration: TimeInterval) throws
 
     /// The panel the device itself says it presents on, or nil when it

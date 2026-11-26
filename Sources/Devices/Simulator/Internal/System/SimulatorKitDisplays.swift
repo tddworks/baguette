@@ -11,13 +11,15 @@ final class SimulatorKitDisplays: Displays, @unchecked Sendable {
     private let host: any DeviceHost
     private let hinge: any Hinge
     private let keys: (any DeviceKeys)?
+    private let angleReader: (any Hinge)?
     private let enumerateIO: () throws -> String
 
     /// `keys` presses a foldable's hardware keys through the guest; a
-    /// display with several panels routes buttons there.
+    /// display with several panels routes buttons there. `angleReader` reads
+    /// the hinge afresh when Core Device can't say which panel is lit.
     init(
         udid: String, host: any DeviceHost, hinge: any Hinge, keys: (any DeviceKeys)? = nil,
-        deviceSetPath: String? = nil
+        angleReader: (any Hinge)? = nil, deviceSetPath: String? = nil
     ) {
         let enumerateIO = { try SimctlCapture.enumerate(udid: udid, deviceSetPath: deviceSetPath) }
         self.udid = udid
@@ -25,6 +27,7 @@ final class SimulatorKitDisplays: Displays, @unchecked Sendable {
         self.host = host
         self.hinge = hinge
         self.keys = keys
+        self.angleReader = angleReader
         self.enumerateIO = enumerateIO
         self.phone = SimulatorKitDisplay(
             kind: .phone,
@@ -33,7 +36,8 @@ final class SimulatorKitDisplays: Displays, @unchecked Sendable {
             host: host,
             enumerateIO: enumerateIO,
             hinge: hinge,
-            keys: keys
+            keys: keys,
+            guestHinge: angleReader
         )
         self.carPlay = SimulatorKitDisplay(
             kind: .carPlay,
@@ -54,7 +58,8 @@ final class SimulatorKitDisplays: Displays, @unchecked Sendable {
             enumerateIO: enumerateIO,
             hinge: hinge,
             keys: keys,
-            pinnedPanel: panel
+            pinnedPanel: panel,
+            guestHinge: angleReader
         )
     }
 }

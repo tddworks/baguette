@@ -111,16 +111,21 @@ struct InjectedDylibInstallerApplyTests {
     }
 }
 
-// HingeControl is not a dylib to inject but an executable to spawn in
-// the guest; it ships and installs the same way, under its bare name.
+// The programs spawned in the guest are not dylibs to inject but
+// executables; they ship and install the same way, under their bare names.
 extension InjectedDylibInstallPlanTests {
-    @Test func `should ship the hinge control executable under its bare name`() {
-        #expect(InjectedDylib.hingeControl.fileName == "HingeControl")
-        #expect(InjectedDylib.hingeControl.sourceTreePath == "Injected/HingeControl/HingeControl")
-        #expect(InjectedDylib.hingeControl.environmentOverride == "BAGUETTE_HINGECONTROL_TOOL")
-        let plan = InjectedDylibInstallPlan.compute(
-            bytes: Data("tool".utf8), supportDir: "/s", dylib: .hingeControl)
-        #expect(plan.destPath.hasSuffix("/HingeControl"))
+    @Test(arguments: [
+        (InjectedDylib.coreMotionAngle, "CoreMotionAngle", "BAGUETTE_COREMOTIONANGLE_TOOL"),
+        (.deviceHubControls, "DeviceHubControls", "BAGUETTE_DEVICEHUBCONTROLS_TOOL"),
+        (.hidButtons, "HIDButtons", "BAGUETTE_HIDBUTTONS_TOOL"),
+        (.axpFrontmost, "AXPFrontmost", "BAGUETTE_AXPFRONTMOST_TOOL"),
+    ])
+    func `should ship each guest program under its bare name`(program: InjectedDylib, name: String, override: String) {
+        #expect(program.fileName == name)
+        #expect(program.sourceTreePath == "Injected/\(name)/\(name)")
+        #expect(program.environmentOverride == override)
+        let plan = InjectedDylibInstallPlan.compute(bytes: Data("program".utf8), supportDir: "/s", dylib: program)
+        #expect(plan.destPath.hasSuffix("/\(name)"))
     }
 }
 
@@ -195,10 +200,10 @@ struct InjectedDylibInstallerLookupTests {
 
     @Test func `should find a bundled executable by its bare name`() throws {
         let scratch = try Scratch()
-        let bundled = try scratch.file("Baguette_Baguette.bundle/HingeControl/HingeControl", in: scratch.executable)
+        let bundled = try scratch.file("Baguette_Baguette.bundle/HIDButtons/HIDButtons", in: scratch.executable)
 
         #expect(
-            find(.hingeControl, scratch)?.resolvingSymlinksInPath().path == bundled.resolvingSymlinksInPath().path)
+            find(.hidButtons, scratch)?.resolvingSymlinksInPath().path == bundled.resolvingSymlinksInPath().path)
     }
 
     @Test func `should find the dylib beside the executable when the build ships no resource bundle`() throws {

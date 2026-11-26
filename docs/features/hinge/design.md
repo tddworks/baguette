@@ -1,14 +1,16 @@
 ---
-description: Why iPhone Duo's hinge and hardware keys are driven by a guest-side HingeControl that reproduces dtuhidd's virtual HID events — the measured payloads, usages, reading path and packaging. Read before touching the hinge or foldable keys.
+description: Why iPhone Duo's hinge and hardware keys are driven by guest-side programs (DeviceHubControls, HIDButtons, CoreMotionAngle) that reproduce dtuhidd's virtual HID events — the measured payloads, usages, reading path and packaging. Read before touching the hinge or foldable keys.
 ---
 
 # Hinge — design
 
 ## Path
 
-- **Drive:** `baguette hinge` / `POST /devices/<udid>/hinge` / 3D socket `set_pose` → `Hinge.fold(to:over:)` (`HingeMotor`) → `GuestHingeMotor` → `xcrun simctl spawn <udid> <HingeControl> serve` (one per device, kept) → `HIDVirtualEventService` vendor event on an `avpCustom`-shaped service.
-- **Keys:** `baguette press` / `key` / `type` / `POST …/input` / stream sockets → a foldable's `HID` is `FoldableInput` → `DeviceKeys` (also played by `GuestHingeMotor`) → `HingeControl button <page> <usage> <ms> [<page> <usage>]…` on a `mainScreenButtons`-shaped service.
-- **Read:** `GuestHinge` → `xcrun simctl spawn <udid> <HingeControl> read-angle` (or `watch-angle`) → CoreMotion's `CMAngleManager` in the guest.
+- **Drive:** `baguette hinge` / `POST /devices/<udid>/hinge` / 3D socket `set_pose` → `Hinge.fold(to:over:)` (`HingeMotor`) → `DeviceHubControls` → `xcrun simctl spawn <udid> <DeviceHubControls> serve` (one per device, kept by `SimctlSpawnSession`) → `HIDVirtualEventService` vendor event on an `avpCustom`-shaped service.
+- **Keys:** `baguette press` / `key` / `type` / `POST …/input` / stream sockets → a foldable's `HID` is `FoldableInput` → `DeviceKeys` (`HIDButtonsKeys`) → `HIDButtons button <page> <usage> <ms> [<page> <usage>]…` on a `mainScreenButtons`-shaped service.
+- **Read:** `CoreMotionHinge` → `xcrun simctl spawn <udid> <CoreMotionAngle> read-angle` (or `watch-angle`) → CoreMotion's `CMAngleManager` in the guest.
+
+Each is its own program, one per Apple subsystem: [injected programs](../injected-programs/design.md).
 
 ## How the hinge is driven
 
@@ -43,23 +45,23 @@ type]` with the top bit of `type` marking a container's last entry —
 for; the simulator's consumer accepts them from any service of that
 shape.
 
-So baguette ships **`HingeControl`** (`Injected/HingeControl/`), an
-iOS-Simulator *executable* — the first non-dylib under `Injected/`,
-built and staged by the same loop — which `GuestHingeMotor` starts once
-per device with `xcrun simctl spawn <udid> <HingeControl> --deadline <t>
-serve` and keeps: it registers a service of the same shape and plays each
-line it is written on stdin (`sweep <from> <to> <ms>` at 60 Hz with Device
-Hub's ease-out, `angle <deg>`, `orientation <native-value>`, `button <page>
-<usage> <ms> [<page> <usage>]…`), answering each with `done <status>` once played — 0
-success, 1 rejected HID dispatch, 2 invalid line. Every hinge, rotation and
+So baguette ships **`DeviceHubControls`** (`Injected/DeviceHubControls/`), an
+iOS-Simulator *executable* built and staged by the same loop as the
+dylibs, which `SimctlSpawnSession` starts once per device with `xcrun
+simctl spawn <udid> <DeviceHubControls> --deadline <t> serve` and keeps: it
+registers a service of the same shape and plays each line it is written on
+stdin (`sweep <from> <to> <ms>` at 60 Hz with Device Hub's ease-out, `angle
+<deg>`, `orientation <native-value>`), answering each with `done <status>`
+once played — 0 success, 1 rejected HID dispatch, 2 invalid line. The keys
+below are `HIDButtons`, its own program and its own kept child. Every hinge, rotation and
 key call waits for that answer, so it returns once the guest has acted and a
 short-lived CLI cannot exit with its command still queued. The encoder
 reproduces Device Hub's payload byte for byte. Commands queue behind one
 another; a pose costs no spawn after the first (~0.9 s round trip for
 Device Hub's 0.8 s sweep). `SharedHinge.fold(to:over:)` starts each
 sweep from the angle last heard — or, when nothing has been heard (no
-`HingeControl`, or a silent guest), at the angle asked for, so the hinge
-moves straight there — and `GuestHinge` reads the sweep back like any
+`CoreMotionAngle`, or a silent guest), at the angle asked for, so the hinge
+moves straight there — and `CoreMotionHinge` reads the sweep back like any
 other, so the page, `litPanel` and the chrome all follow. Unless the last
 sample is the angle asked for (a socket's watch heard the fold land), the
 fold then forgets it, delivered or not, so the next `GET /hinge` or stream
@@ -67,7 +69,7 @@ bind reads the guest rather than the hinge as it was before the fold.
 
 Folds on one device play one at a time. Each one tells its sweep watchers
 (`Hinge.watchSweeps`) the sweep (`HingeSweep`, the same from, to and
-60 Hz ease-out samples `HingeControl` sends) as it goes to the motor, and
+60 Hz ease-out samples `DeviceHubControls` sends) as it goes to the motor, and
 `PoseDelivery` once it returns. A live 3D book plays that sweep as
 commanded (`PosedHinge`). The readings can lag: on a loaded EC2 Mac, every
 sample of a 0.8 s sweep arrived, in order, over about 5 s. When the sweep is
@@ -116,16 +118,16 @@ Device Hub streams the angle into the guest as HID reports
 (`UniversalHID` → `dtuhidd` → `kIOHIDEventTypeHingeAngle` → CoreMotion
 → SpringBoard's pose provider), and SpringBoard decides which panel to
 light. baguette reads it where SpringBoard does, in the guest:
-`HingeControl read-angle` prints the current angle and exits, and
+`CoreMotionAngle read-angle` prints the current angle and exits, and
 `watch-angle` prints every sample until stopped, each as one `angle
-<degrees>` line (`GuestHinge` spawns them with `xcrun simctl spawn`, so
+<degrees>` line (`CoreMotionHinge` spawns them with `xcrun simctl spawn`, so
 a custom device set works too). Only a device with several integrated
 panels (`IntegratedPanels.several`) ever asks. Device Hub's closed pose
 reads ≈3°, its open pose ≈130°; SpringBoard goes landscape on its own
 when open. By hand:
 
 ```bash
-xcrun simctl spawn <UDID> <HingeControl> watch-angle
+xcrun simctl spawn <UDID> <CoreMotionAngle> watch-angle
 ```
 
 Both verbs use CoreMotion's private `CMAngleManager`, the reader behind
@@ -170,10 +172,9 @@ second. Measured with the same monitor, one click each in Device Hub:
 | power (sleep/wake) | `0x0C` | `0x30` |
 | camera control | `0xFF00` | `0x66` |
 
-`HingeControl` registers a second service of that shape and presses
-them: `button <page> <usage> <ms>`. On the host, `DeviceKeys` is the
-domain role (`GuestHingeMotor` plays it as well, one serving child per
-device), and a foldable's `HID` is `FoldableInput`: touches go to the
+`HIDButtons` registers a service of that shape and presses them:
+`button <page> <usage> <ms>`. On the host, `DeviceKeys` is the domain
+role (`HIDButtonsKeys` plays it, one serving child per device), and a foldable's `HID` is `FoldableInput`: touches go to the
 lit panel's digitizer as before, and a `DeviceButton` with a Device Hub
 key (`power`, `lock`, `volume-up`, `volume-down`, `action`) goes to the
 guest, held `duration` seconds or Device Hub's 0.25 s. The CLI, the
@@ -193,27 +194,31 @@ the input only when the device has several panels.
 
 ## Packaging
 
-`HingeControl` follows the injected dylibs exactly: built fat by
+The programs follow the injected dylibs exactly: each built fat by
 `Injected/build.sh` (host-arch-only under `BAGUETTE_INJECTED_ARCHS`),
-staged under `Sources/Baguette/Resources/HingeControl/`, `.copy`'d by
+staged under `Sources/Baguette/Resources/<Program>/`, `.copy`'d by
 `Package.swift`, and installed by `InjectedDylibInstaller` (kind
-`.executable`, env override `BAGUETTE_HINGECONTROL_TOOL`) into the
+`.executable`, env override `BAGUETTE_<PROGRAM>_TOOL`) into the
 content-hashed build directory with `0755`. The one difference is the
-link: an executable, so no `-dynamiclib` / `-install_name`.
+link: an executable, so no `-dynamiclib` / `-install_name`; and each
+includes `Injected/Shared/`.
 
 The homebrew-core formula rebuilds every injected product from source
 for the host arch (`brew audit` rejects the committed universal
-binaries), mirroring each `build.sh`; it needs one more entry for this
-one:
+binaries), mirroring each `build.sh`; the programs spawned in the guest
+take one entry each:
 
 ```ruby
-# Executable spawned in the guest, not a dylib: same sources layout, plain link.
-tool = "Sources/Baguette/Resources/HingeControl/HingeControl"
-rm tool
-system "xcrun", "clang", "-arch", arch, "-isysroot", sdk,
-       "-target", "#{arch}-apple-ios17.0-simulator", "-fobjc-arc",
-       "-framework", "Foundation", "-Wl,-adhoc_codesign",
-       "-o", tool, *Dir["Injected/HingeControl/Sources/*.m"]
+# Executables spawned in the guest, not dylibs: same sources layout, plain link.
+%w[CoreMotionAngle DeviceHubControls HIDButtons AXPFrontmost].each do |program|
+  tool = "Sources/Baguette/Resources/#{program}/#{program}"
+  rm tool
+  system "xcrun", "clang", "-arch", arch, "-isysroot", sdk,
+         "-target", "#{arch}-apple-ios17.0-simulator", "-fobjc-arc",
+         "-I", "Injected/Shared",
+         "-framework", "Foundation", "-Wl,-adhoc_codesign",
+         "-o", tool, *Dir["Injected/#{program}/Sources/*.m"]
+end
 ```
 
 ## Dead ends

@@ -3,7 +3,7 @@ import Mockable
 
 /// What moves a foldable's hinge — and turns the device — the way Device
 /// Hub's pose picker and rotate button do. The production impl is
-/// `GuestHingeMotor`, which runs `HingeControl` inside the guest.
+/// `DeviceHubControls`, which runs the program of that name inside the guest.
 @Mockable
 public protocol HingeMotor: Sendable {
     /// Sweep the hinge from one angle to another over `duration` seconds,
@@ -18,21 +18,21 @@ public protocol HingeMotor: Sendable {
 }
 
 public enum HingeError: Error, Equatable, CustomStringConvertible, LocalizedError {
-    /// The build did not ship `HingeControl`, or it could not be installed.
+    /// The build did not ship `DeviceHubControls`, or it could not be installed.
     case toolMissing
     case toolFailed(status: Int32)
     case toolTimedOut
-    /// The helper started after its deadline and did nothing.
+    /// The program started after its deadline and did nothing.
     case toolStartedLate
 }
 
 public extension HingeError {
     var description: String {
         switch self {
-        case .toolMissing: "HingeControl is missing or could not be installed."
-        case .toolFailed(let status): "HingeControl exited with status \(status)."
-        case .toolTimedOut: "HingeControl did not answer in time; the command may have been delivered, but the stopped helper cannot deliver it later."
-        case .toolStartedLate: "HingeControl started after its deadline and did nothing; the command was not delivered."
+        case .toolMissing: "DeviceHubControls is missing or could not be installed."
+        case .toolFailed(let status): "DeviceHubControls exited with status \(status)."
+        case .toolTimedOut: "DeviceHubControls did not answer in time; the command may have been delivered, but the stopped program cannot deliver it later."
+        case .toolStartedLate: "DeviceHubControls started after its deadline and did nothing; the command was not delivered."
         }
     }
 

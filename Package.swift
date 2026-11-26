@@ -202,10 +202,14 @@ let package = Package(
                 // looks up. Same build-and-stage path, same installer, but
                 // handed to one launch rather than armed device-wide.
                 .copy("Baguette/Resources/DefaultsLookups"),
-                // HingeControl — not a dylib but an executable spawned in
-                // the guest (`simctl spawn`) to drive iPhone Duo's hinge.
-                // Same build-and-stage path, same installer.
-                .copy("Baguette/Resources/HingeControl"),
+                // The programs spawned in the guest (`simctl spawn`), one per
+                // Apple subsystem they drive: not dylibs but executables.
+                // Same build-and-stage path, same installer
+                // (docs/features/injected-programs/design.md).
+                .copy("Baguette/Resources/CoreMotionAngle"),
+                .copy("Baguette/Resources/DeviceHubControls"),
+                .copy("Baguette/Resources/HIDButtons"),
+                .copy("Baguette/Resources/AXPFrontmost"),
             ],
             swiftSettings: [
                 // MOCKING is debug-only; release strips mock code entirely.

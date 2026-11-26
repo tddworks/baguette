@@ -1,28 +1,28 @@
 import BaguetteDevice
 import Foundation
 
-/// `Hinge` read inside the guest: `xcrun simctl spawn <udid> <HingeControl>
-/// read-angle` prints the current angle and exits, `watch-angle` prints
+/// `Hinge` read from CoreMotion inside the guest: `xcrun simctl spawn <udid>
+/// <CoreMotionAngle> read-angle` prints the current angle and exits, `watch-angle` prints
 /// every sample until stopped. Both read CoreMotion's `CMAngleManager`,
 /// as the runtime's own device-info daemon does.
 ///
 /// The first sample carries the current angle and arrives in ~0.6 s with
 /// the spawn, before any motion — so this spawns the reader, takes that
 /// sample, and terminates the child. A failed exit (a device with no
-/// hinge, a silent guest), a missing `HingeControl`, or a child that has
+/// hinge, a silent guest), a missing `CoreMotionAngle`, or a child that has
 /// printed nothing by `deadline` is "no reading".
 ///
-/// The orchestration — tool lookup, argv, byte-to-line splitting,
+/// The orchestration — program lookup, argv, byte-to-line splitting,
 /// first-sample detection, terminate, deadline — is unit-covered through
 /// `MockSubprocess`; only `HostSubprocess`'s `Process` plumbing is
 /// integration-only.
-final class GuestHinge: Hinge, @unchecked Sendable {
+final class CoreMotionHinge: Hinge, @unchecked Sendable {
     private let udid: String
     private let deviceSetPath: String?
     /// A fresh child per call: `angle()` and each `watch` own their
     /// own reader and terminate only that one.
     private let subprocess: () -> any Subprocess
-    private let tool: () -> String?
+    private let path: () -> String?
     private let xcrun: URL
     private let deadline: TimeInterval
 
@@ -30,14 +30,14 @@ final class GuestHinge: Hinge, @unchecked Sendable {
         udid: String,
         deviceSetPath: String? = nil,
         subprocess: @escaping () -> any Subprocess = { HostSubprocess() },
-        tool: @escaping () -> String? = { InjectedDylibInstaller.installIfNeeded(.hingeControl) },
+        path: @escaping () -> String? = { InjectedDylibInstaller.installIfNeeded(.coreMotionAngle) },
         xcrun: URL = URL(fileURLWithPath: "/usr/bin/xcrun"),
         deadline: TimeInterval = 3
     ) {
         self.udid = udid
         self.deviceSetPath = deviceSetPath
         self.subprocess = subprocess
-        self.tool = tool
+        self.path = path
         self.xcrun = xcrun
         self.deadline = deadline
     }
@@ -74,7 +74,7 @@ final class GuestHinge: Hinge, @unchecked Sendable {
                     let lines = state.buffer.append(bytes)
                     state.lock.unlock()
                     for line in lines {
-                        if let angle = HingeAngle.parse(hingeControlLine: line) {
+                        if let angle = HingeAngle.parse(coreMotionAngleLine: line) {
                             state.settle(angle)
                             return
                         }
@@ -119,7 +119,7 @@ final class GuestHinge: Hinge, @unchecked Sendable {
                 arguments: arguments,
                 onBytes: { bytes in
                     for line in watch.lines(from: bytes) {
-                        if let angle = HingeAngle.parse(hingeControlLine: line) {
+                        if let angle = HingeAngle.parse(coreMotionAngleLine: line) {
                             onAngle(angle)
                         }
                     }
@@ -132,10 +132,10 @@ final class GuestHinge: Hinge, @unchecked Sendable {
         return watch
     }
 
-    /// `nil` when the build carries no `HingeControl`.
+    /// `nil` when the build carries no `CoreMotionAngle`.
     private func arguments(verb: String) -> [String]? {
-        guard let tool = tool() else { return nil }
-        return ["simctl"] + (deviceSetPath.map { ["--set", $0] } ?? []) + ["spawn", udid, tool, verb]
+        guard let path = path() else { return nil }
+        return ["simctl"] + (deviceSetPath.map { ["--set", $0] } ?? []) + ["spawn", udid, path, verb]
     }
 
     private final class Watch: HingeWatch, @unchecked Sendable {

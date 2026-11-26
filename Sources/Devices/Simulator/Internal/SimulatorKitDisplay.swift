@@ -50,7 +50,7 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         self.hinge = hinge
         self.keys = keys
         self.pinnedPanel = pinnedPanel
-        self.guestHinge = guestHinge ?? GuestHinge(udid: udid, deviceSetPath: deviceSetPath)
+        self.guestHinge = guestHinge ?? CoreMotionHinge(udid: udid, deviceSetPath: deviceSetPath)
         self.readOrientation = readOrientation
         self.readScreen = readScreen
         self.environment = environment

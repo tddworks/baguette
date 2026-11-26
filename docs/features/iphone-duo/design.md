@@ -15,13 +15,13 @@ is `0x32`". Found on Xcode 27.1 beta / iOS 27.1.
 - Every phone-plane entry point (`tap` / `swipe` / `input`, `screenshot`,
   `stream`, `serve`, `record`, `describe-ui`, `chrome layout`) → the lit panel,
   from `HingeAngle.litPanel`.
-- **Read**: `GuestHinge` → `HingeControl read-angle` / `watch-angle` in the
+- **Read**: `CoreMotionHinge` → `CoreMotionAngle read-angle` / `watch-angle` in the
   guest (CoreMotion), only when `IntegratedPanels.several`.
 - **Drive**: `baguette hinge`, `POST /devices/<UDID>/hinge`, the page's
-  `set_pose` → `Hinge.fold(to:over:)` → `GuestHingeMotor` → `HingeControl serve`
-  in the guest (`Injected/HingeControl`) → private `HID.framework`'s
+  `set_pose` → `Hinge.fold(to:over:)` → `DeviceHubControls` → `DeviceHubControls serve`
+  in the guest (`Injected/DeviceHubControls`) → private `HID.framework`'s
   `HIDVirtualEventService` (see [hinge](../hinge/README.md)).
-- **Keys**: `FoldableInput` → `DeviceKeys` → `HingeControl button` in the guest.
+- **Keys**: `FoldableInput` → `DeviceKeys` (`HIDButtonsKeys`) → `HIDButtons button` in the guest.
 - **Bind**: framebuffer (`ConnectedScreens.binding(kind: .phone, litPanel:)`),
   digitizer (`DisplayTouchTarget.resolve` → `IndigoHIDTouchTarget.panel(screenId:)`),
   chrome (`Simulator.chrome(in:)`), tap space, AX point size
@@ -132,7 +132,7 @@ guest down.
 
 The Duo ignores the legacy Indigo button press and Indigo's keyboard
 message alike; its hardware keys and keyboard keys go through `dtuhidd`'s
-`mainScreenButtons` service instead, pressed by `HingeControl`.
+`mainScreenButtons` service instead, pressed by `HIDButtons`.
 The measured usages and the routing (`FoldableInput` → `DeviceKeys`) are in
 [hinge/design.md](../hinge/design.md#the-hardware-keys-go-the-same-way).
 
@@ -215,7 +215,7 @@ rotation made in Device Hub is its own, and the page's button brings the two
 into step.
 
 **Pose picker.** A pick sends `{"type":"set_pose","hingeDegrees":0}` on the 3D
-socket → `Hinge.fold`, swept over Device Hub's 0.8 s by `HingeControl` inside the
+socket → `Hinge.fold`, swept over Device Hub's 0.8 s by `DeviceHubControls` inside the
 guest; the book plays the sweep as it goes and SpringBoard swaps panels.
 `screen_quad` carries `pose: {hingeDegrees}` so the nearest pose lights up. The
 **hinge slider** sends `{"type":"set_pose","hingeDegrees":72,"duration":0}`

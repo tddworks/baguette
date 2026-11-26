@@ -8,7 +8,10 @@ DerivedData/
 # Build intermediates — `build.sh` stages the real copies into
 # Sources/Baguette/Resources/, which are the tracked ones.
 /Injected/*/*.dylib
-/Injected/HingeControl/HingeControl
+/Injected/CoreMotionAngle/CoreMotionAngle
+/Injected/DeviceHubControls/DeviceHubControls
+/Injected/HIDButtons/HIDButtons
+/Injected/AXPFrontmost/AXPFrontmost
 
 # examples/ListSimulators resolves its dependencies fresh, as a host would.
 examples/ListSimulators/Package.resolved

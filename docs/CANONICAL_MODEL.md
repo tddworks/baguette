@@ -171,7 +171,8 @@ CompanionPhones  ◆    the companion-app twin, one source of Devices — not wi
 | a display's screen and input come from one binding, so a framebuffer never pairs with another plane's digitizer | `Display` · `DisplayBinding` |
 | a HID target is a registration, never computed from a screen id; an unregistered one kills backboardd. The phone plane uses its bound panel's `0x40000000 \| screenId`, else `0x32`; CarPlay its own `1` | `IndigoHIDTouchTarget` · `DisplayTouchTarget.resolve` |
 | a read of the frontmost app asks the bridge first and runs the guest helper only when the bridge can't read it, then gives an app that shows only the status bar a moment to appear; where the helper can't run, what the bridge read is the answer; no PID outlives its query | `AXFrontmostRead` |
-| the guest helper (`HingeControl`) is built for the iOS simulator and runs only in an iOS guest; another guest refuses at once | `GuestFrontmost.runs(onRuntime:)` |
+| `AXPFrontmost` is built for the iOS simulator and runs only in an iOS guest; another guest refuses at once | `AXPTranslatorFrontmost.runs(onRuntime:)` |
+| each program run in the guest drives one Apple subsystem and serves one domain port: `CoreMotionAngle` → `Hinge`, `DeviceHubControls` → `HingeMotor`, `HIDButtons` → `DeviceKeys`, `AXPFrontmost` → the frontmost app; a serving one is kept per device and program | `InjectedPrograms` · `SimctlSpawnSession` |
 | the sweep always looks where the walk can't see, and sweeps the gaps in full only when a scout finds something the walk didn't know | `AXSweep` |
 | a gesture asked to describe the UI compares against the screen before it, and reports the screen only once it has held still and no old page is sliding away | `AXSettle` |
 | an affordance is what can be done next on this screen: a verb, the one command that runs it (its envelope on a session), and the names it takes. An enabled text field can be filled, a slider dragged and any other enabled control tapped, wherever it is; a disabled one is listed apart | `AXAffordance` |
@@ -327,7 +328,6 @@ moves, one change at a time.
 | `IntegratedPanel` on the wire | `"primary"` / `"secondary"` spelled in `DeviceFrame` and twice in `Server` | one wire name on the value |
 | `FoldableInput` | calls `log(…)` from the App layer | Domain logs nothing; the failure is its `Bool` |
 | `LabelTap` · `ThenDescribe` | hold a law and assemble JSON in the App | a Domain value answers, and the App only projects it, as `Fill` does |
-| `GuestHingeMotor` | plays `HingeMotor` and `DeviceKeys` over one guest helper | a name for the helper's role, not "motor" |
 
 ## 7 · Open
 

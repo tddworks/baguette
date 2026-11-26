@@ -94,34 +94,52 @@ struct CoreSimulatorsTests {
         return path
     }
 
-    // MARK: - the hinge helper
+    // MARK: - the programs run in the guest
 
-    /// `HingeControl`, the guest helper baguette runs inside a simulator.
-    /// The CLI finds it beside its executable; a host that links baguette
-    /// ships its own copy and hands it to the simulators it lists.
-    @Test func `should hand every simulator it lists the hinge helper a host ships`() throws {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "hinge-helper-\(UUID().uuidString)")
+    /// The programs baguette runs inside a simulator. The CLI finds them
+    /// beside its executable; a host that links baguette ships its own copies
+    /// and hands each to the simulators it lists.
+    @Test func `should hand every simulator it lists each program a host ships`() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "programs-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let helper = folder.appending(path: "HingeControl")
-        try Data([0x01]).write(to: helper)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+        func program(_ name: String) throws -> URL {
+            let url = folder.appending(path: name)
+            try Data([0x01]).write(to: url)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            return url
+        }
+        let programs = InjectedPrograms(
+            coreMotionAngle: try program("CoreMotionAngle"), deviceHubControls: try program("DeviceHubControls"),
+            hidButtons: try program("HIDButtons"), axpFrontmost: try program("AXPFrontmost"))
         let context = FakeContext(default: FakeSet([FakeDevice()]))
 
-        let simulators = CoreSimulators(deviceSetPath: nil, serviceContext: { context }, hingeControl: helper)
+        let simulators = CoreSimulators(deviceSetPath: nil, serviceContext: { context }, injectedPrograms: programs)
         let simulator = try #require(simulators.all.first as? CoreSimulator)
 
-        #expect(simulator.hingeControl() == helper.path)
+        #expect(simulator.programs.coreMotionAngle() == programs.coreMotionAngle?.path)
+        #expect(simulator.programs.deviceHubControls() == programs.deviceHubControls?.path)
+        #expect(simulator.programs.hidButtons() == programs.hidButtons?.path)
+        #expect(simulator.programs.axpFrontmost() == programs.axpFrontmost?.path)
     }
 
-    @Test func `should find no hinge helper where a host's copy is missing`() throws {
-        let missing = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)/HingeControl")
+    @Test func `should find no program where a host's copy is missing`() throws {
+        let missing = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)/HIDButtons")
         let context = FakeContext(default: FakeSet([FakeDevice()]))
 
-        let simulators = CoreSimulators(deviceSetPath: nil, serviceContext: { context }, hingeControl: missing)
+        let simulators = CoreSimulators(
+            deviceSetPath: nil, serviceContext: { context }, injectedPrograms: InjectedPrograms(hidButtons: missing))
         let simulator = try #require(simulators.all.first as? CoreSimulator)
 
-        #expect(simulator.hingeControl() == nil)
+        #expect(simulator.programs.hidButtons() == nil)
+    }
+
+    // HingeControl answered every verb the four programs split, so a host that
+    // still hands it over keeps working for a release.
+    @Test func `should take the one HingeControl binary as every program`() {
+        let binary = URL(fileURLWithPath: "/opt/host/HingeControl")
+        #expect(InjectedPrograms.everyVerb(in: binary) == InjectedPrograms(
+            coreMotionAngle: binary, deviceHubControls: binary, hidButtons: binary, axpFrontmost: binary))
     }
 
     // MARK: - listing

@@ -193,7 +193,7 @@ struct SharedHingeTests {
         w.cancel()
     }
 
-    /// Without `HingeControl`, or with the guest silent, nothing is
+    /// Without `CoreMotionAngle`, or with the guest silent, nothing is
     /// heard. Sweeping from an assumed shut would fold an open device
     /// closed and hand the display to the cover and back on the way to
     /// the angle asked for.
