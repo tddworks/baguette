@@ -6,6 +6,22 @@ import Testing
 
 @Suite("AXNode")
 struct AXNodeTests {
+    @Test func `should put a node's id, activation point and slider track in its JSON only when it has them`() throws {
+        let frame = Rect(origin: Point(x: 0, y: 0), size: Size(width: 300, height: 30))
+        let slider = AXNode(role: "AXSlider", nodeId: "ax1:d:1:2-3:4", frame: frame,
+                            activationPoint: Point(x: 290, y: 15),
+                            sliderTrack: [Point(x: 0, y: 15), Point(x: 300, y: 15)])
+        let plain = AXNode(role: "AXStaticText", frame: frame)
+
+        let sliderJSON = try #require(JSONSerialization.jsonObject(with: Data(slider.json.utf8)) as? [String: Any])
+        let plainJSON = try #require(JSONSerialization.jsonObject(with: Data(plain.json.utf8)) as? [String: Any])
+
+        #expect(sliderJSON["nodeId"] as? String == "ax1:d:1:2-3:4")
+        #expect((sliderJSON["activationPoint"] as? [String: Double]) == ["x": 290, "y": 15])
+        #expect((sliderJSON["sliderTrack"] as? [[String: Double]]) == [["x": 0, "y": 15], ["x": 300, "y": 15]])
+        #expect(plainJSON["nodeId"] == nil && plainJSON["activationPoint"] == nil && plainJSON["sliderTrack"] == nil)
+    }
+
     @Test func `should mark a node that can be stepped, and leave the field off every other`() throws {
         let frame = Rect(origin: Point(x: 0, y: 0), size: Size(width: 10, height: 10))
         let slider = AXNode(role: "AXSlider", frame: frame, adjustmentActions: ["AXIncrement", "AXDecrement"])

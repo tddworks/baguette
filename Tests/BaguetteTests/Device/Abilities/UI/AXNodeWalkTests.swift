@@ -48,6 +48,55 @@ struct AXNodeWalkTests {
         #expect(node.adjustmentActions == ["AXIncrement", "AXDecrement"])
     }
 
+    @Test func `should lay a wide slider's track along its middle, from its minimum end to its maximum`() {
+        let slider = FakeAXTreeElement(role: "AXSlider", macFrame: CGRect(x: 20, y: 100, width: 300, height: 30))
+
+        let node = AXNode.walk(from: slider, transform: identityTransform())
+
+        #expect(node.sliderTrack == [Point(x: 20, y: 115), Point(x: 320, y: 115)])
+    }
+
+    @Test func `should leave the track off a slider too narrow to drag along`() {
+        let slider = FakeAXTreeElement(role: "AXSlider", macFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+
+        #expect(AXNode.walk(from: slider, transform: identityTransform()).sliderTrack == nil)
+    }
+
+    /// A SwiftUI switch's frame takes in its label; its knob sits at the
+    /// right end, so that is where a finger must land.
+    @Test func `should aim a wide switch at its knob, not its label`() {
+        let toggle = FakeAXTreeElement(role: "AXSwitch", macFrame: CGRect(x: 0, y: 10, width: 300, height: 44))
+
+        #expect(AXNode.walk(from: toggle, transform: identityTransform()).activationPoint == Point(x: 269, y: 32))
+    }
+
+    @Test func `should leave a narrow switch to be pressed anywhere in its frame`() {
+        let toggle = FakeAXTreeElement(role: "AXSwitch", macFrame: CGRect(x: 0, y: 10, width: 51, height: 31))
+
+        #expect(AXNode.walk(from: toggle, transform: identityTransform()).activationPoint == nil)
+    }
+
+    /// One element across reads: its device, its app's process (and when that
+    /// process started, so a relaunch can't reuse an id) and its object.
+    @Test func `should name an element by its device, its app's process and its object`() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let element = FakeAXTreeElement(
+            role: "AXButton", translation: FakeTranslation(pid: pid, objectID: 0x2a))
+        let device = "6F0F6E4C-1D2B-4F5A-9C3E-0A1B2C3D4E5F"
+
+        let id = AXNode.walk(from: element, transform: identityTransform(), device: device).nodeId
+
+        #expect(id?.hasPrefix("ax1:6f0f6e4c-1d2b-4f5a-9c3e-0a1b2c3d4e5f:\(pid):") == true)
+        #expect(id?.hasSuffix(":2a") == true)
+    }
+
+    @Test func `should give no id to an element read without its device`() {
+        let element = FakeAXTreeElement(
+            role: "AXButton", translation: FakeTranslation(pid: ProcessInfo.processInfo.processIdentifier, objectID: 1))
+
+        #expect(AXNode.walk(from: element, transform: identityTransform()).nodeId == nil)
+    }
+
     @Test func `should describe an element as AXUnknown when it has no role`() {
         let elem = FakeAXTreeElement()  // no role
         let node = AXNode.walk(from: elem, transform: identityTransform())
@@ -209,6 +258,7 @@ final class FakeAXTreeElement: NSObject {
     let childrenAny: Any?
     let macFrame: CGRect
     let actionNames: [String]
+    let translationObject: NSObject?
 
     init(
         role: String? = nil,
@@ -223,7 +273,8 @@ final class FakeAXTreeElement: NSObject {
         children: [FakeAXTreeElement] = [],
         childrenAny: Any? = nil,
         macFrame: CGRect = CGRect(x: 0, y: 0, width: 0, height: 0),
-        actionNames: [String] = []
+        actionNames: [String] = [],
+        translation: NSObject? = nil
     ) {
         var s: [String: String] = [:]
         if let role { s["accessibilityRole"] = role }
@@ -240,6 +291,7 @@ final class FakeAXTreeElement: NSObject {
         self.childrenAny = childrenAny
         self.macFrame = macFrame
         self.actionNames = actionNames
+        self.translationObject = translation
         super.init()
     }
 
@@ -260,5 +312,20 @@ final class FakeAXTreeElement: NSObject {
     /// runtime exposes a callable IMP for `class_getMethodImplementation`.
     @objc dynamic func accessibilityFrame() -> CGRect {
         macFrame
+    }
+
+    /// AXPTranslator's handle on the element in its app.
+    @objc dynamic func translation() -> NSObject? {
+        translationObject
+    }
+}
+
+/// The app-side identity behind a translated element.
+final class FakeTranslation: NSObject {
+    @objc let pid: NSNumber
+    @objc let objectID: NSNumber
+    init(pid: Int32, objectID: UInt64) {
+        self.pid = NSNumber(value: pid)
+        self.objectID = NSNumber(value: objectID)
     }
 }

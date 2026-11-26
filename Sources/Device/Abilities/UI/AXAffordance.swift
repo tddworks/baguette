@@ -300,6 +300,8 @@ public extension AXNode {
     /// separates several with the same name. A nameless element has only its
     /// position to go on, so it must still be close.
     func bestMatch(among candidates: [AXNode]) -> AXNode? {
+        // The same element by its id, wherever it is now.
+        if let nodeId, let same = candidates.first(where: { $0.nodeId == nodeId }) { return same }
         let same = candidates.filter { $0.role == role && $0.label == label && $0.identifier == identifier }
         guard let nearest = same.min(by: { distance(to: $0) < distance(to: $1) }) else { return nil }
         if label == nil, identifier == nil, distance(to: nearest) > Self.sameSpot { return nil }

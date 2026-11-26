@@ -11,6 +11,17 @@ struct AXMatchTests {
         AXNode(role: "AXButton", label: label, frame: Rect(origin: Point(x: x, y: y), size: Size(width: 40, height: 40)))
     }
 
+    /// Two unnamed controls side by side: the one read is told apart by its id,
+    /// not by which happens to be nearer now.
+    @Test func `should find the element with the same id first, wherever it moved`() {
+        let frame = { (x: Double) in Rect(origin: Point(x: x, y: 100), size: Size(width: 40, height: 40)) }
+        let target = AXNode(role: "AXSlider", nodeId: "ax1:d:1:0-0:2", frame: frame(100))
+        let neighbour = AXNode(role: "AXSlider", nodeId: "ax1:d:1:0-0:3", frame: frame(104))
+        let movedTarget = AXNode(role: "AXSlider", nodeId: "ax1:d:1:0-0:2", frame: frame(160))
+
+        #expect(target.bestMatch(among: [neighbour, movedTarget]) == movedTarget)
+    }
+
     @Test func `should find an element that has moved a little`() {
         let moved = button("Select Photo", x: 103, y: 98)
 

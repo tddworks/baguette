@@ -169,6 +169,18 @@ lives in the adapter's walk; a property that returns a
 non-string/bool/CGRect type needs a typed
 `class_getMethodImplementation` cast like the frame reader does.
 
+## Where to act on an element
+
+`describe-ui` adds three fields, each only where it applies. `nodeId`
+(`ax1:<device>:<pid>:<process start>:<object>`) names one element across
+reads; the process start keeps a relaunched app from reusing an id, and
+`press` / `adjust` find a node by it before anything else. `activationPoint`
+is where a finger must land when that isn't the frame's middle: a SwiftUI
+switch's frame takes in its label, its knob at the right end (measured: a
+tap at the middle of Settings' "Automatic" row leaves it off, one at its
+activation point turns it on). `sliderTrack` is a wide slider's track,
+minimum end then maximum, for dragging to a value.
+
 ## Stepping a control
 
 `Accessibility.adjust(_:by:)` steps a slider, stepper or picker through its

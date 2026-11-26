@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import ObjectiveC
 import CoreGraphics
@@ -39,6 +40,27 @@ public enum AXElementReader {
 
     /// Bool-valued property; returns `fallback` when the key is
     /// missing or holds a non-NSNumber value.
+    /// The element's identity across reads, `ax1:<device>:<pid>:<process
+    /// start>:<object>`, from AXPTranslator's handle on it in its app. The
+    /// process start keeps a relaunched app from reusing an id. Nil without
+    /// a device, a handle, or a live process.
+    public static func nodeID(_ obj: NSObject, device: String?) -> String? {
+        guard let device, let uuid = UUID(uuidString: device),
+              obj.responds(to: NSSelectorFromString("translation")),
+              let translation = obj.perform(NSSelectorFromString("translation"))?.takeUnretainedValue() as? NSObject,
+              translation.responds(to: NSSelectorFromString("pid")),
+              translation.responds(to: NSSelectorFromString("objectID")),
+              let pid = translation.value(forKey: "pid") as? NSNumber,
+              let object = translation.value(forKey: "objectID") as? NSNumber,
+              pid.int32Value > 0
+        else { return nil }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout.size(ofValue: info))
+        guard proc_pidinfo(pid.int32Value, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return "ax1:\(uuid.uuidString.lowercased()):\(pid.int32Value):\(info.pbi_start_tvsec)-\(info.pbi_start_tvusec):"
+            + String(object.uint64Value, radix: 16)
+    }
+
     /// The steps an element offers: its `AXIncrement` / `AXDecrement`
     /// actions, nothing else it can do.
     public static func adjustmentActions(_ obj: NSObject) -> [String] {
