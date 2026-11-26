@@ -5,6 +5,7 @@ import HummingbirdTesting
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Who may drive the server from a browser, as the router enforces it in

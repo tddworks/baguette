@@ -21,7 +21,7 @@ import Foundation
 /// inputs (Simulator + DeviceChromeAssets) are fetched once, then
 /// handed to this factory; no `@Mockable` collaborator is needed
 /// because there is no conversational I/O.
-struct SimulatorDefinition: Equatable, Sendable {
+public struct SimulatorDefinition: Equatable, Sendable {
     let identity: Identity
     let screen:   Screen
     let buttons:  [Button]
@@ -37,10 +37,16 @@ struct SimulatorDefinition: Equatable, Sendable {
     /// (e.g. `"iPhone 17 Pro"`) — the same key chrome lookup uses,
     /// so the JS SDK can correlate `definition.json` responses
     /// across reconnects even when the user renames the device.
-    struct Identity: Equatable, Sendable {
+    public struct Identity: Equatable, Sendable {
         let udid:  String
         let name:  String
         let model: String
+
+        public init(udid: String, name: String, model: String) {
+            self.udid = udid
+            self.name = name
+            self.model = model
+        }
     }
 
     /// The screen part: where frames land, where pointer events
@@ -168,7 +174,7 @@ extension SimulatorDefinition {
     /// JSON projection consumed by the JS SDK's `Baguette.use(udid)`
     /// bootstrap. Sorted keys keep diffs readable if a snapshot
     /// test lands later. Pure value-domain code — no I/O.
-    func toJSON() -> String {
+    public func toJSON() -> String {
         var dict: [String: Any] = [
             "identity": [
                 "udid":  identity.udid,
@@ -242,7 +248,7 @@ extension SimulatorDefinition {
     /// decides the route layout, the factory just composes strings.
     /// `panel` is which of the device's panels the chrome describes;
     /// a foldable's `.secondary` is the creased, unfolded one.
-    static func compose(
+    public static func compose(
         from simulator: any Simulator,
         chrome assets: DeviceChromeAssets,
         urlPrefix: String,
@@ -271,7 +277,7 @@ extension SimulatorDefinition {
     /// Identity-first flavor for surfaces that aren't simulators — a
     /// physical device borrows a user-picked chrome, and its identity
     /// comes from the companion's hello rather than CoreSimulator.
-    static func compose(
+    public static func compose(
         identity: Identity,
         chrome assets: DeviceChromeAssets,
         urlPrefix: String,

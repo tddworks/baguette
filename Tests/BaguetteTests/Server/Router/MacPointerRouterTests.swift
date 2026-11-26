@@ -5,6 +5,7 @@ import HummingbirdWSTesting
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// The Mac's pointer shape for a page: a socket that says each change, and

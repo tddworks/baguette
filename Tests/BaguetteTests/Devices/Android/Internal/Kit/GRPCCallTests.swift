@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// One gRPC call as HTTP/2 bytes — the preface, its HEADERS (HPACK literals)
 /// and its message — and the replies read back out of DATA frames.

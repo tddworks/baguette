@@ -5,8 +5,8 @@ import BaguetteDevice
 /// second on a running run loop — without one the shape a process reads never
 /// changes — until this process's parent is gone. Integration-only: which
 /// readings are a change is `PointerShapeChanges`'.
-enum PointerShapeWatch {
-    static func sayChanges(_ say: @escaping @Sendable (String) -> Void) -> Never {
+public enum PointerShapeWatch {
+    public static func sayChanges(_ say: @escaping @Sendable (String) -> Void) -> Never {
         // baguette's entry point is async, so a command runs off the main
         // thread; the main thread takes over and runs its run loop.
         DispatchQueue.main.async { watch(say) }

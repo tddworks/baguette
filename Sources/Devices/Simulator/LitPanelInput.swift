@@ -10,7 +10,7 @@ import Foundation
 /// the hinge can move from outside (Device Hub, `baguette hinge`)
 /// mid-drag, and an `up` sent to the other panel would leave the first
 /// one holding a contact nobody releases.
-final class LitPanelInput: HID, @unchecked Sendable {
+public final class LitPanelInput: HID, @unchecked Sendable {
     private let cover: any HID
     private let unfolded: any HID
     private let hinge: any Hinge
@@ -20,14 +20,14 @@ final class LitPanelInput: HID, @unchecked Sendable {
     private enum Contact { case oneFinger, twoFingers }
     private var touching: [Contact: IntegratedPanel] = [:]
 
-    init(cover: any HID, unfolded: any HID, hinge: any Hinge) {
+    public init(cover: any HID, unfolded: any HID, hinge: any Hinge) {
         self.cover = cover
         self.unfolded = unfolded
         self.hinge = hinge
     }
 
     /// A foldable's live input from its two panels and its hinge.
-    convenience init(displays: any Displays, hinge: any Hinge) {
+    public convenience init(displays: any Displays, hinge: any Hinge) {
         self.init(
             cover: displays.panel(.primary).input(),
             unfolded: displays.panel(.secondary).input(),
@@ -48,37 +48,37 @@ final class LitPanelInput: HID, @unchecked Sendable {
         return input(on: panel)
     }
 
-    func tap(at point: Point, size: Size, duration: Double, edge: DeviceEdge?) -> Bool {
+    public func tap(at point: Point, size: Size, duration: Double, edge: DeviceEdge?) -> Bool {
         lit.tap(at: point, size: size, duration: duration, edge: edge)
     }
 
-    func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool {
+    public func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool {
         lit.swipe(from: start, to: end, size: size, duration: duration)
     }
 
-    func touch1(phase: GesturePhase, at point: Point, size: Size, edge: DeviceEdge?) -> Bool {
+    public func touch1(phase: GesturePhase, at point: Point, size: Size, edge: DeviceEdge?) -> Bool {
         contact(.oneFinger, phase).touch1(phase: phase, at: point, size: size, edge: edge)
     }
 
-    func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool {
+    public func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool {
         contact(.twoFingers, phase).touch2(phase: phase, first: first, second: second, size: size)
     }
 
-    var available: Set<DeviceButton> { lit.available }
+    public var available: Set<DeviceButton> { lit.available }
 
-    func button(_ button: DeviceButton, duration: Double) -> Bool {
+    public func button(_ button: DeviceButton, duration: Double) -> Bool {
         lit.button(button, duration: duration)
     }
 
-    func key(_ key: KeyboardKey, modifiers: Set<KeyModifier>, duration: Double) -> Bool {
+    public func key(_ key: KeyboardKey, modifiers: Set<KeyModifier>, duration: Double) -> Bool {
         lit.key(key, modifiers: modifiers, duration: duration)
     }
 
-    func scroll(deltaX: Double, deltaY: Double) -> Bool {
+    public func scroll(deltaX: Double, deltaY: Double) -> Bool {
         lit.scroll(deltaX: deltaX, deltaY: deltaY)
     }
 
-    func twoFingerPath(
+    public func twoFingerPath(
         start1: Point, end1: Point, start2: Point, end2: Point, size: Size, duration: Double
     ) -> Bool {
         lit.twoFingerPath(

@@ -2,6 +2,7 @@ import ArgumentParser
 import Foundation
 import Mockable
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// What one command run did: what it answered on stdout, what it told the

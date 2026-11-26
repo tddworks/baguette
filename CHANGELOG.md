@@ -10,6 +10,12 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- `BaguetteKit`, a Swift package library: the device model and every device family, without the CLI or the HTTP server, for a host that drives devices itself. Depend on it by revision, as `examples/ListSimulators` does. → [docs](docs/ARCHITECTURE.md#layout-outside-in)
+
+### Fixed
+- Builds against swift-nio-ssl 2.37.6 and later, which a package depending on baguette resolves to: WebRTC's DTLS calls BoringSSL by its plain names.
+
 ---
 
 ## [0.3.3] - 2026-11-25

@@ -3,10 +3,10 @@ import Foundation
 
 /// The side of the desktop the Dock lives on, as macOS stores it
 /// (`com.apple.dock orientation`); the bottom when it says nothing.
-enum DockEdge: Equatable, Sendable {
+public enum DockEdge: Equatable, Sendable {
     case left, bottom, right
 
-    init(orientation: String?) {
+    public init(orientation: String?) {
         switch orientation {
         case "left": self = .left
         case "right": self = .right

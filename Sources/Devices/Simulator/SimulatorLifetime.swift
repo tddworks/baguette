@@ -21,12 +21,12 @@ import Foundation
 /// Per AGENTS.md's one-shot-fetch split, everything downstream of the
 /// fetched plist lives here as a pure factory; the irreducible
 /// `CFPreferences` read/write pair is the only Infrastructure code.
-struct SimulatorLifetime: Equatable, Sendable {
+public struct SimulatorLifetime: Equatable, Sendable {
     /// Closing a simulator's window detaches from the device instead
     /// of shutting it down.
-    var detachOnWindowClose: Bool
+    public var detachOnWindowClose: Bool
     /// Quitting Simulator.app leaves booted devices running.
-    var detachOnAppQuit: Bool
+    public var detachOnAppQuit: Bool
 
     /// Simulator.app's own preference key for the window-close route.
     /// These spellings are the contract with Apple — a typo writes a
@@ -37,13 +37,13 @@ struct SimulatorLifetime: Equatable, Sendable {
 
     /// What Simulator.app does out of the box: both routes shut the
     /// device down.
-    static let appleDefault = SimulatorLifetime(
+    public static let appleDefault = SimulatorLifetime(
         detachOnWindowClose: false,
         detachOnAppQuit: false
     )
 
     /// Both routes detach, so a booted device outlives Simulator.app.
-    static let detached = SimulatorLifetime(
+    public static let detached = SimulatorLifetime(
         detachOnWindowClose: true,
         detachOnAppQuit: true
     )
@@ -52,7 +52,7 @@ struct SimulatorLifetime: Equatable, Sendable {
     /// closing the window and quitting the app are independent ways to
     /// lose a booted simulator, so opting out of one still loses it by
     /// the other.
-    var survivesSimulatorApp: Bool { detachOnWindowClose && detachOnAppQuit }
+    public var survivesSimulatorApp: Bool { detachOnWindowClose && detachOnAppQuit }
 
     /// Read the policy out of Simulator.app's preferences.
     ///
@@ -78,7 +78,7 @@ struct SimulatorLifetime: Equatable, Sendable {
     }
 
     /// What moving the policy to `desired` amounts to.
-    enum Change: Equatable, Sendable {
+    public enum Change: Equatable, Sendable {
         /// The machine is already at the requested policy — nothing
         /// was written.
         case unchanged
@@ -96,7 +96,7 @@ struct SimulatorLifetime: Equatable, Sendable {
     /// quits. Callers surface that as "restart Simulator.app" rather
     /// than refusing — a device is often booted through Simulator.app
     /// in the first place, so refusing would block the common case.
-    func change(to desired: SimulatorLifetime, simulatorAppRunning: Bool) -> Change {
+    public func change(to desired: SimulatorLifetime, simulatorAppRunning: Bool) -> Change {
         guard self != desired else { return .unchanged }
         return .applied(restartSimulatorApp: simulatorAppRunning)
     }
@@ -113,7 +113,7 @@ struct SimulatorLifetime: Equatable, Sendable {
     ///
     /// It also names the command that fixes it: an advisory that only
     /// describes the problem is noise.
-    var advisory: String? {
+    public var advisory: String? {
         guard !survivesSimulatorApp else { return nil }
         // The guard leaves at least one route live, so this is never
         // empty.

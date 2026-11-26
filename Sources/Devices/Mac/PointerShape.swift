@@ -7,7 +7,7 @@ import Foundation
 /// image, so a page fetches each image once. A `baguette pointer-shapes`
 /// process says one per change, on its own line:
 /// `shape <id> <hotspot x> <hotspot y> <width> <height> <png, base64>`.
-struct PointerShape: Equatable, Sendable {
+public struct PointerShape: Equatable, Sendable {
     let id: String
     let hotspot: Point
     let size: Size
@@ -37,7 +37,7 @@ struct PointerShape: Equatable, Sendable {
     }
 
     /// What a page is told: the shape without its image, fetched once by id.
-    var json: String {
+    public var json: String {
         #"{"type":"pointer","id":"\#(id)","hotspot":[\#(hotspot.x),\#(hotspot.y)],"size":[\#(size.width),\#(size.height)]}"#
     }
 

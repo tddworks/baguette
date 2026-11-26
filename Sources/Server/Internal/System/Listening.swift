@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Hummingbird
 import HummingbirdWebSocket
 

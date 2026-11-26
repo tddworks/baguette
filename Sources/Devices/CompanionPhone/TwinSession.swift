@@ -7,8 +7,8 @@ import Foundation
 /// state machine — the server feeds it text/binary and forwards the
 /// events; every protocol violation surfaces as `.rejected` with a
 /// reason instead of a silent drop.
-struct TwinSession: Sendable {
-    enum Event: Equatable, Sendable {
+public struct TwinSession: Sendable {
+    public enum Event: Equatable, Sendable {
         case registered(TwinHello)
         case attitude(AttitudeSample)
         case streamOpened(VideoFormat)
@@ -24,11 +24,11 @@ struct TwinSession: Sendable {
     /// tiebreak. `nil` accepts any udid (used by tests of other rules).
     private let expecting: String?
 
-    init(expecting: String? = nil) {
+    public init(expecting: String? = nil) {
         self.expecting = expecting
     }
 
-    mutating func receive(text: String) -> Event {
+    public mutating func receive(text: String) -> Event {
         let envelope: TwinEnvelope
         do {
             envelope = try TwinEnvelope.parse(line: text)
@@ -60,7 +60,7 @@ struct TwinSession: Sendable {
         }
     }
 
-    mutating func receive(binary data: Data) -> Event {
+    public mutating func receive(binary data: Data) -> Event {
         guard hello != nil else {
             return .rejected(reason: "binary frame before hello")
         }

@@ -5,20 +5,20 @@ import Foundation
 /// sends it: `{"viewer","width","height","scale","room","use"}` — its screen
 /// in its own points, how many pixels make one, how much room the Mac gets,
 /// and whether the display is the main one.
-struct ShareRequest: Equatable, Sendable {
-    struct Invalid: Error, Equatable {
-        let reason: String
+public struct ShareRequest: Equatable, Sendable {
+    public struct Invalid: Error, Equatable {
+        public let reason: String
     }
 
-    let viewer: String
-    let shape: SharedScreenShape
-    let use: ShareUse
+    public let viewer: String
+    public let shape: SharedScreenShape
+    public let use: ShareUse
 
     /// The largest screen side and pixel density a viewer may report.
     static let largestSide = 20_000.0
     static let largestScale = 10.0
 
-    static func parse(_ body: String) throws -> ShareRequest {
+    public static func parse(_ body: String) throws -> ShareRequest {
         guard let object = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any] else {
             throw Invalid(reason: "the body must be a JSON object")
         }

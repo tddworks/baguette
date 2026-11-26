@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// One picture waiting to be converted, the newest: a later one replaces it,
 /// and only the first of a run asks for the work to be scheduled.

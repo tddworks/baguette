@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// Where `adb` is found: the SDK the environment names, Android Studio's own,
 /// or Homebrew's.

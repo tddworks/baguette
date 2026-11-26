@@ -6,6 +6,7 @@ import Mockable
 import Testing
 import UniformTypeIdentifiers
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// `baguette chrome` and `render-3d` run against the devices, chrome and

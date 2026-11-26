@@ -7,7 +7,7 @@ import Foundation
 /// across reboots. Reached only when asked for (`serve --share-mac`,
 /// `list --mac`, or a display's UUID given to `--udid`): it shows, and
 /// drives, this Mac. Design: docs/features/mac-screen/design.md.
-final class MacDisplays: Devices, @unchecked Sendable {
+public final class MacDisplays: Devices, @unchecked Sendable {
     private let displays: @Sendable () -> [MacDisplayInfo]
     private let feed: @Sendable () -> any DisplayFeed
     private let events: any HostEvents
@@ -29,11 +29,11 @@ final class MacDisplays: Devices, @unchecked Sendable {
         self.madePixels = madePixels
     }
 
-    var all: [any Device] {
+    public var all: [any Device] {
         displays().map { MacDisplay(info: $0, feed: feed, events: events, madePixels: madePixels, bounds: bounds) }
     }
 
-    func find(id: DeviceID) throws -> (any Device)? {
+    public func find(id: DeviceID) throws -> (any Device)? {
         all.first { $0.id == id }
     }
 }

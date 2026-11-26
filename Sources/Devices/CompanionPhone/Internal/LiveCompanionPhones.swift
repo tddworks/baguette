@@ -7,20 +7,22 @@ import Foundation
 /// lists devices stably; a re-registered udid keeps its slot but takes
 /// the fresh identity (the phone may have been renamed between
 /// connects).
-final class LiveCompanionPhones: CompanionPhones, @unchecked Sendable {
+public final class LiveCompanionPhones: CompanionPhones, @unchecked Sendable {
     private let lock = NSLock()
     // Registration is COUNTED: the video and motion sockets each
     // register the same udid, and the device stays listed until the
     // last one closes.
     private var ordered: [(device: CompanionPhone, connections: Int)] = []
 
-    var all: [CompanionPhone] {
+    public init() {}
+
+    public var all: [CompanionPhone] {
         lock.lock()
         defer { lock.unlock() }
         return ordered.map(\.device)
     }
 
-    func register(hello: TwinHello) {
+    public func register(hello: TwinHello) {
         let device = CompanionPhone(hello: hello)
         lock.lock()
         if let index = ordered.firstIndex(where: { $0.device.udid == device.udid }) {
@@ -32,7 +34,7 @@ final class LiveCompanionPhones: CompanionPhones, @unchecked Sendable {
         log("[device] companion connected: \(device.name) (\(device.udid))")
     }
 
-    func unregister(udid: String) {
+    public func unregister(udid: String) {
         lock.lock()
         if let index = ordered.firstIndex(where: { $0.device.udid == udid }) {
             let remaining = ordered[index].connections - 1

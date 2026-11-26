@@ -9,3 +9,6 @@ DerivedData/
 # Sources/Baguette/Resources/, which are the tracked ones.
 /Injected/*/*.dylib
 /Injected/HingeControl/HingeControl
+
+# examples/ListSimulators resolves its dependencies fresh, as a host would.
+examples/ListSimulators/Package.resolved

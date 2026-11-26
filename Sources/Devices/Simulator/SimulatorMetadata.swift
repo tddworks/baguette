@@ -2,7 +2,7 @@ import BaguetteDevice
 import Foundation
 
 /// Installed identities remain stable when the user renames a simulator.
-struct SimulatorMetadata: Equatable, Sendable {
+public struct SimulatorMetadata: Equatable, Sendable {
     var deviceTypeIdentifier: String?
     var productFamily: String?
     var runtimeIdentifier: String?

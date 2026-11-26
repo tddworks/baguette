@@ -1,3 +1,4 @@
+import BaguetteDeviceFamilies
 import Foundation
 
 /// This Mac's Simulator.app settings, through its preferences domain.

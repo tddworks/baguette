@@ -11,7 +11,7 @@ import Mockable
 /// (Infrastructure) which holds a `DeviceHost` and resolves a fresh
 /// `SimDevice` on each operation.
 @Mockable
-protocol Simulator: Sendable {
+public protocol Simulator: Sendable {
     var udid: String { get }
     var name: String { get }
     var state: SimulatorState { get }
@@ -157,7 +157,7 @@ protocol Simulator: Sendable {
 
 /// `Simulator.State` lifted to a top-level enum so the protocol can
 /// declare it as a property type.
-enum SimulatorState: Sendable, Equatable {
+public enum SimulatorState: Sendable, Equatable {
     case creating
     case shutdown
     case booting
@@ -200,7 +200,7 @@ extension Simulator {
     /// Compact JSON for the `list` subcommand's stdout and the
     /// `serve` list endpoint. Field order is part of the contract —
     /// callers grep for it.
-    var json: String {
+    public var json: String {
         "{\"udid\":\"\(udid)\",\"name\":\"\(name)\",\"state\":\"\(state.description)\",\"runtime\":\"\(runtime)\"}"
     }
 
@@ -208,7 +208,7 @@ extension Simulator {
 }
 
 /// Failure modes the host surfaces. Each maps to a CLI exit message.
-enum SimulatorError: Error, Equatable {
+public enum SimulatorError: Error, Equatable {
     case bootFailed
     case shutdownFailed
     case notFound(udid: String)

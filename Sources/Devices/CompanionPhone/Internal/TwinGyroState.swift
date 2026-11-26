@@ -24,16 +24,16 @@ import Foundation
 /// - **Emit only on change**: a tick whose pose sits inside the
 ///   dead-band returns `nil` — a resting phone costs zero renders and
 ///   zero frames.
-final class TwinGyroState: @unchecked Sendable {
-    struct Applied: Equatable {
-        let attitude: Attitude
-        let zoom: Double
-        let pushQuad: Bool
+public final class TwinGyroState: @unchecked Sendable {
+    public struct Applied: Equatable {
+        public let attitude: Attitude
+        public let zoom: Double
+        public let pushQuad: Bool
     }
 
     private struct Entry {
         let sender: Double
-        let attitude: Attitude
+        public let attitude: Attitude
     }
 
     private let lock = NSLock()
@@ -61,13 +61,13 @@ final class TwinGyroState: @unchecked Sendable {
     /// renders.
     private static let deadBand = 0.000002
 
-    init(zoom: Double) {
+    public init(zoom: Double) {
         self.zoom = zoom
     }
 
     /// Feed one sample. Returns `true` exactly once — the first sample
     /// ever — so the caller can announce the gyro going live.
-    func add(_ sample: AttitudeSample, arrivedAt host: TimeInterval) -> Bool {
+    public func add(_ sample: AttitudeSample, arrivedAt host: TimeInterval) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         let first = entries.isEmpty && heading == nil
@@ -91,7 +91,7 @@ final class TwinGyroState: @unchecked Sendable {
 
     /// The pose the render clock should show at `hostNow`, or `nil`
     /// when it hasn't moved past the dead-band — nothing to render.
-    func pose(at hostNow: TimeInterval) -> Applied? {
+    public func pose(at hostNow: TimeInterval) -> Applied? {
         lock.lock()
         defer { lock.unlock() }
         guard let newest = entries.last, let senderOffset else { return nil }
@@ -133,7 +133,7 @@ final class TwinGyroState: @unchecked Sendable {
     /// Capture the CURRENT heading as "facing the viewer". Pitch and
     /// roll stay absolute — re-zeroing a lying phone still shows a
     /// lying model, turned to face front.
-    func rezero() {
+    public func rezero() {
         lock.lock()
         heading = nil
         entries.removeAll()
@@ -144,7 +144,7 @@ final class TwinGyroState: @unchecked Sendable {
 
     /// A manual `set_3d_camera` changed the dolly — keep it under the
     /// gyro's rotation.
-    func set(zoom: Double) {
+    public func set(zoom: Double) {
         lock.lock()
         self.zoom = zoom
         lock.unlock()

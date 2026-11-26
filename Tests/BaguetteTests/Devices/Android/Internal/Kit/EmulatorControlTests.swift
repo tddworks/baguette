@@ -2,6 +2,7 @@ import Foundation
 import IOSurface
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// The emulator control API's messages, as protobuf bytes on the wire — the
 /// handful baguette sends and reads (android.emulation.control, emulator 37).

@@ -6,7 +6,7 @@ import Mockable
 /// each one is, and every display placed at once (for this session only,
 /// never saved). Decides nothing; the real one is `CoreGraphicsDisplayConfiguration`.
 @Mockable
-protocol DisplayConfiguration: Sendable {
+public protocol DisplayConfiguration: Sendable {
     var main: UInt32 { get }
     /// Where each listed display is; nil when the list can't be read.
     func bounds() -> [UInt32: Rect]?
@@ -18,14 +18,14 @@ protocol DisplayConfiguration: Sendable {
 /// after it. Where each display goes is `DisplayOrigins`'. Measured: a
 /// display made a moment ago is listed half a second later, so this waits for
 /// it to be listed, and checks it took — for two seconds at most.
-struct MainDisplayMove {
+public struct MainDisplayMove {
     let configuration: any DisplayConfiguration
     let pause: @Sendable (TimeInterval) -> Void
 
     static let tries = 40
     static let interval: TimeInterval = 0.05
 
-    init(configuration: any DisplayConfiguration,
+    public init(configuration: any DisplayConfiguration,
          pause: @escaping @Sendable (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }) {
         self.configuration = configuration
         self.pause = pause
@@ -33,7 +33,7 @@ struct MainDisplayMove {
 
     /// `freeing`: the Dock's side, when the display should have nothing
     /// beside that edge (a share made main); nil only shifts the arrangement.
-    func makeMain(_ display: UInt32, freeing edge: DockEdge? = nil) -> Bool {
+    public func makeMain(_ display: UInt32, freeing edge: DockEdge? = nil) -> Bool {
         for attempt in 0..<Self.tries {
             if configuration.main == display {
                 if attempt > 0 { log("[mac] display \(display) is main after \(attempt) tries") }

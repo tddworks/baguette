@@ -8,13 +8,13 @@ import Mockable
 /// new display. Nil when the Mac won't make one. Decides nothing; the real one
 /// is `CGVirtualDisplays`.
 @Mockable
-protocol VirtualDisplays: Sendable {
+public protocol VirtualDisplays: Sendable {
     func create(named name: String, shape: SharedScreenShape, serial: UInt32) -> (any VirtualDisplay)?
 }
 
 /// One display made by `VirtualDisplays`: who it is to the Mac, and going away.
 @Mockable
-protocol VirtualDisplay: AnyObject, Sendable {
+public protocol VirtualDisplay: AnyObject, Sendable {
     /// Its `CGDirectDisplayID`, new each time a display is made.
     var id: UInt32 { get }
     /// Its own UUID — its device id.
@@ -26,7 +26,7 @@ protocol VirtualDisplay: AnyObject, Sendable {
 /// the Dock and new windows are — and making another main. Decides nothing;
 /// the real one is `CGDisplayArrangement`.
 @Mockable
-protocol DisplayArrangement: Sendable {
+public protocol DisplayArrangement: Sendable {
     var main: UInt32 { get }
     /// `freeingDock`: keep nothing beside the Dock's edge of `display` — a
     /// share made main, so an auto-hidden Dock can come up on it.

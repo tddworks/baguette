@@ -2,6 +2,7 @@ import Foundation
 import Mockable
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// A connection to an emulator's control API, with its link — the bytes to
 /// and from the emulator — stood in for: what is written, in what order, and

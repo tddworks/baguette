@@ -1,5 +1,6 @@
 import Foundation
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// What `devicectl` writes about one connected phone, for the adapters
 /// that ask it where the phone's tunnel is and how big its screen is.

@@ -7,14 +7,14 @@ import Foundation
 /// own display list, though every other process sees them within half a
 /// second; the server has to keep seeing them, to list and stream them.
 /// Design: docs/features/mac-screen/design.md.
-final class ChildDisplayArrangement: DisplayArrangement, @unchecked Sendable {
+public final class ChildDisplayArrangement: DisplayArrangement, @unchecked Sendable {
     private let executable: URL
     private let makeProcess: @Sendable () -> any Subprocess
     private let readMain: @Sendable () -> UInt32
     private let wait: TimeInterval
 
     /// `wait`: how long the process has to finish.
-    init(executable: URL, makeProcess: @escaping @Sendable () -> any Subprocess,
+    public init(executable: URL, makeProcess: @escaping @Sendable () -> any Subprocess,
          readMain: @escaping @Sendable () -> UInt32 = HostDisplayList.main, wait: TimeInterval = 5) {
         self.executable = executable
         self.makeProcess = makeProcess
@@ -22,9 +22,9 @@ final class ChildDisplayArrangement: DisplayArrangement, @unchecked Sendable {
         self.wait = wait
     }
 
-    var main: UInt32 { readMain() }
+    public var main: UInt32 { readMain() }
 
-    func makeMain(_ display: UInt32, freeingDock: Bool) -> Bool {
+    public func makeMain(_ display: UInt32, freeingDock: Bool) -> Bool {
         let process = makeProcess()
         let finished = DispatchSemaphore(value: 0)
         let status = Status()

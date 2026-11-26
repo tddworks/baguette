@@ -100,14 +100,25 @@ families and the plugins; they depend on `BaguetteDevice`, which
 depends on nothing of baguette's — only Foundation / IOSurface (public
 Apple types) and Mockable.
 
+The package ships two products. `baguette` is the CLI: Commands, Server
+and Plugins around `@main`. `BaguetteKit` is the library for a host that
+drives devices itself (SimKit): it re-exports `BaguetteDevice` and
+`BaguetteDeviceFamilies`, so it carries every device family and none of
+the CLI, the HTTP server or the plugins.
+[`examples/ListSimulators`](../examples/ListSimulators) depends on it,
+and CI builds it.
+
 ```
 Sources/
 ├── Commands/           the CLI: one file per `baguette` subcommand
 ├── Server/             what `baguette serve` runs: routes, WebSocket, WebRoot
-├── Devices/            the device families, each with its own Internal/
+├── Devices/            module BaguetteDeviceFamilies — the device families,
+│   │                   each with its own Internal/
 │   ├── Simulator/          CoreSimulator, SimulatorKit, simctl
 │   ├── iPhone/             a phone on a cable: CoreDevice, its tunnel services
-│   └── CompanionPhone/     the companion-app twin
+│   ├── CompanionPhone/     the companion-app twin
+│   ├── Android/            emulators and phones, through adb
+│   └── Mac/                this Mac's displays
 ├── Plugins/
 │   ├── Plugin/             manifests, grants, routes a plugin may reach
 │   └── Bakery/             where plugins come from: repos, menus, trust
@@ -117,6 +128,8 @@ Sources/
 │   ├── Abilities/<ability>/  one role and its values (Touch, Press, Key,
 │   │                       Screen, Capture, UI, Apps, Location, …)
 │   └── Internal/           host I/O every family shares (subprocess, Xcode, log)
+├── BaguetteKit/        module BaguetteKit — the library product: re-exports
+│                       BaguetteDevice and BaguetteDeviceFamilies
 └── Baguette/           `@main` (RootCommand) and Resources/Web/ for `serve`
 ```
 

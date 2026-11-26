@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Android's own key codes (`KEYCODE_*`, what `adb shell input keyevent`

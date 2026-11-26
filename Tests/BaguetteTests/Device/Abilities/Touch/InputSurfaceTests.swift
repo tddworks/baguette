@@ -1,6 +1,7 @@
 import Testing
 import Mockable
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
 /// Default-impl behaviour on `InputSurface`: `heal` is the one verb the

@@ -4,10 +4,12 @@ import Foundation
 
 /// The session's display configuration through CoreGraphics. Integration-only:
 /// when and where to place displays is `MainDisplayMove`'s.
-struct CoreGraphicsDisplayConfiguration: DisplayConfiguration {
-    var main: UInt32 { CGMainDisplayID() }
+public struct CoreGraphicsDisplayConfiguration: DisplayConfiguration {
+    public init() {}
 
-    func bounds() -> [UInt32: Rect]? {
+    public var main: UInt32 { CGMainDisplayID() }
+
+    public func bounds() -> [UInt32: Rect]? {
         var count: UInt32 = 0
         guard CGGetActiveDisplayList(0, nil, &count) == .success else { return nil }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
@@ -18,7 +20,7 @@ struct CoreGraphicsDisplayConfiguration: DisplayConfiguration {
         })
     }
 
-    func place(_ origins: [UInt32: Point]) {
+    public func place(_ origins: [UInt32: Point]) {
         var config: CGDisplayConfigRef?
         guard CGBeginDisplayConfiguration(&config) == .success else { return }
         for (id, origin) in origins {

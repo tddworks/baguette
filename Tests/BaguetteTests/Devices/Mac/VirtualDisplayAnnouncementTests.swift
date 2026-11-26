@@ -1,5 +1,6 @@
 import Testing
 @testable import Baguette
+@testable import BaguetteDeviceFamilies
 
 /// What a `baguette virtual-display` process says once: the display it made,
 /// or why it made none.

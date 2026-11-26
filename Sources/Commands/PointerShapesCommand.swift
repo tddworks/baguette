@@ -1,5 +1,6 @@
 import ArgumentParser
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Foundation
 
 /// `baguette pointer-shapes` — not for people: `serve --share-mac` runs one

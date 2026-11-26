@@ -8,16 +8,33 @@ import Foundation
 /// Companion phones connect only while `serve` runs, so only it passes them.
 /// This Mac's displays are reached only when asked for — they show, and
 /// drive, the Mac itself.
-struct DeviceKinds {
-    let simulators: any Simulators
-    var companions: (any Devices)? = nil
-    var phones: any Devices = CoreDevicePhones()
-    var androids: any Devices = AndroidDevices()
-    var macs: (any Devices)? = nil
+public struct DeviceKinds: Sendable {
+    public let simulators: any Simulators
+    public var companions: (any Devices)?
+    public var phones: any Devices
+    public var androids: any Devices
+    public var macs: (any Devices)?
+
+    /// Every family but simulators has a default: phones on a cable through
+    /// CoreDevice (`phones: nil`), Android through adb (`androids: nil`), and
+    /// neither companion phones nor this Mac's displays unless they are passed.
+    public init(
+        simulators: any Simulators,
+        companions: (any Devices)? = nil,
+        phones: (any Devices)? = nil,
+        androids: (any Devices)? = nil,
+        macs: (any Devices)? = nil
+    ) {
+        self.simulators = simulators
+        self.companions = companions
+        self.phones = phones ?? CoreDevicePhones()
+        self.androids = androids ?? AndroidDevices()
+        self.macs = macs
+    }
 
     /// Simulators, then companion phones, then phones on a cable, then
     /// Android emulators and phones, then this Mac's displays when asked for.
-    var devices: any Devices {
+    public var devices: any Devices {
         CombinedDevices([SimulatorDevices(simulators)] + (companions.map { [$0] } ?? []) + [phones, androids] + (macs.map { [$0] } ?? []))
     }
 }

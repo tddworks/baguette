@@ -48,6 +48,12 @@ jobs:
       - name: Test with coverage
         run: swift test --enable-code-coverage
 
+      # A package that depends on the BaguetteKit product, resolved fresh
+      # (no Package.resolved), the way SimKit and every other host is: it
+      # breaks when the library stops building for anyone but this repo.
+      - name: Library consumer builds
+        run: swift build --package-path examples/ListSimulators
+
       - name: Generate lcov report
         run: |
           BIN_PATH=$(swift build --show-bin-path)

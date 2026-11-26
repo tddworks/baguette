@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteDeviceFamilies
 import Foundation
 
 /// A bakery's `baguette.json` — its *menu*: which plugins it offers and

@@ -6,7 +6,7 @@ import Foundation
 /// it makes, and a display goes when its process does, so each display is the
 /// first of its own process, and removing it is ending that process. A crash
 /// in the private API ends only that process. Design: docs/features/mac-screen/design.md.
-final class ChildVirtualDisplays: VirtualDisplays, @unchecked Sendable {
+public final class ChildVirtualDisplays: VirtualDisplays, @unchecked Sendable {
     private let executable: URL
     private let makeProcess: @Sendable () -> any Subprocess
     private let wait: TimeInterval
@@ -15,7 +15,7 @@ final class ChildVirtualDisplays: VirtualDisplays, @unchecked Sendable {
     /// `wait`: how long a process has to announce its display. `isListed`:
     /// whether the Mac still lists a display, so removing one finishes when
     /// it is gone — macOS chooses a new main display only then.
-    init(executable: URL, makeProcess: @escaping @Sendable () -> any Subprocess, wait: TimeInterval = 5,
+    public init(executable: URL, makeProcess: @escaping @Sendable () -> any Subprocess, wait: TimeInterval = 5,
          isListed: @escaping @Sendable (UInt32) -> Bool = HostDisplayList.isListed) {
         self.executable = executable
         self.makeProcess = makeProcess
@@ -23,7 +23,7 @@ final class ChildVirtualDisplays: VirtualDisplays, @unchecked Sendable {
         self.isListed = isListed
     }
 
-    func create(named name: String, shape: SharedScreenShape, serial: UInt32) -> (any VirtualDisplay)? {
+    public func create(named name: String, shape: SharedScreenShape, serial: UInt32) -> (any VirtualDisplay)? {
         let process = makeProcess()
         let heard = Heard()
         do {
@@ -79,7 +79,7 @@ final class ChildVirtualDisplays: VirtualDisplays, @unchecked Sendable {
         private let process: any Subprocess
         private let isListed: @Sendable (UInt32) -> Bool
 
-        init(id: UInt32, uuid: String, process: any Subprocess, isListed: @escaping @Sendable (UInt32) -> Bool) {
+        public init(id: UInt32, uuid: String, process: any Subprocess, isListed: @escaping @Sendable (UInt32) -> Bool) {
             self.id = id
             self.uuid = uuid
             self.process = process

@@ -8,7 +8,7 @@ import Foundation
 /// display takes no other shape), under the same serial so its id holds;
 /// removed when it ends.
 /// Design: docs/features/mac-screen/design.md#sharing-to-a-viewers-shape.
-final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
+public final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
     private struct Share {
         let viewer: String
         let serial: UInt32
@@ -28,14 +28,14 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
     private var shares: [String: Share] = [:]
     private var serials: UInt32 = 0
 
-    init(displays: any VirtualDisplays, arrangement: any DisplayArrangement) {
+    public init(displays: any VirtualDisplays, arrangement: any DisplayArrangement) {
         self.displays = displays
         self.arrangement = arrangement
     }
 
     /// Share the Mac to `viewer` through a new display of `shape`; its device
     /// id, or nil when the Mac won't make the display.
-    func start(viewer: String, shape: SharedScreenShape, use: ShareUse) -> String? {
+    public func start(viewer: String, shape: SharedScreenShape, use: ShareUse) -> String? {
         work.lock(); defer { work.unlock() }
         let serial = lock.withLock { serials += 1; return serials }
         // Read before the display is made: macOS calls a new display main for a moment.
@@ -51,17 +51,17 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
     }
 
     /// The pixels the share's display was made with; nil when no share has the id.
-    func pixels(of id: String) -> Size? {
+    public func pixels(of id: String) -> Size? {
         lock.withLock { shares[id]?.shape.pixels }
     }
 
-    func isSharing(_ id: String) -> Bool {
+    public func isSharing(_ id: String) -> Bool {
         lock.withLock { shares[id] != nil }
     }
 
     /// The viewer turned, or resized: the display made again in the new
     /// shape, the same device, main again if it was.
-    func reshape(_ id: String, to shape: SharedScreenShape) -> Bool {
+    public func reshape(_ id: String, to shape: SharedScreenShape) -> Bool {
         work.lock(); defer { work.unlock() }
         guard var share = lock.withLock({ shares[id] }) else { return false }
         // macOS removes the main display slowly — it chooses another and moves
@@ -92,7 +92,7 @@ final class VirtualDisplayShares: ScreenShares, @unchecked Sendable {
 
     /// The viewer left: the main display given back — when this share's
     /// display still is main — and the display removed.
-    func end(_ id: String) {
+    public func end(_ id: String) {
         work.lock(); defer { work.unlock() }
         guard let share = lock.withLock({ shares.removeValue(forKey: id) }) else { return }
         if arrangement.main == share.display.id, let previousMain = share.previousMain {

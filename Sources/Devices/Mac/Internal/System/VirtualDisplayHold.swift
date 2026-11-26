@@ -8,7 +8,7 @@ import CoreGraphics
 /// and its own mode `SharedScreenShape.isMode`. Measured on macOS 27: the
 /// display takes its modes once and starts on the 1× one; only the first
 /// virtual display a process makes can have its mode chosen.
-enum VirtualDisplayHold {
+public enum VirtualDisplayHold {
     private typealias Make = @convention(c) (Unmanaged<AnyObject>, Selector, UInt32, UInt32, Double) -> Unmanaged<AnyObject>
     private typealias Initialise = @convention(c) (Unmanaged<AnyObject>, Selector, AnyObject) -> Unmanaged<AnyObject>
     private typealias Apply = @convention(c) (AnyObject, Selector, AnyObject) -> Bool
@@ -16,7 +16,7 @@ enum VirtualDisplayHold {
     private static let queue = DispatchQueue(label: "baguette.mac.virtual-display")
 
     /// Make it and choose its 2× mode: what to announce.
-    static func make(named name: String, shape: SharedScreenShape, serial: UInt32) -> VirtualDisplayAnnouncement {
+    public static func make(named name: String, shape: SharedScreenShape, serial: UInt32) -> VirtualDisplayAnnouncement {
         guard let descriptorClass = NSClassFromString("CGVirtualDisplayDescriptor") as? NSObject.Type,
               let settingsClass = NSClassFromString("CGVirtualDisplaySettings") as? NSObject.Type,
               let displayClass = NSClassFromString("CGVirtualDisplay"),
