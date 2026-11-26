@@ -4,6 +4,7 @@ public enum DeviceModelRoots {
     public static func standard(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
+        resources: URL? = BaguetteResources.folder,
         bundle: Bundle? = sidecarResourceBundle()
     ) -> [URL] {
         var roots: [URL] = []
@@ -20,8 +21,11 @@ public enum DeviceModelRoots {
                     .appending(path: "3d-models")
             )
         }
-        if let resources = bundle?.resourceURL {
+        if let resources {
             roots.append(resources.appending(path: "Models3D"))
+        }
+        if let bundled = bundle?.resourceURL {
+            roots.append(bundled.appending(path: "Models3D"))
         }
         return roots
     }

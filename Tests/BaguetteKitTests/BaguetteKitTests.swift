@@ -34,6 +34,23 @@ struct BaguetteKitTests {
     }
 }
 
+/// The resources folder is the process's: one suite, one test at a time.
+@Suite("BaguetteResources", .serialized)
+struct BaguetteResourcesTests {
+    @Test func `should hand a host's resources folder to every lookup after it chooses one`() {
+        let folder = URL(fileURLWithPath: "/opt/host/baguette-resources", isDirectory: true)
+        defer { BaguetteResources.use(folder: nil) }
+
+        BaguetteResources.use(folder: folder)
+
+        #expect(BaguetteResources.folder == folder)
+    }
+
+    @Test func `should have no resources folder until a host chooses one`() {
+        #expect(BaguetteResources.folder == nil)
+    }
+}
+
 private func emptyDeviceSet() throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appending(path: "baguettekit-\(UUID().uuidString)", directoryHint: .isDirectory)

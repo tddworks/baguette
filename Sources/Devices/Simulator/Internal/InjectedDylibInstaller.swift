@@ -25,6 +25,8 @@ public enum InjectedDylibInstaller {
     ///
     /// Lookup order (matches `WebRoot.swift`'s pattern):
     ///   1. The dylib's env override — an explicit path.
+    ///   1a. The resources folder a host chose (`BaguetteResources`), laid
+    ///       out as the bundle's: `<Name>/<file>`.
     ///   2. Source-tree fallback — when running out of `.build/`, walk up to
     ///      find `<Name>/<Name>.dylib`.
     ///   3. Sidecar `Baguette_Baguette.bundle` next to the executable.
@@ -36,11 +38,16 @@ public enum InjectedDylibInstaller {
     static func bundledDylibURL(
         _ dylib: InjectedDylib,
         environment: [String: String] = ProcessInfo.processInfo.environment,
+        resources: URL? = BaguetteResources.folder,
         executableDirectory: URL? = ExecutableImage.directory()
     ) -> URL? {
         if let env = environment[dylib.environmentOverride],
            FileManager.default.fileExists(atPath: env) {
             return URL(fileURLWithPath: env)
+        }
+        if let hosted = resources?.appendingPathComponent(dylib.name).appendingPathComponent(dylib.fileName),
+           FileManager.default.fileExists(atPath: hosted.path) {
+            return hosted
         }
         guard let exeDir = executableDirectory else { return nil }
         if let dev = sourceTreeDylib(dylib, from: exeDir) { return dev }
