@@ -35,12 +35,20 @@ public protocol Hinge: Sendable {
     /// pose picker, from baguette. Throws when the device cannot be
     /// driven (no `HingeControl`, or the guest refused).
     func fold(to degrees: Double, over duration: TimeInterval) throws
+
+    /// The panel the device itself says it presents on, or nil when it
+    /// can't say. SpringBoard decides which panel a foldable lights — from
+    /// the fold's angle, speed and history, and an app may light the cover
+    /// while open — so where the device can be asked, its answer is the
+    /// truth and the angle only stands in for it.
+    func presentingPanel() -> IntegratedPanel?
 }
 
 public extension Hinge {
-    /// The panel this hinge lights: no reading means as booted, folded,
-    /// so the cover. The one place that rule lives.
-    var litPanel: IntegratedPanel { angle()?.litPanel ?? .primary }
+    /// The panel this hinge lights: the one the device says it presents
+    /// on; failing that, the one its angle suggests; with no reading, as
+    /// booted, folded, so the cover. The one place that rule lives.
+    var litPanel: IntegratedPanel { presentingPanel() ?? angle()?.litPanel ?? .primary }
 }
 
 /// A running watch on a hinge; `cancel` stops the samples.

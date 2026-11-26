@@ -28,19 +28,19 @@ enum ConnectedScreens {
 
     /// The exact phone panel an observation is read from, with the
     /// scale that turns its framebuffer pixels into points. A foldable
-    /// needs a hinge angle to name the lit panel; a missing angle, an
+    /// needs to be told its lit panel; a missing panel, an
     /// absent or ambiguous framebuffer, or an unusable scale is an
     /// error, never a fallback to another panel.
     static func observedPhone(
-        ports: [SizedFramebuffer], screens: [ConnectedScreenRecord], angle: HingeAngle?
+        ports: [SizedFramebuffer], screens: [ConnectedScreenRecord], litPanel: IntegratedPanel?
     ) throws -> (binding: DisplayBinding, scale: Double, multiplePanels: Bool) {
         let integrated = screens.filter { $0.screenType == .integrated }
         let record: ConnectedScreenRecord
         if integrated.count == 1, let only = integrated.first {
             record = only
         } else {
-            guard integrated.count > 1, let angle,
-                let lit = integrated.first(where: { $0.panel == angle.litPanel })
+            guard integrated.count > 1, let litPanel,
+                let lit = integrated.first(where: { $0.panel == litPanel })
             else { throw ObservedScreenError.unavailable }
             record = lit
         }

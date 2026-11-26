@@ -33,10 +33,99 @@ final class SharedHinge: Hinge, @unchecked Sendable {
 
     private let motor: (any HingeMotor)?
 
-    init(inner: any Hinge, motor: (any HingeMotor)? = nil, now: @escaping () -> Date = { Date() }) {
+    /// `presenting` asks the device which panel it lights (Core Device, in
+    /// production); nil for a device that can't be asked, which leaves the
+    /// angle to stand in. The delays are injectable so the schedule is
+    /// unit-covered without a device.
+    init(
+        inner: any Hinge, motor: (any HingeMotor)? = nil, now: @escaping () -> Date = { Date() },
+        presenting: (@Sendable () -> IntegratedPanel?)? = nil,
+        settleDelays: [TimeInterval] = SharedHinge.settleDelays,
+        pollInterval: TimeInterval = SharedHinge.pollInterval
+    ) {
         self.inner = inner
         self.motor = motor
         self.now = now
+        self.presenting = presenting
+        self.settleDelays = settleDelays
+        self.pollInterval = pollInterval
+    }
+
+    // MARK: - the panel the device presents on
+
+    /// Asking Core Device takes about a third of a second: far too slow
+    /// for every frame or touch. While the hinge is watched, its samples
+    /// say when to ask — after it settles, at each of `settleDelays`,
+    /// because SpringBoard swaps panels on its own schedule after the pose
+    /// stops; every sample re-arms the series, so a sweep of any length
+    /// costs at most that many reads — and a slow poll catches a swap no
+    /// hinge motion announces (an app lighting the cover). With nobody
+    /// watching, an answer stands for `presentingLifetime`. A failed read
+    /// isn't news: the last answer stands.
+    static let settleDelays: [TimeInterval] = [0.3, 1.0, 3.0]
+    static let pollInterval: TimeInterval = 5
+    static let presentingLifetime: TimeInterval = 2
+
+    private let presenting: (@Sendable () -> IntegratedPanel?)?
+    private let settleDelays: [TimeInterval]
+    private let pollInterval: TimeInterval
+    private let presentingQueue = DispatchQueue(label: "baguette.shared-hinge.presenting", qos: .utility)
+    private var presented: (panel: IntegratedPanel?, at: Date)?
+    private var settles: [DispatchWorkItem] = []
+    private var poll: DispatchSourceTimer?
+
+    func presentingPanel() -> IntegratedPanel? {
+        guard presenting != nil else { return nil }
+        let (cached, watched) = lock.withLock { (presented, innerWatch != nil) }
+        if let cached, watched || now().timeIntervalSince(cached.at) < Self.presentingLifetime {
+            return cached.panel
+        }
+        return readPresenting()
+    }
+
+    /// Asks the device once and keeps what it says; a failed answer keeps
+    /// the last panel it named.
+    @discardableResult
+    private func readPresenting() -> IntegratedPanel? {
+        guard let presenting else { return nil }
+        let answer = presenting()
+        return lock.withLock {
+            let panel = answer ?? presented?.panel
+            presented = (panel, now())
+            return panel
+        }
+    }
+
+    private func startFollowingPresentingPanel() {
+        guard presenting != nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: presentingQueue)
+        timer.schedule(deadline: .now(), repeating: pollInterval, leeway: .milliseconds(250))
+        timer.setEventHandler { [weak self] in self?.readPresenting() }
+        lock.withLock { poll = timer }
+        timer.resume()
+    }
+
+    private func stopFollowingPresentingPanel() {
+        let (timer, pending) = lock.withLock { () -> (DispatchSourceTimer?, [DispatchWorkItem]) in
+            defer { poll = nil; settles = [] }
+            return (poll, settles)
+        }
+        timer?.cancel()
+        pending.forEach { $0.cancel() }
+    }
+
+    /// A hinge sample: the fold is under way. Ask once it settles.
+    private func hingeMoved() {
+        guard presenting != nil else { return }
+        let series = settleDelays.map { _ in DispatchWorkItem { [weak self] in self?.readPresenting() } }
+        let stale = lock.withLock { () -> [DispatchWorkItem] in
+            defer { settles = series }
+            return settles
+        }
+        stale.forEach { $0.cancel() }
+        for (delay, work) in zip(settleDelays, series) {
+            presentingQueue.asyncAfter(deadline: .now() + delay, execute: work)
+        }
     }
 
     /// A sweep starts where the hinge is — the angle last heard. With
@@ -111,13 +200,14 @@ final class SharedHinge: Hinge, @unchecked Sendable {
     /// The shared hinge for `udid` in its device set, made on first use.
     static func forDevice(
         _ udid: String, deviceSetPath: String? = nil,
-        make: () -> any Hinge, motor: @autoclosure () -> (any HingeMotor)? = nil
+        make: () -> any Hinge, motor: @autoclosure () -> (any HingeMotor)? = nil,
+        presenting: (@Sendable () -> IntegratedPanel?)? = nil
     ) -> SharedHinge {
         let key = DeviceKey(deviceSetPath: deviceSetPath, udid: udid)
         registryLock.lock()
         defer { registryLock.unlock() }
         if let existing = registry[key] { return existing }
-        let made = SharedHinge(inner: make(), motor: motor())
+        let made = SharedHinge(inner: make(), motor: motor(), presenting: presenting)
         registry[key] = made
         return made
     }
@@ -185,6 +275,7 @@ final class SharedHinge: Hinge, @unchecked Sendable {
             lock.lock()
             innerWatch = started
             lock.unlock()
+            startFollowingPresentingPanel()
         }
         return Subscription { [weak self] in self?.remove(id) }
     }
@@ -194,6 +285,7 @@ final class SharedHinge: Hinge, @unchecked Sendable {
         last = (angle, now())
         let targets = Array(subscribers.values)
         lock.unlock()
+        hingeMoved()
         for target in targets { target(angle) }
     }
 
@@ -204,6 +296,7 @@ final class SharedHinge: Hinge, @unchecked Sendable {
         if stop != nil { innerWatch = nil }
         lock.unlock()
         stop?.cancel()
+        if stop != nil { stopFollowingPresentingPanel() }
     }
 
     private final class Subscription: HingeWatch, @unchecked Sendable {

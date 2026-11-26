@@ -23,6 +23,7 @@ struct HowADeviceLooksTests {
     private func duo(angle: HingeAngle?) -> (MockDevice, MockChromes) {
         let hinge = MockHinge()
         given(hinge).angle().willReturn(angle)
+        given(hinge).presentingPanel().willReturn(nil)
         let chromes = MockChromes()
         given(chromes).panels(forDeviceName: .value("iPhone Duo")).willReturn([.primary, .secondary])
         return (device(model: "iPhone Duo", hinge: hinge), chromes)

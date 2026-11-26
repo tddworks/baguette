@@ -63,13 +63,24 @@ powering it *off* crash-loops SpringBoard.
 
 ## The hinge
 
-The hinge decides which panel is lit: SpringBoard lights one from the angle
-Device Hub's pose picker sets (closed ≈3°, open ≈130°). baguette both drives
-and reads it; how, byte for byte, is in [hinge/design.md](../hinge/design.md).
-What matters here is the one number the panel binding keys on:
-`HingeAngle.litPanel` puts the swap at 90°, and only a device with more than
-one portrait panel (`IntegratedPanels.several`) ever asks, so a phone pays
-nothing.
+SpringBoard decides which panel is lit, from the angle Device Hub's pose
+picker sets (closed ≈3°, open ≈130°) — and from how the hinge got there.
+baguette both drives and reads the hinge; how, byte for byte, is in
+[hinge/design.md](../hinge/design.md).
+
+**The angle doesn't say which panel is lit; Core Device does.** Measured on
+iOS 27.1 (2026-11-26): Device Hub's presets swap the panels where 90° would,
+but a fold in small steps kept the cover lit at 92°, 100° and 130°, and the
+unfolded panel lit back down to 30°. At 100° the angle rule bound the dark
+unfolded panel: a black screenshot, touches to the wrong digitizer. An app
+may also light the cover while open. So `Hinge.litPanel` takes the panel
+`devicectl device info displays` marks `active` (`presentingPanel()`; the
+cover is the one it calls `primary`) and falls back to `HingeAngle.litPanel`'s
+90° only when Core Device can't say. A `devicectl` run is ~0.3 s, so
+`SharedHinge` keeps the answer: while the hinge is watched it asks 0.3, 1
+and 3 s after the last sample and every 5 s besides; unwatched, an answer
+stands 2 s. Only a device with more than one portrait panel
+(`IntegratedPanels.several`) ever asks, so a phone pays nothing.
 
 ## Framebuffer: the lit panel
 
