@@ -11,6 +11,7 @@ For releases prior to this changelog, see the
 ## [Unreleased]
 
 ### Added
+- `Device.render3D` / `snapshot3D`: a device on its 3D model as it stands, in the library — the models and renderer are the caller's. `render-3d --udid` and `POST /devices/:udid/render-3d.png` go through it, so an iPhone Duo is posed at its hinge with its picture on the panel it lights.
 - `CoreSimulators(hingeControl:)`: a library host hands its own copy of `HingeControl`, the guest helper, to the simulators it lists.
 
 ### Removed

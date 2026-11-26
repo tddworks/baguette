@@ -35,9 +35,9 @@ baguette render-3d \
   --output device.png
 ```
 
-Exactly one of `--udid` and `--screen` is required; `--device` is inferred
-with `--udid`. Unknown devices, model IDs, variant sets and variant choices
-fail explicitly — baguette never substitutes a visually similar model.
+Exactly one of `--udid` and `--screen` is required; `--device` is inferred with `--udid`, and a
+foldable is posed as it stands: at its hinge, its picture on the panel it lights. Unknown devices,
+model IDs, variant sets and choices fail explicitly — never a visually similar model.
 
 On the `serve` page, the focus-mode **cube** button switches the main
 viewport between the 2D stream and the live 3D stream (it's also the way

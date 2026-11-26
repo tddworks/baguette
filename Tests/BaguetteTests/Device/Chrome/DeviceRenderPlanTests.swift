@@ -73,6 +73,21 @@ struct DeviceRenderPlanTests {
         #expect(plan.rendersScreenGlass == glass)
     }
 
+    /// SpringBoard can keep the cover lit at 100° after a slow fold; the
+    /// picture goes on the panel the device lights, not the one 90° names.
+    @Test func `should show the screen on the panel the device lights, not the one its angle suggests`() throws {
+        let plan = try DeviceRenderPlan.build(
+            model: Self.installed(fold: DeviceModelFold(
+                clip: "fold", shutTime: 5, coverMaterial: "Cover",
+                coverTextureSize: RenderDimensions(width: 100, height: 200), openPoseDegrees: 130
+            )),
+            variants: [:], rotation: .zero, outputSize: RenderDimensions(width: 300, height: 400),
+            hingeDegrees: 100, litPanel: .primary
+        )
+        #expect(plan.screenPanel == .primary)
+        #expect(plan.hingeDegrees == 100)
+    }
+
     @Test func `should keep the existing screen selection when no fold is given`() throws {
         #expect(try Self.foldPlan(angle: nil).screenPanel == nil)
     }
@@ -147,7 +162,7 @@ struct DeviceRenderPlanTests {
     }
 }
 
-private extension DeviceRenderPlanTests {
+extension DeviceRenderPlanTests {
     static func installed(fold: DeviceModelFold? = nil) -> InstalledDeviceModel {
         InstalledDeviceModel(
             definition: DeviceModelDefinition(
