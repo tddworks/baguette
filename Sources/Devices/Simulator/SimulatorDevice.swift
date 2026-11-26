@@ -105,7 +105,7 @@ private struct SimulatorPower: Power {
     func turnOff() throws { try simulator.shutdown() }
 }
 
-private extension DeviceKind.Platform {
+extension DeviceKind.Platform {
     /// The platform a runtime's display name starts with — "watchOS 12.0".
     /// A runtime the host didn't name reads as iOS, the default device set's.
     init(runtime: String) {
