@@ -114,6 +114,12 @@ accepts only from a dependency pinned by revision, branch or path: kept
 out of `BaguetteKit`, they leave that one pinnable by version. Without
 it, a phone's screen is devicectl stills and it takes no touch.
 
+The files baguette ships beside its binary — the 3D models, the dylibs it
+injects, the hinge helper — sit in `Baguette_Baguette.bundle` for the CLI.
+A library host has no such bundle: it copies those folders from
+`Sources/Baguette/Resources/` and names the copy with
+`BaguetteResources.use(folder:)`, which both lookups try before the bundle.
+
 ```
 Sources/
 ├── Commands/           the CLI: one file per `baguette` subcommand

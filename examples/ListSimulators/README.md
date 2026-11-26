@@ -24,3 +24,13 @@ SwiftPM accepts only from a dependency pinned by revision, branch or path:
 ```swift
 .package(url: "https://github.com/tddworks/baguette", revision: "<commit>"),
 ```
+
+3D device renders, the injected camera, motion and network dylibs, and the
+iPhone Duo hinge helper read files the CLI keeps in its resource bundle.
+A library has no bundle: copy the folders you need from
+`Sources/Baguette/Resources/` (`Models3D/`, `VirtualCamera/`, …) into one
+folder you ship, and name it before driving a device:
+
+```swift
+BaguetteResources.use(folder: URL(fileURLWithPath: "/path/to/baguette-resources"))
+```

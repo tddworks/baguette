@@ -13,6 +13,7 @@ For releases prior to this changelog, see the
 ### Added
 - `BaguetteKit`, a Swift package library: the device model and every device family, without the CLI or the HTTP server, for a host that drives devices itself. Pin it by version, as `examples/ListSimulators` shows. → [docs](docs/ARCHITECTURE.md#layout-outside-in)
 - `BaguetteCoreDevice`, a second library: a phone on a cable live (screen, touch, tunnel) through Xcode's CoreDevice, as `CoreDeviceAccess.live`. Pin it by revision; without it a phone is devicectl stills.
+- `BaguetteResources.use(folder:)`: a library host names where it keeps the 3D models, injected dylibs and hinge helper, looked in before the CLI's resource bundle.
 
 ### Fixed
 - Builds against swift-nio-ssl 2.37.6 and later, which a package depending on baguette resolves to: WebRTC's DTLS calls BoringSSL by its plain names.

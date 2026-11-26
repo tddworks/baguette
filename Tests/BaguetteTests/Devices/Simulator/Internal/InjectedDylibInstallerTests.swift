@@ -154,9 +154,35 @@ struct InjectedDylibInstallerLookupTests {
         }
     }
 
-    private func find(_ dylib: InjectedDylib, _ scratch: Scratch, environment: [String: String] = [:]) -> URL? {
+    private func find(_ dylib: InjectedDylib, _ scratch: Scratch, environment: [String: String] = [:],
+                      resources: URL? = nil) -> URL? {
         InjectedDylibInstaller.bundledDylibURL(
-            dylib, environment: environment, executableDirectory: scratch.executable)
+            dylib, environment: environment, resources: resources, executableDirectory: scratch.executable)
+    }
+
+    @Test func `should take the dylib from the resources folder its host points at`() throws {
+        let scratch = try Scratch()
+        let resources = scratch.root.appendingPathComponent("host-resources")
+        let hosted = try scratch.file("VirtualMotion/VirtualMotion.dylib", in: resources)
+        try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib")
+
+        #expect(find(.motion, scratch, resources: resources)?.path == hosted.path)
+    }
+
+    @Test func `should look further when its host's resources folder lacks the dylib`() throws {
+        let scratch = try Scratch()
+        let resources = scratch.root.appendingPathComponent("host-resources")
+        let inTree = try scratch.file("Injected/VirtualMotion/VirtualMotion.dylib")
+
+        #expect(find(.motion, scratch, resources: resources)?.path == inTree.path)
+    }
+
+    @Test func `should take a helper tool from the resources folder its host points at`() throws {
+        let scratch = try Scratch()
+        let resources = scratch.root.appendingPathComponent("host-resources")
+        let hosted = try scratch.file("HingeControl/HingeControl", in: resources)
+
+        #expect(find(.hingeControl, scratch, resources: resources)?.path == hosted.path)
     }
 
     @Test func `should take the dylib its environment override names`() throws {
