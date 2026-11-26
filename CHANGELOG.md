@@ -10,6 +10,12 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Added
+- `CoreSimulators(hingeControl:)`: a library host hands its own copy of `HingeControl`, the guest helper, to the simulators it lists.
+
+### Removed
+- `BaguetteResources` (new in 0.4.0): a process-wide folder every lookup read. A host now hands each file to what uses it: `CoreSimulators(hingeControl:)`, and `LiveDeviceModels(rootURLs:)` for 3D models.
+
 ### Fixed
 - iPhone Duo: the lit panel is the one Core Device reports, not the one the hinge angle suggests. After a fold in small steps the cover stayed lit at 100°, where the 90° rule bound the dark panel: a black screen, touches lost. → [docs](docs/features/iphone-duo/design.md#the-hinge)
 

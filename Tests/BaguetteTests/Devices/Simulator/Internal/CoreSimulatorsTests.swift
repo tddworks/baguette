@@ -94,6 +94,36 @@ struct CoreSimulatorsTests {
         return path
     }
 
+    // MARK: - the hinge helper
+
+    /// `HingeControl`, the guest helper baguette runs inside a simulator.
+    /// The CLI finds it beside its executable; a host that links baguette
+    /// ships its own copy and hands it to the simulators it lists.
+    @Test func `should hand every simulator it lists the hinge helper a host ships`() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "hinge-helper-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let helper = folder.appending(path: "HingeControl")
+        try Data([0x01]).write(to: helper)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+        let context = FakeContext(default: FakeSet([FakeDevice()]))
+
+        let simulators = CoreSimulators(deviceSetPath: nil, serviceContext: { context }, hingeControl: helper)
+        let simulator = try #require(simulators.all.first as? CoreSimulator)
+
+        #expect(simulator.hingeControl() == helper.path)
+    }
+
+    @Test func `should find no hinge helper where a host's copy is missing`() throws {
+        let missing = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)/HingeControl")
+        let context = FakeContext(default: FakeSet([FakeDevice()]))
+
+        let simulators = CoreSimulators(deviceSetPath: nil, serviceContext: { context }, hingeControl: missing)
+        let simulator = try #require(simulators.all.first as? CoreSimulator)
+
+        #expect(simulator.hingeControl() == nil)
+    }
+
     // MARK: - listing
 
     @Test func `should list each available device with its name, state, runtime and model`() throws {

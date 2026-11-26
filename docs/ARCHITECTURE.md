@@ -116,9 +116,11 @@ it, a phone's screen is devicectl stills and it takes no touch.
 
 The files baguette ships beside its binary — the 3D models, the dylibs it
 injects, the hinge helper — sit in `Baguette_Baguette.bundle` for the CLI.
-A library host has no such bundle: it copies those folders from
-`Sources/Baguette/Resources/` and names the copy with
-`BaguetteResources.use(folder:)`, which both lookups try before the bundle.
+A library host has no such bundle, so it hands over its own copies where
+they are used, never as process-wide state: the models as
+`LiveDeviceModels(rootURLs:)` to whatever renders a device in 3D, and
+`HingeControl`, the guest helper, as `CoreSimulators(hingeControl:)`, which
+gives it to every simulator it lists. Leaving them out finds the CLI's.
 
 ```
 Sources/

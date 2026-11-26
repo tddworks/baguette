@@ -25,6 +25,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     let deviceSetPath: String?
 
     private let host: any DeviceHost
+    /// Where `HingeControl`, the guest helper, is: the hinge reads and
+    /// folds with it, a foldable's keys go through it, and accessibility
+    /// asks it for the frontmost app.
+    let hingeControl: @Sendable () -> String?
 
     init(
         udid: String,
@@ -34,8 +38,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         deviceTypeName: String,
         host: any DeviceHost,
         deviceSetPath: String? = nil,
+        hingeControl: @escaping @Sendable () -> String? = { InjectedDylibInstaller.installIfNeeded(.hingeControl) },
         metadata: SimulatorMetadata = SimulatorMetadata()
     ) {
+        self.hingeControl = hingeControl
         self.udid = udid
         self.name = name
         self.state = state
@@ -103,7 +109,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
 
     func displays() -> any Displays {
         SimulatorKitDisplays(
-            udid: udid, host: host, hinge: hinge(), keys: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath),
+            udid: udid, host: host, hinge: hinge(), keys: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath, tool: hingeControl),
             deviceSetPath: deviceSetPath)
     }
 
@@ -112,8 +118,8 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     func hinge() -> any Hinge {
         SharedHinge.forDevice(
             udid, deviceSetPath: deviceSetPath,
-            make: { GuestHinge(udid: udid, deviceSetPath: deviceSetPath) },
-            motor: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath),
+            make: { GuestHinge(udid: udid, deviceSetPath: deviceSetPath, tool: hingeControl) },
+            motor: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath, tool: hingeControl),
             presenting: { [udid] in CoreDeviceDisplays.presentingPanel(udid: udid) })
     }
 
@@ -125,8 +131,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         // The observed phone panel supplies the point space, orientation
         // and identity every AX result is expressed in.
         let display = displays().phone
+        let hingeControl = self.hingeControl
         return AXPTranslatorAccessibility(
             udid: udid, host: host, deviceSetPath: deviceSetPath,
+            frontmostPID: { try GuestFrontmost.pid(udid: $0, deviceSetPath: $1, tool: hingeControl) },
             recheckGeometry: { try display.recheckedScreen() },
             displayGeometry: { try display.observedScreen() }
         )
@@ -142,7 +150,7 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
                 let ports = try SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host)
                 return IntegratedPanels.several(in: ports)
             },
-            motor: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath),
+            motor: GuestHingeMotor.forDevice(udid, deviceSetPath: deviceSetPath, tool: hingeControl),
             standard: PurpleEventOrientation(udid: udid, host: host)
         )
     }
