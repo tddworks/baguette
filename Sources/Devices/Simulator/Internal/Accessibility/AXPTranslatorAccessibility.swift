@@ -261,7 +261,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         under element: NSObject, ctx: AXPContext, depth: Int, into found: inout [(node: AXNode, element: NSObject)]
     ) {
         guard depth < maxDepth else { return }
-        found.append((AXNode.walk(from: element, transform: ctx.transform, depthCap: 0), element))
+        found.append((AXNode.walk(from: element, transform: ctx.transform, depthCap: 0, device: ctx.device), element))
         for child in AXElementReader.children(of: element) {
             collectElements(under: child, ctx: ctx, depth: depth + 1, into: &found)
         }
@@ -277,7 +277,7 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         Self.stamp(token: ctx.token, on: translation)
         guard let element = AXPTranslatorBridge.macPlatformElement(translator: ctx.translator, translation: translation) else { return nil }
         Self.stampElementTranslation(token: ctx.token, on: element)
-        let hit = AXNode.walk(from: element, transform: ctx.transform, depthCap: 0, deadline: ctx.deadline)
+        let hit = AXNode.walk(from: element, transform: ctx.transform, depthCap: 0, deadline: ctx.deadline, device: ctx.device)
         return node.bestMatch(among: [hit]) == nil ? nil : element
     }
 
@@ -333,6 +333,8 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         let frontmostRoot: NSObject
         let transform: AXFrameTransform
         let deadline: Date
+        /// The device's UDID, which every element's `nodeId` carries.
+        let device: String
     }
 
     /// Run `body` inside a fully-prepared AXP context. Handles the
@@ -388,7 +390,8 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             token: token,
             frontmostRoot: frontmostRoot,
             transform: transform,
-            deadline: deadline
+            deadline: deadline,
+            device: udid
         ))
         try Self.requireUnchanged(geometry, try recheckGeometry())
         result?.screen = geometry
@@ -448,7 +451,8 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             from: ctx.frontmostRoot,
             transform: ctx.transform,
             depthCap: Self.maxDepth,
-            deadline: ctx.deadline
+            deadline: ctx.deadline,
+            device: ctx.device
         )
     }
 
@@ -536,7 +540,8 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
             from: hitElement,
             transform: ctx.transform,
             depthCap: depthCap,
-            deadline: ctx.deadline
+            deadline: ctx.deadline,
+            device: ctx.device
         )
     }
 

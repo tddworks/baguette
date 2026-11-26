@@ -131,7 +131,8 @@ public extension AXNode {
     private func withChildren(_ newChildren: [AXNode]) -> AXNode {
         AXNode(
             role: role, subrole: subrole, label: label, value: value,
-            identifier: identifier, title: title, help: help, frame: frame,
+            identifier: identifier, nodeId: nodeId, title: title, help: help, frame: frame,
+            activationPoint: activationPoint, sliderTrack: sliderTrack,
             enabled: enabled, focused: focused, hidden: hidden,
             adjustmentActions: adjustmentActions,
             children: newChildren, screen: screen
