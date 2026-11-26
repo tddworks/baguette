@@ -35,6 +35,7 @@ struct HingeRoutesTests {
             size: Size(width: 2007, height: 2853), orientation: orientation
         ))
         given(hinge).angle().willReturn(angle)
+        given(hinge).presentingPanel().willReturn(nil)
         given(chromes).panels(forDeviceName: .value(deviceType)).willReturn(panels)
         return (simulators, chromes)
     }

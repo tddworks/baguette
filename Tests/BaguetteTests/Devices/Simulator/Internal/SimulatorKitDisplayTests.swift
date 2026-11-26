@@ -92,7 +92,9 @@ struct SimulatorKitDisplayTests {
     private func duo(keys: (any DeviceKeys)? = nil) -> Rig {
         let rig = Rig(device: FakeKit.device([(1398, 2034), (2007, 2853)]).0, enumerate: Self.foldable, keys: keys)
         given(rig.hinge).angle().willReturn(Self.open)
+        given(rig.hinge).presentingPanel().willReturn(nil)
         given(rig.guestHinge).angle().willReturn(Self.open)
+        given(rig.guestHinge).presentingPanel().willReturn(nil)
         return rig
     }
 

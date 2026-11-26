@@ -87,8 +87,10 @@ final class SimulatorKitDisplay: Display, @unchecked Sendable {
         let ports = try SimulatorKitFramebuffers.sizedFramebuffers(udid: udid, host: host)
         let screens = SimctlIOEnumerate.connectedScreens(from: try enumerateIO())
         let multiple = screens.filter { $0.screenType == .integrated }.count > 1
-        let angle = multiple ? guestHinge.angle() : nil
-        let observed = try ConnectedScreens.observedPhone(ports: ports, screens: screens, angle: angle)
+        // The device's own answer first; the angle, sampled from the
+        // guest rather than a shared watch, only when it can't say.
+        let lit = multiple ? (hinge.presentingPanel() ?? guestHinge.angle()?.litPanel) : nil
+        let observed = try ConnectedScreens.observedPhone(ports: ports, screens: screens, litPanel: lit)
         let binding = observed.binding
         guard let points = binding.pointSize(scale: observed.scale) else {
             throw ObservedScreenError.unavailable

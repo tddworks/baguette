@@ -42,6 +42,9 @@ final class GuestHinge: Hinge, @unchecked Sendable {
         self.deadline = deadline
     }
 
+    /// The guest's motion stream knows the angle, not the panel lit.
+    func presentingPanel() -> IntegratedPanel? { nil }
+
     func angle() -> HingeAngle? {
         final class State: @unchecked Sendable {
             let lock = NSLock()

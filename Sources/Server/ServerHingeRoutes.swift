@@ -120,9 +120,10 @@ extension Server {
         // Every device answers; only one whose bezel has a second panel
         // folds, and only it is asked for its hinge and its phone plane.
         let foldable = chromes.panels(forDeviceName: device.kind.model).contains(.secondary)
-        let angle = foldable ? (try? device.require(.hinge))?.angle() : nil
+        let hinge = foldable ? try? device.require(.hinge) : nil
+        let angle = hinge?.angle()
         let degrees = angle.map { "\($0.degrees)" } ?? "null"
-        let lit = angle?.litPanel ?? .primary
+        let lit = hinge?.litPanel ?? .primary
         // The guest turns the unfolded panel to landscape on its own, so
         // the page has to be told which way it faces; the binding of the
         // phone plane carries what Connected Screens reports.

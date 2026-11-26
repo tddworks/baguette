@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+- iPhone Duo: the lit panel is the one Core Device reports, not the one the hinge angle suggests. After a fold in small steps the cover stayed lit at 100°, where the 90° rule bound the dark panel: a black screen, touches lost. → [docs](docs/features/iphone-duo/design.md#the-hinge)
+
 ---
 
 ## [0.4.0] - 2026-11-26

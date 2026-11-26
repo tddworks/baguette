@@ -35,6 +35,7 @@ struct LitPanelInputTests {
         let fold = Fold()
         let hinge = MockHinge()
         given(hinge).angle().willProduce { HingeAngle(degrees: fold.lit == .primary ? 0 : 130) }
+        given(hinge).presentingPanel().willReturn(nil)
         let input = LitPanelInput(cover: cover, unfolded: unfolded, hinge: hinge)
         return (input, cover, unfolded, fold)
     }
