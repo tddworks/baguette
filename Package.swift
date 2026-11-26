@@ -52,6 +52,12 @@ let package = Package(
         // the device model and every device family, without the CLI or
         // the HTTP server. Its one public face is `BaguetteKit`.
         .library(name: "BaguetteKit", targets: ["BaguetteKit"]),
+        // A phone on a cable live through Xcode's CoreDevice: its screen,
+        // touch and tunnel, as `CoreDeviceAccess.live`. Its own product
+        // because CoreDevice is weak-linked with linker flags SwiftPM accepts
+        // only from a dependency pinned by revision, branch or path —
+        // BaguetteKit, without it, can be pinned by version.
+        .library(name: "BaguetteCoreDevice", targets: ["BaguetteCoreDevice"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
@@ -112,19 +118,31 @@ let package = Package(
             dependencies: [
                 "BaguetteDevice",
                 "WebRTCKit",
-                "CoreDeviceABI",
                 .product(name: "Mockable", package: "Mockable"),
             ],
             path: "Sources/Devices",
             swiftSettings: [
                 .define("MOCKING", .when(configuration: .debug)),
-            ] + coreDeviceDefine,
-            linkerSettings: coreDeviceLinking + [
+            ],
+            linkerSettings: [
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("VideoToolbox"),
             ]
+        ),
+        // Xcode's CoreDevice, bound with `@_silgen_name` and weak-linked:
+        // the one target with CoreDevice's linker flags. The iPhone family
+        // reaches it only through the `CoreDeviceAccess` a host passes it.
+        .target(
+            name: "BaguetteCoreDevice",
+            dependencies: [
+                "BaguetteDeviceFamilies",
+                "CoreDeviceABI",
+            ],
+            path: "Sources/CoreDevice",
+            swiftSettings: coreDeviceDefine,
+            linkerSettings: coreDeviceLinking
         ),
         // What a package that depends on the `BaguetteKit` product
         // imports: the device model and the device families, re-exported.
@@ -141,19 +159,19 @@ let package = Package(
             dependencies: [
                 "BaguetteDevice",
                 "BaguetteDeviceFamilies",
+                "BaguetteCoreDevice",
                 "WebRTCKit",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
-                "CoreDeviceABI",
             ],
             // The two ways in (Commands, Server) and the plugins, around
             // the one `@main` in Sources/Baguette, which also keeps the
             // resources. The device families are their own target.
             path: "Sources",
             // Their own targets; listed so this one doesn't warn about them.
-            exclude: ["Device", "Devices", "BaguetteKit", "CoreDeviceABI", "WebRTCKit"],
+            exclude: ["Device", "Devices", "CoreDevice", "BaguetteKit", "CoreDeviceABI", "WebRTCKit"],
             sources: ["Baguette/RootCommand.swift", "Commands", "Server", "Plugins"],
             resources: [
                 // Static HTML/CSS/JS for `baguette serve`. Each file is
@@ -192,8 +210,8 @@ let package = Package(
             swiftSettings: [
                 // MOCKING is debug-only; release strips mock code entirely.
                 .define("MOCKING", .when(configuration: .debug)),
-            ] + coreDeviceDefine,
-            linkerSettings: coreDeviceLinking + [
+            ],
+            linkerSettings: [
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),

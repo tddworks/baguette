@@ -305,14 +305,14 @@ struct CoreDevicePhonesTests {
         }
     }
 
-    @Test(.enabled(if: CoreDeviceFramework.isAvailable))
-    func `should show a phone's live screen through CoreDevice, whichever receiver its route picks`() throws {
+    @Test func `should show a phone's live screen through CoreDevice, whichever receiver its route picks`() throws {
         for route in [PhoneScreenRoute.rtp, .avconference] {
             let phone = CoreDevicePhone(
                 PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
                               marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
                               coreDeviceIdentifier: UUID()),
-                devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: route)
+                devicectl: Devicectl(makeSubprocess: FakeDevicectl().make), screenRoute: route,
+                coreDevice: reachableCoreDevice())
 
             let view = try #require(try phone.require(.screen) as? SharedScreenView)
             #expect(view.shared.make() is CoreDeviceScreen)
@@ -321,17 +321,28 @@ struct CoreDevicePhonesTests {
 
     // A phone streams its screen to one receiver: a second stream asked of it
     // takes the picture from the first, and its goodbye ends it for both.
-    @Test(.enabled(if: CoreDeviceFramework.isAvailable))
-    func `should show every viewer of a phone one live screen, however often the phone is looked up`() throws {
+    @Test func `should show every viewer of a phone one live screen, however often the phone is looked up`() throws {
         let screens = SharedScreens()
         let phone = PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
                                   marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
                                   coreDeviceIdentifier: UUID())
         let devicectl = Devicectl(makeSubprocess: FakeDevicectl().make)
-        let first = try #require(try CoreDevicePhone(phone, devicectl: devicectl, screens: screens).require(.screen) as? SharedScreenView)
-        let second = try #require(try CoreDevicePhone(phone, devicectl: devicectl, screens: screens).require(.screen) as? SharedScreenView)
+        let coreDevice = reachableCoreDevice()
+        let first = try #require(try CoreDevicePhone(phone, devicectl: devicectl, screens: screens, coreDevice: coreDevice).require(.screen) as? SharedScreenView)
+        let second = try #require(try CoreDevicePhone(phone, devicectl: devicectl, screens: screens, coreDevice: coreDevice).require(.screen) as? SharedScreenView)
 
         #expect(first.shared === second.shared)
+    }
+
+    @Test func `should show a phone's screen as stills when this process reaches no CoreDevice`() throws {
+        let phone = CoreDevicePhone(
+            PhysicalPhone(udid: phoneUDID, name: "han's iPhone", productType: "iPhone19,7",
+                          marketingName: "iPhone 18 Pro Max", platform: .iOS, state: .ready,
+                          coreDeviceIdentifier: UUID()),
+            devicectl: Devicectl(makeSubprocess: FakeDevicectl().make),
+            coreDevice: .absent)
+
+        #expect(try phone.require(.screen) is DevicectlScreen)
     }
 
     @Test func `should take no touch on a phone CoreDevice gave no identifier`() {
@@ -400,4 +411,13 @@ private final class Deferred: @unchecked Sendable {
         get { lock.withLock { queued } }
         set { lock.withLock { queued = newValue } }
     }
+}
+
+/// CoreDevice as a host that links it hands it over: it answers, and its
+/// touch and screen are the fakes a test gives.
+private func reachableCoreDevice(
+    hid: any UniversalHID = MockUniversalHID(),
+    mediaStream: any MediaStreamStarter = MockMediaStreamStarter()
+) -> CoreDeviceAccess {
+    CoreDeviceAccess(isAvailable: { true }, connect: { _ in }, universalHID: hid, mediaStream: mediaStream)
 }

@@ -5,8 +5,8 @@ import Foundation
 /// down for seconds after the phone is listed: take the phone as soon as
 /// it appears, and wait (fifty looks, a tenth of a second apart) only
 /// while it hasn't and the list isn't complete.
-enum CoreDeviceListing {
-    static func find<Device>(
+package enum CoreDeviceListing {
+    package static func find<Device>(
         where matches: (Device) -> Bool,
         listed: () -> [Device],
         isComplete: () -> Bool,

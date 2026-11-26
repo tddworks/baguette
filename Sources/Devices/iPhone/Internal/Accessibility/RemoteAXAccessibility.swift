@@ -39,7 +39,7 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
         }
     }
 
-    init(identifier: UUID, tunnel: any Tunnel = CoreDeviceTunnel(), budget: TimeInterval = 20,
+    init(identifier: UUID, tunnel: any Tunnel, budget: TimeInterval = 20,
          translator: any AccessibilityTranslator = AXPTranslation(),
          connect: @escaping @Sendable (String, UInt16) throws -> any TunnelConnection = {
              try TunnelSocket(host: $0, port: $1, timeout: 5)

@@ -4,9 +4,9 @@ import Foundation
 /// One Universal HID digitizer report, as values: the fingers on the glass
 /// now, or lifting, each numbered from one. UniversalHID's own setters lay
 /// it out (`UniversalHIDReport`), field by field from this.
-struct DigitizerReport: Equatable, Sendable {
+package struct DigitizerReport: Equatable, Sendable {
     /// The way a swipe in from an edge moves: inward, away from it.
-    enum Swipe: Equatable, Sendable {
+    package enum Swipe: Equatable, Sendable {
         case right, down, up, left
 
         /// In from the left moves right; from the top, down; and so on.
@@ -20,19 +20,19 @@ struct DigitizerReport: Equatable, Sendable {
         }
     }
 
-    struct Finger: Equatable, Sendable {
+    package struct Finger: Equatable, Sendable {
         /// Its contact's index and identity, from one.
-        let index: Int
-        let x: Double
-        let y: Double
+        package let index: Int
+        package let x: Double
+        package let y: Double
         /// Touching, and in range; a lifting finger is neither.
-        let touching: Bool
+        package let touching: Bool
         /// A swipe in from an edge, marked on every report including the
         /// lift (with "locked"), so SpringBoard finishes it.
-        let swipe: Swipe?
+        package let swipe: Swipe?
     }
 
-    let fingers: [Finger]
+    package let fingers: [Finger]
 
     init(contacts: [Contact], touching: Bool, edge: DeviceEdge?) {
         let swipe = edge.map(Swipe.init(inFrom:))

@@ -12,7 +12,7 @@ final class CoreDeviceTunnel: Tunnel, @unchecked Sendable {
     private let interfaces: @Sendable () -> [String]
 
     init(devicectl: Devicectl = Devicectl(),
-         connect: @escaping @Sendable (UUID) throws -> Void = { try CoreDeviceConnection.connect($0) },
+         connect: @escaping @Sendable (UUID) throws -> Void,
          interfaces: @escaping @Sendable () -> [String] = { HostNetwork.addresses() }) {
         self.devicectl = devicectl
         self.connect = connect

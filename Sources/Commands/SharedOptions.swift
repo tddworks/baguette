@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteCoreDevice
 import BaguetteDeviceFamilies
 import ArgumentParser
 import Foundation
@@ -27,7 +28,7 @@ extension DeviceOption {
     /// The kinds of device this run reaches, simulators from `deviceSet`
     /// (or Xcode's default set).
     static func kinds(deviceSet: String?) -> DeviceKinds {
-        reachable ?? DeviceKinds(simulators: CoreSimulators(deviceSetPath: deviceSet))
+        reachable ?? DeviceKinds(simulators: CoreSimulators(deviceSetPath: deviceSet), coreDevice: .live)
     }
 
     /// The device `--udid` names, from every family this host can reach —

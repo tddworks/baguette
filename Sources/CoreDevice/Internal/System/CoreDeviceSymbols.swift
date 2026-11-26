@@ -1,3 +1,4 @@
+import BaguetteDeviceFamilies
 import Foundation
 
 /// CoreDevice's symbols, looked up in this process. Weak-linked symbols

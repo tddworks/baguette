@@ -43,8 +43,8 @@ final class CoreDeviceScreen: Screen, @unchecked Sendable {
 
     init(identifier: UUID,
          devicectl: Devicectl = Devicectl(),
-         tunnel: any Tunnel = CoreDeviceTunnel(),
-         starter: any MediaStreamStarter = CoreDeviceMediaStream(),
+         tunnel: any Tunnel,
+         starter: any MediaStreamStarter,
          openSocket: @escaping @Sendable () throws -> any DatagramSocket = { try UDPSocket() },
          makeReceiver: @escaping @Sendable () throws -> any ScreenReceiver = { RTPReceiver() },
          now: @escaping @Sendable () -> Date = { Date() },
@@ -163,7 +163,5 @@ final class CoreDeviceScreen: Screen, @unchecked Sendable {
         }
     }
 
-    enum StreamError: Error {
-        case notListed, unexpectedAnswer
-    }
+    typealias StreamError = MediaStreamError
 }

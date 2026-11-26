@@ -1,4 +1,5 @@
 import BaguetteDevice
+import BaguetteCoreDevice
 import BaguetteDeviceFamilies
 import Foundation
 
@@ -28,6 +29,7 @@ extension ServeCommand {
         let kinds = DeviceKinds(
             simulators: simulators,
             companions: CompanionDevices(phones: companions, screens: twinScreens),
+            coreDevice: .live,
             macs: shareMac ? MacDisplays.onThisMac(madePixels: { screenShares?.pixels(of: $0) }) : nil
         )
         // DeviceKit's chrome first, then the Mac frames installed here, then —
