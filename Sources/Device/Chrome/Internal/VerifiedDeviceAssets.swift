@@ -10,28 +10,33 @@ public struct VerifiedDeviceAssets: @unchecked Sendable {
 
     private let cacheRoot: URL
     private let fetch: Fetch
-    private let developerDir: () -> String
+    private let xcodes: () -> [URL]
 
+    /// `xcodes` are the Xcode bundles an asset Apple ships inside Xcode is
+    /// looked for in, in order: by default the selected Xcode, then every
+    /// other installed one, newest first (`Xcode.installed()`).
     public init(
         cacheRoot: URL = Self.defaultCacheRoot,
         fetch: @escaping Fetch = { try Data(contentsOf: $0) },
-        developerDir: @escaping () -> String = { Xcode.developerDir() }
+        xcodes: @escaping () -> [URL] = { Xcode.installed() }
     ) {
         self.cacheRoot = cacheRoot
         self.fetch = fetch
-        self.developerDir = developerDir
+        self.xcodes = xcodes
     }
 
     public func resolve(_ model: InstalledDeviceModel) throws -> URL {
-        // An asset Apple ships inside Xcode: `<Xcode>/Contents/<resource>`,
-        // the developer dir being `<Xcode>/Contents/Developer`.
+        // An asset Apple ships inside Xcode: `<Xcode>/Contents/<resource>`.
+        // Not every Xcode has it — the iPhone Duo's model arrived in 27.1 —
+        // so the same path is tried in each installed Xcode, the selected
+        // one first. The path is exact: the same file, never a look-alike.
         if let resource = model.definition.asset.xcodeResource, !resource.isEmpty {
-            let contents = URL(fileURLWithPath: developerDir()).deletingLastPathComponent()
-            let candidate = contents.appending(path: resource)
-            guard FileManager.default.fileExists(atPath: candidate.path) else {
-                throw DeviceModelError.localAssetNotFound(resource)
+            let searched = xcodes()
+            for xcode in searched {
+                let candidate = xcode.appending(path: "Contents").appending(path: resource)
+                if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
             }
-            return candidate
+            throw DeviceModelError.xcodeResourceNotFound(resource, searched: searched.map(\.path))
         }
         if model.definition.asset.file != nil {
             do {

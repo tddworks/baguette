@@ -56,4 +56,41 @@ public enum Xcode {
         }
         return nil
     }
+
+    // MARK: - every installed Xcode
+
+    /// The Xcode bundles on this Mac, in the order an asset Apple ships
+    /// inside Xcode is looked for: the selected one (`developerDir()`)
+    /// first, then the others in `/Applications` and `~/Applications`,
+    /// newest first.
+    public static func installed(fileManager: FileManager = .default) -> [URL] {
+        let selected = URL(fileURLWithPath: developerDir())
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let folders = [
+            URL(fileURLWithPath: "/Applications"),
+            fileManager.homeDirectoryForCurrentUser.appending(path: "Applications"),
+        ]
+        let found: [(URL, String)] = folders.flatMap { folder -> [(URL, String)] in
+            let apps = (try? fileManager.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: nil)) ?? []
+            return apps.compactMap { app in
+                guard app.pathExtension == "app",
+                      let info = NSDictionary(contentsOf: app.appending(path: "Contents/Info.plist")),
+                      info["CFBundleIdentifier"] as? String == "com.apple.dt.Xcode"
+                else { return nil }
+                return (app, info["CFBundleShortVersionString"] as? String ?? "0")
+            }
+        }
+        return searchOrder(selected: selected, installed: found)
+    }
+
+    /// The selected Xcode, then the rest by version, newest first,
+    /// compared as numbers (26.10 is newer than 26.4). Each Xcode once.
+    static func searchOrder(selected: URL?, installed: [(URL, String)]) -> [URL] {
+        let others = installed
+            .filter { $0.0.standardizedFileURL != selected?.standardizedFileURL }
+            .sorted { $0.1.compare($1.1, options: .numeric) == .orderedDescending }
+            .map(\.0)
+        return (selected.map { [$0] } ?? []) + others
+    }
 }

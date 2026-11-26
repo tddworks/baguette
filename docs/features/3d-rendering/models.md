@@ -128,7 +128,7 @@ optional keys a book needs:
 
 | Key | Meaning |
 |-----|---------|
-| `asset.xcodeResource` | The asset's path under the selected Xcode's `Contents/` (DeviceKit's `V68.usdz`); read in place, never copied |
+| `asset.xcodeResource` | The asset's path under an Xcode's `Contents/` (DeviceKit's `V68.usdz`, in Xcode 27.1 and later), looked for in the selected Xcode, then every other installed one, newest first; read in place, never copied |
 | `scene.restRotation` | Turns a model authored lying flat, screen up, to face the camera before any requested rotation |
 | `scene.textureRotation` | Quarter turns (degrees) the framebuffer needs on the mesh when its UVs run the other way |
 | `scene.fold` | `clip` (the shutting clip), `shutTime` (its time when shut; flat at 0), `coverMaterial`, `coverTextureSize`, `coverTextureRotation`, `openPoseDegrees` (Device Hub's open pose, from where up the bend is centred) |

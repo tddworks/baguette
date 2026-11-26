@@ -18,6 +18,7 @@ For releases prior to this changelog, see the
 - `BaguetteResources` (new in 0.4.0): a process-wide folder every lookup read. A host now hands each file to what uses it: `CoreSimulators(hingeControl:)`, and `LiveDeviceModels(rootURLs:)` for 3D models.
 
 ### Fixed
+- iPhone Duo renders in 3D with Xcode 27.0 selected: its model ships only in Xcode 27.1 and later, and is now found in any installed Xcode, the selected one first. Before, the render failed with `localAssetNotFound`.
 - iPhone Duo: the lit panel is the one Core Device reports, not the one the hinge angle suggests. After a fold in small steps the cover stayed lit at 100°, where the 90° rule bound the dark panel: a black screen, touches lost. → [docs](docs/features/iphone-duo/design.md#the-hinge)
 
 ---
