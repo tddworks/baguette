@@ -60,7 +60,7 @@ AXP invokes the delegate via ObjC dispatch.
 ### Per-call dance
 
 ```
-1. simctl [--set path] spawn UDID HingeControl frontmost → live PID
+1. simctl [--set path] spawn UDID AXPFrontmost frontmost → live PID
 2. translation = SimDevice.sendAccessibilityRequestAsync(
                      requestType: 1, parameters: {pid})
 3. Token = UUID().uuidString
@@ -104,7 +104,7 @@ app with genuinely nothing to show pays for the helper on each read, which
 is what every read used to cost. Point queries still always use the helper.
 
 The fallback asks the guest window server for the current frontmost PID
-in a fresh `HingeControl frontmost` process: inside the guest, the AX
+in a fresh `AXPFrontmost frontmost` process (iOS guests only; elsewhere the bridge's answer stands): inside the guest, the AX
 translator routes requests to its own `processTranslatorRequest:`, and no
 HID framework is loaded or input service registered. The implementation
 follows [idb's guest runtime](https://github.com/facebook/idb/blob/1c5c81f6cbe3a31986eda66349fd22a2f9b47858/SimulatorFrameworkBridge/Runtime/AccessibilityRuntime.m#L831)

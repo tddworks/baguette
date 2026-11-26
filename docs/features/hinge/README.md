@@ -34,8 +34,8 @@ GET  /devices/<udid>/hinge                  (or /simulators/<udid>/hinge)
 The `POST` blocks for the sweep and answers `{"ok":true}`; `400` for a
 pose that is not `closed`/`open`/`flat`, an angle off 0–180 or a
 duration off 0–60 s; `404` for an unknown udid; `500` when the device
-could not be driven (no `HingeControl` shipped, guest refused); `504`
-when the guest helper timed out, so the fold may have landed. A phone
+could not be driven (no `DeviceHubControls` shipped, guest refused); `504`
+when `DeviceHubControls` timed out, so the fold may have landed. A phone
 answers the `GET` with `foldable:false` and has nothing to drive.
 
 On the 3D socket the picker sends:
@@ -92,7 +92,7 @@ untouched.
 - Device Hub and baguette both feed the same hinge; whoever sent last
   wins, and Device Hub's picker shows its own last pick, not the
   device's angle, until it next reads the hinge.
-- `HingeControl` needs the iOS 27.1 simulator's private `HID.framework`
+- `DeviceHubControls` needs the iOS 27.1 simulator's private `HID.framework`
   to accept a virtual service from an unentitled process, and CoreMotion
   to hand it the hinge angle, which both do; a future runtime may not.
 - The guest's hinge reading goes silent after a SpringBoard restart

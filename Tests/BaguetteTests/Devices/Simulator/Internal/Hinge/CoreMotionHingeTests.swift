@@ -5,15 +5,15 @@ import Mockable
 @testable import BaguetteDeviceFamilies
 @testable import BaguetteDevice
 
-/// `GuestHinge` reads the hinge with `HingeControl read-angle` spawned
+/// `CoreMotionHinge` reads the hinge with `CoreMotionAngle read-angle` spawned
 /// in the guest, which prints the current angle and exits, and watches
 /// it with `watch-angle`, which prints every sample until stopped. The
 /// orchestration is: spawn, split lines, take the first sample,
 /// terminate — and give up on exit or after a deadline. All of that is
 /// driven here through `MockSubprocess`; the `Foundation.Process`
 /// plumbing is integration-only.
-@Suite("GuestHinge — orchestration via Subprocess")
-struct GuestHingeTests {
+@Suite("CoreMotionHinge — orchestration via Subprocess")
+struct CoreMotionHingeTests {
 
     final class Captures: @unchecked Sendable {
         var executable: URL?
@@ -29,9 +29,9 @@ struct GuestHingeTests {
     /// which is how a real child that answers instantly behaves too.
     private func makeHinge(
         deviceSetPath: String? = nil,
-        tool: String? = "/tools/HingeControl",
+        path: String? = "/tools/CoreMotionAngle",
         feed: @escaping @Sendable (Captures) -> Void
-    ) -> (GuestHinge, MockSubprocess, Captures) {
+    ) -> (CoreMotionHinge, MockSubprocess, Captures) {
         let sub = MockSubprocess()
         let captures = Captures()
         given(sub).run(
@@ -44,8 +44,8 @@ struct GuestHingeTests {
             feed(captures)
         }
         given(sub).terminate().willReturn()
-        let hinge = GuestHinge(
-            udid: "duo", deviceSetPath: deviceSetPath, subprocess: { sub }, tool: { tool }, deadline: 0.5)
+        let hinge = CoreMotionHinge(
+            udid: "duo", deviceSetPath: deviceSetPath, subprocess: { sub }, path: { path }, deadline: 0.5)
         return (hinge, sub, captures)
     }
 
@@ -58,17 +58,17 @@ struct GuestHingeTests {
         verify(sub).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any).called(0)
     }
 
-    @Test func `should read this device's hinge with HingeControl in the guest`() {
+    @Test func `should read this device's hinge with CoreMotionAngle in the guest`() {
         let (hinge, _, captures) = makeHinge { c in c.onBytes?(Data(self.sample.utf8)) }
         _ = hinge.angle()
         #expect(captures.executable?.path == "/usr/bin/xcrun")
-        #expect(captures.arguments == ["simctl", "spawn", "duo", "/tools/HingeControl", "read-angle"])
+        #expect(captures.arguments == ["simctl", "spawn", "duo", "/tools/CoreMotionAngle", "read-angle"])
     }
 
     @Test func `should read the hinge of a device in a custom set`() {
         let (hinge, _, captures) = makeHinge(deviceSetPath: "/sets/a") { c in c.onBytes?(Data(self.sample.utf8)) }
         _ = hinge.angle()
-        #expect(captures.arguments == ["simctl", "--set", "/sets/a", "spawn", "duo", "/tools/HingeControl", "read-angle"])
+        #expect(captures.arguments == ["simctl", "--set", "/sets/a", "spawn", "duo", "/tools/CoreMotionAngle", "read-angle"])
     }
 
     @Test func `should read the hinge angle from the first sample`() {
@@ -127,12 +127,12 @@ struct GuestHingeTests {
         given(sub).run(
             executable: .any, arguments: .any, onBytes: .any, onExit: .any
         ).willThrow(NSError(domain: "spawn", code: 1))
-        let hinge = GuestHinge(udid: "duo", subprocess: { sub }, tool: { "/tools/HingeControl" }, deadline: 0.5)
+        let hinge = CoreMotionHinge(udid: "duo", subprocess: { sub }, path: { "/tools/CoreMotionAngle" }, deadline: 0.5)
         #expect(hinge.angle() == nil)
     }
 
-    @Test func `should report no reading without spawning when HingeControl is missing`() {
-        let (hinge, sub, _) = makeHinge(tool: nil) { _ in }
+    @Test func `should report no reading without spawning when CoreMotionAngle is missing`() {
+        let (hinge, sub, _) = makeHinge(path: nil) { _ in }
         #expect(hinge.angle() == nil)
         verify(sub).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any).called(0)
     }
@@ -153,10 +153,10 @@ struct GuestHingeTests {
         watch.cancel()
     }
 
-    @Test func `should watch this device's hinge with HingeControl in the guest`() {
+    @Test func `should watch this device's hinge with CoreMotionAngle in the guest`() {
         let (hinge, _, captures) = makeHinge(deviceSetPath: "/sets/a") { _ in }
         let watch = hinge.watch { _ in }
-        #expect(captures.arguments == ["simctl", "--set", "/sets/a", "spawn", "duo", "/tools/HingeControl", "watch-angle"])
+        #expect(captures.arguments == ["simctl", "--set", "/sets/a", "spawn", "duo", "/tools/CoreMotionAngle", "watch-angle"])
         watch.cancel()
     }
 
@@ -190,8 +190,8 @@ struct GuestHingeTests {
         watch.cancel()
     }
 
-    @Test func `should deliver nothing without spawning when watching without HingeControl`() {
-        let (hinge, sub, _) = makeHinge(tool: nil) { _ in }
+    @Test func `should deliver nothing without spawning when watching without CoreMotionAngle`() {
+        let (hinge, sub, _) = makeHinge(path: nil) { _ in }
         let watch = hinge.watch { _ in Issue.record("no sample expected") }
         watch.cancel()
         verify(sub).run(executable: .any, arguments: .any, onBytes: .any, onExit: .any).called(0)

@@ -1,7 +1,8 @@
 #!/bin/bash
-# Build HingeControl — an iOS-Simulator *executable* (not a dylib) that
-# baguette spawns inside the guest with `simctl spawn` to drive iPhone
-# Duo's hinge. See Sources/HingeControl.m for what it speaks.
+# Build CoreMotionAngle — an iOS-Simulator *executable* (not a dylib) that baguette
+# spawns inside the guest with `simctl spawn`. See Sources/main.m for what
+# it speaks, and docs/features/injected-programs/design.md for why it is one
+# program of four.
 #
 # Same cross-compile recipe as the dylibs: iphonesimulator SDK, fat by
 # default, single arch under BAGUETTE_INJECTED_ARCHS, linker-signed adhoc
@@ -11,7 +12,7 @@ set -e
 cd "$(dirname "$0")"
 
 SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
-OUT=HingeControl
+OUT=CoreMotionAngle
 
 build_slice() {
     local arch="$1"
@@ -19,12 +20,14 @@ build_slice() {
         -arch "$arch" \
         -isysroot "$SDK" \
         -target "${arch}-apple-ios17.0-simulator" \
+        -I ../Shared \
         -framework Foundation \
         -fobjc-arc \
         -Wall \
+        -Werror \
         -Wl,-adhoc_codesign \
         -o "${OUT}.${arch}" \
-        Sources/HingeControl.m Sources/Frontmost.m Sources/HingeAngle.m
+        Sources/*.m
 }
 
 ARCHS=${BAGUETTE_INJECTED_ARCHS:-"arm64 x86_64"}

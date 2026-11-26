@@ -119,8 +119,9 @@ injects, the hinge helper — sit in `Baguette_Baguette.bundle` for the CLI.
 A library host has no such bundle, so it hands over its own copies where
 they are used, never as process-wide state: the models as
 `LiveDeviceModels(rootURLs:)` to whatever renders a device in 3D, and
-`HingeControl`, the guest helper, as `CoreSimulators(hingeControl:)`, which
-gives it to every simulator it lists. Leaving them out finds the CLI's.
+the programs run in the guest as `CoreSimulators(injectedPrograms:)`, which
+gives them to every simulator it lists
+([injected programs](features/injected-programs/design.md)). Leaving them out finds the CLI's.
 
 ```
 Sources/

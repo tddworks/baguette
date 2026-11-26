@@ -13,8 +13,8 @@ public final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     private let deviceSetPath: String?
     private let serviceContext: @Sendable () -> NSObject?
     private let now: @Sendable () -> TimeInterval
-    /// Where the hinge helper is, asked each time a simulator runs it.
-    private let hingeControl: @Sendable () -> String?
+    /// Where each program run in the guest is, asked each time one runs.
+    private let programs: InjectedProgramPaths
 
     /// How long a found device is taken as still there. Finding one costs about 70 ms,
     /// and a read asks up to three times, so polling a screen was mostly this. Short,
@@ -26,17 +26,27 @@ public final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
     /// The simulators of `deviceSetPath`, or of Xcode's default set when nil,
     /// through the active Xcode's CoreSimulator.
     ///
-    /// `hingeControl` is a host's own copy of `HingeControl`, the guest
-    /// helper that reads and moves a foldable's hinge, presses its keys and
-    /// names the frontmost app. Nil finds the one the CLI ships beside its
-    /// executable (`BAGUETTE_HINGECONTROL_TOOL`, the source tree, the bundle).
-    public convenience init(deviceSetPath: String? = nil, hingeControl: URL? = nil) {
+    /// `injectedPrograms` are a host's own copies of the programs baguette
+    /// runs in the guest (docs/features/injected-programs/design.md); each
+    /// one left nil is found where the CLI ships it (`BAGUETTE_<NAME>_TOOL`,
+    /// the source tree, the bundle).
+    public convenience init(deviceSetPath: String? = nil, injectedPrograms: InjectedPrograms = InjectedPrograms()) {
         self.init(
             deviceSetPath: deviceSetPath,
             serviceContext: {
                 CoreSimulatorFramework.sharedContext(developerDir: CoreSimulators.developerDir())
             },
-            hingeControl: hingeControl
+            injectedPrograms: injectedPrograms
+        )
+    }
+
+    /// `hingeControl` is one binary answering every program's verbs: the
+    /// `HingeControl` they were split from.
+    @available(*, deprecated, message: "Pass each program: CoreSimulators(deviceSetPath:injectedPrograms:).")
+    public convenience init(deviceSetPath: String? = nil, hingeControl: URL?) {
+        self.init(
+            deviceSetPath: deviceSetPath,
+            injectedPrograms: hingeControl.map(InjectedPrograms.everyVerb(in:)) ?? InjectedPrograms()
         )
     }
 
@@ -44,17 +54,12 @@ public final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         deviceSetPath: String? = nil,
         serviceContext: @escaping @Sendable () -> NSObject?,
         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-        hingeControl: URL? = nil
+        injectedPrograms: InjectedPrograms = InjectedPrograms()
     ) {
         self.deviceSetPath = deviceSetPath
         self.serviceContext = serviceContext
         self.now = now
-        if let hingeControl {
-            let path = hingeControl.path
-            self.hingeControl = { @Sendable in FileManager.default.isExecutableFile(atPath: path) ? path : nil }
-        } else {
-            self.hingeControl = { @Sendable in InjectedDylibInstaller.installIfNeeded(.hingeControl) }
-        }
+        programs = InjectedProgramPaths(injectedPrograms)
         Self.loadFrameworks()
     }
 
@@ -179,7 +184,7 @@ public final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
             deviceTypeName: deviceTypeName,
             host: self,
             deviceSetPath: deviceSetPath,
-            hingeControl: hingeControl,
+            programs: programs,
             // Identity from the installed catalog, read once per device: the
             // identifiers survive a rename and `versionString` compares cleanly,
             // while `runtime.version` is a packed integer.

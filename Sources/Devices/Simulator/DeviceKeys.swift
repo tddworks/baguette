@@ -7,7 +7,7 @@ import Mockable
 /// buttons service. iPhone Duo's SpringBoard takes volume, power and
 /// the camera control only from there — the legacy Indigo press lands
 /// on a touchscreen service and is ignored. The production impl is
-/// `GuestHingeMotor`, which runs `HingeControl` inside the guest.
+/// `HIDButtonsKeys`, which runs `HIDButtons` inside the guest.
 @Mockable
 protocol DeviceKeys: Sendable {
     /// Press `usage` for `hold` seconds with `modifiers` held around it,

@@ -25,30 +25,30 @@ struct AXFrontmostTests {
         }
     }
 
-    // HingeControl is built for the iOS simulator; in a watchOS, tvOS or
+    // AXPFrontmost is built for the iOS simulator; in a watchOS, tvOS or
     // visionOS guest dyld refuses it, after a spawn of up to ten seconds.
     @Test(arguments: [
         ("iOS 27.1", true), ("watchOS 11.2", false), ("tvOS 26.0", false), ("visionOS 26.0", false),
     ])
-    func `should run the guest helper only in an iOS guest`(runtime: String, runs: Bool) {
-        #expect(GuestFrontmost.runs(onRuntime: runtime) == runs)
+    func `should run AXPFrontmost only in an iOS guest`(runtime: String, runs: Bool) {
+        #expect(AXPTranslatorFrontmost.runs(onRuntime: runtime) == runs)
     }
 
-    @Test func `should refuse at once in a guest the helper can't run in`() {
-        #expect(throws: GuestFrontmost.Failure.unsupportedRuntime("watchOS 11.2")) {
-            try GuestFrontmost.pid(udid: "W", runtime: "watchOS 11.2", tool: { "/guest tool" })
+    @Test func `should refuse at once in a guest AXPFrontmost can't run in`() {
+        #expect(throws: AXPTranslatorFrontmost.Failure.unsupportedRuntime("watchOS 11.2")) {
+            try AXPTranslatorFrontmost.pid(udid: "W", runtime: "watchOS 11.2", path: { "/guest program" })
         }
     }
 
     @Test func `should ask the chosen device in the chosen device set for its frontmost app`() throws {
         let script = try Script(
-            "[ \"$2\" = --set ] && [ \"$3\" = '/custom set' ] && [ \"$4\" = spawn ] && [ \"$6\" = '/guest tool' ] && [ \"$7\" = frontmost ] || exit 9; printf '{\"pid\":%s}' \"$5\""
+            "[ \"$2\" = --set ] && [ \"$3\" = '/custom set' ] && [ \"$4\" = spawn ] && [ \"$6\" = '/guest program' ] && [ \"$7\" = frontmost ] || exit 9; printf '{\"pid\":%s}' \"$5\""
         )
         defer { script.remove() }
         for udid in ["123", "456"] {
             #expect(
-                try GuestFrontmost.pid(
-                    udid: udid, deviceSetPath: "/custom set", tool: { "/guest tool" }, xcrun: script.url
+                try AXPTranslatorFrontmost.pid(
+                    udid: udid, deviceSetPath: "/custom set", path: { "/guest program" }, xcrun: script.url
                 ) == Int32(udid))
         }
     }
@@ -58,7 +58,7 @@ struct AXFrontmostTests {
         defer { script.remove() }
         for pid in [123, 456] {
             try Data("{\"pid\":\(pid)}".utf8).write(to: script.url.appendingPathExtension("pid"))
-            #expect(try GuestFrontmost.pid(udid: "device", tool: { "/guest tool" }, xcrun: script.url) == pid)
+            #expect(try AXPTranslatorFrontmost.pid(udid: "device", path: { "/guest program" }, xcrun: script.url) == pid)
         }
     }
 
@@ -66,36 +66,36 @@ struct AXFrontmostTests {
         #expect(
             AXFrontmost.Failure.invalidPID(0).localizedDescription
                 == "The guest frontmost query returned an invalid process identifier: 0.")
-        #expect(GuestFrontmost.Failure.toolMissing.localizedDescription.contains("HingeControl guest helper is missing"))
+        #expect(AXPTranslatorFrontmost.Failure.programMissing.localizedDescription.contains("AXPFrontmost program is missing"))
         #expect(
-            GuestFrontmost.Failure.invalidResponse(udid: "device", cause: "banner").localizedDescription
+            AXPTranslatorFrontmost.Failure.invalidResponse(udid: "device", cause: "banner").localizedDescription
                 == "Frontmost application query for device returned invalid data: banner")
     }
 
-    @Test func `should fail explicitly when the guest helper is missing or its query fails`() throws {
-        #expect(throws: GuestFrontmost.Failure.toolMissing) {
-            try GuestFrontmost.pid(udid: "device", tool: { nil })
+    @Test func `should fail explicitly when AXPFrontmost is missing or its query fails`() throws {
+        #expect(throws: AXPTranslatorFrontmost.Failure.programMissing) {
+            try AXPTranslatorFrontmost.pid(udid: "device", path: { nil })
         }
         let script = try Script("echo 'frontmost unavailable' >&2; exit 7")
         defer { script.remove() }
         #expect(throws: SimctlCapture.Failure.failed(udid: "device", status: 7, output: "frontmost unavailable\n")) {
-            try GuestFrontmost.pid(udid: "device", tool: { "/guest tool" }, xcrun: script.url)
+            try AXPTranslatorFrontmost.pid(udid: "device", path: { "/guest program" }, xcrun: script.url)
         }
     }
 
     @Test func `should find the frontmost app when the guest also prints diagnostics`() throws {
         let script = try Script("printf 'simctl diagnostic\\n' >&2; printf '{\"pid\":123}'")
         defer { script.remove() }
-        #expect(try GuestFrontmost.pid(udid: "device", tool: { "/guest tool" }, xcrun: script.url) == 123)
+        #expect(try AXPTranslatorFrontmost.pid(udid: "device", path: { "/guest program" }, xcrun: script.url) == 123)
     }
 
     @Test func `should keep the guest diagnostic when the frontmost answer is malformed`() throws {
         let script = try Script("printf invalid; printf 'guest diagnostic' >&2")
         defer { script.remove() }
         do {
-            _ = try GuestFrontmost.pid(udid: "device", tool: { "/guest tool" }, xcrun: script.url)
+            _ = try AXPTranslatorFrontmost.pid(udid: "device", path: { "/guest program" }, xcrun: script.url)
             Issue.record("Malformed guest output must fail")
-        } catch GuestFrontmost.Failure.invalidResponse(let udid, let cause) {
+        } catch AXPTranslatorFrontmost.Failure.invalidResponse(let udid, let cause) {
             #expect(udid == "device")
             #expect(cause.contains("invalid"))
             #expect(cause.contains("guest diagnostic"))

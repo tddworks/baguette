@@ -5,7 +5,7 @@ import Foundation
 ///
 /// A foldable's stream sockets each want the sweep, and every bind of
 /// the phone plane wants the current angle. Giving each caller its own
-/// `GuestHinge` put several monitors on one device at once and a
+/// `CoreMotionHinge` put several monitors on one device at once and a
 /// fresh spawn on every resolve — including inside `/hinge` polls
 /// while a socket was already streaming samples. This runs a single
 /// inner watch for as long as anyone subscribes, fans its samples out,
@@ -129,7 +129,7 @@ final class SharedHinge: Hinge, @unchecked Sendable {
     }
 
     /// A sweep starts where the hinge is — the angle last heard. With
-    /// nothing heard (no `HingeControl`, or a silent guest) the
+    /// nothing heard (no `CoreMotionAngle`, or a silent guest) the
     /// hinge goes straight to the angle asked for rather than sweeping
     /// from a guessed start.
     ///

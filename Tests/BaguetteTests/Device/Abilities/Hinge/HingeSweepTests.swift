@@ -3,14 +3,14 @@ import Foundation
 @testable import Baguette
 @testable import BaguetteDevice
 
-/// A sweep baguette plays on the hinge moves it the way `HingeControl
+/// A sweep baguette plays on the hinge moves it the way `DeviceHubControls
 /// sweep` does: one sample every 60 Hz frame with Device Hub's ease-out,
 /// the first step at once and the last exactly on the target.
 @Suite("HingeSweep")
 struct HingeSweepTests {
     private let open = HingeSweep(from: 180, to: 130, duration: 0.8)
 
-    @Test func `should step along HingeControl's ease-out one sample a frame`() {
+    @Test func `should step along DeviceHubControls' ease-out one sample a frame`() {
         // Read back from the guest during `sweep 180 130 800`.
         #expect(abs(open.degrees(after: 0) - 176.88) < 0.01)
         #expect(abs(open.degrees(after: 1.0 / 60) - 173.88) < 0.01)

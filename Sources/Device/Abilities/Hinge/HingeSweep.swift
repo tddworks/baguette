@@ -1,6 +1,6 @@
 import Foundation
 
-/// A sweep baguette plays on a foldable's hinge, as `HingeControl sweep
+/// A sweep baguette plays on a foldable's hinge, as `DeviceHubControls sweep
 /// <from> <to> <ms>` plays it in the guest: one sample every 60 Hz frame
 /// with Device Hub's ease-out, the first step at once and the last
 /// exactly on the target.
@@ -11,7 +11,7 @@ public struct HingeSweep: Equatable, Sendable {
 
     public static let frameInterval: TimeInterval = 1.0 / 60
 
-    /// `HingeControl`'s count: whole 16.667 ms frames, at least one, and
+    /// `DeviceHubControls`' count: whole 16.667 ms frames, at least one, and
     /// as many as an `Int` holds for a sweep longer than that.
     private var frames: Int {
         let count = duration * 1000 / 16.667

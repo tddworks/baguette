@@ -8,8 +8,9 @@ import CryptoKit
 /// Three dylibs armed device-wide — the virtual camera, virtual motion
 /// and network conditioning — sharing one install layout, one arming
 /// mechanism (`InjectedDylibs`) and one `DYLD_INSERT_LIBRARIES`; one
-/// handed only to the app baguette launches, `DefaultsLookups`; and one
-/// executable, `HingeControl`, run with `simctl spawn`.
+/// handed only to the app baguette launches, `DefaultsLookups`; and four
+/// executables run with `simctl spawn`: `CoreMotionAngle`,
+/// `DeviceHubControls`, `HIDButtons`, `AXPFrontmost`.
 public struct InjectedDylib: Equatable, Sendable {
     enum Kind: Sendable { case dylib, executable }
 
@@ -48,9 +49,21 @@ public struct InjectedDylib: Equatable, Sendable {
     /// Never armed device-wide: only the app baguette launches loads it.
     static let defaultsLookups = InjectedDylib(
         name: "DefaultsLookups", environmentOverride: "BAGUETTE_DEFAULTSLOOKUPS_DYLIB")
-    /// Drives iPhone Duo's hinge from inside the guest (`GuestHingeMotor`).
-    static let hingeControl = InjectedDylib(
-        name: "HingeControl", environmentOverride: "BAGUETTE_HINGECONTROL_TOOL", kind: .executable)
+    /// The programs spawned in the guest, one per Apple subsystem they drive
+    /// (docs/features/injected-programs/design.md).
+    ///
+    /// Reads the hinge angle from CoreMotion (`CoreMotionHinge`).
+    static let coreMotionAngle = InjectedDylib(
+        name: "CoreMotionAngle", environmentOverride: "BAGUETTE_COREMOTIONANGLE_TOOL", kind: .executable)
+    /// Plays Device Hub's hinge slider and orientation picker (`DeviceHubControls`).
+    static let deviceHubControls = InjectedDylib(
+        name: "DeviceHubControls", environmentOverride: "BAGUETTE_DEVICEHUBCONTROLS_TOOL", kind: .executable)
+    /// Presses keys and buttons on a HID buttons service (`HIDButtonsKeys`).
+    static let hidButtons = InjectedDylib(
+        name: "HIDButtons", environmentOverride: "BAGUETTE_HIDBUTTONS_TOOL", kind: .executable)
+    /// Names the frontmost app through AXPTranslator (`AXPTranslatorFrontmost`).
+    static let axpFrontmost = InjectedDylib(
+        name: "AXPFrontmost", environmentOverride: "BAGUETTE_AXPFRONTMOST_TOOL", kind: .executable)
 }
 
 /// Pure factory: turns a (dylib-bytes, support-dir, dylib) triple into the
