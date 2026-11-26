@@ -169,6 +169,19 @@ lives in the adapter's walk; a property that returns a
 non-string/bool/CGRect type needs a typed
 `class_getMethodImplementation` cast like the frame reader does.
 
+## Stepping a control
+
+`Accessibility.adjust(_:by:)` steps a slider, stepper or picker through its
+`AXIncrement` / `AXDecrement` actions, as VoiceOver does, never by dragging.
+`describe-ui` marks such an element `"adjustable": true` with its
+`adjustmentActions`, and leaves both off everything else. Each step is sent
+once and read back; a step the element refuses, or whose outcome can't be
+read, ends the run unretried (`AXAdjustment`). `completedActions` counts steps
+sent, not how far the value moved: a step at the minimum still counts. A step
+that reflows the page (Text Size) replaces the control, so the adapter finds
+it again, as `press` does, and goes on with the new one. Measured on iOS 27.1,
+Settings › Appearance › Text Size: 50% → 83% in two steps, and back down.
+
 ## References
 
 - [Silbercue/SilbercueSwift `AXPBridge.swift`](https://github.com/Silbercue/SilbercueSwift/blob/main/SilbercueSwiftMCP/Sources/SilbercueSwiftCore/AXPBridge.swift)

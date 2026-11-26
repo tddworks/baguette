@@ -39,6 +39,27 @@ public enum AXElementReader {
 
     /// Bool-valued property; returns `fallback` when the key is
     /// missing or holds a non-NSNumber value.
+    /// The steps an element offers: its `AXIncrement` / `AXDecrement`
+    /// actions, nothing else it can do.
+    public static func adjustmentActions(_ obj: NSObject) -> [String] {
+        let names = obj.value(forKey: "accessibilityActionNames") as? [String] ?? []
+        return names.filter { $0 == "AXIncrement" || $0 == "AXDecrement" }
+    }
+
+    /// One step up or down, as VoiceOver's swipe sends it. True when the
+    /// step was dispatched — not proof the app moved its value.
+    public static func adjust(_ obj: NSObject, increment: Bool) -> Bool {
+        // AXPTranslator's elements implement these void-returning
+        // translated actions; NSAccessibilityElement's BOOL ones are no-ops.
+        let selector = NSSelectorFromString(increment ? "performIncrementAction" : "performDecrementAction")
+        if obj.responds(to: selector), let imp = obj.method(for: selector) {
+            typealias Action = @convention(c) (AnyObject, Selector) -> Void
+            unsafeBitCast(imp, to: Action.self)(obj, selector)
+            return true
+        }
+        return bool(obj, increment ? "accessibilityPerformIncrement" : "accessibilityPerformDecrement", default: false)
+    }
+
     public static func bool(_ obj: NSObject, _ key: String, default fallback: Bool) -> Bool {
         if let n = obj.value(forKey: key) as? NSNumber { return n.boolValue }
         return fallback

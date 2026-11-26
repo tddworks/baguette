@@ -62,6 +62,11 @@ final class RemoteAXAccessibility: Accessibility, @unchecked Sendable {
     /// not wired yet, so nothing is pressed.
     func press(_ node: AXNode) throws -> Bool { false }
 
+    /// Stepping needs the same live request; not wired yet either.
+    func adjust(_ node: AXNode, by steps: Int) throws -> AXAdjustment {
+        .refused(node, by: steps, because: "stepping a control isn't wired for a phone on a cable yet")
+    }
+
     // MARK: - The tree
 
     /// One read per phone at a time: its accessibility service closes a

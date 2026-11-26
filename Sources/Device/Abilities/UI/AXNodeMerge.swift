@@ -133,6 +133,7 @@ public extension AXNode {
             role: role, subrole: subrole, label: label, value: value,
             identifier: identifier, title: title, help: help, frame: frame,
             enabled: enabled, focused: focused, hidden: hidden,
+            adjustmentActions: adjustmentActions,
             children: newChildren, screen: screen
         )
     }

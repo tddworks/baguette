@@ -6,6 +6,20 @@ import Testing
 
 @Suite("AXNode")
 struct AXNodeTests {
+    @Test func `should mark a node that can be stepped, and leave the field off every other`() throws {
+        let frame = Rect(origin: Point(x: 0, y: 0), size: Size(width: 10, height: 10))
+        let slider = AXNode(role: "AXSlider", frame: frame, adjustmentActions: ["AXIncrement", "AXDecrement"])
+        let button = AXNode(role: "AXButton", frame: frame)
+
+        let sliderJSON = try #require(JSONSerialization.jsonObject(with: Data(slider.json.utf8)) as? [String: Any])
+        let buttonJSON = try #require(JSONSerialization.jsonObject(with: Data(button.json.utf8)) as? [String: Any])
+
+        #expect(sliderJSON["adjustable"] as? Bool == true)
+        #expect(sliderJSON["adjustmentActions"] as? [String] == ["AXIncrement", "AXDecrement"])
+        #expect(buttonJSON["adjustable"] == nil)
+        #expect(buttonJSON["adjustmentActions"] == nil)
+    }
+
 
     // MARK: - identity & defaults
 
