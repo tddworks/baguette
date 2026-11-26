@@ -25,6 +25,21 @@ struct AXFrontmostTests {
         }
     }
 
+    // HingeControl is built for the iOS simulator; in a watchOS, tvOS or
+    // visionOS guest dyld refuses it, after a spawn of up to ten seconds.
+    @Test(arguments: [
+        ("iOS 27.1", true), ("watchOS 11.2", false), ("tvOS 26.0", false), ("visionOS 26.0", false),
+    ])
+    func `should run the guest helper only in an iOS guest`(runtime: String, runs: Bool) {
+        #expect(GuestFrontmost.runs(onRuntime: runtime) == runs)
+    }
+
+    @Test func `should refuse at once in a guest the helper can't run in`() {
+        #expect(throws: GuestFrontmost.Failure.unsupportedRuntime("watchOS 11.2")) {
+            try GuestFrontmost.pid(udid: "W", runtime: "watchOS 11.2", tool: { "/guest tool" })
+        }
+    }
+
     @Test func `should ask the chosen device in the chosen device set for its frontmost app`() throws {
         let script = try Script(
             "[ \"$2\" = --set ] && [ \"$3\" = '/custom set' ] && [ \"$4\" = spawn ] && [ \"$6\" = '/guest tool' ] && [ \"$7\" = frontmost ] || exit 9; printf '{\"pid\":%s}' \"$5\""

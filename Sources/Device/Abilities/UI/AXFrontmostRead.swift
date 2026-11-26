@@ -37,12 +37,20 @@ public enum AXFrontmostRead {
         now: () -> TimeInterval = { Date().timeIntervalSinceReferenceDate },
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) throws -> AXNode? {
-        if let pid = bridge(), pid > 0,
-            let answer = try? tree(pid, .bridge), !answer.children.isEmpty
-        {
-            return answer
+        var bridged: AXNode?
+        if let pid = bridge(), pid > 0 {
+            bridged = try? tree(pid, .bridge)
+            if let bridged, !bridged.children.isEmpty { return bridged }
         }
-        let pid = try guest()
+        // Where the helper can't run (a watch's guest), what the bridge read
+        // is the answer; with nothing read, the helper's failure is.
+        let pid: Int32
+        do {
+            pid = try guest()
+        } catch {
+            if let bridged { return bridged }
+            throw error
+        }
         let start = now()
         var answer = try tree(pid, .guest)
         while answer?.showsOnlyTheStatusBar != false, now() - start < timing.wake {

@@ -132,9 +132,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
         // and identity every AX result is expressed in.
         let display = displays().phone
         let hingeControl = self.hingeControl
+        let runtime = self.runtime
         return AXPTranslatorAccessibility(
             udid: udid, host: host, deviceSetPath: deviceSetPath,
-            frontmostPID: { try GuestFrontmost.pid(udid: $0, deviceSetPath: $1, tool: hingeControl) },
+            frontmostPID: { try GuestFrontmost.pid(udid: $0, deviceSetPath: $1, runtime: runtime, tool: hingeControl) },
             recheckGeometry: { try display.recheckedScreen() },
             displayGeometry: { try display.observedScreen() }
         )

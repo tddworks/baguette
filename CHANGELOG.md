@@ -10,6 +10,9 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Fixed
+- `describe-ui` on an Apple Watch (or another guest that isn't iOS) no longer fails with a dyld error. The `HingeControl` guest helper is built for the iOS simulator, so it isn't spawned in other guests, and a read keeps what the host bridge read when the helper can't run.
+
 ---
 
 ## [0.5.0] - 2026-11-26

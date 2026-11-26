@@ -88,6 +88,33 @@ struct AXFrontmostReadTests {
         }
     }
 
+    // A watch's guest can't run the helper (it is built for iOS), and its
+    // bridge reads a face with no children: that answer is the read, not a
+    // failure.
+    @Test func `should keep the bridge's answer when the guest helper can't run`() throws {
+        let result = try AXFrontmostRead.read(
+            bridge: { 7 },
+            guest: { throw GuestDown() },
+            tree: { _, source in
+                #expect(source == .bridge)
+                return tree(children: 0)
+            })
+
+        #expect(result == tree(children: 0))
+    }
+
+    @Test func `should surface the guest helper's failure when the bridge read nothing`() {
+        #expect(throws: GuestDown()) {
+            try AXFrontmostRead.read(
+                bridge: { 7 },
+                guest: { throw GuestDown() },
+                tree: { _, source in
+                    if source == .bridge { throw GuestDown() }
+                    return tree(children: 1)
+                })
+        }
+    }
+
     @Test func `should report an empty tree when the guest helper finds one too`() throws {
         let result = try AXFrontmostRead.read(
             bridge: { 7 }, guest: { 7 }, tree: { _, _ in tree(children: 0) })
