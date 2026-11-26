@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] - 2026-11-26
+
 ### Added
 - `describe-ui` gives an element its `nodeId` (one element across reads), a switch the `activationPoint` its knob is at, and a wide slider its `sliderTrack`; each only where it applies. → [docs](docs/features/accessibility/design.md#where-to-act-on-an-element)
 - `Accessibility.adjust(_:by:)`: step a slider, stepper or picker through accessibility, read back after each step. `describe-ui` marks such elements `"adjustable"` with their `adjustmentActions`. → [docs](docs/features/accessibility/design.md#stepping-a-control)
@@ -23,21 +27,9 @@ For releases prior to this changelog, see the
 - iPhone Duo renders in 3D with Xcode 27.0 selected: its model ships only in Xcode 27.1 and later, and is now found in any installed Xcode, the selected one first. Before, the render failed with `localAssetNotFound`.
 - iPhone Duo: the lit panel is the one Core Device reports, not the one the hinge angle suggests. After a fold in small steps the cover stayed lit at 100°, where the 90° rule bound the dark panel: a black screen, touches lost. → [docs](docs/features/iphone-duo/design.md#the-hinge)
 
----
-
-## [0.4.0] - 2026-11-26
-
-### Added
-- `BaguetteKit`, a Swift package library: the device model and every device family, without the CLI or the HTTP server, for a host that drives devices itself. Pin it by version, as `examples/ListSimulators` shows. → [docs](docs/ARCHITECTURE.md#layout-outside-in)
-- `BaguetteCoreDevice`, a second library: a phone on a cable live (screen, touch, tunnel) through Xcode's CoreDevice, as `CoreDeviceAccess.live`. Pin it by revision; without it a phone is devicectl stills.
-- `BaguetteResources.use(folder:)`: a library host names where it keeps the 3D models, injected dylibs and hinge helper, looked in before the CLI's resource bundle.
-
-### Fixed
-- Builds against swift-nio-ssl 2.37.6 and later, which a package depending on baguette resolves to: WebRTC's DTLS calls BoringSSL by its plain names.
-
 ## Older releases
 
-[0.3](docs/changelog/0.3.md) · [0.2](docs/changelog/0.2.md) · [0.1](docs/changelog/0.1.md)
+[0.4](docs/changelog/0.4.md) · [0.3](docs/changelog/0.3.md) · [0.2](docs/changelog/0.2.md) · [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/tddworks/baguette/compare/v0.3.3...v0.4.0
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/tddworks/baguette/compare/v0.4.0...v0.5.0
