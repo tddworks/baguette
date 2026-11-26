@@ -32,6 +32,13 @@ public protocol Accessibility: AnyObject, Sendable {
     /// responded: iOS says so for a plain heading too.
     func press(_ node: AXNode) throws -> Bool
 
+    /// Steps `node` — a slider, stepper or picker — `steps` times through
+    /// its increment (positive) or decrement (negative) action, as
+    /// VoiceOver does, reading its value back after each step. A step the
+    /// element refuses, or whose outcome can't be read, ends the run
+    /// unretried; the result says how far it got.
+    func adjust(_ node: AXNode, by steps: Int) throws -> AXAdjustment
+
     /// Hit-test the topmost accessibility element at `point`
     /// (device-point coordinates, same units as gesture wire input).
     /// Returns `nil` when the point falls outside any accessible

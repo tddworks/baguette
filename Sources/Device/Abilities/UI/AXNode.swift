@@ -46,6 +46,9 @@ public struct AXNode: Equatable, Sendable {
     public let enabled: Bool
     public let focused: Bool
     public let hidden: Bool
+    /// The steps the element offers — `AXIncrement`, `AXDecrement` — for a
+    /// slider, stepper or picker. Empty for everything else.
+    public let adjustmentActions: [String]
     public let children: [AXNode]
     public var screen: AXScreen?
 
@@ -61,6 +64,7 @@ public struct AXNode: Equatable, Sendable {
         enabled: Bool = true,
         focused: Bool = false,
         hidden: Bool = false,
+        adjustmentActions: [String] = [],
         children: [AXNode] = [],
         screen: AXScreen? = nil
     ) {
@@ -75,6 +79,7 @@ public struct AXNode: Equatable, Sendable {
         self.enabled = enabled
         self.focused = focused
         self.hidden = hidden
+        self.adjustmentActions = adjustmentActions
         self.children = children
         self.screen = screen
     }
@@ -190,6 +195,7 @@ public struct AXNode: Equatable, Sendable {
                 || AXElementReader.bool(element, "accessibilityFocused", default: false),
             hidden: AXElementReader.bool(element, "isAccessibilityHidden", default: false)
                 || AXElementReader.bool(element, "accessibilityHidden", default: false),
+            adjustmentActions: AXElementReader.adjustmentActions(element),
             children: children
         )
     }
@@ -222,6 +228,12 @@ public struct AXNode: Equatable, Sendable {
         ]
         if let screen {
             result["screen"] = screen.dictionary
+        }
+        // Only where there is something to step: a screen holds many
+        // controls and few sliders, and every field costs a reader tokens.
+        if !adjustmentActions.isEmpty {
+            result["adjustable"] = true
+            result["adjustmentActions"] = adjustmentActions
         }
         return result
     }

@@ -15,5 +15,6 @@ public final class UnableAccessibility: Accessibility, @unchecked Sendable {
     public func glance() throws -> AXNode? { throw refusal }
     public func wake() throws { throw refusal }
     public func press(_ node: AXNode) throws -> Bool { throw refusal }
+    public func adjust(_ node: AXNode, by steps: Int) throws -> AXAdjustment { throw refusal }
     public func describeAt(point: Point) throws -> AXNode? { throw refusal }
 }

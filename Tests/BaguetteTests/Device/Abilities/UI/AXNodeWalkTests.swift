@@ -39,6 +39,15 @@ struct AXNodeWalkTests {
         #expect(node.children.isEmpty)
     }
 
+    @Test func `should read the steps up and down an element offers, and nothing else it can do`() {
+        let slider = FakeAXTreeElement(
+            role: "AXSlider", actionNames: ["AXPress", "AXIncrement", "AXDecrement", "AXShowMenu"])
+
+        let node = AXNode.walk(from: slider, transform: identityTransform())
+
+        #expect(node.adjustmentActions == ["AXIncrement", "AXDecrement"])
+    }
+
     @Test func `should describe an element as AXUnknown when it has no role`() {
         let elem = FakeAXTreeElement()  // no role
         let node = AXNode.walk(from: elem, transform: identityTransform())
@@ -199,6 +208,7 @@ final class FakeAXTreeElement: NSObject {
     let children: [FakeAXTreeElement]
     let childrenAny: Any?
     let macFrame: CGRect
+    let actionNames: [String]
 
     init(
         role: String? = nil,
@@ -212,7 +222,8 @@ final class FakeAXTreeElement: NSObject {
         numberValue: NSNumber? = nil,
         children: [FakeAXTreeElement] = [],
         childrenAny: Any? = nil,
-        macFrame: CGRect = CGRect(x: 0, y: 0, width: 0, height: 0)
+        macFrame: CGRect = CGRect(x: 0, y: 0, width: 0, height: 0),
+        actionNames: [String] = []
     ) {
         var s: [String: String] = [:]
         if let role { s["accessibilityRole"] = role }
@@ -228,6 +239,7 @@ final class FakeAXTreeElement: NSObject {
         self.children = children
         self.childrenAny = childrenAny
         self.macFrame = macFrame
+        self.actionNames = actionNames
         super.init()
     }
 
@@ -235,6 +247,7 @@ final class FakeAXTreeElement: NSObject {
         if let s = strings[key] { return s }
         if let b = booleans[key] { return NSNumber(value: b) }
         if key == "accessibilityValue", let n = numberValue { return n }
+        if key == "accessibilityActionNames", !actionNames.isEmpty { return actionNames }
         if key == "accessibilityChildren" {
             if let custom = childrenAny { return custom }
             return children.isEmpty ? nil : children as [NSObject]

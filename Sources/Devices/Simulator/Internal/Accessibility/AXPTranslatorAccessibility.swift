@@ -156,6 +156,83 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         _ = try frontmostPID(udid, deviceSetPath)
     }
 
+    func adjust(_ node: AXNode, by steps: Int) throws -> AXAdjustment {
+        if let reason = AXAdjustment.refusal(stepping: node, by: steps) {
+            return .refused(node, by: steps, because: reason)
+        }
+        guard Self.isAvailable, let device = resolveDevice() else {
+            return .refused(node, by: steps, because: "accessibility isn't available")
+        }
+        let geometry = try recheckGeometry()
+        let bridged = Self.bridgeFrontmostPID(device: device).flatMap { $0 > 0 ? $0 : nil }
+        let pid = try bridged ?? frontmostPID(udid, deviceSetPath)
+        var outcome: AXAdjustment?
+        _ = try withAXPContext(known: (geometry, pid)) { ctx in
+            Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
+            Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
+            var found: [(node: AXNode, element: NSObject)] = []
+            Self.collectElements(under: ctx.frontmostRoot, ctx: ctx, depth: 0, into: &found)
+            let match = node.bestMatch(among: found.map(\.node))
+            guard let element = found.first(where: { $0.node == match })?.element
+                ?? hitElement(matching: node, screen: geometry, ctx: ctx)
+            else { return nil }
+            // A step that reflows the page (Text Size) replaces the control:
+            // the old element stops answering. Find it again, as `press`
+            // finds it, and go on with the new one.
+            let live = LiveElement(element) {
+                var again: [(node: AXNode, element: NSObject)] = []
+                Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
+                Self.collectElements(under: ctx.frontmostRoot, ctx: ctx, depth: 0, into: &again)
+                let match = node.bestMatch(among: again.map(\.node))
+                return again.first(where: { $0.node == match })?.element
+            }
+            outcome = AXAdjustment.run(
+                steps: steps, on: Self.adjustable(live), deadline: ctx.deadline,
+                settle: { prior in Self.settle(live, from: prior, by: ctx.deadline) })
+            return nil
+        }
+        return outcome ?? .refused(node, by: steps, because: "the element is no longer on screen")
+    }
+
+    /// The control being stepped, followed across a redraw that replaces it.
+    private final class LiveElement: @unchecked Sendable {
+        private(set) var element: NSObject
+        private let find: () -> NSObject?
+        init(_ element: NSObject, find: @escaping () -> NSObject?) {
+            self.element = element
+            self.find = find
+        }
+        /// Its value; when the element no longer answers, the value of the
+        /// one found in its place.
+        var value: String? {
+            if let value = AXElementReader.stringOrNumber(element, "accessibilityValue") { return value }
+            guard let again = find() else { return nil }
+            element = again
+            return AXElementReader.stringOrNumber(again, "accessibilityValue")
+        }
+    }
+
+    /// The live element as a run steps it.
+    private static func adjustable(_ live: LiveElement) -> AXAdjustment.Element {
+        AXAdjustment.Element(
+            value: { live.value },
+            usable: {
+                (AXElementReader.bool(live.element, "accessibilityEnabled", default: true)
+                    || AXElementReader.bool(live.element, "isAccessibilityEnabled", default: false))
+                    && !AXElementReader.bool(live.element, "isAccessibilityHidden", default: false)
+            },
+            step: { AXElementReader.adjust(live.element, increment: $0) })
+    }
+
+    /// After a step, wait up to half a second (within `deadline`) for the
+    /// value to show the step: the app applies it on its own run loop.
+    private static func settle(_ live: LiveElement, from prior: String?, by deadline: Date) {
+        let until = min(deadline, Date().addingTimeInterval(0.5))
+        while Date() < until, !AXAdjustment.settled(after: prior, now: live.value) {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+    }
+
     func press(_ node: AXNode) throws -> Bool {
         guard Self.isAvailable, let device = resolveDevice() else { return false }
         let geometry = try recheckGeometry()
