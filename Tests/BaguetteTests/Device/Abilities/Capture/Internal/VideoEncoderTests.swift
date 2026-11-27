@@ -31,8 +31,25 @@ struct VideoEncoderTests {
         given(session).set(.any).willProduce { $0 == refusing ? refused : 0 }
         given(session).prepare().willReturn(0)
         given(session).close().willReturn()
+        given(session).retire().willReturn()
         given(session).submit(.any, at: .any, keyframe: .any, done: .any).willProduce { _, _, _, done in
             done(answer)
+            return 0
+        }
+        return session
+    }
+
+    /// A session that holds every frame: its answers come only when a test
+    /// calls them, as a wedged encoder's never do.
+    private func hungSession(answers: Answers) -> MockCompressionSession {
+        let session = MockCompressionSession()
+        given(session).open(width: .any, height: .any, codec: .any, lowLatencyRateControl: .any).willReturn(0)
+        given(session).set(.any).willReturn(0)
+        given(session).prepare().willReturn(0)
+        given(session).close().willReturn()
+        given(session).retire().willReturn()
+        given(session).submit(.any, at: .any, keyframe: .any, done: .any).willProduce { _, _, _, done in
+            answers.hold(done)
             return 0
         }
         return session
@@ -214,6 +231,44 @@ struct VideoEncoderTests {
 
         #expect(results.failed == 1)
     }
+
+    // MARK: - a session that stops answering
+
+    @Test func `should open a fresh session that starts with a keyframe after giving up on a hung one`() {
+        let session = hungSession(answers: Answers())
+        let encoder = VideoEncoder(fps: 30, session: session)
+        encoder.encode(frame())
+
+        encoder.abandon()
+        encoder.encode(frame())
+
+        verify(session).open(width: .any, height: .any, codec: .any, lowLatencyRateControl: .any).called(2)
+        verify(session).submit(.any, at: .any, keyframe: .value(true), done: .any).called(2)
+    }
+
+    @Test func `should turn a late answer from a session it gave up on into nothing`() {
+        let answers = Answers()
+        let encoder = VideoEncoder(fps: 30, session: hungSession(answers: answers))
+        let results = Results()
+        encoder.encode(frame()) { results.append($0) }
+
+        encoder.abandon()
+        let keyframe = CompressedFrame(avcc: Data([1]), keyframe: true, records: ["avcC": Data([0x01, 0x64, 0, 0x1F])])
+        answers.answerFirst(CompressionResult(status: 0, dropped: false, frame: keyframe))
+
+        #expect(results.frames.isEmpty && results.empty == 1)
+    }
+
+    @Test func `should let go of a hung session without waiting on it`() {
+        let session = hungSession(answers: Answers())
+        let encoder = VideoEncoder(fps: 30, session: session)
+        encoder.encode(frame())
+
+        encoder.abandon()
+
+        verify(session).retire().called(1)
+        verify(session).close().called(0)
+    }
 }
 
 /// Every answer the encoder gave, in order.
@@ -230,4 +285,15 @@ private final class Results: @unchecked Sendable {
 
 private final class EncodedBox: @unchecked Sendable {
     var encoded: VideoEncoder.Encoded?
+}
+
+/// The answers a hung session holds back.
+private final class Answers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: [@Sendable (CompressionResult) -> Void] = []
+    func hold(_ done: @escaping @Sendable (CompressionResult) -> Void) { lock.withLock { held.append(done) } }
+    func answerFirst(_ result: CompressionResult) {
+        let first = lock.withLock { held.isEmpty ? nil : held.removeFirst() }
+        first?(result)
+    }
 }

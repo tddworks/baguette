@@ -249,6 +249,40 @@ struct AVCCStreamTests {
         #expect(throws: ScreenDown.self) { try stream.start(on: screen) }
         verify(screen).stop().called(1)
     }
+
+    // MARK: - an encoder that stops answering
+
+    @Test func `should keep the picture going from a fresh keyframe when the encoder stops answering`() throws {
+        let session = MockCompressionSession()
+        let submits = Counter()
+        let keyframe = self.keyframe
+        given(session).open(width: .any, height: .any, codec: .any, lowLatencyRateControl: .any).willReturn(0)
+        given(session).set(.any).willReturn(0)
+        given(session).prepare().willReturn(0)
+        given(session).close().willReturn()
+        given(session).retire().willReturn()
+        given(session).submit(.any, at: .any, keyframe: .any, done: .any).willProduce { _, _, _, done in
+            // The first frame goes in and never comes back; the fresh session answers.
+            if submits.increment() > 0 { done(keyframe) }
+            return 0
+        }
+        let frames = FrameCallback()
+        let screen = MockScreen()
+        given(screen).start(onFrame: .any).willProduce { frames.set($0) }
+        given(screen).stop().willReturn()
+        let sink = RecordingSink()
+        let stream = AVCCStream(config: .default, sink: sink, quality: 0.7,
+                                encoder: VideoEncoder(fps: 60, tuning: .strict, session: session), stallLimit: 0.05)
+        try stream.start(on: screen)
+
+        frames.deliver(Surfaces.filled(0x10))
+        let deadline = Date().addingTimeInterval(2)
+        while !tags(sink).contains(AVCCEnvelope.keyframeTag), Date() < deadline { usleep(5_000) }
+        stream.stop()
+
+        #expect(tags(sink).contains(AVCCEnvelope.keyframeTag))
+        verify(session).retire().called(1)
+    }
 }
 
 private final class Counter: @unchecked Sendable {
@@ -279,4 +313,12 @@ func offTheTestThreads(_ work: @escaping @Sendable () -> Void) async {
     await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
         DispatchQueue.global().async { work(); done.resume() }
     }
+}
+
+/// The screen's frame callback, handed over when the stream starts.
+private final class FrameCallback: @unchecked Sendable {
+    private let lock = NSLock()
+    private var onFrame: (@Sendable (IOSurface) -> Void)?
+    func set(_ callback: @escaping @Sendable (IOSurface) -> Void) { lock.withLock { onFrame = callback } }
+    func deliver(_ surface: IOSurface) { lock.withLock { onFrame }?(surface) }
 }

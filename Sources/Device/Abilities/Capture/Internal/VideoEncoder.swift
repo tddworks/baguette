@@ -129,6 +129,16 @@ public final class VideoEncoder: @unchecked Sendable {
         open = false
     }
 
+    /// Give up on a session that stopped answering: let it go without
+    /// waiting on the frame inside it, and make its late answers nothing.
+    /// The next frame opens a fresh session, starting with a keyframe
+    /// (docs/features/stream/design.md).
+    public func abandon() {
+        lock.withLock { referenceChain.reset() }
+        if open { session.retire() }
+        open = false
+    }
+
     private func encode(
         _ pixelBuffer: CVPixelBuffer, forceKeyframe: Bool, strict: Bool,
         completion: @escaping @Sendable (Result<Encoded?, any Error>) -> Void

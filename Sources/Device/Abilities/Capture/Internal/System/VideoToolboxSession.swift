@@ -58,6 +58,13 @@ final class VideoToolboxSession: CompressionSession, @unchecked Sendable {
         session = nil
     }
 
+    func retire() {
+        guard let retired = session else { return }
+        session = nil
+        nonisolated(unsafe) let wedged = retired
+        DispatchQueue.global(qos: .utility).async { VTCompressionSessionInvalidate(wedged) }
+    }
+
     private static func entry(_ property: CompressionProperty) -> (CFString, CFTypeRef) {
         switch property {
         case .realTime(let on): (kVTCompressionPropertyKey_RealTime, on ? kCFBooleanTrue : kCFBooleanFalse)

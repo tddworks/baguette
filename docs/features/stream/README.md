@@ -37,8 +37,9 @@ AVCC tags:
 | `0x04` | JPEG seed, so a consumer paints before the first keyframe lands |
 
 The stream WebSocket carries the same `[tag][payload]` messages without the
-length prefix, one per binary message. AVCC WebSockets retain encoded reference
-frames in order and close with an error if a consumer exceeds the 32 MiB queue.
+length prefix, one per binary message. A WebSocket viewer that falls a few
+frames behind skips to the next keyframe instead of queueing, and the page asks
+for one the moment its decoder loses the picture ([design](design.md)).
 MJPEG may discard older independent images for a slow consumer.
 
 ## Retune while streaming
@@ -70,11 +71,11 @@ a runtime property, the stream ends with an explicit error.
 - H.264 may skip a frame under real-time load; that does not end the stream.
   A replacement encoder session (after `set_scale`) starts with its own
   keyframe and decoder configuration and discards callbacks from the previous
-  session. An encoding error, or an AVCC consumer that falls 32 MiB behind,
-  ends the stream with an explicit error.
+  session. An encoding error ends the stream with an explicit error. On stdout
+  every frame is written: a consumer that reads slowly backs the stream up.
 
 ## See also
 
-[serve.md](../../serve.md) · [wire.md](../../wire.md) ·
+[design](design.md) · [serve.md](../../serve.md) · [wire.md](../../wire.md) ·
 [screenshot](../screenshot/README.md) · [recording](../recording/README.md) ·
 [WebRTC live view](../webrtc/README.md)

@@ -350,7 +350,7 @@ extension Server {
             // its own chunks. No decode, no re-encode, no per-viewer
             // codec state; stream controls are accepted and ignored
             // because the encoder lives on the phone.
-            let sink = WebSocketFrameSink(outbound: outbound, format: .avcc)
+            let sink = WebSocketFrameSink(outbound: outbound, format: .avcc, keyframesOnRequest: false)
             let byteID = UUID()
             hub.attachBytes(id: byteID) { sink.write($0) }
             defer { hub.detachBytes(id: byteID) }
@@ -376,7 +376,8 @@ extension Server {
         }
 
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5)
+        let stream = format.makeStream(config: .default(for: format), sink: sink, quality: 0.5)
+        sink.askKeyframes(of: stream)
         let screen = hub.view()
         do {
             try stream.start(on: screen)
@@ -512,6 +513,7 @@ extension Server {
         let stream = format.makeStream(
             config: .default.with(fps: defaultFPS), sink: sink, quality: 0.7
         )
+        sink.askKeyframes(of: stream)
         let screen = RenderedScreen(source: hub.view(), scene: scene)
         do {
             try stream.start(on: screen)

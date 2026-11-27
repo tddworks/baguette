@@ -45,7 +45,7 @@ What the current path does (shipped code):
 |---|---|---|
 | Encode | `H264Tuning.lowLatency`: no B-frames, `MaxFrameDelayCount 0`, low-latency rate control, IDR every 5 s | Already the FaceTime/screen-share setup. WebRTC uses the same encoder, so it wins nothing here |
 | Transport | One binary WS message per AVCC chunk over TCP | **No loss on localhost.** On Wi-Fi or a WAN, one lost segment holds back every frame behind it (head-of-line blocking) |
-| Backpressure | `FrameBacklog` keeps every AVCC reference; the socket closes once a viewer is 32 MiB behind | A slow link builds up delay rather than dropping frames, then fails outright |
+| Backpressure | `FrameBacklog` skips a viewer a few frames behind to the next keyframe ([stream design](../stream/design.md)) | A slow link loses frames and waits on keyframes instead of building delay |
 | Bitrate | Fixed (8 Mbps default); the page retunes it by hand with `set_bitrate` | Nothing reacts to the link by itself |
 | Decode/paint | WebCodecs `optimizeForLatency`, one-frame queue drawn on `requestAnimationFrame` | Up to one display refresh waiting for rAF; no jitter buffer |
 
@@ -56,7 +56,7 @@ What the current path does (shipped code):
   We expect the gap to be under one frame (≤ 17 ms at 60 fps).
 - **H2 — A lossy or slow link: WebRTC holds latency where the WebSocket
   drifts.** NACK/PLI plus congestion control (TWCC/GCC) trade picture quality
-  for delay. TCP trades delay for quality and then hits the 32 MiB close.
+  for delay. TCP skips to the next keyframe once a viewer falls behind, then waits on that keyframe.
 - **H3 — Freezes: WebRTC recovers faster after a loss burst.** A PLI asks for
   one IDR. TCP has to resend everything first.
 - **H4 — Host CPU: about the same per stream.** The same VT session runs
@@ -71,7 +71,7 @@ benefit below needs the viewer on another machine, and none is measured yet:
 
 | Benefit | Why the WebSocket can't do it | What it takes in baguette |
 |---|---|---|
-| **Latency stays bounded under loss** | TCP holds every later frame behind one lost segment (head-of-line blocking). The backlog grows until `FrameBacklog` closes the socket at 32 MiB | Nothing extra. UDP drops the damaged frame, and NACK/PLI repairs or restarts from an IDR (law 2) |
+| **Latency stays bounded under loss** | TCP holds every later frame behind one lost segment (head-of-line blocking). `FrameBacklog` skips to the next keyframe once the viewer is behind, but the stall itself still happens | Nothing extra. UDP drops the damaged frame, and NACK/PLI repairs or restarts from an IDR (law 2) |
 | **Bitrate follows the link** | Fixed 8 Mbps until someone sends `set_bitrate` | Wire the viewer's TWCC/REMB estimate to `H264 Stream.apply(config)`. MediaMTX can't, so the spike shows none of it |
 | **Reaches viewers behind NAT** | `serve` binds loopback; remote means `--allowed-hosts` plus a reverse proxy and open ports | STUN, and TURN for strict networks: a relay to run or rent |
 | **Any WHEP player can watch** | AVCC-over-WebSocket is baguette's own framing; only our page reads it | Nothing extra. OBS, GStreamer, Cloudflare, LiveKit and MediaMTX speak WHEP. An SFU can fan one upload out to many viewers |

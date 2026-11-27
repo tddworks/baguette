@@ -1696,6 +1696,7 @@ struct Server: Sendable {
             sink: sink,
             quality: 0.7
         )
+        sink.askKeyframes(of: stream)
         // 3D stays phone-only; ignore any display=carplay on these routes.
         let screen: any DeviceFrames
         let input: Abilities?
@@ -1987,7 +1988,8 @@ struct Server: Sendable {
         }
 
         let sink = WebSocketFrameSink(outbound: outbound, format: format)
-        let stream = format.makeStream(config: .default, sink: sink, quality: 0.5, codec: codec)
+        let stream = format.makeStream(config: .default(for: format), sink: sink, quality: 0.5, codec: codec)
+        sink.askKeyframes(of: stream)
         let screen = bound.screen
         // One input for the whole session — the paste keystroke must
         // reuse the same warmed HID services the gestures ride. A device

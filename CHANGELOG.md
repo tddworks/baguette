@@ -10,6 +10,11 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+### Changed
+- The live view stays current: a WebSocket viewer a few frames behind skips to the next keyframe instead of queueing up to 32 MiB of lag, and the page asks for a keyframe as soon as its decoder loses the picture. → [docs](docs/features/stream/design.md)
+- A live view (WebSocket or WebRTC) whose video encoder stops answering recovers on its own: after 1.5 s the stream opens a fresh encoder session and resumes from a keyframe instead of freezing. → [docs](docs/features/stream/design.md#an-encoder-that-stops-answering--both-viewers)
+- MJPEG keeps up on a LAN or phone: each viewer gets the newest image, never a queue, `serve` starts it at half size and 30 fps (an eighth of the bytes), and the page paints images in order. → [docs](docs/features/stream/design.md#mjpeg--the-newest-image-and-only-it)
+
 ---
 
 ## [0.5.0] - 2026-11-26

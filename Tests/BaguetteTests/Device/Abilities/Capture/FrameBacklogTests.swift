@@ -21,19 +21,80 @@ struct FrameBacklogTests {
         frame(AVCCEnvelope.descriptionTag, bytes: bytes, marker: marker)
     }
 
-    @Test func `should keep every AVCC reference frame while letting MJPEG discard old frames`() {
-        var avcc = FrameBacklog(format: .avcc)
+    private func keyframe(_ bytes: Int, marker: UInt8 = 0xAA) -> Data {
+        frame(AVCCEnvelope.keyframeTag, bytes: bytes, marker: marker)
+    }
+
+    @Test func `should keep every reference frame and refuse the overflow when the frames can't be read`() {
+        // `frameMetadata=1` packets start with a length prefix, not a tag.
+        var packets = FrameBacklog(format: .avcc, preservingDescriptions: false)
         let half = Data(repeating: 0x02, count: FrameBacklog.referenceByteBudget / 2)
-        let first = avcc.append(half)
-        let second = avcc.append(half)
-        let overflow = avcc.append(Data([0x02]))
-        #expect(first && second && !overflow)
-        #expect(avcc.droppedCount == 0 && avcc.count == 2)
+        #expect(packets.append(half) == .queued)
+        #expect(packets.append(half) == .queued)
+        #expect(packets.append(Data([0x02])) == .rejected)
+        #expect(packets.droppedCount == 0 && packets.count == 2)
+    }
+
+    @Test func `should keep only the newest image waiting for an MJPEG viewer`() {
         var jpeg = FrameBacklog(format: .mjpeg)
-        let image = Data(repeating: 0xFF, count: FrameBacklog.defaultByteBudget)
-        jpeg.append(image)
-        jpeg.append(Data([0xFF, 0xD8]))
+        let older = Data([0xFF, 0xD8, 1]), newer = Data([0xFF, 0xD8, 2])
+        jpeg.append(older)
+        jpeg.append(newer)
         #expect(jpeg.count == 1 && jpeg.droppedCount == 1)
+        #expect(jpeg.popFirst() == newer)
+    }
+
+    // MARK: - a live AVCC viewer skips, it never queues
+
+    @Test func `should send every frame while the viewer keeps up`() {
+        var backlog = FrameBacklog(format: .avcc)
+        #expect(backlog.append(description(10)) == .queued)
+        #expect(backlog.append(keyframe(100)) == .queued)
+        for _ in 0..<(FrameBacklog.frameAllowance - 1) {
+            #expect(backlog.append(delta(20)) == .queued)
+        }
+        #expect(backlog.droppedCount == 0)
+    }
+
+    @Test func `should drop a delta and ask for a keyframe when the viewer falls the frame allowance behind`() {
+        var backlog = FrameBacklog(format: .avcc)
+        backlog.append(keyframe(100))
+        for _ in 0..<(FrameBacklog.frameAllowance - 1) { backlog.append(delta(20)) }
+        #expect(backlog.append(delta(20, marker: 9)) == .droppedAskingForKeyframe)
+        #expect(backlog.count == FrameBacklog.frameAllowance)
+        #expect(backlog.droppedCount == 1)
+    }
+
+    @Test func `should drop later deltas without asking again until a keyframe comes`() {
+        var backlog = FrameBacklog(format: .avcc)
+        for _ in 0..<FrameBacklog.frameAllowance { backlog.append(delta(20)) }
+        backlog.append(delta(20))
+        // The viewer catches up, but a delta still has no reference to decode against.
+        while backlog.popFirst() != nil {}
+        #expect(backlog.append(delta(20)) == .dropped)
+        #expect(backlog.append(delta(20)) == .dropped)
+        #expect(backlog.append(keyframe(100)) == .queued)
+        #expect(backlog.append(delta(20)) == .queued)
+    }
+
+    @Test func `should put a keyframe at the front of the queue, keeping the newest description, when it supersedes a backlog`() {
+        var backlog = FrameBacklog(format: .avcc)
+        backlog.append(description(10, marker: 1))
+        backlog.append(keyframe(100, marker: 1))
+        for _ in 0..<FrameBacklog.frameAllowance { backlog.append(delta(20)) }
+        let current = description(10, marker: 2)
+        let fresh = keyframe(100, marker: 2)
+        backlog.append(current)
+        #expect(backlog.append(fresh) == .queued)
+        #expect(backlog.popFirst() == current)
+        #expect(backlog.popFirst() == fresh)
+        #expect(backlog.popFirst() == nil)
+    }
+
+    @Test func `should drop a delta when the viewer falls the byte budget behind`() {
+        var backlog = FrameBacklog(format: .avcc)
+        backlog.append(keyframe(FrameBacklog.defaultByteBudget))
+        #expect(backlog.append(delta(20)) == .droppedAskingForKeyframe)
     }
 
     @Test func `should keep every frame while the backlog is under budget`() {

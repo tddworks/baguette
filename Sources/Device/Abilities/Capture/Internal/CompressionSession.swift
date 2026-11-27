@@ -21,6 +21,9 @@ protocol CompressionSession: AnyObject, Sendable {
         done: @escaping @Sendable (CompressionResult) -> Void
     ) -> Int32
     func close()
+    /// Let go of the open session without waiting on a frame inside it: a
+    /// wedged encoder never lets go, and invalidating it may block.
+    func retire()
 }
 
 /// What the session made of one submitted frame.

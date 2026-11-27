@@ -12,6 +12,8 @@ class FakeVideoDecoder {
     this.state = 'unconfigured';
     this.configs = [];
     this.chunks = [];
+    /** Chunks handed over and not decoded yet: what a busy decoder piles up. */
+    this.decodeQueueSize = 0;
     FakeVideoDecoder.made.push(this);
   }
   configure(config) {
@@ -41,11 +43,13 @@ function withWebCodecs(run) {
 
 function avccDecoder() {
   const logs = [];
+  const asks = [];
   const decoder = FrameDecoder.create('avcc', {
     onFrame: () => {},
     onLog: (message, isError) => logs.push({ message, isError }),
+    onKeyframeNeeded: () => asks.push('keyframe'),
   });
-  return { decoder, logs };
+  return { decoder, logs, asks };
 }
 
 // One WebSocket message: [tag][payload]. The description's bytes 1–3 name
@@ -131,5 +135,75 @@ test('should tell the page an H.264 stream arrived in H.264', () => {
     const decoder = FrameDecoder.create('avcc', { onFrame: () => {}, onCodec: (type) => arrived.push(type) });
     decoder.feed(description);
     assert.deepEqual(arrived, ['video/H264']);
+  });
+});
+
+test('should ask for a keyframe at once when the browser decoder fails', () => {
+  withWebCodecs(() => {
+    const { decoder, asks } = avccDecoder();
+    decoder.feed(description);
+    decoder.feed(keyframe);
+    FakeVideoDecoder.made[0].fail('Decoding error.');
+    assert.deepEqual(asks, ['keyframe']);
+  });
+});
+
+test('should skip deltas and ask for a keyframe when the browser decoder falls behind', () => {
+  withWebCodecs(() => {
+    const { decoder, asks } = avccDecoder();
+    decoder.feed(description);
+    decoder.feed(keyframe);
+    const busy = FakeVideoDecoder.made[0];
+    busy.decodeQueueSize = 3;
+    decoder.feed(delta);
+    busy.decodeQueueSize = 0;
+    decoder.feed(delta);
+    decoder.feed(keyframe);
+    decoder.feed(delta);
+    assert.deepEqual(busy.chunks.map((c) => c.type), ['key', 'key', 'delta']);
+    assert.deepEqual(asks, ['keyframe']);
+  });
+});
+
+test('should ask for one keyframe per lost picture however many deltas it skips', () => {
+  withWebCodecs(() => {
+    const { decoder, asks } = avccDecoder();
+    decoder.feed(description);
+    decoder.feed(keyframe);
+    FakeVideoDecoder.made[0].decodeQueueSize = 3;
+    for (let i = 0; i < 10; i++) decoder.feed(delta);
+    assert.deepEqual(asks, ['keyframe']);
+  });
+});
+
+// createImageBitmap as a browser runs it: each decode finishes when it
+// finishes. The fake's decodes finish only when a test says so.
+function withImageDecodes(run) {
+  const decodes = [];
+  const saved = globalThis.createImageBitmap;
+  globalThis.createImageBitmap = (blob) => new Promise((resolve) => decodes.push({ blob, finish: () => resolve({ blob }) }));
+  return Promise.resolve(run(decodes)).finally(() => { globalThis.createImageBitmap = saved; });
+}
+
+const jpeg = (n) => ({ data: new Uint8Array([0xff, 0xd8, n]).buffer });
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+test('should decode one MJPEG image at a time, keeping only the newest that arrived meanwhile', async () => {
+  await withImageDecodes(async (decodes) => {
+    const painted = [];
+    const decoder = FrameDecoder.create('mjpeg', { onFrame: (image) => painted.push(image.blob), onLog: () => {} });
+    decoder.feed(jpeg(1));
+    decoder.feed(jpeg(2));
+    decoder.feed(jpeg(3));
+    assert.equal(decodes.length, 1);
+
+    decodes[0].finish();
+    await settle();
+    assert.equal(decodes.length, 2);
+    decodes[1].finish();
+    await settle();
+
+    const bytes = await Promise.all(painted.map((b) => b.arrayBuffer()));
+    assert.deepEqual(bytes.map((b) => new Uint8Array(b)[2]), [1, 3]);
   });
 });

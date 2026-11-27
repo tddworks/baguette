@@ -5,6 +5,9 @@ import IOSurface
 /// ready for the next once VideoToolbox answers. Once encoded, every reference
 /// frame reaches the sink in order; a still screen is refreshed on a steady
 /// beat (`RefreshCadence`), which keeps browser decoder pipelines progressing.
+/// A frame VideoToolbox holds past `stallLimit` is given up on, and the
+/// next opens a fresh session — for the WebSocket and WebRTC viewers alike
+/// (docs/features/stream/design.md).
 public final class AVCCStream: Stream, @unchecked Sendable {
     private let configLock = NSLock()
     private var currentConfig: StreamConfig
@@ -16,7 +19,14 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     /// Where every frame is encoded, including VideoToolbox's answers; the
     /// stream's state is confined to it.
     let queue = DispatchQueue(label: "baguette.avcc", qos: .userInteractive)
-    private lazy var latest = LatestFrame<IOSurface>(queue: queue, fps: config.fps) { [weak self] surface, ready in
+    /// How long VideoToolbox may hold a frame before its session is given
+    /// up on: a healthy keyframe takes ~50 ms, so only a wedged one gets here.
+    public static let stallLimit: Double = 1.5
+    private let stallLimit: Double
+    private lazy var latest = LatestFrame<IOSurface>(
+        queue: queue, fps: config.fps, stallLimit: stallLimit,
+        onStall: { [weak self] in self?.encoderStalled() }
+    ) { [weak self] surface, ready in
         guard let self else { return ready() }
         encode(surface, ready: ready)
     }
@@ -39,11 +49,21 @@ public final class AVCCStream: Stream, @unchecked Sendable {
     /// The codec its encoder makes.
     var codec: any Codec { encoder.codec }
 
-    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: VideoEncoder) {
+    init(config: StreamConfig, sink: any FrameSink, quality: Double, encoder: VideoEncoder,
+         stallLimit: Double = AVCCStream.stallLimit) {
         currentConfig = config
         self.sink = sink
         jpeg = JPEGEncoder(quality: quality)
         self.encoder = encoder
+        self.stallLimit = stallLimit
+    }
+
+    /// On `queue`: VideoToolbox kept a frame past the stall limit. Its
+    /// session is let go; the next frame opens a fresh one with a keyframe.
+    private func encoderStalled() {
+        guard running else { return }
+        log("encoder held a frame over \(stallLimit) s; opening a fresh session")
+        encoder.abandon()
     }
 
     public func start(on screen: any Screen) throws {
