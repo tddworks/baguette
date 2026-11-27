@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.5.2] - 2026-11-27
+
 ### Changed
 - The live view stays current: a WebSocket viewer a few frames behind skips to the next keyframe instead of queueing up to 32 MiB of lag, and the page asks for a keyframe as soon as its decoder loses the picture. → [docs](docs/features/stream/design.md)
 - A live view (WebSocket or WebRTC) whose video encoder stops answering recovers on its own: after 1.5 s the stream opens a fresh encoder session and resumes from a keyframe instead of freezing. → [docs](docs/features/stream/design.md#an-encoder-that-stops-answering--both-viewers)
@@ -51,6 +55,7 @@ For releases prior to this changelog, see the
 
 [0.4](docs/changelog/0.4.md) · [0.3](docs/changelog/0.3.md) · [0.2](docs/changelog/0.2.md) · [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/tddworks/baguette/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/tddworks/baguette/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/tddworks/baguette/compare/v0.4.0...v0.5.0
