@@ -14,6 +14,14 @@ public struct StreamConfig: Equatable, Sendable {
     /// to produce a clean image. MJPEG ignores this knob (uses `quality`).
     public static let `default` = StreamConfig(fps: 60, bitrateBps: 8_000_000, scale: 1)
 
+    /// Where a stream of `format` starts. Every MJPEG image is a whole
+    /// picture — ~890 KB at an iPhone's full size — so it starts at half
+    /// size and 30 fps, an eighth of the bytes; `set_scale` / `set_fps`
+    /// still raise it (docs/features/stream/design.md).
+    public static func `default`(for format: StreamFormat) -> StreamConfig {
+        format == .mjpeg ? Self.default.with(fps: 30).with(scale: 2) : Self.default
+    }
+
     /// Returns a copy with the supplied fields replaced. Pass only the
     /// knobs the user is changing; the rest fall through unchanged.
     public func with(fps: Int? = nil, bitrateBps: Int? = nil, scale: Int? = nil) -> StreamConfig {

@@ -14,32 +14,64 @@
 // optional `close()`. Older frames the caller hasn't painted yet
 // should be `close()`d before being replaced; the decoder doesn't
 // own that responsibility.
+// One JPEG decodes at a time; an image that arrives meanwhile waits, and a
+// newer one replaces it. Decodes that overlapped could finish out of order
+// and paint an older picture after a newer one, and a queue of them is lag
+// (docs/features/stream/design.md).
 function MjpegDecoder({ onFrame, onLog }) {
+  let decoding = false;
+  let next = null;
+  let disposed = false;
+  const decode = (bytes) => {
+    decoding = true;
+    createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }))
+      .then((bmp) => { if (disposed) { if (bmp.close) bmp.close(); } else onFrame(bmp); })
+      .catch(() => { /* corrupt frame; skip */ })
+      .finally(() => {
+        decoding = false;
+        if (next && !disposed) { const bytes = next; next = null; decode(bytes); }
+      });
+  };
   return {
-    async feed(e) {
-      if (e.data instanceof ArrayBuffer) {
-        try {
-          const bmp = await createImageBitmap(new Blob([e.data], { type: 'image/jpeg' }));
-          onFrame(bmp);
-        } catch { /* corrupt frame; skip */ }
-      } else {
+    feed(e) {
+      if (!(e.data instanceof ArrayBuffer)) {
         forwardJSONErrors(e.data, onLog);
+        return;
       }
+      if (decoding) next = e.data;
+      else decode(e.data);
     },
-    dispose() { /* nothing to release */ },
+    dispose() { disposed = true; next = null; },
   };
 }
 
-function AvccDecoder({ onFrame, onLog, onCodec }) {
+// Decoded chunks a decoder may have waiting before the picture is
+// called behind: past it, deltas are skipped to the next keyframe.
+const DECODE_ALLOWANCE = 2;
+
+function AvccDecoder({ onFrame, onLog, onCodec, onKeyframeNeeded }) {
   let ts = 0;
   // A VideoDecoder that reports an error is closed for good: every later
   // chunk would be dropped and the page would sit on its last picture.
   // So the last description is kept, and a closed decoder is replaced
   // at the next keyframe — a delta before it has nothing to refer to.
   let config = null;
+  // The picture is lost (the decoder failed or fell behind): no delta
+  // decodes until a keyframe, which is asked for once, at once — the
+  // encoder's own comes only every few seconds
+  // (docs/features/stream/design.md).
+  let waitingForKey = false;
+  const lose = () => {
+    if (waitingForKey) return;
+    waitingForKey = true;
+    if (onKeyframeNeeded) onKeyframeNeeded();
+  };
   const makeDecoder = () => new VideoDecoder({
     output: (frame) => onFrame(frame),
-    error: (err) => onLog && onLog('decoder: ' + err.message + ' — resuming at the next keyframe', true),
+    error: (err) => {
+      onLog && onLog('decoder: ' + err.message + ' — resuming at the next keyframe', true);
+      lose();
+    },
   });
   let decoder = makeDecoder();
   return {
@@ -107,6 +139,12 @@ function AvccDecoder({ onFrame, onLog, onCodec }) {
           }
         }
         if (decoder.state !== 'configured') return;
+        if (type === 0x03) {
+          if (decoder.decodeQueueSize > DECODE_ALLOWANCE) lose();
+          if (waitingForKey) return;
+        } else {
+          waitingForKey = false;
+        }
         // 0x02 = key (IDR), 0x03 = delta.
         try {
           decoder.decode(new EncodedVideoChunk({

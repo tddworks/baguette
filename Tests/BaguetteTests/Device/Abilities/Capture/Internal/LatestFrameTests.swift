@@ -127,4 +127,43 @@ struct LatestFrameTests {
         #expect(consumer.taken == [1, 2, 3])
         frames.stop()
     }
+
+    // MARK: - an encoder that stops answering
+
+    private final class Stalls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        var seen: Int { lock.withLock { count } }
+        func bump() { lock.withLock { count += 1 } }
+    }
+
+    @Test func `should hand the consumer the next frame when it holds one past the stall limit`() {
+        let consumer = Consumer(holds: true)
+        let stalls = Stalls()
+        let frames = LatestFrame<Int>(
+            queue: DispatchQueue(label: "latest-frame-stall"), fps: 0, stallLimit: 0.05, onStall: { stalls.bump() }
+        ) { consumer.take($0, ready: $1) }
+        frames.start()
+        frames.offer(1)
+        #expect(consumer.wait())
+        frames.offer(2)
+        #expect(consumer.wait())
+        #expect(consumer.taken == [1, 2])
+        #expect(stalls.seen == 1)
+        frames.stop()
+    }
+
+    @Test func `should never give up on a frame answered within the stall limit`() {
+        let consumer = Consumer(holds: false)
+        let stalls = Stalls()
+        let frames = LatestFrame<Int>(
+            queue: DispatchQueue(label: "latest-frame-in-time"), fps: 0, stallLimit: 0.05, onStall: { stalls.bump() }
+        ) { consumer.take($0, ready: $1) }
+        frames.start()
+        frames.offer(1)
+        #expect(consumer.wait())
+        #expect(!consumer.wait(0.15))
+        #expect(stalls.seen == 0)
+        frames.stop()
+    }
 }

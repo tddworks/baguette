@@ -70,6 +70,8 @@ StreamSession.prototype.start = function () {
     },
     onLog: log,
     onCodec,
+    // The decoder lost the picture: the stream re-encodes it as a keyframe.
+    onKeyframeNeeded: () => this.send({ type: 'force_idr' }),
   });
 
   socket.onopen    = () => {

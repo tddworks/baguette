@@ -4,8 +4,11 @@ import Foundation
 /// `LatestFrameRules`: the consumer takes a frame and calls `ready` when it
 /// can take the next — at once for one that finishes in place (a JPEG, a 3D
 /// render), from its completion for one that finishes later (VideoToolbox).
-/// A fresh frame never waits on a timer unless the frame rate asks it to;
-/// that wait is the one timer here.
+/// A fresh frame never waits on a timer unless the frame rate asks it to.
+///
+/// With a `stallLimit`, a frame the consumer holds longer is given up on:
+/// `onStall` runs on `queue`, then the next frame starts, and the held
+/// frame's late `ready` changes nothing (docs/features/stream/design.md).
 public final class LatestFrame<Frame>: @unchecked Sendable {
     public typealias Consumer = @Sendable (_ frame: Frame, _ ready: @escaping @Sendable () -> Void) -> Void
 
@@ -20,10 +23,18 @@ public final class LatestFrame<Frame>: @unchecked Sendable {
     private var turn = 0
     private var timer: DispatchSourceTimer?
     private var timerAt: Double?
+    private let stallLimit: Double?
+    private let onStall: (@Sendable () -> Void)?
+    private var stallTimer: DispatchSourceTimer?
 
-    public init(queue: DispatchQueue, fps: Int, consumer: @escaping Consumer) {
+    public init(
+        queue: DispatchQueue, fps: Int, stallLimit: Double? = nil, onStall: (@Sendable () -> Void)? = nil,
+        consumer: @escaping Consumer
+    ) {
         self.queue = queue
         self.consumer = consumer
+        self.stallLimit = stallLimit
+        self.onStall = onStall
         rules = LatestFrameRules(fps: fps)
         queue.setSpecific(key: queueKey, value: true)
     }
@@ -33,6 +44,7 @@ public final class LatestFrame<Frame>: @unchecked Sendable {
             rules.clear()
             turn += 1
             cancelTimer()
+            cancelStallWatch()
             running = true
         }
     }
@@ -70,6 +82,7 @@ public final class LatestFrame<Frame>: @unchecked Sendable {
             running = false
             turn += 1
             cancelTimer()
+            cancelStallWatch()
             rules.clear()
         }
         // A renderer may need its caller's main thread to finish; such owners
@@ -86,6 +99,7 @@ public final class LatestFrame<Frame>: @unchecked Sendable {
             let mine = turn
             let consumer = self.consumer
             let ready: @Sendable () -> Void = { [weak self] in self?.ready(turn: mine) }
+            watchForStall(turn: mine)
             queue.async { consumer(frame, ready) }
         case .wake(let at):
             arm(at: at)
@@ -97,6 +111,42 @@ public final class LatestFrame<Frame>: @unchecked Sendable {
     private func ready(turn mine: Int) {
         lock.withLock {
             guard running, mine == turn else { return }
+            cancelStallWatch()
+            perform(rules.ready(at: Self.now))
+        }
+    }
+
+    // MARK: - the stall watch (callers hold the lock)
+
+    private func watchForStall(turn mine: Int) {
+        cancelStallWatch()
+        guard let stallLimit else { return }
+        let source = DispatchSource.makeTimerSource(queue: queue)
+        source.schedule(deadline: .now() + stallLimit, leeway: .milliseconds(10))
+        source.setEventHandler { [weak self] in self?.stalled(turn: mine) }
+        stallTimer = source
+        source.resume()
+    }
+
+    private func cancelStallWatch() {
+        stallTimer?.cancel()
+        stallTimer = nil
+    }
+
+    /// On `queue`: the frame of `mine` is still held. Its turn ends here, so
+    /// its late `ready` is stale; the owner hears first, then the next frame
+    /// starts (it is queued behind this handler).
+    private func stalled(turn mine: Int) {
+        let gaveUp = lock.withLock { () -> Bool in
+            guard running, mine == turn else { return false }
+            turn += 1
+            stallTimer = nil
+            return true
+        }
+        guard gaveUp else { return }
+        onStall?()
+        lock.withLock {
+            guard running else { return }
             perform(rules.ready(at: Self.now))
         }
     }

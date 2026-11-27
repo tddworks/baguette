@@ -47,4 +47,14 @@ struct StreamConfigTests {
         #expect(StreamConfig.Change.fps(60).applied(to: config) == config.with(fps: 60))
         #expect(StreamConfig.Change.scale(2).applied(to: config) == config.with(scale: 2))
     }
+
+    @Test func `should start an MJPEG stream at half size and 30 frames a second`() {
+        let c = StreamConfig.default(for: .mjpeg)
+        #expect(c.scale == 2)
+        #expect(c.fps == 30)
+    }
+
+    @Test func `should start an AVCC stream at the full default`() {
+        #expect(StreamConfig.default(for: .avcc) == .default)
+    }
 }

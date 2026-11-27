@@ -9,10 +9,17 @@ import Foundation
 /// discarded — the newest avcC description, without which a decoder can
 /// never start, and the frame that just arrived.
 ///
-/// A reference codec cannot drop that way: every encoded H.264 frame is
-/// needed to decode the ones after it, so an AVCC backlog rejects the
-/// frame that would overflow its (larger) budget instead, and the owner
-/// ends the stream.
+/// A reference codec cannot drop that way: every encoded H.264 / HEVC
+/// delta needs the one before it. So a live AVCC viewer *skips* instead
+/// (docs/features/stream/design.md): past `frameAllowance` frames or the
+/// byte budget a delta is dropped, every later delta with it, until a
+/// keyframe — which is never dropped and supersedes everything queued in
+/// front of it but the newest description. The owner asks the stream for
+/// that keyframe when `append` says so.
+///
+/// Packets the backlog can't read (below) keep every frame instead, and
+/// reject the frame that would overflow `referenceByteBudget`; the owner
+/// then ends the stream.
 ///
 /// Frames arrive here already stripped of their transport envelope, so
 /// an AVCC frame's first byte is its `AVCCEnvelope` tag. A JPEG starts
@@ -32,9 +39,30 @@ public struct FrameBacklog {
     /// frames behind a stall are all still needed.
     public static let referenceByteBudget = 32 * 1024 * 1024
 
+    /// The most encoded frames a live AVCC viewer may have waiting before
+    /// the next delta is dropped: 100 ms at 60 fps, room for a keyframe
+    /// crossing the link and the deltas behind it.
+    public static let frameAllowance = 6
+
+    /// What became of a frame handed to `append`.
+    public enum Admission: Equatable, Sendable {
+        case queued
+        /// Dropped; the viewer already waits for a keyframe.
+        case dropped
+        /// Dropped, and the viewer now waits for a keyframe: ask the stream for one.
+        case droppedAskingForKeyframe
+        /// Refused: the stream can't go on for this viewer.
+        case rejected
+    }
+
+    private enum Policy { case discardOldest, skipToKeyframe, rejectOverflow }
+
     public let byteBudget: Int
     private let preservingDescriptions: Bool
-    private let rejectingOverflow: Bool
+    private let policy: Policy
+    /// The most frames kept waiting, newest first; nil keeps what the budget allows.
+    private var frameCap: Int?
+    private var awaitingKeyframe = false
     private var frames: [Data] = []
     public private(set) var byteCount = 0
     /// How many frames the backlog has discarded over its lifetime, so a
@@ -47,29 +75,85 @@ public struct FrameBacklog {
     ) {
         self.byteBudget = byteBudget
         self.preservingDescriptions = preservingDescriptions
-        self.rejectingOverflow = rejectingOverflow
+        self.policy = rejectingOverflow ? .rejectOverflow : .discardOldest
     }
 
-    /// The policy a format needs: MJPEG discards, AVCC rejects overflow.
+    private init(byteBudget: Int, policy: Policy) {
+        self.byteBudget = byteBudget
+        self.preservingDescriptions = true
+        self.policy = policy
+    }
+
+    /// The policy a format needs: MJPEG discards its oldest images, a
+    /// readable AVCC stream skips to the next keyframe, and AVCC packets
+    /// (`preservingDescriptions` off) reject overflow.
     public init(format: StreamFormat, preservingDescriptions: Bool = true) {
-        self.init(
-            byteBudget: format == .avcc ? Self.referenceByteBudget : Self.defaultByteBudget,
-            preservingDescriptions: preservingDescriptions, rejectingOverflow: format == .avcc)
+        switch (format, preservingDescriptions) {
+        case (.mjpeg, _):
+            // Every image is whole: a viewer wants the newest, never a queue of them.
+            self.init(byteBudget: Self.defaultByteBudget, preservingDescriptions: preservingDescriptions)
+            frameCap = 1
+        case (.avcc, true):
+            self.init(byteBudget: Self.defaultByteBudget, policy: .skipToKeyframe)
+        case (.avcc, false):
+            self.init(byteBudget: Self.referenceByteBudget, preservingDescriptions: false, rejectingOverflow: true)
+        }
     }
 
     public var count: Int { frames.count }
     public var isEmpty: Bool { frames.isEmpty }
 
-    /// Appends `frame`, or returns `false` when this backlog rejects
-    /// overflow and the frame does not fit: dropping it, or anything
-    /// before it, would invalidate every frame that follows.
+    /// Appends `frame`, or says why it didn't.
     @discardableResult
-    public mutating func append(_ frame: Data) -> Bool {
-        if rejectingOverflow, frame.count > byteBudget - byteCount { return false }
+    public mutating func append(_ frame: Data) -> Admission {
+        switch policy {
+        case .rejectOverflow:
+            guard frame.count <= byteBudget - byteCount else { return .rejected }
+        case .skipToKeyframe:
+            switch frame.first {
+            case AVCCEnvelope.keyframeTag:
+                supersede()
+                awaitingKeyframe = false
+            case AVCCEnvelope.deltaTag:
+                if awaitingKeyframe {
+                    droppedCount += 1
+                    return .dropped
+                }
+                if encodedFramesWaiting >= Self.frameAllowance || frame.count > byteBudget - byteCount {
+                    droppedCount += 1
+                    awaitingKeyframe = true
+                    return .droppedAskingForKeyframe
+                }
+            default:
+                break
+            }
+        case .discardOldest:
+            break
+        }
         frames.append(frame)
         byteCount += frame.count
-        trim()
-        return true
+        if policy == .discardOldest { trim() }
+        if let frameCap {
+            while frames.count > frameCap {
+                byteCount -= frames.removeFirst().count
+                droppedCount += 1
+            }
+        }
+        return .queued
+    }
+
+    /// Keyframes and deltas waiting; descriptions and seeds don't count.
+    private var encodedFramesWaiting: Int {
+        frames.count { $0.first == AVCCEnvelope.keyframeTag || $0.first == AVCCEnvelope.deltaTag }
+    }
+
+    /// A keyframe decodes on its own: everything queued in front of it is
+    /// stale but the newest description, which the keyframe may need.
+    private mutating func supersede() {
+        let kept = frames.last(where: Self.isDescription)
+        droppedCount += frames.count - (kept == nil ? 0 : 1)
+        frames = kept.map { [$0] } ?? []
+        byteCount = kept?.count ?? 0
     }
 
     public mutating func popFirst() -> Data? {

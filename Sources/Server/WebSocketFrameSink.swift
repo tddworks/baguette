@@ -26,9 +26,9 @@ import NIOCore
 /// the socket, so chunks arrive in order without blocking the encoder.
 /// A client that reads slower than the encoder produces cannot grow
 /// the server without bound — `FrameBacklog` discards the oldest MJPEG
-/// frames once its byte budget is reached, while an AVCC backlog keeps
-/// every encoded reference and the socket closes with an error once the
-/// consumer falls `FrameBacklog.referenceByteBudget` behind.
+/// frames once its byte budget is reached, while a live AVCC viewer that
+/// falls behind skips to the next keyframe, which `onKeyframeNeeded` asks
+/// the stream for (docs/features/stream/design.md).
 final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     private let outbound: WebSocketOutboundWriter
     private let format: StreamFormat
@@ -36,6 +36,15 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     private var backlog: FrameBacklog
     private var stopped = false
     private var draining = false
+    /// The stream asked for a keyframe after a viewer that fell behind
+    /// skipped a frame. Asked off the encoder's queue: the encoder hands
+    /// this sink frames from that queue, and asking there would wait on it.
+    private weak var keyframes: (any BaguetteDevice.Stream)?
+
+    /// Where a skipped viewer's keyframe comes from: the stream feeding this sink.
+    func askKeyframes(of stream: any BaguetteDevice.Stream) {
+        lock.withLock { keyframes = stream }
+    }
 
     // Per-format parser state, lock-protected. The encoder calls
     // `write` from its own queue; we keep the parser strictly
@@ -47,10 +56,19 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
     /// `preservingDescriptions` is off for `frameMetadata=1` streams,
     /// whose packets are already framed and carry their own description
     /// messages — see `FrameBacklog`.
-    init(outbound: WebSocketOutboundWriter, format: StreamFormat, preservingDescriptions: Bool = true) {
+    ///
+    /// `keyframesOnRequest` is off for chunks forwarded from an encoder
+    /// nobody here can ask (a phone's own H.264): skipping would leave a
+    /// viewer waiting on that encoder's next IDR, so every frame is kept.
+    init(
+        outbound: WebSocketOutboundWriter, format: StreamFormat, preservingDescriptions: Bool = true,
+        keyframesOnRequest: Bool = true
+    ) {
         self.outbound = outbound
         self.format = format
-        self.backlog = FrameBacklog(format: format, preservingDescriptions: preservingDescriptions)
+        self.backlog = keyframesOnRequest || format != .avcc
+            ? FrameBacklog(format: format, preservingDescriptions: preservingDescriptions)
+            : FrameBacklog(byteBudget: FrameBacklog.referenceByteBudget, rejectingOverflow: true)
     }
 
     func write(_ data: Data) {
@@ -180,7 +198,20 @@ final class WebSocketFrameSink: FrameSink, @unchecked Sendable {
             lock.unlock()
             return
         }
-        guard backlog.append(data) else {
+        switch backlog.append(data) {
+        case .queued:
+            break
+        case .dropped:
+            lock.unlock()
+            return
+        case .droppedAskingForKeyframe:
+            lock.unlock()
+            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+                guard let self else { return }
+                lock.withLock { keyframes }?.requestKeyframe()
+            }
+            return
+        case .rejected:
             stopped = true
             backlog = FrameBacklog()
             lock.unlock()
