@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baguette Remote compared — remote desktop apps for iPhone, side by side</title>
+<link rel="canonical" href="https://baguette.tddworks.com/remote/compare/">
+<meta name="description" content="Baguette Remote, Yosei, Ferry, Screens, OpenScreens and Open Screen Sharing: the same test on the same Mac, and what each app says it does.">
+<meta property="og:title" content="Remote desktop apps for iPhone, side by side">
+<meta property="og:description" content="The same test on the same Mac, and what each app says it does.">
+<meta property="og:image" content="https://baguette.tddworks.com/remote/static/compare-5apps.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="../static/logo.png">
+<style>
+  :root {
+    --bg: #070d0c; --text: #fff; --muted: rgba(255,255,255,.62); --dim: rgba(255,255,255,.40);
+    --line: rgba(255,255,255,.08); --accent: #5ED3BF; --on-accent: #04241E;
+    --panel: rgba(255,255,255,.035); --amber: #F2C36B;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+         line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+  code, kbd { font: 600 .88em ui-monospace, "SF Mono", Menlo, monospace; padding: 1px 6px; border-radius: 6px;
+              background: rgba(255,255,255,.09); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); white-space: nowrap; }
+
+  /* top bar, as on /remote/ */
+  .top { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+         background: rgba(7,13,12,.72); border-bottom: 1px solid rgba(255,255,255,.07); }
+  .top .wrap { display: flex; align-items: center; height: 64px; gap: 28px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .brand img { width: 32px; height: 32px; border-radius: 8px; }
+  .top nav { margin-left: auto; display: flex; gap: 26px; font-size: 14.5px; color: var(--muted); }
+  .top nav a:hover { color: #fff; }
+  .btn { display: inline-flex; align-items: center; height: 46px; padding: 0 22px; border-radius: 23px; font-weight: 650; font-size: 15.5px;
+         background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 26px rgba(94,211,191,.28); transition: transform .15s, box-shadow .15s; }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(94,211,191,.38); }
+  .btn.small { height: 36px; padding: 0 16px; font-size: 14px; }
+  .btn.ghost { background: rgba(255,255,255,.08); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+
+  .tag, .kicker { font: 600 12.5px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .tag { display: inline-block; padding: 7px 12px; border-radius: 999px; background: rgba(94,211,191,.10); box-shadow: inset 0 0 0 1px rgba(94,211,191,.28); }
+  h2 { margin-top: 12px; font-size: clamp(30px, 4vw, 44px); line-height: 1.1; letter-spacing: -.028em; font-weight: 720; max-width: 780px; }
+  .sub { margin-top: 14px; font-size: 18px; color: var(--muted); max-width: 680px; }
+  section.block { padding: 96px 0; border-top: 1px solid rgba(255,255,255,.06); }
+
+  /* hero */
+  .hero { position: relative; overflow: hidden; }
+  .hero::before { content: ""; position: absolute; inset: -30% -10% auto -10%; height: 140%; z-index: 0;
+                  background: radial-gradient(55% 50% at 70% 30%, rgba(94,211,191,.28), transparent 70%),
+                              radial-gradient(40% 40% at 10% 0%, rgba(46,140,122,.28), transparent 70%); }
+  .hero .wrap { position: relative; z-index: 1; padding-top: 84px; padding-bottom: 40px; }
+  .hero h1 { margin-top: 22px; font-size: clamp(40px, 6vw, 72px); line-height: 1.03; letter-spacing: -.035em; font-weight: 750; max-width: 900px; }
+  .hero h1 span { color: var(--accent); }
+  .hero p.lead { margin-top: 22px; font-size: 19.5px; color: rgba(255,255,255,.68); max-width: 640px; }
+  .apps { margin-top: 30px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .apps span { font-size: 14px; padding: 7px 14px; border-radius: 999px; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); color: rgba(255,255,255,.8); }
+  .apps span.us { color: var(--on-accent); background: var(--accent); box-shadow: none; font-weight: 650; }
+
+  /* the film */
+  .film { position: relative; margin-top: 46px; border-radius: 26px; overflow: hidden; background: #000;
+          box-shadow: 0 40px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.09); }
+  .film video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .film-cap { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 18px; color: var(--muted); font-size: 14.5px; }
+  .film-cap b { color: #fff; font-weight: 600; }
+
+  /* only here */
+  .only { margin-top: 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .only > div { position: relative; padding: 28px 26px 26px; border-radius: 24px; overflow: hidden;
+                background: radial-gradient(120% 90% at 0% 0%, rgba(94,211,191,.16), rgba(255,255,255,.025) 60%);
+                box-shadow: inset 0 0 0 1px rgba(94,211,191,.22); }
+  .only .ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: rgba(94,211,191,.16); color: var(--accent); }
+  .only svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .only h3 { margin-top: 18px; font-size: 21px; letter-spacing: -.015em; }
+  .only p { margin-top: 8px; font-size: 15px; color: var(--muted); }
+  .only-note { margin-top: 22px; color: var(--dim); font-size: 14px; max-width: 760px; }
+
+  /* the matrix */
+  .legend { margin-top: 26px; display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
+  .tablewrap { margin-top: 18px; overflow-x: auto; border-radius: 24px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+  table { width: 100%; min-width: 1080px; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+  th, td { padding: 14px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  thead th { position: sticky; top: 0; z-index: 3; background: #0c1413; font-size: 15px; font-weight: 650; padding-top: 20px; padding-bottom: 18px; white-space: nowrap; }
+  thead th small { display: block; font-weight: 400; font-size: 12px; color: var(--dim); margin-top: 2px; }
+  tbody th { position: sticky; left: 0; z-index: 2; background: #0a1110; width: 200px; min-width: 200px; font-weight: 550; color: rgba(255,255,255,.9); }
+  thead th:first-child { left: 0; z-index: 4; }
+  .us { background: rgba(94,211,191,.075); }
+  thead th.us { background: #10241f; color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+  tr.grp th, tr.grp td { background: transparent; padding-top: 26px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.12); }
+  tr.grp th { font: 600 11.5px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); background: #0a1110; }
+  tr.grp td.us { background: rgba(94,211,191,.075); }
+  tr.hl th { color: #fff; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+  .y, .p, .n, .u { display: flex; gap: 8px; align-items: flex-start; }
+  .y::before, .p::before, .n::before, .u::before { flex: none; width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center;
+            font-size: 11px; font-weight: 800; margin-top: 1px; }
+  .y::before { content: "✓"; background: rgba(94,211,191,.2); color: var(--accent); }
+  .p::before { content: "½"; background: rgba(242,195,107,.18); color: var(--amber); }
+  .n::before { content: "–"; background: rgba(255,255,255,.07); color: var(--dim); }
+  .u::before { content: "?"; background: rgba(255,255,255,.05); color: var(--dim); }
+  .n, .u { color: var(--dim); }
+  td small { display: block; color: var(--dim); font-size: 12.5px; margin-top: 3px; padding-left: 26px; }
+  td.plain small { padding-left: 0; }
+
+  /* cards */
+  .cards { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { padding: 24px; border-radius: 22px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; }
+  .card.us { background: radial-gradient(110% 80% at 0% 0%, rgba(94,211,191,.16), rgba(255,255,255,.03) 65%); box-shadow: inset 0 0 0 1px rgba(94,211,191,.35); }
+  .card h3 { font-size: 19px; letter-spacing: -.01em; }
+  .card .by { margin-top: 3px; font-size: 13px; color: var(--dim); }
+  .card p { margin-top: 12px; font-size: 15px; color: var(--muted); flex: 1; }
+  .card a { margin-top: 16px; font-size: 13.5px; color: var(--accent); }
+  .card a:hover { text-decoration: underline; }
+
+  .sources { margin-top: 30px; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .sources li { margin-top: 6px; } .sources a { color: rgba(255,255,255,.8); text-decoration: underline; text-decoration-color: rgba(255,255,255,.25); }
+
+  .join { text-align: center; padding: 110px 0; position: relative; overflow: hidden; border-top: 1px solid rgba(255,255,255,.06); }
+  .join::before { content: ""; position: absolute; inset: 0; background: radial-gradient(50% 70% at 50% 100%, rgba(94,211,191,.26), transparent 70%); }
+  .join > * { position: relative; }
+  .join img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+  .join h2 { margin: 26px auto 0; }
+  .join p { margin: 14px auto 28px; color: var(--muted); font-size: 18px; max-width: 540px; }
+  .join .go { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  footer { padding: 34px 0 48px; border-top: 1px solid rgba(255,255,255,.06); color: rgba(255,255,255,.42); font-size: 12.5px; text-align: center; }
+
+  @media (max-width: 900px) {
+    .top nav { display: none; }
+    .only, .cards { grid-template-columns: 1fr; }
+    section.block { padding: 72px 0; }
+    tbody th { width: 150px; min-width: 150px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../static/logo.png" alt="">Baguette Remote</a>
+  <nav><a href="#film">The test</a><a href="#only">Beyond the Mac</a><a href="#matrix">Feature by feature</a><a href="#apps">The apps</a></nav>
+  <a class="btn small" href="https://testflight.apple.com/join/1KUrwc3S">Join the beta</a>
+</div></div>
+
+<header class="hero" id="film"><div class="wrap">
+  <span class="tag">Compared</span>
+  <h1>Remote desktop on iPhone,<br><span>side by side.</span></h1>
+  <p class="lead">One Mac, one Safari window, the same two test pages. Five apps on an iPhone, recorded the same day and lined up to the frame. Watch, and judge for yourself.</p>
+  <div class="apps"><span class="us">Baguette Remote</span><span>Yosei</span><span>Ferry</span><span>Screens</span><span>OpenScreens</span><span>Open Screen Sharing</span></div>
+
+  <div class="film">
+    <video src="../static/compare-5apps.mp4" poster="../static/compare-5apps.jpg" controls muted loop playsinline preload="metadata"></video>
+  </div>
+  <div class="film-cap">
+    <span><b>① 60 fps counter</b> · a number and a sliding bar, about 9 s</span>
+    <span><b>② Heavy motion</b> · scrolling text and moving blocks, about 11 s</span>
+    <span>Left to right: Baguette Remote, Yosei, Ferry, Screens, OpenScreens</span>
+  </div>
+</div></header>
+
+<section class="block" id="only"><div class="wrap">
+  <div class="kicker">Beyond the Mac's desktop</div>
+  <h2>The Mac, and everything plugged into it.</h2>
+  <p class="sub">Every app here shows a Mac. Baguette Remote also lists the simulators, emulators and phones that Mac is running, in one place, and you touch them directly, with no pointer in the way.</p>
+  <div class="only">
+    <div>
+      <div class="ico"><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10 5.5h4"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <h3>iOS simulators</h3>
+      <p>The Mac's iPhone and iPad simulators, listed on your phone. Boot one, shut it down, and tap, slide and type into it like the real thing.</p>
+    </div>
+    <div>
+      <div class="ico"><svg viewBox="0 0 24 24"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M9 6.5l-1.2-2M15 6.5l1.2-2"/><path d="M8.5 10.5a3.5 3.5 0 017 0"/><path d="M10 19h4"/></svg></div>
+      <h3>Android emulators</h3>
+      <p>The Android emulators on the same Mac sit in the same list. Try your Android build from the sofa, next to the iOS one.</p>
+    </div>
+    <div>
+      <div class="ico"><svg viewBox="0 0 24 24"><rect x="2.5" y="12" width="9" height="9" rx="2"/><rect x="14" y="3" width="7.5" height="14" rx="2"/><path d="M11.5 16.5h2.5a2.5 2.5 0 002.5-2.5V17"/></svg></div>
+      <h3>Real iPhones on a cable</h3>
+      <p>A Mac mini on the desk with test iPhones plugged in: each phone streams to yours, and you touch it from wherever you are.</p>
+    </div>
+  </div>
+  <p class="only-note">These need <code>baguette serve</code> on the Mac: <a href="https://github.com/tddworks/baguette" style="text-decoration:underline">baguette</a> is open source, installed with <code>brew install baguette</code> (Xcode 26 on Apple silicon; the Android SDK for emulators). The Mac's own screen needs nothing installed. None of the other apps' pages mention simulators, emulators or plugged-in iPhones.</p>
+</div></section>
+
+<section class="block" id="matrix"><div class="wrap">
+  <div class="kicker">Feature by feature</div>
+  <h2>What each app says it does.</h2>
+  <p class="sub">Taken from each app's own page or App Store listing on 27 November 2026. "Not stated" means the page doesn't say. It doesn't mean the app can't.</p>
+  <div class="legend"><span class="y">Yes</span><span class="p">Partly, or with a condition</span><span class="n">No</span><span class="u">Not stated</span></div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr>
+      <th></th>
+      <th class="us">Baguette Remote<small>tddworks</small></th>
+      <th>Yosei<small>Tomas Truben</small></th>
+      <th>Ferry<small>App Store</small></th>
+      <th>Screens<small>Edovia</small></th>
+      <th>OpenScreens<small>burakgon</small></th>
+      <th>Open Screen Sharing<small>nekohasekai</small></th>
+    </tr></thead>
+    <tbody>
+      <tr class="grp"><th>Beyond the Mac</th><td class="us"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr class="hl"><th>iOS simulators on the Mac</th>
+        <td class="us"><span class="y">Listed, booted and touched</span><small>with <code>baguette serve</code></small></td>
+        <td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td></tr>
+      <tr class="hl"><th>Android emulators on the Mac</th>
+        <td class="us"><span class="y">Same list, touched directly</span><small>with <code>baguette serve</code></small></td>
+        <td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td></tr>
+      <tr class="hl"><th>Real iPhones plugged into the Mac</th>
+        <td class="us"><span class="y">Streamed and touched</span><small>on a cable, with <code>baguette serve</code></small></td>
+        <td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td><td><span class="u">Not stated</span></td></tr>
+
+      <tr class="grp"><th>Connects to</th><td class="us"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><th>Mac</th>
+        <td class="us"><span class="y">macOS Screen Sharing</span></td>
+        <td><span class="y">Yosei for Mac</span><small>Apple silicon, macOS 26+</small></td>
+        <td><span class="y">macOS Screen Sharing</span></td>
+        <td><span class="y">macOS Screen Sharing</span></td>
+        <td><span class="y">macOS Screen Sharing</span></td>
+        <td><span class="y">Mac screen sharing</span></td></tr>
+      <tr><th>Windows / Linux</th>
+        <td class="us"><span class="n">No</span></td>
+        <td><span class="n">No, Mac only</span></td>
+        <td><span class="y">VNC</span></td>
+        <td><span class="y">VNC, and Raspberry Pi</span></td>
+        <td><span class="y">VNC, and Raspberry Pi</span></td>
+        <td><span class="y">VNC and RDP</span></td></tr>
+      <tr><th>Installed on the Mac</th>
+        <td class="us"><span class="y">Nothing for the screen</span><small><code>baguette</code> for simulators and devices</small></td>
+        <td><span class="p">Yosei for Mac (free)</span></td>
+        <td><span class="y">Nothing</span></td>
+        <td><span class="y">Nothing for High Performance</span></td>
+        <td><span class="y">Nothing</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+
+      <tr class="grp"><th>Picture</th><td class="us"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><th>High-performance video</th>
+        <td class="us"><span class="y">Best: full video on your Wi-Fi</span><small>Light / Low hold the Mac to 8 / 4 Mbps; Basic needs no video</small></td>
+        <td><span class="y">Up to 120 fps</span><small>on ProMotion iPads</small></td>
+        <td><span class="y">Hardware-encoded on the local network</span><small>Apple silicon, macOS 14+</small></td>
+        <td><span class="y">High Performance Screen Sharing</span><small>Apple silicon, macOS 14+</small></td>
+        <td><span class="y">HEVC, up to 60 fps</span><small>Apple silicon, macOS 14+</small></td>
+        <td><span class="u">Not stated</span></td></tr>
+      <tr><th>Screen shaped to the device</th>
+        <td class="us"><span class="y">The iPhone's exact shape</span></td>
+        <td><span class="y">iPhone, iPad, iPhone Duo</span></td>
+        <td><span class="y">Virtual display; follows rotation</span></td>
+        <td><span class="p">Resizes to fit; virtual displays</span></td>
+        <td><span class="y">Phone-shaped held upright</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+      <tr><th>The Mac's sound</th>
+        <td class="us"><span class="u">Not stated</span></td>
+        <td><span class="y">Both ways</span><small>the phone is the Mac's mic</small></td>
+        <td><span class="y">Yes</span><small>local network, High Performance</small></td>
+        <td><span class="y">Yes</span><small>High Performance</small></td>
+        <td><span class="y">Yes</span><small>High Performance</small></td>
+        <td><span class="u">Not stated</span></td></tr>
+
+      <tr class="grp"><th>Control</th><td class="us"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><th>Touch &amp; trackpad</th>
+        <td class="us"><span class="y">Trackpad gestures, pinch, rotate, Mission Control</span><small>direct touch on simulators and devices</small></td>
+        <td><span class="y">Direct and Trackpad modes</span></td>
+        <td><span class="y">Trackpad and direct touch</span></td>
+        <td><span class="y">Touch and Trackpad modes</span></td>
+        <td><span class="y">Trackpad, momentum scroll, pinch</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+      <tr><th>Dictation</th>
+        <td class="us"><span class="y">Hold Dictate, typed at the cursor</span></td>
+        <td><span class="y">Yes</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="y">Yes</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+      <tr><th>Keys for coding agents</th>
+        <td class="us"><span class="y"><span><kbd>esc</kbd> <kbd>⏎</kbd> <kbd>⌃C</kbd> and arrows float on screen</span></span><small>⌘ ⌥ ⌃ ⇧ held for the next key</small></td>
+        <td><span class="y">Agents screen, up to eight</span></td>
+        <td><span class="p">Toolbar: modifiers, Esc, arrows, F-keys</span></td>
+        <td><span class="p">Shortcuts toolbar</span></td>
+        <td><span class="p">Modifier and function key bar</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+      <tr><th>Files &amp; clipboard</th>
+        <td class="us"><span class="p">Paste from iPhone</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="y">Clipboard sync, files both ways</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="p">File transfer over SSH</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+
+      <tr class="grp"><th>Away from home</th><td class="us"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><th>Over the internet</th>
+        <td class="us"><span class="y">Tailscale, or any route to the Mac</span><small>no relay in between</small></td>
+        <td><span class="y">USB-C, Wi-Fi or Tailscale</span></td>
+        <td><span class="y">SSH; Tailscale device list</span></td>
+        <td><span class="y">Screens Connect, Tailscale, SSH</span><small>free Screens Connect account</small></td>
+        <td><span class="y">Tailscale, SSH tunnels, Wake-on-LAN</span></td>
+        <td><span class="p">"Optimized for public networks"</span></td></tr>
+
+      <tr class="grp"><th>Getting it</th><td class="us"></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><th>Runs on</th>
+        <td class="us plain">iPhone, iPad<small>iOS 26+</small></td>
+        <td class="plain">iPhone, iPad</td>
+        <td class="plain">iPhone, iPad, Mac, Apple TV<small>iOS 17+</small></td>
+        <td class="plain">iPhone, iPad, Mac, Vision Pro<small>iOS 17.6+</small></td>
+        <td class="plain">iPhone, iPad, Mac<small>iOS 26+</small></td>
+        <td class="plain">iOS, macOS, Android<small>iOS 15+</small></td></tr>
+      <tr><th>Price</th>
+        <td class="us plain">Free while in beta</td>
+        <td class="plain">Free in beta<small>pricing not announced</small></td>
+        <td class="plain">Free download</td>
+        <td class="plain">7-day free trial</td>
+        <td class="plain">Free</td>
+        <td class="plain">$1.99 on iOS<small>free from source</small></td></tr>
+      <tr><th>Where to get it</th>
+        <td class="us plain">TestFlight public beta</td>
+        <td class="plain">TestFlight (full)<small>Mac app is a download</small></td>
+        <td class="plain">App Store</td>
+        <td class="plain">App Store</td>
+        <td class="plain">Mac app on GitHub<small>iOS TestFlight not open yet</small></td>
+        <td class="plain">App Store, Google Play, GitHub</td></tr>
+      <tr><th>Open source</th>
+        <td class="us"><span class="p">baguette, the server, is</span><small>the app is not</small></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="y">MIT</span></td>
+        <td><span class="y">GPL-3.0</span></td></tr>
+      <tr><th>Account &amp; analytics</th>
+        <td class="us"><span class="y">No account, no analytics</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="u">Not stated</span></td>
+        <td><span class="p">Account for Screens Connect</span></td>
+        <td><span class="y">No analytics</span></td>
+        <td><span class="u">Not stated</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div></section>
+
+<section class="block" id="apps"><div class="wrap">
+  <div class="kicker">The apps</div>
+  <h2>Each one, in a few lines.</h2>
+  <div class="cards">
+    <div class="card us"><h3>Baguette Remote</h3><div class="by">tddworks · free public beta</div>
+      <p>Your Mac on iPhone and iPad through macOS's own Screen Sharing, in a screen the iPhone's shape, with the keys a coding agent asks for. With baguette on the Mac, its simulators, Android emulators and plugged-in iPhones too.</p>
+      <a href="../">baguette.tddworks.com/remote →</a></div>
+    <div class="card"><h3>Yosei</h3><div class="by">Tomas Truben · free beta</div>
+      <p>Your Mac on iPhone and iPad through its own Mac app, in a display shaped to the device. Up to 120 fps on ProMotion iPads, sound both ways, and an Agents screen.</p>
+      <a href="https://yosei.app/">yosei.app →</a></div>
+    <div class="card"><h3>Ferry Remote Desktop</h3><div class="by">App Store · free download</div>
+      <p>For iPhone, iPad, Mac and Apple TV. macOS Screen Sharing and VNC, High Performance sessions, virtual displays sized to the device, Picture in Picture, file transfer and SSH.</p>
+      <a href="https://apps.apple.com/us/app/ferry-remote-desktop/id6833728061">App Store →</a></div>
+    <div class="card"><h3>Screens</h3><div class="by">Edovia · 7-day free trial</div>
+      <p>For iPhone, iPad, Mac and Vision Pro, reaching Macs, Windows, Linux and Raspberry Pi. High Performance Screen Sharing, Screens Connect for the internet, Tailscale and SSH.</p>
+      <a href="https://edovia.com/en/screens">edovia.com/en/screens →</a></div>
+    <div class="card"><h3>OpenScreens</h3><div class="by">burakgon · free, MIT</div>
+      <p>Open source for Mac, iPhone and iPad. High Performance mode (HEVC, up to 60 fps, sound), VNC for Windows and Linux, built-in Tailscale, SSH tunnels and virtual displays.</p>
+      <a href="https://github.com/burakgon/OpenScreens">github.com/burakgon/OpenScreens →</a></div>
+    <div class="card"><h3>Open Screen Sharing</h3><div class="by">nekohasekai · GPL-3.0</div>
+      <p>Open source for iOS, macOS and Android, "optimized for Mac screen sharing and public networks," with standard VNC and RDP. $1.99 on the App Store.</p>
+      <a href="https://github.com/nekohasekai/open-screen-sharing">github.com/nekohasekai/open-screen-sharing →</a></div>
+  </div>
+
+  <ol class="sources">
+    <li><a href="https://baguette.tddworks.com/remote/">baguette.tddworks.com/remote</a> and <a href="https://baguette.tddworks.com">baguette.tddworks.com</a></li>
+    <li><a href="https://yosei.app/">yosei.app</a></li>
+    <li><a href="https://apps.apple.com/us/app/ferry-remote-desktop/id6833728061">Ferry Remote Desktop on the App Store</a>, version 1.0.5</li>
+    <li><a href="https://edovia.com/en/screens">edovia.com/en/screens</a></li>
+    <li><a href="https://github.com/burakgon/OpenScreens">github.com/burakgon/OpenScreens</a></li>
+    <li><a href="https://github.com/nekohasekai/open-screen-sharing">github.com/nekohasekai/open-screen-sharing</a> and its App Store listing, version 1.0.11</li>
+  </ol>
+</div></section>
+
+<section class="join"><div class="wrap">
+  <img src="../static/logo.png" alt="">
+  <h2>Try it on your own Mac.</h2>
+  <p>Free while in beta, for iPhone and iPad on iOS 26 or later.</p>
+  <div class="go"><a class="btn" href="https://testflight.apple.com/join/1KUrwc3S">Join the beta on TestFlight</a><a class="btn ghost" href="../">See how it works</a></div>
+</div></section>
+
+<footer><div class="wrap">© 2026 Baguette Remote. Read on 27 November 2026; apps change, so check a claim on its own page before quoting it. An independent app, not affiliated with any app named here, or with Apple, Anthropic, OpenAI, Google or Tailscale. Product names are trademarks of their owners.</div></footer>
+</body>
+</html>
