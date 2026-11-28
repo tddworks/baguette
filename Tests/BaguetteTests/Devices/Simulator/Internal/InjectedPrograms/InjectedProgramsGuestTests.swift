@@ -11,8 +11,8 @@ struct InjectedProgramsGuestTests {
     private static func sources(_ program: String) -> URL { injected.appending(path: "\(program)/Sources") }
     private static let shared = injected.appending(path: "Shared")
 
-    @Test func `should answer each served command with its status and refuse to act past a deadline`() throws {
-        try Self.run(compiling: """
+    @Test func `should answer each served command with its status and refuse to act past a deadline`() async throws {
+        try await Self.run(compiling: """
         #import "InjectedCommand.h"
         #include <assert.h>
         #include <string.h>
@@ -45,8 +45,8 @@ struct InjectedProgramsGuestTests {
         """, including: [Self.shared])
     }
 
-    @Test func `should take only the orientation picker's native values`() throws {
-        try Self.run(compiling: """
+    @Test func `should take only the orientation picker's native values`() async throws {
+        try await Self.run(compiling: """
         #import "OrientationPicker.h"
         #include <assert.h>
         int main(void) {
@@ -75,8 +75,8 @@ struct InjectedProgramsGuestTests {
     /// `button <page> <usage> <ms> [<page> <usage>]…` — trailing pairs are
     /// modifiers, down before the key and up after it in reverse, so a
     /// shifted letter or a Cmd chord types as on a hardware keyboard.
-    @Test func `should hold a key's modifiers down around it and release them in reverse`() throws {
-        try Self.run(compiling: """
+    @Test func `should hold a key's modifiers down around it and release them in reverse`() async throws {
+        try await Self.run(compiling: """
         #import "ButtonPress.h"
         #include <assert.h>
         int main(void) {
@@ -117,8 +117,8 @@ struct InjectedProgramsGuestTests {
 
     /// `read-angle` and `watch-angle` print each valid sample the guest's
     /// CoreMotion reports as `angle <degrees>`; an invalid one is no reading.
-    @Test func `should report each valid hinge sample to the host as an angle line`() throws {
-        try Self.run(compiling: """
+    @Test func `should report each valid hinge sample to the host as an angle line`() async throws {
+        try await Self.run(compiling: """
         #import "HingeAngle.h"
         #include <assert.h>
         #include <string.h>
@@ -160,8 +160,8 @@ struct InjectedProgramsGuestTests {
     @Test(arguments: earlyExits)
     func `should exit before acting when arguments are invalid or the start is late`(
         exit: (program: String, arguments: [String], status: Int32)
-    ) throws {
-        let (status, output) = try Self.launch(exit.program, exit.arguments)
+    ) async throws {
+        let (status, output) = try await Self.launch(exit.program, exit.arguments)
         #expect(status == exit.status)
         #expect(output.isEmpty)
     }
@@ -174,55 +174,82 @@ struct InjectedProgramsGuestTests {
         ("AXPFrontmost", ["read-angle"]),
         ("AXPFrontmost", ["button", "7", "4", "100"]),
     ])
-    func `should refuse a verb another program owns`(program: String, arguments: [String]) throws {
-        let (status, output) = try Self.launch(program, arguments)
+    func `should refuse a verb another program owns`(program: String, arguments: [String]) async throws {
+        let (status, output) = try await Self.launch(program, arguments)
         #expect(status == 2)
         #expect(output.isEmpty)
     }
 
     /// The program built for macOS, run once with `arguments`.
-    private static func launch(_ program: String, _ arguments: [String]) throws -> (Int32, Data) {
-        let scratch = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let binary = scratch.appending(path: program)
-        let files = try FileManager.default.contentsOfDirectory(atPath: sources(program).path)
-            .filter { $0.hasSuffix(".m") }
-            .map { sources(program).appending(path: $0).path }
-        try compile(["-I", shared.path] + files, to: binary)
+    private static func launch(_ program: String, _ arguments: [String]) async throws -> (Int32, Data) {
         let process = Process()
         let output = Pipe()
-        process.executableURL = binary
+        process.executableURL = try await Built.once.binary(of: program)
         process.arguments = arguments
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        return (process.terminationStatus, output.fileHandleForReading.readDataToEndOfFile())
+        let status = try await exitStatus(of: process)
+        return (status, output.fileHandleForReading.readDataToEndOfFile())
     }
 
     /// Compile `source` against `directories`' headers for macOS and require it to exit 0.
-    private static func run(compiling source: String, including directories: [URL]) throws {
+    private static func run(compiling source: String, including directories: [URL]) async throws {
         let scratch = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         let file = scratch.appending(path: "InjectedProgramTest.m")
         try source.write(to: file, atomically: true, encoding: .utf8)
         let binary = scratch.appending(path: "InjectedProgramTest")
-        try compile(directories.flatMap { ["-I", $0.path] } + [file.path], to: binary)
+        try await compile(directories.flatMap { ["-I", $0.path] } + [file.path], to: binary)
         let run = Process()
         run.executableURL = binary
-        try run.run()
-        run.waitUntilExit()
-        #expect(run.terminationStatus == 0)
+        #expect(try await exitStatus(of: run) == 0)
     }
 
-    private static func compile(_ inputs: [String], to binary: URL) throws {
+    private static func compile(_ inputs: [String], to binary: URL) async throws {
         let compile = Process()
         compile.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         compile.arguments = ["--sdk", "macosx", "clang", "-fobjc-arc", "-framework", "Foundation"] + inputs + ["-o", binary.path]
-        try compile.run()
-        compile.waitUntilExit()
-        try #require(compile.terminationStatus == 0)
+        try #require(try await exitStatus(of: compile) == 0)
+    }
+
+    /// Run `process` and await its exit without holding a thread: Swift
+    /// Testing runs every suite on the cooperative pool, and a compile or a
+    /// child blocked in `waitUntilExit()` holds a pool thread for seconds —
+    /// enough of them, on a three-core CI runner, and no other suite's task
+    /// gets one (#179).
+    private static func exitStatus(of process: Process) async throws -> Int32 {
+        try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+            do { try process.run() } catch {
+                process.terminationHandler = nil
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    /// Each program under `Injected/` built once for the whole suite, however
+    /// many cases launch it.
+    private actor Built {
+        static let once = Built()
+        private let directory = FileManager.default.temporaryDirectory
+            .appending(path: "baguette-injected-\(UUID().uuidString)")
+        private var builds: [String: Task<URL, any Error>] = [:]
+
+        func binary(of program: String) async throws -> URL {
+            if let build = builds[program] { return try await build.value }
+            let directory = directory
+            let build = Task {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let files = try FileManager.default.contentsOfDirectory(atPath: sources(program).path)
+                    .filter { $0.hasSuffix(".m") }
+                    .map { sources(program).appending(path: $0).path }
+                let binary = directory.appending(path: program)
+                try await compile(["-I", InjectedProgramsGuestTests.shared.path] + files, to: binary)
+                return binary
+            }
+            builds[program] = build
+            return try await build.value
+        }
     }
 }

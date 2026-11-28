@@ -330,27 +330,47 @@ struct HostSubprocessTests {
 
     /// A one-shot exit signal that can be awaited, with a timeout so a
     /// hung child fails the test instead of hanging the suite.
+    ///
+    /// Both sides settle off the cooperative pool: the exit arrives on a
+    /// GCD queue (`HostSubprocess` reports it there) and the deadline is a
+    /// GCD timer. Whichever comes first decides; the awaiting task only
+    /// collects the verdict. Polling from the pool instead measured the
+    /// pool: while other suites held its threads with synchronous work,
+    /// the poll first woke past the deadline and failed a child that had
+    /// exited in milliseconds (#179).
     final class Finished: @unchecked Sendable {
         private let lock = NSLock()
         private var status: Int32?
+        private var waiter: CheckedContinuation<Int32, any Error>?
 
         func complete(_ code: Int32) {
-            lock.lock(); defer { lock.unlock() }
-            if status == nil { status = code }
-        }
-
-        private var current: Int32? {
-            lock.lock(); defer { lock.unlock() }
-            return status
+            let waiter = lock.withLock { () -> CheckedContinuation<Int32, any Error>? in
+                guard status == nil else { return nil }
+                status = code
+                defer { self.waiter = nil }
+                return self.waiter
+            }
+            waiter?.resume(returning: code)
         }
 
         func value(timeout: Duration) async throws -> Int32 {
-            let deadline = ContinuousClock.now.advanced(by: timeout)
-            while ContinuousClock.now < deadline {
-                if let status = current { return status }
-                try await Task.sleep(for: .milliseconds(10))
+            try await withCheckedThrowingContinuation { continuation in
+                let settled = lock.withLock { () -> Int32? in
+                    if let status { return status }
+                    waiter = continuation
+                    return nil
+                }
+                if let settled { return continuation.resume(returning: settled) }
+                let seconds = Double(timeout.components.seconds)
+                    + Double(timeout.components.attoseconds) / 1e18
+                DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { [self] in
+                    let expired = lock.withLock { () -> CheckedContinuation<Int32, any Error>? in
+                        defer { waiter = nil }
+                        return waiter
+                    }
+                    expired?.resume(throwing: ChildTimedOut())
+                }
             }
-            throw ChildTimedOut()
         }
     }
 
