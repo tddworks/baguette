@@ -15,6 +15,9 @@ final class FakeDevicectl: @unchecked Sendable {
     var status: Int32 = 0
     var output = Data()
     var writeFile: ((_ path: String, _ arguments: [String]) -> Void)?
+    /// Called with the number of runs so far, on the caller's thread, once
+    /// each run has answered.
+    var afterRun: ((_ runs: Int) -> Void)?
 
     func make() -> any Subprocess {
         let sub = MockSubprocess()
@@ -36,7 +39,8 @@ final class FakeDevicectl: @unchecked Sendable {
         _ arguments: [String], stdin: String?,
         _ onBytes: @Sendable (Data) -> Void, _ onExit: @Sendable (Int32) -> Void
     ) {
-        lock.withLock { runs.append((arguments, stdin)) }
+        let count = lock.withLock { runs.append((arguments, stdin)); return runs.count }
+        defer { afterRun?(count) }
         for flag in ["--json-output", "--destination"] {
             if let index = arguments.firstIndex(of: flag), index + 1 < arguments.count {
                 writeFile?(arguments[index + 1], arguments)
@@ -148,6 +152,12 @@ struct DevicectlPasteboardTests {
     }
 }
 
+/// Each screen here shoots back to back (`interval: 0`) on its own queue, and
+/// every lap throws — no PNG to remove, or a capture that failed — which
+/// Swift Testing records. So each is stopped from its own queue the moment
+/// the test has what it needs, never by a test task waiting on the
+/// cooperative pool: a held pool once left three of them shooting for
+/// minutes, and the thrown errors they piled up stalled the whole run (#179).
 @Suite("DevicectlScreen")
 struct DevicectlScreenTests {
     @Test func `should deliver each screenshot devicectl takes as a frame`() async throws {
@@ -160,10 +170,10 @@ struct DevicectlScreenTests {
             udid: phoneUDID, devicectl: Devicectl(makeSubprocess: fake.make),
             decode: { _ in surface }, interval: 0)
         let frames = FrameCounter()
+        defer { screen.stop() }
 
-        try screen.start { _ in frames.add() }
+        try screen.start { _ in if frames.add() >= 2 { screen.stop() } }
         try await frames.wait(for: 2)
-        screen.stop()
 
         let first = try #require(fake.arguments.first)
         #expect(Array(first.prefix(6)) == ["devicectl", "device", "capture", "screenshot", "--device", phoneUDID])
@@ -176,10 +186,11 @@ struct DevicectlScreenTests {
         let screen = DevicectlScreen(
             udid: phoneUDID, devicectl: Devicectl(makeSubprocess: fake.make),
             decode: { _ in nil }, interval: 0)
+        fake.afterRun = { if $0 >= 2 { screen.stop() } }
+        defer { screen.stop() }
 
         try screen.start { _ in }
         try await waitUntil { fake.arguments.count >= 2 }
-        screen.stop()
     }
 
     @Test func `should take no more screenshots once stopped`() async throws {
@@ -187,14 +198,14 @@ struct DevicectlScreenTests {
         let screen = DevicectlScreen(
             udid: phoneUDID, devicectl: Devicectl(makeSubprocess: fake.make),
             decode: { _ in nil }, interval: 0)
+        fake.afterRun = { _ in screen.stop() }
+        defer { screen.stop() }
 
         try screen.start { _ in }
         try await waitUntil { fake.arguments.count >= 1 }
-        screen.stop()
-        let taken = fake.arguments.count
         try await Task.sleep(for: .milliseconds(50))
 
-        #expect(fake.arguments.count <= taken + 1)
+        #expect(fake.arguments.count == 1)
     }
 }
 
@@ -370,7 +381,7 @@ private final class ExitLatch: @unchecked Sendable {
 private final class FrameCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
-    func add() { lock.withLock { count += 1 } }
+    @discardableResult func add() -> Int { lock.withLock { count += 1; return count } }
     func wait(for target: Int) async throws {
         try await waitUntil { self.lock.withLock { self.count >= target } }
     }
