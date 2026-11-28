@@ -648,7 +648,7 @@
   <div class="feature">
     <div class="words"><div class="num">03</div><h3>Every device your Mac runs</h3>
       <p>iPhone and iPad simulators, Android emulators, and real iPhones plugged into the Mac, in one list.</p>
-      <ul><li>Boot one or shut it down from your phone</li><li>Tap, slide and type on it directly: no pointer in the way</li><li>Needs <a href="https://github.com/tddworks/baguette" style="color:var(--accent)">baguette</a>, open source, running on the Mac: <code>baguette serve</code></li></ul></div>
+      <ul><li>Boot one or shut it down from your phone</li><li>Tap, slide and type on it directly: no pointer in the way</li><li>Needs <a href="https://github.com/tddworks/baguette" style="color:var(--accent)">baguette</a>, open source, running on the Mac: <code>baguette serve --share-mac --host 0.0.0.0</code></li></ul></div>
     <div class="frame wide"><div class="pair"><div class="device"><div class="phone">
     <div class="ambient"></div>
     <div class="island"></div>
@@ -757,7 +757,7 @@
   <div class="steps">
     <div class="step2"><div class="n">1</div><h4>Turn on Screen Sharing</h4><p>On the Mac: System Settings, General, Sharing, Screen Sharing. Nothing of ours is installed.</p></div>
     <div class="step2"><div class="n">2</div><h4>Open the app and sign in</h4><p>It finds Macs on your Wi-Fi; away from home, type the Mac’s address or Tailscale name. Your password stays in this iPhone’s Keychain.</p></div>
-    <div class="step2"><div class="n">3</div><h4>For simulators and phones</h4><p>Run <code style="font:600 13px ui-monospace,Menlo,monospace;color:var(--accent)">baguette serve</code> on the Mac and they appear in the Devices tab.</p></div>
+    <div class="step2"><div class="n">3</div><h4>For simulators and phones</h4><p>Run <code style="font:600 13px ui-monospace,Menlo,monospace;color:var(--accent)">baguette serve --share-mac --host 0.0.0.0</code> on the Mac and they appear in the Devices tab.</p></div>
   </div>
 </div></section>
 
