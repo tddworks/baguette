@@ -69,9 +69,7 @@ The rest of development is in [CONTRIBUTING](CONTRIBUTING.md#build--test).
 ```bash
 baguette serve                          # web UI at http://127.0.0.1:8421/devices
 open http://localhost:8421/farm         # every booted simulator side by side
-baguette serve --share-mac --host 0.0.0.0   # also this Mac's displays; open http://<mac-ip>:8421/mac/share
-                                            # on a phone or tablet to use it as an extra or main display
-                                            # (anyone on your network can then see and control this Mac)
+baguette serve --share-mac --host 0.0.0.0   # + this Mac; open http://<mac-ip>:8421/mac/share on a phone
 
 baguette list                           # simulators, iPhones on a cable, Android emulators
 baguette boot --udid <UDID>
@@ -90,9 +88,8 @@ baguette record     --udid <UDID> --size appstore-6.9 --duration 10 --output dem
 
 Coordinates are device points (dp on Android), and `--width` / `--height`
 are the screen size in those points (`baguette chrome layout --udid <UDID>`
-tells you for a simulator). For a
-long-lived session, pipe JSON gestures into `baguette input` — see the
-[wire protocol](docs/wire.md).
+tells you for a simulator). For a long-lived session, pipe JSON gestures
+into `baguette input` — see the [wire protocol](docs/wire.md).
 
 ## Sponsors
 
