@@ -69,6 +69,9 @@ The rest of development is in [CONTRIBUTING](CONTRIBUTING.md#build--test).
 ```bash
 baguette serve                          # web UI at http://127.0.0.1:8421/devices
 open http://localhost:8421/farm         # every booted simulator side by side
+baguette serve --share-mac --host 0.0.0.0   # also this Mac's displays; open http://<mac-ip>:8421/mac/share
+                                            # on a phone or tablet to use it as an extra or main display
+                                            # (anyone on your network can then see and control this Mac)
 
 baguette list                           # simulators, iPhones on a cable, Android emulators
 baguette boot --udid <UDID>
@@ -119,7 +122,7 @@ Every device is in one list (`/devices`) and opens in one page; each does what i
 | iOS simulators | Boot them, stream at 60 fps, touches, gestures, buttons, keyboard, the accessibility tree, logs, captures, and a simulated world; the second table below |
 | Real iPhones and iPads on a cable | Touches and swipes (an edge swipe goes Home), a live screen, screenshots, recordings, the pasteboard, the accessibility tree; through CoreDevice → [real devices](docs/features/real-devices/README.md) |
 | Android emulators | Boot and shut down an AVD, stream and record its screen, touches with two fingers, scrolls, buttons (`back` too), keys and typing → [Android](docs/features/android/README.md) |
-| This Mac's displays | Stream (WebRTC, H.264/H.265), record, screenshot; drive with mouse, hover, keyboard and scroll; the pointer drawn in its real shape; share to a phone or tablet as a virtual display of the device's shape, used as an extended or main display; Mac frames → [Mac screen](docs/features/mac-screen/README.md) |
+| This Mac's displays | Stream (WebRTC, H.264/H.265), record, screenshot; drive with mouse, hover, keyboard and scroll; the pointer drawn in its real shape; share to a phone or tablet as a virtual display of the device's shape, used as an extended or main display (`serve --share-mac`, then open `/mac/share` on the device); Mac frames → [Mac screen](docs/features/mac-screen/README.md), [share to your device](docs/features/mac-screen/README.md#share-to-your-device) |
 
 What a simulator covers:
 
